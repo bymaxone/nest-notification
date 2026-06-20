@@ -75,7 +75,8 @@ export class DefaultTemplateRenderer implements IEmailTemplateRenderer {
 
   /**
    * @param options - Templates plus locale/missing-variable/nested-path policy.
-   * @throws Error When a registered template lacks a string `subject` or `html`.
+   * @throws Error When a registered template lacks a string `subject`/`html`, or
+   * carries a non-string `text`.
    */
   constructor(options: DefaultTemplateRendererOptions = {}) {
     const entries = Object.entries(options.templates ?? {})
@@ -179,14 +180,20 @@ export class DefaultTemplateRenderer implements IEmailTemplateRenderer {
     return current
   }
 
-  /** Validates a registered template shape, throwing on the offending key. */
+  /**
+   * Validates a registered template shape, throwing on the offending key. The
+   * optional `text` body, when present, must be a string — a non-string `text`
+   * would otherwise pass construction and crash at render time inside
+   * `String.prototype.replace`.
+   */
   private assertValidTemplate(key: string, template: unknown): void {
     const shape = template as Partial<TemplateDefinition> | null
     if (
       shape === null ||
       typeof shape !== 'object' ||
       typeof shape.subject !== 'string' ||
-      typeof shape.html !== 'string'
+      typeof shape.html !== 'string' ||
+      (shape.text !== undefined && typeof shape.text !== 'string')
     ) {
       throw new Error(`Invalid template "${key}" — must have { subject: string, html: string }`)
     }

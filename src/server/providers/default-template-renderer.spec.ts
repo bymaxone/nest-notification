@@ -211,4 +211,26 @@ describe('DefaultTemplateRenderer', () => {
       () => new DefaultTemplateRenderer({ templates: { 'x::en': { subject: 'S' } as never } })
     ).toThrow('Invalid template "x::en"')
   })
+
+  // Construction validation: a present-but-non-string `text` fails fast instead
+  // of crashing at render time inside `String.prototype.replace`.
+  it('should reject a template whose text is not a string at construction', () => {
+    expect(
+      () =>
+        new DefaultTemplateRenderer({
+          templates: { 'x::en': { subject: 'S', html: '<p>x</p>', text: 123 } as never }
+        })
+    ).toThrow('Invalid template "x::en"')
+  })
+
+  // Construction validation: a valid string `text` is accepted and renders.
+  it('should accept a template with a valid string text at construction', async () => {
+    const renderer = new DefaultTemplateRenderer({
+      templates: { 'x::en': { subject: 'S', html: '<p>{{n}}</p>', text: 'Hi {{n}}' } }
+    })
+
+    const rendered = await renderer.render('x', { n: 'Jane' }, 'en')
+
+    expect(rendered.text).toBe('Hi Jane')
+  })
 })
