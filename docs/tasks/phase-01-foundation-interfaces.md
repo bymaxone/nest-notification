@@ -1,6 +1,6 @@
 # Phase 1 — Foundation + Interfaces (`IEmailProvider` + `IOtpStorage`)
 
-> **Status**: 🔄 In Progress · **Progress**: 2 / 11 tasks · **Last updated**: 2026-06-19
+> **Status**: 🔄 In Progress · **Progress**: 3 / 11 tasks · **Last updated**: 2026-06-19
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 2 (Phase 1)
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md)
 
@@ -41,7 +41,7 @@ The flagship decision baked in here is the **dissolution of the Prisma coupling*
 |---|---|---|---|---|---|
 | 1.1 | Project scaffold **+ complete CI** (package.json, tsconfig×, tsup 3 entries, jest×, stryker, eslint, check-size, check:no-prisma, **ci/codeql/scorecard/release workflows — incremental-safe**) | ✅ | P0 | L | — |
 | 1.2 | Shared types + constants (`src/shared`) | ✅ | P0 | S | 1.1 |
-| 1.3 | Main interfaces (`IEmailProvider`, `IOtpStorage` + atomic methods, renderer, log, SMS/Push sketches, module options, `NotificationRequest`) | ⬜ | P0 | M | 1.1, 1.2 |
+| 1.3 | Main interfaces (`IEmailProvider`, `IOtpStorage` + atomic methods, renderer, log, SMS/Push sketches, module options, `NotificationRequest`) | ✅ | P0 | M | 1.1, 1.2 |
 | 1.4 | Injection tokens + error catalog (incl. `OTP_EMAIL_DELIVERY_NOT_CONFIGURED`) + `NotificationException` + default-options constants | ⬜ | P0 | M | 1.2, 1.3 |
 | 1.5 | Options validation + resolution (`ResolvedNotificationOptions` + `resolveForPurpose`, `maxAttachmentBytes`, `maskRecipient`) | ⬜ | P0 | M | 1.3, 1.4 |
 | 1.6 | No-op providers + minimal `DefaultTemplateRenderer` (escape html body only) | ⬜ | P0 | S | 1.3 |
@@ -231,7 +231,7 @@ the plan. 5. Append `- 1.2 ✅ <YYYY-MM-DD> — <summary>`.
 
 ### Task 1.3 — Main interfaces
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: 1.1, 1.2
@@ -242,13 +242,13 @@ Declare every interface the consumer can implement or reference: `IEmailProvider
 
 #### Acceptance criteria
 
-- [ ] `IOtpStorage` declares `set`, `get`, `consumeAttempt`, `update`, `delete`, `tryAcquireCooldown`, `getCooldown`, `clearCooldown`, `isConfigured`, `name` — with the "MUST be atomic" contract on `consumeAttempt`/`tryAcquireCooldown` and the "no recipient normalization" note
-- [ ] `consumeAttempt` return = `{ status: 'not_found' } | { status: 'max_attempts' } | { status: 'ok'; entry: OtpEntry }`
-- [ ] `OtpVerifyResult` = `{valid:true} | {valid:false; reason:'not_found'} | {…'max_attempts'} | {…'invalid_code'; remainingAttempts}` (no `'expired'`)
-- [ ] `tenantIdResolver?: (req: NotificationRequest) => string | Promise<string>` (not `express.Request`)
-- [ ] `EmailChannelOptions.maxAttachmentBytes?`, `AuditOptions.maskRecipient?` present
-- [ ] `ISmsProvider`/`IPushProvider` carry `@since v0.2 (planned)`; JSDoc states the Prisma-dissolution on `IOtpStorage`
-- [ ] No `any`; `pnpm typecheck` passes
+- [x] `IOtpStorage` declares `set`, `get`, `consumeAttempt`, `update`, `delete`, `tryAcquireCooldown`, `getCooldown`, `clearCooldown`, `isConfigured`, `name` — with the "MUST be atomic" contract on `consumeAttempt`/`tryAcquireCooldown` and the "no recipient normalization" note
+- [x] `consumeAttempt` return = `{ status: 'not_found' } | { status: 'max_attempts' } | { status: 'ok'; entry: OtpEntry }`
+- [x] `OtpVerifyResult` = `{valid:true} | {valid:false; reason:'not_found'} | {…'max_attempts'} | {…'invalid_code'; remainingAttempts}` (no `'expired'`)
+- [x] `tenantIdResolver?: (req: NotificationRequest) => string | Promise<string>` (not `express.Request`)
+- [x] `EmailChannelOptions.maxAttachmentBytes?`, `AuditOptions.maskRecipient?` present
+- [x] `ISmsProvider`/`IPushProvider` carry `@since v0.2 (planned)`; JSDoc states the Prisma-dissolution on `IOtpStorage`
+- [x] No `any`; `pnpm typecheck` passes
 
 #### Files to create / modify
 
@@ -824,3 +824,4 @@ in `docs/development_plan.md`. 5. Append `- 1.11 ✅ <YYYY-MM-DD> — <summary>`
 
 - 1.1 ✅ 2026-06-19 — Scaffold + incremental-safe CI: package.json (zero deps, 3 subpaths, optional peers), tsconfig family, tsup (3 entries), jest×4, stryker, eslint flat, check-size (30/4/8 KB), check:no-prisma, ci/codeql/scorecard/release workflows. All gates green on empty sources.
 - 1.2 ✅ 2026-06-19 — Shared subpath: `OtpPurpose`/`NotificationChannel`/`NotificationErrorResponse` types, the 21-code `NOTIFICATION_ERROR_CODES`, `DEFAULT_TTLS`; zero NestJS/Node imports; 100% coverage.
+- 1.3 ✅ 2026-06-19 — Interfaces: `IEmailProvider`, `IOtpStorage` (atomic `consumeAttempt`/`tryAcquireCooldown`/`clearCooldown`, Prisma-dissolution note), renderer, log repo, SMS/Push v0.2 sketches, module options (+`NotificationRequest`, async factory). Zero `any`.
