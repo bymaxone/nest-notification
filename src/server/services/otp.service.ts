@@ -37,6 +37,7 @@ import type {
 import type { OtpPurposeConfig } from '../interfaces/notification-module-options.interface'
 import type { IOtpStorage, OtpEntry, OtpVerifyResult } from '../interfaces/otp-storage.interface'
 import { generateOtpCode } from '../utils/code-generator'
+import { cooldownExpiresAt, toRetryAfterHeader } from '../utils/cooldown-helpers'
 import { safeCompare } from '../utils/timing-safe-compare'
 
 /** Milliseconds in one second. */
@@ -249,8 +250,8 @@ export class OtpService {
     await this.audit(this.otpAuditEntry('cooldown_blocked', ref, { remainingSeconds }))
     throw new NotificationException('OTP_COOLDOWN_ACTIVE', {
       remainingSeconds,
-      retryAfter: String(remainingSeconds),
-      expiresAt: Date.now() + remainingSeconds * MS_PER_SECOND
+      retryAfter: toRetryAfterHeader(remainingSeconds),
+      expiresAt: cooldownExpiresAt(remainingSeconds)
     })
   }
 

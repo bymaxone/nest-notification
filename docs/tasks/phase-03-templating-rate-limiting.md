@@ -1,6 +1,6 @@
 # Phase 3 — Templating + Rate Limiting
 
-> **Status**: ⬜ Not started · **Progress**: 0 / 8 tasks · **Last updated**: 2026-06-19
+> **Status**: ✅ Done · **Progress**: 8 / 8 tasks · **Last updated**: 2026-06-20
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 4 (Phase 3)
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md)
 
@@ -32,14 +32,14 @@ Refine the `DefaultTemplateRenderer` (robust i18n fallback chain, nested paths, 
 
 | ID | Task | Status | Priority | Size | Depends on |
 |---|---|---|---|---|---|
-| 3.1 | `DefaultTemplateRenderer` refinement (fallback chain, nested paths, missing-var modes, html-only escape) | ⬜ | P0 | M | 1.6 |
-| 3.2 | Template adapter docs (Handlebars / React Email / MJML) in `docs/templates/` | ⬜ | P2 | S | — |
-| 3.3 | Cooldown helpers (`toRetryAfterHeader`, `cooldownExpiresAt`, `formatCooldown`) | ⬜ | P1 | S | — |
-| 3.4 | `OtpService` cooldown details (`retryAfter`, `expiresAt` on `OTP_COOLDOWN_ACTIVE`) | ⬜ | P1 | S | 2.5, 3.3 |
-| 3.5 | Barrel exports (cooldown helpers + renderer types) | ⬜ | P1 | S | 3.1, 3.3 |
-| 3.6 | `CANONICAL_EMAIL_TEMPLATES` naming convention | ⬜ | P1 | S | — |
-| 3.7 | Tests for Phase 3 (renderer extensions + cooldown helpers) | ⬜ | P0 | M | 3.1, 3.3, 3.4 |
-| 3.8 | Phase 3 validation + close | ⬜ | P0 | S | 3.7 |
+| 3.1 | `DefaultTemplateRenderer` refinement (fallback chain, nested paths, missing-var modes, html-only escape) | ✅ | P0 | M | 1.6 |
+| 3.2 | Template adapter docs (Handlebars / React Email / MJML) in `docs/templates/` | ✅ | P2 | S | — |
+| 3.3 | Cooldown helpers (`toRetryAfterHeader`, `cooldownExpiresAt`, `formatCooldown`) | ✅ | P1 | S | — |
+| 3.4 | `OtpService` cooldown details (`retryAfter`, `expiresAt` on `OTP_COOLDOWN_ACTIVE`) | ✅ | P1 | S | 2.5, 3.3 |
+| 3.5 | Barrel exports (cooldown helpers + renderer types) | ✅ | P1 | S | 3.1, 3.3 |
+| 3.6 | `CANONICAL_EMAIL_TEMPLATES` naming convention | ✅ | P1 | S | — |
+| 3.7 | Tests for Phase 3 (renderer extensions + cooldown helpers) | ✅ | P0 | M | 3.1, 3.3, 3.4 |
+| 3.8 | Phase 3 validation + close | ✅ | P0 | S | 3.7 |
 
 ---
 
@@ -47,7 +47,7 @@ Refine the `DefaultTemplateRenderer` (robust i18n fallback chain, nested paths, 
 
 ### Task 3.1 — `DefaultTemplateRenderer` refinement
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: 1.6
@@ -58,12 +58,12 @@ Upgrade the minimal renderer: configurable `fallbackLocales`, `onMissingVar` (`e
 
 #### Acceptance criteria
 
-- [ ] Construction validates every registered template (invalid shape throws on construction)
-- [ ] Fallback chain `[locale, ...fallbackLocales]`; `fallbackLocales:['pt','en']` for `pt-BR` → `['pt-BR','pt','en']`
-- [ ] `onMissingVar:'empty'` → `''`; `'throw'` → error with the variable name
-- [ ] `enableNestedPaths:true` resolves `{{user.name}}`; default treats it as a flat key
-- [ ] Escape applies to interpolated values **in the html body only** (subject/text raw; author markup untouched); `text`-only templates supported
-- [ ] Coverage 100%
+- [x] Construction validates every registered template (invalid shape throws on construction)
+- [x] Fallback chain `[locale, ...fallbackLocales]`; `fallbackLocales:['pt','en']` for `pt-BR` → `['pt-BR','pt','en']`
+- [x] `onMissingVar:'empty'` → `''`; `'throw'` → error with the variable name
+- [x] `enableNestedPaths:true` resolves `{{user.name}}`; default treats it as a flat key
+- [x] Escape applies to interpolated values **in the html body only** (subject/text raw; author markup untouched); `text`-only templates supported
+- [x] Coverage 100%
 
 #### Files to create / modify
 
@@ -110,7 +110,7 @@ Completion Protocol:
 
 ### Task 3.2 — Template adapter docs
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P2
 - **Size**: S
 - **Depends on**: —
@@ -121,8 +121,8 @@ Add reference adapter examples (Handlebars, React Email, MJML) under `docs/templ
 
 #### Acceptance criteria
 
-- [ ] `docs/templates/{handlebars,react-email,mjml}-renderer.example.md` created
-- [ ] Each: setup (`pnpm add`), full `IEmailTemplateRenderer` adapter, engine-specific security caveats (e.g. Handlebars `{{var}}` vs `{{{var}}}`), module registration snippet
+- [x] `docs/templates/{handlebars,react-email,mjml}-renderer.example.md` created
+- [x] Each: setup (`pnpm add`), full `IEmailTemplateRenderer` adapter, engine-specific security caveats (e.g. Handlebars `{{var}}` vs `{{{var}}}`), module registration snippet
 
 #### Files to create / modify
 
@@ -164,7 +164,7 @@ Completion Protocol:
 
 ### Task 3.3 — Cooldown helpers
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: S
 - **Depends on**: —
@@ -175,8 +175,8 @@ Implement pure helpers: `toRetryAfterHeader(remainingSeconds)`, `cooldownExpires
 
 #### Acceptance criteria
 
-- [ ] `toRetryAfterHeader(47.3)='48'`, `(-5)='0'`; `cooldownExpiresAt(60)≈now+60000`, `(0)≈now`; `formatCooldown` → `'0s'`/`'47s'`/`'2m 5s'`/`'1h 2m 5s'`/`'2m'`/`'1h'`
-- [ ] Coverage 100%; no date library dependency
+- [x] `toRetryAfterHeader(47.3)='48'`, `(-5)='0'`; `cooldownExpiresAt(60)≈now+60000`, `(0)≈now`; `formatCooldown` → `'0s'`/`'47s'`/`'2m 5s'`/`'1h 2m 5s'`/`'2m'`/`'1h'`
+- [x] Coverage 100%; no date library dependency
 
 #### Files to create / modify
 
@@ -217,7 +217,7 @@ Completion Protocol:
 
 ### Task 3.4 — `OtpService` cooldown details
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: S
 - **Depends on**: 2.5, 3.3
@@ -228,9 +228,9 @@ Enrich the `OTP_COOLDOWN_ACTIVE` exception with `details.retryAfter` (string) an
 
 #### Acceptance criteria
 
-- [ ] `OTP_COOLDOWN_ACTIVE` carries `remainingSeconds`, `retryAfter`, `expiresAt`
-- [ ] The `max_attempts` branch has no immediate cooldown (entry already deleted by `consumeAttempt`)
-- [ ] `otp.service.spec.ts` updated to assert `details`
+- [x] `OTP_COOLDOWN_ACTIVE` carries `remainingSeconds`, `retryAfter`, `expiresAt`
+- [x] The `max_attempts` branch has no immediate cooldown (entry already deleted by `consumeAttempt`)
+- [x] `otp.service.spec.ts` updated to assert `details`
 
 #### Files to create / modify
 
@@ -273,7 +273,7 @@ Completion Protocol:
 
 ### Task 3.5 — Barrel exports
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: S
 - **Depends on**: 3.1, 3.3
@@ -284,8 +284,8 @@ Export the cooldown helpers and the refined renderer types from `src/server/inde
 
 #### Acceptance criteria
 
-- [ ] `toRetryAfterHeader`, `cooldownExpiresAt`, `formatCooldown`, `TemplateDefinition`, `DefaultTemplateRendererOptions` exported
-- [ ] `pnpm build` clean
+- [x] `toRetryAfterHeader`, `cooldownExpiresAt`, `formatCooldown`, `TemplateDefinition`, `DefaultTemplateRendererOptions` exported
+- [x] `pnpm build` clean
 
 #### Files to create / modify
 
@@ -324,7 +324,7 @@ Completion Protocol:
 
 ### Task 3.6 — `CANONICAL_EMAIL_TEMPLATES`
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: S
 - **Depends on**: —
@@ -335,8 +335,8 @@ Document the canonical template names (no HTML shipped) — including the fitnes
 
 #### Acceptance criteria
 
-- [ ] `CANONICAL_EMAIL_TEMPLATES` const + `CanonicalEmailTemplate` type, JSDoc per template listing variables (incl. `verificationLink` for the password-reset deep link; `daysLeft`/`durationDays` for trial)
-- [ ] Exported from the barrel
+- [x] `CANONICAL_EMAIL_TEMPLATES` const + `CanonicalEmailTemplate` type, JSDoc per template listing variables (incl. `verificationLink` for the password-reset deep link; `daysLeft`/`durationDays` for trial)
+- [x] Exported from the barrel
 
 #### Files to create / modify
 
@@ -379,7 +379,7 @@ Completion Protocol:
 
 ### Task 3.7 — Tests for Phase 3
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: 3.1, 3.3, 3.4
@@ -390,8 +390,8 @@ Completion Protocol:
 
 #### Acceptance criteria
 
-- [ ] `default-template-renderer.ts` + `cooldown-helpers.ts` at 100%; global 100%
-- [ ] Escape-scope test (html escaped, subject/text raw); cooldown formatting matrix; cooldown-details assertion
+- [x] `default-template-renderer.ts` + `cooldown-helpers.ts` at 100%; global 100%
+- [x] Escape-scope test (html escaped, subject/text raw); cooldown formatting matrix; cooldown-details assertion
 
 #### Files to create / modify
 
@@ -432,7 +432,7 @@ Completion Protocol:
 
 ### Task 3.8 — Phase 3 validation + close
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: S
 - **Depends on**: 3.7
@@ -443,9 +443,9 @@ Run gates + a renderer/cooldown smoke; close the phase with `/bymax-quality:code
 
 #### Acceptance criteria
 
-- [ ] `pnpm typecheck && pnpm lint && pnpm test:cov && pnpm build && pnpm size` green
-- [ ] Smoke: renderer fallback + `formatCooldown`/`toRetryAfterHeader`; adapters documented
-- [ ] Code-review findings applied
+- [x] `pnpm typecheck && pnpm lint && pnpm test:cov && pnpm build && pnpm size` green
+- [x] Smoke: renderer fallback + `formatCooldown`/`toRetryAfterHeader`; adapters documented
+- [x] Code-review findings applied
 
 #### Files to create / modify
 
@@ -485,3 +485,12 @@ the plan. 5. Append `- 3.8 ✅ <YYYY-MM-DD> — <summary>`.
 ## Completion log
 
 > Append-only. One line per completed task: `- <task-id> ✅ YYYY-MM-DD — <one-line summary>`.
+
+- 3.1 ✅ 2026-06-20 — Refined `DefaultTemplateRenderer`: fallback-locale chain, opt-in nested paths, `onMissingVar` empty/throw, construction-time validation; html-body-only escaping preserved; 100% coverage.
+- 3.3 ✅ 2026-06-20 — Added pure cooldown helpers (`toRetryAfterHeader`, `cooldownExpiresAt`, `formatCooldown`) with no date-library dependency; 100% coverage.
+- 3.6 ✅ 2026-06-20 — Added `CANONICAL_EMAIL_TEMPLATES` constant + `CanonicalEmailTemplate` type (no HTML shipped), per-template variable JSDoc; exported from the barrel.
+- 3.4 ✅ 2026-06-20 — `OTP_COOLDOWN_ACTIVE` now carries `retryAfter` (via `toRetryAfterHeader`) and `expiresAt` (via `cooldownExpiresAt`) alongside `remainingSeconds`; spec asserts the three details.
+- 3.5 ✅ 2026-06-20 — Barrel now exports the cooldown helpers and the refined renderer types (`TemplateDefinition`, `DefaultTemplateRendererOptions`, `MissingVariableMode`); build clean, symbols verified in the bundle.
+- 3.2 ✅ 2026-06-20 — Wrote Handlebars / React Email / MJML adapter example docs (verified against handlebars@4, @react-email/render@1, mjml@4) with setup, full adapter, security caveats, and module registration.
+- 3.7 ✅ 2026-06-20 — Phase 3 tests consolidated: renderer extensions (fallback/nested/missing-var/escape-scope/construction), cooldown matrix, OTP cooldown-details; full suite 245 tests at 100% line/branch global.
+- 3.8 ✅ 2026-06-20 — Phase gates green (typecheck · lint · test:cov 100% · build · check:no-prisma · size); smoke validated renderer fallback/nested/escape-scope + `formatCooldown`/`toRetryAfterHeader`; code-review + security-review at zero findings.

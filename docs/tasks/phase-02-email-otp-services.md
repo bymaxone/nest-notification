@@ -1,6 +1,6 @@
 # Phase 2 — EmailService + OtpService (atomic)
 
-> **Status**: 🔄 In Progress · **Progress**: 10 / 10 tasks · **Last updated**: 2026-06-20
+> **Status**: ✅ Done · **Progress**: 10 / 10 tasks · **Last updated**: 2026-06-20
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 3 (Phase 2)
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md)
 

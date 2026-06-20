@@ -50,6 +50,10 @@ export {
   NOTIFICATION_PURPOSES,
   type CanonicalNotificationPurpose
 } from './constants/notification-purposes'
+export {
+  CANONICAL_EMAIL_TEMPLATES,
+  type CanonicalEmailTemplate
+} from './constants/canonical-templates'
 
 // Interface contracts (types)
 export type {
@@ -100,7 +104,8 @@ export { NoOpNotificationLogRepository } from './providers/no-op-notification-lo
 export {
   DefaultTemplateRenderer,
   type DefaultTemplateRendererOptions,
-  type TemplateSource
+  type TemplateDefinition,
+  type MissingVariableMode
 } from './providers/default-template-renderer'
 export {
   ResendEmailProvider,
@@ -117,6 +122,9 @@ export {
 export { hashTenantRecipient } from './utils/hash'
 export { generateOtpCode } from './utils/code-generator'
 export { safeCompare } from './utils/timing-safe-compare'
+
+// Cooldown presentation helpers — for consumers building Retry-After headers / countdowns
+export { toRetryAfterHeader, cooldownExpiresAt, formatCooldown } from './utils/cooldown-helpers'
 
 // Errors and exception
 export {
