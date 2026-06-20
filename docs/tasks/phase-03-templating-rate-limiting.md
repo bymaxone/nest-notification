@@ -1,6 +1,6 @@
 # Phase 3 — Templating + Rate Limiting
 
-> **Status**: ⬜ Not started · **Progress**: 0 / 8 tasks · **Last updated**: 2026-06-19
+> **Status**: 🔄 In Progress · **Progress**: 0 / 8 tasks · **Last updated**: 2026-06-20
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 4 (Phase 3)
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md)
 
