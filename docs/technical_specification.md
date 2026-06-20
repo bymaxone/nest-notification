@@ -35,10 +35,10 @@
 
 `@bymax-one/nest-notification` is a **multi-channel** and **multi-tenant** npm library for sending notifications from NestJS applications. It encapsulates four distinct channels behind strict TypeScript interfaces — email, OTP, SMS, and push — and allows each channel to be plugged into any external provider (Resend, SendGrid, AWS SES, Mailgun, NodeMailer, Twilio, AWS SNS, FCM, APN, Web Push), as well as any storage (Redis, DynamoDB, Memcached, in-memory for dev).
 
-The library is a direct successor of the `_commons_/notification/` module from the `bymax-fitness-ai` project, with three critical architectural corrections:
+The library generalizes the hand-rolled notification module a typical NestJS app ships, with three critical architectural corrections:
 
-1. **Zero Prisma coupling** — the original `EmailVerificationService` imported `PrismaService` directly. In the new lib, **all OTP storage goes behind the `IOtpStorage` interface** (default `RedisOtpStorage`), and email verification becomes **a use case of the OTP channel**, not a service coupled to the user schema.
-2. **Pluggable templates** — the original `EmailService` had hardcoded HTML in Portuguese with fitness branding. In the new lib, **rendering goes through `IEmailTemplateRenderer`** (default: simple interpolation; consumers can plug in Handlebars/MJML/React Email).
+1. **Zero Prisma coupling** — a hand-rolled `EmailVerificationService` typically imports `PrismaService` directly. In this lib, **all OTP storage goes behind the `IOtpStorage` interface** (default `RedisOtpStorage`), and email verification becomes **a use case of the OTP channel**, not a service coupled to the user schema.
+2. **Pluggable templates** — hand-rolled email services tend to hardcode branded HTML. In this lib, **rendering goes through `IEmailTemplateRenderer`** (default: simple interpolation; consumers can plug in Handlebars/MJML/React Email).
 3. **Injectable email provider** — the original imported `resend` as a direct dependency. In the new lib, **Resend is just the default reference `IEmailProvider`**; the consumer chooses.
 
 ### 1.2 Why it exists
@@ -125,42 +125,24 @@ When a channel is not configured, its services are **not registered** in the Nes
 |---|---|---|---|
 | Email channel + `IEmailProvider` | Yes | — | Needed for integration with `@bymax-one/nest-auth` |
 | OTP channel + `IOtpStorage` | Yes | — | Needed for email verification and password reset |
-| Default `RedisOtpStorage` | Yes | — | Multi-instance ready, current alternative adopted in fitness |
+| Default `RedisOtpStorage` | Yes | — | Multi-instance ready |
 | `InMemoryOtpStorage` (dev) | Yes | — | Useful for tests and local dev without Redis |
-| `ResendProvider` (reference) | Yes | — | Demonstrates the pattern; it's what fitness uses today |
+| `ResendProvider` (reference) | Yes | — | Demonstrates the pattern with a popular provider |
 | Resend cooldown (60s) | Yes | — | Essential anti-brute-force |
-| `IEmailTemplateRenderer` + default | Yes | — | Replaces the hardcoded fitness HTML |
+| `IEmailTemplateRenderer` + default | Yes | — | Replaces hardcoded HTML in the consumer |
 | Notification audit log | Yes | — | Needed in production from day 1 |
 | Multi-tenant scoping | Yes | — | Without this the lib does not serve SaaS |
 | `./react` `useOtpInput` hook | Yes | — | Complete OTP UX is essential |
-| **SMS channel + `ISmsProvider`** | — | Yes | No internal use case today (fitness delivers OTP by email only) |
-| **Push channel + `IPushProvider`** | — | Yes | Mobile app does not yet use push notifications |
+| **SMS channel + `ISmsProvider`** | — | Yes | No use case today (v0.1 delivers OTP by email only) |
+| **Push channel + `IPushProvider`** | — | Yes | No push-notification use case in v0.1 |
 | Multi-provider fallback (e.g., SES → SendGrid on disaster) | — | Yes (v0.3) | High complexity; "nice to have" feature |
 | In-app inbox / preferences UI | Never | — | This is an application feature, not a lib feature |
 
-**v0.1 end scope:** Email (1 channel) + OTP (1 channel) + Audit log + Templating + Multi-tenant + React hook. Everything that `bymax-fitness-ai` needs today to replace `_commons_/notification/`.
+**v0.1 end scope:** Email (1 channel) + OTP (1 channel) + Audit log + Templating + Multi-tenant + React hook. Everything a consumer needs to replace a hand-rolled notification module.
 
-### 1.8 Coverage parity with `bymax-fitness`
-
-This package must absorb everything `bymax-fitness/_commons_/notification/` does today. The mapping:
-
-| `bymax-fitness` today | Equivalent in this lib | Notes |
-|---|---|---|
-| `OTPService` / `OTPRedisService` (`generateOTPCode`, `storeOTP`, `validateOTP`, `removeOTP`) | `OtpService.generate` / `verify` / `consume` + `RedisOtpStorage` | Adds cooldown, key hashing, timing-safe compare, atomic attempt increment |
-| Two OTP service instances (10-min reset, 60-min verification) under separate tokens | One `OtpService` + `otp.perPurpose` (`password_reset` 600s, `email_verification` 3600s) | Replaces the two-instance hack with config |
-| `EmailService.sendVerificationEmail` (email-verification OTP) | `OtpService.generate({ purpose: 'email_verification', deliverVia: 'email', emailTemplate: 'otp_code' })` | — |
-| `EmailService.sendOTPCode` (password-reset OTP + optional deep link) | `OtpService.generate({ purpose: 'password_reset', emailTemplate: 'otp_password_reset', emailData: { verificationLink } })` | Deep link via `emailData` |
-| `EmailService.sendPasswordResetSuccessEmail` | `EmailService.sendTemplate('password_reset_success')` | — |
-| `EmailService.sendWelcomeEmail` | `EmailService.sendTemplate('welcome')` | — |
-| `EmailService.sendTrialExpiringEmail` (html + text + tags) | `EmailService.sendTemplate('trial_expiring')` | Renderer returns `{subject, html, text}`; pass `tags` |
-| `EmailService.sendTrialExpiredEmail` (html + text + tags) | `EmailService.sendTemplate('trial_expired')` | — |
-| Hardcoded PT-BR HTML (`generateEmailBase/Header/Footer/...`) | Consumer's `IEmailTemplateRenderer` (e.g. `BymaxFitnessTemplateRenderer`) | Porting these 6 templates is the bulk of Phase 5 |
-| `LoggerService` structured events (`OTP_STORED`, `EMAIL_SENT`, …) | `INotificationLogRepository` audit + Nest `Logger` | Operational logging stays in the host's logger |
-| Prisma coupling in `EmailVerificationService` | Removed — OTP behind `IOtpStorage`; user activation stays in the host app | The core "zero Prisma" correction (§1.1) |
-
-**Behavior changes the host must account for when migrating:**
-- **Resend cooldown is new** — fitness has none; the FE "resend" button must handle `OTP_COOLDOWN_ACTIVE` (429 + `remainingSeconds`).
-- **Recipient normalization** — fitness lowercases the email before keying; this lib does not, so the host must pass `email.trim().toLowerCase()` as `recipient`.
+**Behavior to account for when migrating off a hand-rolled module:**
+- **Resend cooldown** — the FE "resend" button must handle `OTP_COOLDOWN_ACTIVE` (429 + `remainingSeconds`).
+- **Recipient normalization** — this lib does not lowercase, so the host must pass `email.trim().toLowerCase()` as `recipient`.
 - **Stricter errors** — a missing email provider throws `EMAIL_PROVIDER_NOT_CONFIGURED` instead of silently logging and returning (use `NoOpEmailProvider` in dev).
 
 ---
@@ -1902,7 +1884,7 @@ export class SnsSmsProvider implements ISmsProvider {
 
 ### 5.5 `IEmailTemplateRenderer`
 
-Solves the problem of **hardcoded HTML in PT-BR** that currently exists in the `EmailService` of fitness.
+Solves the problem of **hardcoded HTML** that a hand-rolled `EmailService` typically bakes in.
 
 ```typescript
 /**
@@ -2259,7 +2241,7 @@ export class EmailService {
 
 ### 6.2 `OtpService`
 
-Public OTP service. Replaces the `OTPService` + `OTPRedisService` + `EmailVerificationService` from fitness.
+Public OTP service. Replaces a hand-rolled `OTPService` + `OTPRedisService` + `EmailVerificationService`.
 
 ```typescript
 @Injectable()
@@ -2754,7 +2736,7 @@ The lib documents canonical template names. **Does not embed any HTML** — the 
 | `new_login_alert` | New device login | `device`, `ip`, `timestamp`, `name` |
 | `mfa_enabled` / `mfa_disabled` | MFA toggled | `name`, `appName` |
 
-> The first seven mirror what `bymax-fitness` ships today (see §1.8 coverage map). `otp_code` /
+> The first seven mirror the names a typical consumer already ships. `otp_code` /
 > `otp_password_reset` render a CTA button when `emailData.verificationLink` is supplied — that is how
 > an OTP email doubles as a deep link (the `magic_link` purpose). `trial_*` templates typically also
 > register a hand-written plain-text body for deliverability and provider `tags` for analytics.
@@ -2848,7 +2830,7 @@ EVAL consumeAttempt.lua 1 notification:otp:{purpose}:{h} {now}
 
 ### 10.6 Trade-off: Redis SET vs Redis Hash
 
-The current version of `_commons_/notification/` in fitness uses SET with JSON. We keep the pattern because:
+A hand-rolled notification module commonly uses SET with JSON. We keep the pattern because:
 
 - Simplifies `SET ... XX` for conditional upsert
 - There is no field-by-field access (we always read/write the entire entry)
@@ -3146,7 +3128,7 @@ The lib has **zero direct dependencies** (`"dependencies": {}`). All external fu
 
 ## 14. Implementation Phases
 
-> **Strategy:** Unit tests written alongside each phase (TDD), not accumulated. Per the Bymax testing standard, each implemented file reaches **100% line/branch coverage** before advancing, with mutation score **≥ 95% (Stryker break 95), targeting 100%**, gating the release (§14.7).
+> **Strategy:** Unit tests written alongside each phase (TDD), not accumulated. Per the Bymax testing standard, each implemented file reaches **100% line/branch coverage** before advancing, with mutation score **≥ 95% (Stryker break 95), targeting 100%**, gating the release (§14.6).
 
 ### 14.1 Overview
 
@@ -3156,8 +3138,7 @@ The lib has **zero direct dependencies** (`"dependencies": {}`). All external fu
 | 2 | MEDIUM | OTP channel + storage | OtpService, RedisOtpStorage, InMemoryOtpStorage, code-generator, cooldown, audit log integration + tests |
 | 3 | MEDIUM | Templating + audit log | Refinement of DefaultTemplateRenderer (i18n, escape), audit interceptor, NotificationLogRepository contract + tests |
 | 4 | LOW | Subpath shared + React | Public types/constants, useOtpInput hook, useOtpCountdown + RTL tests |
-| 5 | HIGH | Internal adoption (replacing _commons_/notification/) | Migrate bymax-fitness-ai to use the lib + E2E smoke tests |
-| 6 | LOW | Polishing + release v0.1.0 | README, CHANGELOG, scripts/check-size.mjs, mutation testing, npm publish |
+| 5 | LOW | Polishing + release v0.1.0 | README, CHANGELOG, scripts/check-size.mjs, mutation testing, npm publish |
 
 > **Execution by AI agents** — no estimates in human days/weeks. Fine granularity per sub-step stays in `docs/development_plan.md` (Appendix B — Complexity Matrix).
 
@@ -3165,9 +3146,9 @@ The lib has **zero direct dependencies** (`"dependencies": {}`). All external fu
 
 | Phase | Complexity | Focus |
 |---|---|---|
-| 7 | MEDIUM | SMS channel + TwilioSmsProvider, SnsSmsProvider |
-| 8 | MEDIUM | Push channel + FcmPushProvider |
-| 9 | LOW | Failover between providers + release v0.2.0 |
+| 6 | MEDIUM | SMS channel + TwilioSmsProvider, SnsSmsProvider |
+| 7 | MEDIUM | Push channel + FcmPushProvider |
+| 8 | LOW | Failover between providers + release v0.2.0 |
 
 ### 14.2 Phase 1 — Foundation + Email Channel
 
@@ -3301,20 +3282,7 @@ The lib has **zero direct dependencies** (`"dependencies": {}`). All external fu
    - RTL tests for `useOtpInput`, `useOtpCountdown`
    - Smoke test of the `./shared` export
 
-### 14.6 Phase 5 — Adoption in bymax-fitness-ai
-
-**Objective:** Replace `_commons_/notification/` with `@bymax-one/nest-notification`. Validates the package in production.
-
-**Deliverables:**
-
-1. Implementation of `PrismaNotificationLogRepository` in the fitness backend
-2. Implementation of `BymaxFitnessTemplateRenderer` porting the **6** hardcoded templates to the renderer: `otp_code` (email verification), `otp_password_reset` (with deep-link CTA), `welcome`, `password_reset_success`, `trial_expiring` and `trial_expired` (the trial pair keep their plain-text body + provider tags)
-3. Refactor of `EmailVerificationService` (coupled to Prisma) to use `OtpService` directly — pass `recipient = email.trim().toLowerCase()` and a constant `tenantId` (fitness is effectively single-tenant)
-4. Wire the FE "resend" button to the new `OTP_COOLDOWN_ACTIVE` response (429 + `remainingSeconds`) — cooldown did not exist before
-5. Removal of `_commons_/notification/` after validation
-6. E2E smoke tests (registration + email-verification OTP, password-reset OTP, resend cooldown)
-
-### 14.7 Phase 6 — Release v0.1.0
+### 14.6 Phase 5 — Release v0.1.0
 
 **Objective:** Publish `0.1.0` on npm.
 

@@ -1,6 +1,6 @@
 # Autonomous Phase Execution — @bymax-one/nest-notification
 
-> A runbook for driving the whole roadmap (Phase 1 → Phase 7) autonomously, one
+> A runbook for driving the whole roadmap (Phase 1 → Phase 6) autonomously, one
 > phase per PR, with zero human interaction after launch. It encodes the
 > operational lessons learned from running the same kind of chain on the sibling
 > `rust-auth` project, where the naive "one agent does everything including merge
@@ -75,7 +75,7 @@ Phase tasks:  docs/tasks/phase-NN-*.md  +  docs/tasks/README.md (tasks dashboard
 Two dashboards, two emoji legends — keep BOTH in sync every state change (§5 of
 the runbook + plan §1.6): plan uses 📋/🔄/✅, the tasks README uses 🔴/🟡/🟢.
 
-You drive the WHOLE roadmap, Phase 1 → Phase 7, one phase per PR, sequentially —
+You drive the WHOLE roadmap, Phase 1 → Phase 6, one phase per PR, sequentially —
 NEVER two phases in parallel. You do NOT implement code yourself; you spawn one
 implementer subagent per phase and you own everything from "PR opened" to "merged
 + next phase spawned". Read §1 (architecture), §4 (conventions), and §5 (the
@@ -103,11 +103,9 @@ STEP 0 — Pick the next phase
 ────────────────────────────────────────────────────────────────────────────
 Read docs/tasks/README.md (the dashboard) and docs/development_plan.md.
 The next phase is the lowest-numbered phase NOT 🟢 Done.
-  • If all of Phases 1–7 are 🟢 Done → report "✅ All phases complete. v0.1.0 is
+  • If all of Phases 1–6 are 🟢 Done → report "✅ All phases complete. v0.1.0 is
     ready to release." and STOP.
-  • PHASE 6 IS CROSS-REPO. Phase 6 (Adoption) runs in the bymax-fitness-ai repo,
-    not this one — see §6 of the runbook. Handle its working directory and repo
-    accordingly when you reach it.
+  • All phases run in this repo.
 
 ────────────────────────────────────────────────────────────────────────────
 STEP 1 — Spawn the implementer (steps 0–4) in an isolated worktree
@@ -189,7 +187,7 @@ TWO DIFFERENT emoji vocabularies (do not cross them):
     Progress (X/Y tasks), Last updated date; AND the Total row.
     (Plan legend §1.3: 📋 ToDo · 🔄 In Progress · ✅ Done · 🟡 Partial · ⛔ Blocked.)
   • docs/development_plan.md §1.4 Progress — recompute Overall progress
-    (N/7 phases done + %, M/55 tasks), update Active phase to the next phase,
+    (N/6 phases done + %, M/49 tasks), update Active phase to the next phase,
     and Blocked.
   • docs/tasks/README.md dashboard — phase row → 🟢 Done, Tasks counter, and the
     Total row's overall %.
@@ -257,7 +255,7 @@ For every task:
   • Apply the per-task self-update protocol (README §"Self-update protocol"):
     task Status ✅, task-index row, completion log — AND bump the phase Progress
     (X/Y tasks) in BOTH the plan §1.5 dashboard and the README dashboard, plus
-    the §1.4 task counter (M/55). Commit with Conventional Commits:
+    the §1.4 task counter (M/49). Commit with Conventional Commits:
     <type>(notification): <subject> (<phase>.<task>).
 Technical priority order: security → correctness → performance → ergonomics.
 
@@ -270,7 +268,7 @@ STEP 2 — Phase-wide gates (must all pass)
   pnpm build        # dist/ has .mjs + .cjs + .d.ts for every declared subpath
   pnpm check:no-prisma   # @prisma/client must never be imported
   pnpm size         # bundle budgets (server/shared/react) respected
-(Mutation testing / Stryker is a Phase 7 pre-release gate, NOT per task.)
+(Mutation testing / Stryker is a Phase 6 pre-release gate, NOT per task.)
 
 ────────────────────────────────────────────────────────────────────────────
 STEP 3 — Reviews (iterate to zero findings)
@@ -344,7 +342,7 @@ Bymax Code-Craft Standard.
   `exactOptionalPropertyTypes`); the only allowed cast is a commented `as never`
   for inherited NestJS error cases.
 - **100% line + branch coverage** on every implemented file (`pnpm test:cov`, hard gate).
-- **Mutation ≥ 95% (break 95), driven toward 100%** — Stryker, a **Phase 7
+- **Mutation ≥ 95% (break 95), driven toward 100%** — Stryker, a **Phase 6
   pre-release** gate only (not per task/commit).
 - **Clean Code sizing & SRP** — functions ≤ 50 lines, files ≤ 800 (200–400 typical);
   one responsibility per file/function. Over the limit is a HIGH code-review finding.
@@ -436,26 +434,11 @@ replies — so the merge is immediate when the gate opens.
 
 ---
 
-## 6. Phase 6 is cross-repo (Adoption)
+## 6. All phases run in this repo
 
-Phases 1–5 and 7 run in **this** repo (`bymaxone/nest-notification`). **Phase 6
-(Adoption) runs in the `bymax-fitness-ai` repo** — it ports the 6 production email
-templates, implements `PrismaNotificationLogRepository`, refactors
-`EmailVerificationService` onto the published package, removes the legacy
-`_commons_/notification/`, and runs an E2E smoke. It validates the package against
-its real consumer **before** the v0.1.0 release in Phase 7.
-
-When the orchestrator reaches Phase 6:
-- The implementer's working directory and GitHub repo change to `bymax-fitness-ai`.
-- It still consumes this library — by then `nest-notification` must be installable
-  (a local `link:`/`file:` or a pre-release publish, per the Phase 6 task file).
-- **One agent / one suite at a time** — `bymax-fitness-ai` consumes sibling
-  `@bymax-one/*` libs, so never fan out test agents there (OOM risk). This matches
-  the single-implementer-per-phase rule already in force.
-- Because Phase 6 mutates a production app, treat its merge gate with the same
-  conjunction (§5.1) and verify the E2E smoke is green before merging.
-
-After Phase 6 merges, the chain returns here for **Phase 7 — Release v0.1.0**
-(README/CHANGELOG/SECURITY, CI workflows, bundle budgets, the Stryker mutation
-gate, tag, `pnpm publish --provenance`).
+Every phase runs in **this** repo (`bymaxone/nest-notification`). The final phase
+is **Phase 6 — Release v0.1.0** (README/CHANGELOG/SECURITY, CI workflows, bundle
+budgets, the Stryker mutation gate, tag, `pnpm publish --provenance`). The dogfood
+smoke (task 6.3) imports the built package across all three subpaths and is the
+consumer validation that gates the release.
 ```

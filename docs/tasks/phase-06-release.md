@@ -1,14 +1,14 @@
-# Phase 7 — Release v0.1.0
+# Phase 6 — Release v0.1.0
 
-> **Status**: ⬜ Not started · **Progress**: 0 / 7 tasks · **Last updated**: 2026-06-19
-> **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 8 (Phase 7)
+> **Status**: ⬜ Not started · **Progress**: 0 / 7 tasks · **Last updated**: 2026-06-20
+> **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 7 (Phase 6)
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md) § 14
 
 ---
 
 ## Context
 
-Finalize documentation (README, CHANGELOG, SECURITY, CLAUDE, AGENTS, LICENSE), configure CI, validate bundle budgets, run end-to-end mutation testing, then tag + publish v0.1.0 — **only after Phase 6 validated the package in a real consumer**.
+Finalize documentation (README, CHANGELOG, SECURITY, CLAUDE, AGENTS, LICENSE), configure CI, validate bundle budgets, run end-to-end mutation testing, then tag + publish v0.1.0 — gated by the dogfood smoke (task 6.3), which validates the published package surface across all three subpaths.
 
 ---
 
@@ -18,14 +18,14 @@ Finalize documentation (README, CHANGELOG, SECURITY, CLAUDE, AGENTS, LICENSE), c
 2. **Provenance + supply chain.** `pnpm publish --provenance` via GH Actions OIDC; CodeQL clean; OpenSSF Scorecard ≥ 7.0; `pnpm check:no-prisma` in CI.
 3. **Bundle budgets enforced in CI:** server < 30 KB, shared < 4 KB, react < 8 KB brotli.
 4. **SMS/Push documented as deferred to v0.2** (interfaces present, services not implemented).
-5. **Publish only on explicit user confirmation** — tasks 7.6 STOPS before tagging/publishing for human sign-off.
+5. **Publish only on explicit user confirmation** — task 6.6 STOPS before tagging/publishing for human sign-off.
 
 ---
 
 ## Reference docs
 
-- [`docs/technical_specification.md`](../technical_specification.md) — §14.7 (release deliverables), §12 (what is NOT in the package), §13 (dependencies).
-- [`docs/development_plan.md`](../development_plan.md) — § 8.1–§8.7.
+- [`docs/technical_specification.md`](../technical_specification.md) — §14.6 (release deliverables), §12 (what is NOT in the package), §13 (dependencies).
+- [`docs/development_plan.md`](../development_plan.md) — § 7.1–§7.7.
 
 ---
 
@@ -33,19 +33,19 @@ Finalize documentation (README, CHANGELOG, SECURITY, CLAUDE, AGENTS, LICENSE), c
 
 | ID | Task | Status | Priority | Size | Depends on |
 |---|---|---|---|---|---|
-| 7.1 | README (badges, quick start, 3 scenarios, multi-tenant security) | ⬜ | P0 | M | — |
-| 7.2 | CHANGELOG + SECURITY + CLAUDE + AGENTS + LICENSE | ⬜ | P0 | M | — |
-| 7.3 | CI/release finalization (workflows exist since Phase 1 — verify, badges, dogfood smoke, scorecard ≥ 7) | ⬜ | P0 | S | — |
-| 7.4 | Bundle size budgets (final) | ⬜ | P1 | S | — |
-| 7.5 | Mutation testing end (≥ 95%, → 100%) | ⬜ | P0 | M | — |
-| 7.6 | Final pre-publish gate + tag + publish (`--provenance`) | ⬜ | P0 | S | 7.1–7.5 |
-| 7.7 | Release notes v0.1.0 | ⬜ | P1 | S | 7.6 |
+| 6.1 | README (badges, quick start, 3 scenarios, multi-tenant security) | ⬜ | P0 | M | — |
+| 6.2 | CHANGELOG + SECURITY + CLAUDE + AGENTS + LICENSE | ⬜ | P0 | M | — |
+| 6.3 | CI/release finalization (workflows exist since Phase 1 — verify, badges, dogfood smoke, scorecard ≥ 7) | ⬜ | P0 | S | — |
+| 6.4 | Bundle size budgets (final) | ⬜ | P1 | S | — |
+| 6.5 | Mutation testing end (≥ 95%, → 100%) | ⬜ | P0 | M | — |
+| 6.6 | Final pre-publish gate + tag + publish (`--provenance`) | ⬜ | P0 | S | 6.1–6.5 |
+| 6.7 | Release notes v0.1.0 | ⬜ | P1 | S | 6.6 |
 
 ---
 
 ## Tasks
 
-### Task 7.1 — README
+### Task 6.1 — README
 
 - **Status**: ⬜ Not started
 - **Priority**: P0
@@ -72,10 +72,10 @@ You are a senior NestJS engineer/technical writer working on the nest-notificati
 
 PROJECT: @bymax-one/nest-notification — public NestJS notification lib, releasing v0.1.0.
 
-CURRENT PHASE: 7 (Release) — Task 7.1 of 7
+CURRENT PHASE: 6 (Release) — Task 6.1 of 7
 
 REQUIRED READING (only these):
-- `docs/development_plan.md` §8.1 (README structure) + §5.5 (security section).
+- `docs/development_plan.md` §7.1 (README structure) + §5.5 (security section).
 - `bymax-one/nest-auth/README.md` (structure to mirror).
 
 TASK
@@ -92,13 +92,13 @@ Verification:
 - Renders; all code blocks are valid; ~12–18 KB.
 
 Completion Protocol:
-1. Status ✅ (block + index). 2. Tick AC. 3. Index row + progress `1/7`. 4. Update the Phase 7 row in the plan.
-5. Append `- 7.1 ✅ <YYYY-MM-DD> — <summary>`.
+1. Status ✅ (block + index). 2. Tick AC. 3. Index row + progress `1/7`. 4. Update the Phase 6 row in the plan.
+5. Append `- 6.1 ✅ <YYYY-MM-DD> — <summary>`.
 ````
 
 ---
 
-### Task 7.2 — CHANGELOG + SECURITY + CLAUDE + AGENTS + LICENSE
+### Task 6.2 — CHANGELOG + SECURITY + CLAUDE + AGENTS + LICENSE
 
 - **Status**: ⬜ Not started
 - **Priority**: P0
@@ -124,10 +124,10 @@ You are a senior NestJS engineer/technical writer working on the nest-notificati
 
 PROJECT: @bymax-one/nest-notification — public NestJS notification lib, releasing v0.1.0.
 
-CURRENT PHASE: 7 (Release) — Task 7.2 of 7
+CURRENT PHASE: 6 (Release) — Task 6.2 of 7
 
 REQUIRED READING (only these):
-- `docs/development_plan.md` §8.2.
+- `docs/development_plan.md` §7.2.
 - `bymax-one/nest-auth/{CHANGELOG,SECURITY,CLAUDE,AGENTS}.md`, `LICENSE` (to mirror).
 
 TASK
@@ -146,13 +146,13 @@ Verification:
 - Files present and consistent with the lib's actual API.
 
 Completion Protocol:
-1. Status ✅ (block + index). 2. Tick AC. 3. Index row + progress `2/7`. 4. Update the Phase 7 row.
-5. Append `- 7.2 ✅ <YYYY-MM-DD> — <summary>`.
+1. Status ✅ (block + index). 2. Tick AC. 3. Index row + progress `2/7`. 4. Update the Phase 6 row.
+5. Append `- 6.2 ✅ <YYYY-MM-DD> — <summary>`.
 ````
 
 ---
 
-### Task 7.3 — CI/release finalization
+### Task 6.3 — CI/release finalization
 
 - **Status**: ⬜ Not started
 - **Priority**: P0
@@ -181,13 +181,13 @@ You are a senior DevOps/NestJS engineer working on the nest-notification project
 PROJECT: @bymax-one/nest-notification — public NestJS notification lib, releasing v0.1.0 with provenance.
 The CI/CodeQL/Scorecard/Release workflows were created in Task 1.1 and have gated every phase.
 
-CURRENT PHASE: 7 (Release) — Task 7.3 of 7
+CURRENT PHASE: 6 (Release) — Task 6.3 of 7
 
 PRECONDITIONS
 - The 4 workflows exist and are green (incremental-safe since Phase 1).
 
 REQUIRED READING (only these):
-- `docs/development_plan.md` §8.3.
+- `docs/development_plan.md` §7.3.
 - `.github/workflows/release.yml` (the release-shape gates it expects).
 
 TASK
@@ -205,13 +205,13 @@ Verification:
 - `node scripts/dogfood-smoke-test.mjs` passes; the latest `ci.yml` run on the branch is green.
 
 Completion Protocol:
-1. Status ✅ (block + index). 2. Tick AC. 3. Index row + progress `3/7`. 4. Update the Phase 7 row.
-5. Append `- 7.3 ✅ <YYYY-MM-DD> — <summary>`.
+1. Status ✅ (block + index). 2. Tick AC. 3. Index row + progress `3/7`. 4. Update the Phase 6 row.
+5. Append `- 6.3 ✅ <YYYY-MM-DD> — <summary>`.
 ````
 
 ---
 
-### Task 7.4 — Bundle size budgets (final)
+### Task 6.4 — Bundle size budgets (final)
 
 - **Status**: ⬜ Not started
 - **Priority**: P1
@@ -237,10 +237,10 @@ You are a senior build engineer working on the nest-notification project.
 
 PROJECT: @bymax-one/nest-notification — public NestJS notification lib.
 
-CURRENT PHASE: 7 (Release) — Task 7.4 of 7
+CURRENT PHASE: 6 (Release) — Task 6.4 of 7
 
 REQUIRED READING (only these):
-- `docs/development_plan.md` §8.4.
+- `docs/development_plan.md` §7.4.
 
 TASK
 Finalize the bundle budgets.
@@ -253,13 +253,13 @@ Verification:
 - `pnpm size` green within budgets.
 
 Completion Protocol:
-1. Status ✅ (block + index). 2. Tick AC. 3. Index row + progress `4/7`. 4. Update the Phase 7 row.
-5. Append `- 7.4 ✅ <YYYY-MM-DD> — <summary>`.
+1. Status ✅ (block + index). 2. Tick AC. 3. Index row + progress `4/7`. 4. Update the Phase 6 row.
+5. Append `- 6.4 ✅ <YYYY-MM-DD> — <summary>`.
 ````
 
 ---
 
-### Task 7.5 — Mutation testing end
+### Task 6.5 — Mutation testing end
 
 - **Status**: ⬜ Not started
 - **Priority**: P0
@@ -287,10 +287,10 @@ You are a senior NestJS test/quality engineer working on the nest-notification p
 PROJECT: @bymax-one/nest-notification — public NestJS notification lib. Release gate: mutation ≥ 95%
 (break 95), driven as close to 100% as achievable.
 
-CURRENT PHASE: 7 (Release) — Task 7.5 of 7
+CURRENT PHASE: 6 (Release) — Task 6.5 of 7
 
 REQUIRED READING (only these):
-- `docs/development_plan.md` §8.5.
+- `docs/development_plan.md` §7.5.
 
 TASK
 Run mutation testing and close the gaps.
@@ -307,18 +307,18 @@ Verification:
 - `pnpm mutation` ≥ 95% global; critical paths 100%.
 
 Completion Protocol:
-1. Status ✅ (block + index). 2. Tick AC. 3. Index row + progress `5/7`. 4. Update the Phase 7 row.
-5. Append `- 7.5 ✅ <YYYY-MM-DD> — <summary>`.
+1. Status ✅ (block + index). 2. Tick AC. 3. Index row + progress `5/7`. 4. Update the Phase 6 row.
+5. Append `- 6.5 ✅ <YYYY-MM-DD> — <summary>`.
 ````
 
 ---
 
-### Task 7.6 — Final pre-publish gate + tag + publish
+### Task 6.6 — Final pre-publish gate + tag + publish
 
 - **Status**: ⬜ Not started
 - **Priority**: P0
 - **Size**: S
-- **Depends on**: 7.1, 7.2, 7.3, 7.4, 7.5
+- **Depends on**: 6.1, 6.2, 6.3, 6.4, 6.5
 
 #### Description
 
@@ -341,13 +341,13 @@ You are a senior release engineer working on the nest-notification project.
 
 PROJECT: @bymax-one/nest-notification — public NestJS notification lib, v0.1.0.
 
-CURRENT PHASE: 7 (Release) — Task 7.6 of 7
+CURRENT PHASE: 6 (Release) — Task 6.6 of 7
 
 PRECONDITIONS
-- Tasks 7.1–7.5 done; Phase 6 (adoption) validated the package in bymax-fitness-ai.
+- Tasks 6.1–6.5 done; the dogfood smoke (task 6.3) validated the published package surface.
 
 REQUIRED READING (only these):
-- `docs/development_plan.md` §8.6.
+- `docs/development_plan.md` §7.6.
 
 TASK
 Run the pre-publish gate and prepare the release; STOP for human confirmation before tagging/publishing.
@@ -363,18 +363,18 @@ Verification:
 - `pnpm prepublishOnly` green; (post-publish) provenance badge present.
 
 Completion Protocol:
-1. Status ✅ (block + index). 2. Tick AC. 3. Index row + progress `6/7`. 4. Update the Phase 7 row.
-5. Append `- 7.6 ✅ <YYYY-MM-DD> — <summary>`.
+1. Status ✅ (block + index). 2. Tick AC. 3. Index row + progress `6/7`. 4. Update the Phase 6 row.
+5. Append `- 6.6 ✅ <YYYY-MM-DD> — <summary>`.
 ````
 
 ---
 
-### Task 7.7 — Release notes v0.1.0
+### Task 6.7 — Release notes v0.1.0
 
 - **Status**: ⬜ Not started
 - **Priority**: P1
 - **Size**: S
-- **Depends on**: 7.6
+- **Depends on**: 6.6
 
 #### Description
 
@@ -395,13 +395,13 @@ You are a senior release engineer working on the nest-notification project.
 
 PROJECT: @bymax-one/nest-notification — public NestJS notification lib, v0.1.0.
 
-CURRENT PHASE: 7 (Release) — Task 7.7 of 7 (LAST)
+CURRENT PHASE: 6 (Release) — Task 6.7 of 7 (LAST)
 
 PRECONDITIONS
-- Task 7.6 done: tagged + published.
+- Task 6.6 done: tagged + published.
 
 REQUIRED READING (only these):
-- `docs/development_plan.md` §8.7.
+- `docs/development_plan.md` §7.7.
 
 TASK
 Publish the release notes.
@@ -416,8 +416,8 @@ Verification:
 - Release visible on GitHub; CHANGELOG dated.
 
 Completion Protocol:
-1. Status ✅ (block + index). 2. Tick AC. 3. Index row + progress `7/7`. 4. Mark the Phase 7 row ✅ in
-the plan. 5. Append `- 7.7 ✅ <YYYY-MM-DD> — <summary>`.
+1. Status ✅ (block + index). 2. Tick AC. 3. Index row + progress `7/7`. 4. Mark the Phase 6 row ✅ in
+the plan. 5. Append `- 6.7 ✅ <YYYY-MM-DD> — <summary>`.
 ````
 
 ---

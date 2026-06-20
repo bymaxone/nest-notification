@@ -1,7 +1,7 @@
 # Development Plan — @bymax-one/nest-notification
 
 > **Version:** 1.1.0 (re-synced with audited spec)
-> **Last updated:** 2026-06-19
+> **Last updated:** 2026-06-20
 > **Status:** Ready for execution
 > **Reference spec:** [`docs/technical_specification.md`](./technical_specification.md) (spec rev 1.1.0)
 > **Target engine:** NestJS 11 (server) + native Node 24 (`node:crypto`) + optional Redis 7
@@ -17,13 +17,12 @@
 4. [Phase 3 — Templating + Rate Limiting](#4-phase-3--templating--rate-limiting)
 5. [Phase 4 — Multi-tenant + Audit Log](#5-phase-4--multi-tenant--audit-log)
 6. [Phase 5 — Frontend (./react)](#6-phase-5--frontend-react)
-7. [Phase 6 — Adoption in bymax-fitness-ai](#7-phase-6--adoption-in-bymax-fitness-ai)
-8. [Phase 7 — Release v0.1.0](#8-phase-7--release-v010)
-9. [Appendix A — Dependency Graph](#appendix-a--dependency-graph)
-10. [Appendix B — Complexity Matrix](#appendix-b--complexity-matrix)
-11. [Appendix C — Reference Configs](#appendix-c--reference-configs)
-12. [Appendix D — Glossary](#appendix-d--glossary)
-13. [Appendix E — Redis Key Strategy](#appendix-e--redis-key-strategy)
+7. [Phase 6 — Release v0.1.0](#7-phase-6--release-v010)
+8. [Appendix A — Dependency Graph](#appendix-a--dependency-graph)
+9. [Appendix B — Complexity Matrix](#appendix-b--complexity-matrix)
+10. [Appendix C — Reference Configs](#appendix-c--reference-configs)
+11. [Appendix D — Glossary](#appendix-d--glossary)
+12. [Appendix E — Redis Key Strategy](#appendix-e--redis-key-strategy)
 
 ---
 
@@ -48,14 +47,14 @@ The phase order respects the dependency graph (Appendix A): interfaces before se
 | **JSDoc on every exported symbol** | Every `export` of class, function, interface, constant carries JSDoc with `@example` when applicable. |
 | **English in code and comments** | Identifiers, internal messages, comments, JSDoc — all in English. Documentation (`docs/`) in English. |
 | **Zero `dependencies`** | `package.json` ships `"dependencies": {}`. Everything via peer dep. Reduces supply chain. |
-| **Zero Prisma coupling** | The lib NEVER imports `@prisma/client`. All persistence via interfaces (`IOtpStorage`, `INotificationLogRepository`). This is the **central dissolver** of coupling inherited from `bymax-fitness-ai/_commons_/notification/`. |
+| **Zero Prisma coupling** | The lib NEVER imports `@prisma/client`. All persistence via interfaces (`IOtpStorage`, `INotificationLogRepository`). This is the **central dissolver** of the Prisma coupling a hand-rolled notification module would otherwise impose on its consumer. |
 | **Dependency inversion** | Email providers (`IEmailProvider`), OTP storage (`IOtpStorage`), renderer (`IEmailTemplateRenderer`), audit (`INotificationLogRepository`) are all interfaces. The lib provides **reference adapters** (Resend, Redis, default interpolator, no-op log) without tying the consumer to them. |
 | **Channel abstraction** | Each channel (email, OTP) has its own service + provider/storage. Adding SMS or Push in v0.2 does not touch existing channels. |
 | **Opt-in features** | Only configured channels are registered as providers in the NestJS container. Enabling audit without configuring `INotificationLogRepository` is an initialization error. |
 | **Native multi-tenant** | Every operation accepts `tenantId`. Redis keys use `sha256(tenantId:recipient)` to avoid PII leaking and cross-tenant collision. |
 | **Security by default** | OTP codes generated via `crypto.randomInt` (built digit-by-digit, no `10**length` overflow). Comparison via length-guarded `crypto.timingSafeEqual`. Attempt increment is **atomic** (Redis Lua / single-threaded Map) and the resend cooldown is an **atomic `SET NX EX` lock** — otherwise `maxAttempts`/anti-resend are bypassable under concurrency. Codes NEVER logged in audit/console. |
 | **Audit silent failure never crashes the main flow** | Audit log is fire-and-forget by default (`audit.swallowErrors: true`). Errors are logged (meta-log) but not propagated to the caller. |
-| **`MODULE_ACTION_RESULT` log key pattern** | Even in tests — eases migration of bymax-fitness code and integration with `@bymax-one/nest-logger`. |
+| **`MODULE_ACTION_RESULT` log key pattern** | Even in tests — eases integration with `@bymax-one/nest-logger`. |
 | **Clean Code sizing & SRP** | Functions ≤ 50 lines; files ≤ 800 lines (200–400 typical); one responsibility per file/function. Over the limit = a HIGH finding in `/bymax-quality:code-review` — split by responsibility. |
 | **Official docs first (never from memory)** | Before using any library/framework/SDK/API/CLI, re-verify the current official docs (`mcp__context7__resolve-library-id` → `query-docs`, WebSearch fallback) and follow the Bymax pattern in `03 - Resources/<Stack>/`. Stacks evolve fast. |
 | **Layered architecture & reuse** | Each file carries an `@fileoverview` + `@layer` header; reuse `@bymax-one/*` libs (single source of truth, never reimplement); DRY; barrels only when a symbol is both exported AND imported. |
@@ -74,8 +73,8 @@ The phase order respects the dependency graph (Appendix A): interfaces before se
 
 ### 1.4 Progress
 
-- **Overall progress:** 🔄 5 / 7 phases done (71%) — 42 / 55 tasks (76%)
-- **Active phase:** **Phase 6** (Adoption in bymax-fitness-ai) — 📋 ToDo
+- **Overall progress:** 🔄 5 / 6 phases done (83%) — 42 / 49 tasks (86%)
+- **Active phase:** **Phase 6** (Release v0.1.0) — 📋 ToDo
 - **Blocked:** none
 
 ### 1.5 Phase dashboard
@@ -87,13 +86,12 @@ The phase order respects the dependency graph (Appendix A): interfaces before se
 | 3 | [Templating + Rate Limiting](./tasks/phase-03-templating-rate-limiting.md) | ✅ Done | 8/8 | MEDIUM | 2026-06-20 |
 | 4 | [Multi-tenant + Audit Log](./tasks/phase-04-multitenant-audit.md) | ✅ Done | 8/8 | MEDIUM | 2026-06-20 |
 | 5 | [Frontend (`./react`)](./tasks/phase-05-frontend-react.md) | ✅ Done | 5/5 | MEDIUM | 2026-06-20 |
-| 6 | [Adoption in bymax-fitness-ai](./tasks/phase-06-adoption-bymax-fitness.md) | 📋 ToDo | 0/6 | HIGH | — |
-| 7 | [Release v0.1.0](./tasks/phase-07-release.md) | 📋 ToDo | 0/7 | MEDIUM | — |
-| | **Total** | 🔄 **5 / 7 phases** | **42 / 55 tasks** | — | — |
+| 6 | [Release v0.1.0](./tasks/phase-06-release.md) | 📋 ToDo | 0/7 | MEDIUM | — |
+| | **Total** | 🔄 **5 / 6 phases** | **42 / 49 tasks** | — | — |
 
-> Each phase links to its task file in [`docs/tasks/`](./tasks/) (one file per phase). Full per-phase detail is in §2–§8; dependency graph in Appendix A, complexity matrix in Appendix B.
+> Each phase links to its task file in [`docs/tasks/`](./tasks/) (one file per phase). Full per-phase detail is in §2–§7; dependency graph in Appendix A, complexity matrix in Appendix B.
 
-> **Phase mapping to spec §14.** The spec slices the roadmap slightly differently (1 Email · 2 OTP · 3 Templating+Audit · 4 Shared+React · 5 Adoption · 6 Release). This plan keeps the same total scope but groups backend work into Phases 1–4, frontend into Phase 5, then mirrors the spec's **Adoption (6)** and **Release (7)** as distinct phases — adoption validates the package against the real consumer **before** publishing.
+> **Phase mapping to spec §14.** The spec slices the roadmap slightly differently (1 Email · 2 OTP · 3 Templating+Audit · 4 Shared+React · 5 Release). This plan keeps the same total scope but groups backend work into Phases 1–4, frontend into Phase 5, then mirrors the spec's **Release (6)** as the final phase.
 
 > **No time estimate** — this plan is intended for execution by AI agents. Duration in human days does not apply. Relative complexity per phase is in the dashboard above and detailed per sub-step in the [Complexity Matrix in Appendix B](#appendix-b--complexity-matrix). Use those signals to prioritize more careful human review on HIGH complexity phases.
 
@@ -102,7 +100,7 @@ The phase order respects the dependency graph (Appendix A): interfaces before se
 When a phase or task changes state, keep the dashboard consistent:
 
 1. Set the phase row's **Status** emoji + **Last updated** date and bump its **Progress** (`X/Y` tasks) in the §1.5 dashboard.
-2. Recompute **Overall progress** (`N / 7` phases done + percentage, `M / 55` tasks) and update **Active phase** / **Blocked** in §1.4.
+2. Recompute **Overall progress** (`N / 6` phases done + percentage, `M / 49` tasks) and update **Active phase** / **Blocked** in §1.4.
 3. Mirror the per-task status inside the phase's task file (`docs/tasks/phase-NN-*.md` — Task index row + Completion log).
 4. Never mark a phase ✅ while any §1.7 Done-criteria bullet is unmet — use 🟡 Partial until all are satisfied.
 5. Commit the plan update with a `docs(plan): …` Conventional Commit (no `Co-Authored-By` trailer).
@@ -123,7 +121,7 @@ A phase is only marked **Done** when, **cumulatively**:
 - [ ] `/bymax-quality:code-review` executed and findings applied
 - [ ] Phase-specific smoke test passes on a NestJS fixture
 
-### 1.8 Expected end file structure (after Phase 7)
+### 1.8 Expected end file structure (after Phase 6)
 
 The `nest-notification/` repo root directory mirrors the canonical layout of the sibling libs (`bymax-one/nest-auth`, `bymax-one/nest-cache`); the monorepo-level `bymax-one/EXTRACTION_ROADMAP.md §4` (outside this repo) is the original template:
 
@@ -133,7 +131,7 @@ nest-notification/
 ├── docs/
 │   ├── technical_specification.md
 │   ├── development_plan.md          ← this file
-│   ├── tasks/                       ← one file per phase (phase-01..07-*.md) + README index
+│   ├── tasks/                       ← one file per phase (phase-01..06-*.md) + README index
 │   ├── mutation_testing_plan.md
 │   ├── mutation_testing_results.md
 │   └── schemas/
@@ -166,7 +164,7 @@ The task carries the full prompt for AI agent execution (Role / Project / Precon
 
 #### 1.10.1 Dissolving the Prisma coupling (highlight Phase 1)
 
-In `bymax-fitness-ai/_commons_/notification/`, the `EmailVerificationService` imported `PrismaService` directly to persist OTP codes in an `email_verification` table. This created 3 problems:
+A hand-rolled `EmailVerificationService` that imports `PrismaService` directly to persist OTP codes in an `email_verification` table — the typical pattern a consumer ships before adopting this lib — creates 3 problems:
 
 1. **Non-portable** — any consumer using TypeORM/Drizzle/Mongo would need to refactor
 2. **Leaks the schema** — the lib forced a specific shape (`{ email, code, expiresAt }`) on the user table
@@ -193,12 +191,12 @@ grep -r "@prisma/client" src/ && exit 1 || exit 0
 
 The `ISmsProvider` and `IPushProvider` interfaces are **declared in Phase 1** (in the `interfaces/` directory, marked with JSDoc `@since v0.2 (planned)`) to document the future contract. **But the corresponding services (`SmsService`, `PushService`) ARE NOT implemented in Phase 1-4**. The motivation:
 
-- `bymax-fitness-ai` (primary consumer) does not need SMS/Push today — it delivers OTP by email only
+- The primary use case (email-delivered OTP) does not need SMS/Push today — v0.1 delivers OTP by email only
 - Implementing 4 channels simultaneously would widen v0.1's blast radius with no real use case to validate them
 - Keeping the interfaces declared lets v0.1 consumers plan the integration ahead
 - OTP delivery in v0.1 is `email` or `manual`; SMS-delivered OTP (`deliverVia: 'sms'`) lands with the SMS channel in v0.2 (see spec §15)
 
-Phase 7 release notes document SMS/Push as "deferred to v0.2".
+The Release phase notes document SMS/Push as "deferred to v0.2".
 
 #### 1.10.3 Multi-tenant via `sha256(tenantId:recipient)`
 
@@ -263,7 +261,7 @@ nest-notification/
 └── src/react/index.ts           # empty in this step
 ```
 
-> **Incremental-safe CI (must hold at every phase).** `ci.yml`'s `verify` job runs exactly `pnpm typecheck && lint && check:no-prisma && test:cov && test:e2e && build && <integrity> && size`. It passes from this first PR (empty sources + zero tests) because: jest configs set `passWithNoTests: true`; coverage is enforced only over implemented files (`collectCoverageFrom`); the build-output integrity loop tolerates the still-empty `react` bundle; size budgets pass on small bundles. **Mutation is never in `ci.yml`** (pre-release gate, §8.5). **`release.yml` only runs on a `v*.*.*` tag**, so it never fires during phases. Full workflow spec + the gold-standard reference: §8.3.
+> **Incremental-safe CI (must hold at every phase).** `ci.yml`'s `verify` job runs exactly `pnpm typecheck && lint && check:no-prisma && test:cov && test:e2e && build && <integrity> && size`. It passes from this first PR (empty sources + zero tests) because: jest configs set `passWithNoTests: true`; coverage is enforced only over implemented files (`collectCoverageFrom`); the build-output integrity loop tolerates the still-empty `react` bundle; size budgets pass on small bundles. **Mutation is never in `ci.yml`** (pre-release gate, §7.5). **`release.yml` only runs on a `v*.*.*` tag**, so it never fires during phases. Full workflow spec + the gold-standard reference: §7.3.
 
 > The `test/e2e/` directory is created on demand when the first `*.e2e-spec.ts` is added — do NOT create a `.gitkeep` placeholder.
 
@@ -459,7 +457,7 @@ JSDoc must call out: never log body, never leak credentials, throw `Error` on fa
   - `{ valid: false; reason: 'max_attempts' }`
   - `{ valid: false; reason: 'invalid_code'; remainingAttempts: number }`
 
-**JSDoc highlight (Prisma decoupling):** "This interface DISSOLVES the Prisma coupling that existed in `bymax-fitness-ai/_commons_/notification/EmailVerificationService`. No `@prisma/client` import lives anywhere in this library."
+**JSDoc highlight (Prisma decoupling):** "This interface DISSOLVES the Prisma coupling a hand-rolled `EmailVerificationService` would otherwise impose. No `@prisma/client` import lives anywhere in this library."
 
 Implementation contract (full text in spec §5.2):
 - **`consumeAttempt` MUST be atomic** — lookup + attempt increment in one indivisible step (Redis: Lua script; in-memory: a single synchronous read-modify-write). A plain `get`+`update` races and lets `maxAttempts` be bypassed under concurrency.
@@ -3005,7 +3003,7 @@ Validate:
 
 ## 6. Phase 5 — Frontend (`./react`)
 
-> **Phase objective:** Implement the `./react` subpath with the `useOtpInput` and `useOtpCountdown` hooks plus their RTL tests. Adoption (Phase 6) and Release (Phase 7) follow.
+> **Phase objective:** Implement the `./react` subpath with the `useOtpInput` and `useOtpCountdown` hooks plus their RTL tests. Release (Phase 6) follows.
 >
 > **Complexity:** MEDIUM. React hooks are simple state logic — `useState` + `useRef`. The risk lies in UX details (paste handler, auto-focus, Backspace navigation).
 >
@@ -3310,111 +3308,13 @@ pnpm typecheck && pnpm lint && pnpm test:cov && pnpm build && pnpm size
 
 ---
 
-## 7. Phase 6 — Adoption in bymax-fitness-ai
+## 7. Phase 6 — Release v0.1.0
 
-> **Phase objective:** Replace `bymax-fitness-ai`'s `_commons_/notification/` with `@bymax-one/nest-notification`, validating the package against its first real consumer **before** publishing (spec §14.6).
->
-> **Complexity:** HIGH. Touches a production app: porting the 6 hardcoded templates, dissolving the Prisma coupling in `EmailVerificationService`, and two behavior changes (new resend cooldown, explicit recipient normalization).
->
-> **Critical paths:** the fitness `PrismaNotificationLogRepository` and `BymaxFitnessTemplateRenderer`; the registration + email-verification E2E.
-
-> **Scope note:** the code in this phase lives in the **`bymax-fitness-ai` repo**, not in the lib. The lib stays consumer-agnostic; this phase proves the contract works end-to-end.
-
-### 7.1 `PrismaNotificationLogRepository` (fitness backend)
-
-**Objective:** Implement `INotificationLogRepository` over the fitness Prisma client (the lib never imports Prisma — the consumer does).
-
-**Deliverables:**
-
-- Add the `NotificationLog` model from `docs/schemas/notification-log.prisma` to the fitness `schema.prisma`; run `prisma migrate dev`.
-- Implement `PrismaNotificationLogRepository` (see §5.4 example) and register it under `audit.repository`.
-
-**Acceptance criteria:**
-
-- [ ] Migration created and applied
-- [ ] `create(entry)` persists every `NotificationLogEntry` field; never throws into the caller (fire-and-forget honored by `swallowErrors`)
-
-### 7.2 `BymaxFitnessTemplateRenderer` — port the 6 production templates
-
-**Objective:** Port the hardcoded PT-BR HTML from `_commons_/notification/email/email.service.ts` into an `IEmailTemplateRenderer` registered via `email.templateRenderer`.
-
-**Templates to port (the lib ships none — these live in the consumer):**
-
-| Template name | From fitness method | Notes |
-|---|---|---|
-| `otp_code` | `sendVerificationEmail` / `generateVerificationEmailTemplate` | email-verification OTP; hours+minutes expiry formatting |
-| `otp_password_reset` | `sendOTPCode` / `generateOTPEmailTemplate` | password-reset OTP; optional `verificationLink` CTA (deep link) |
-| `welcome` | `sendWelcomeEmail` / `generateWelcomeEmailTemplate` | — |
-| `password_reset_success` | `sendPasswordResetSuccessEmail` / `generatePasswordResetSuccessTemplate` | — |
-| `trial_expiring` | `sendTrialExpiringEmail` (html + text + tags) | keep the plain-text body and provider `tags` |
-| `trial_expired` | `sendTrialExpiredEmail` (html + text + tags) | keep the plain-text body and provider `tags` |
-
-**Acceptance criteria:**
-
-- [ ] All 6 templates registered (with `en` + `pt-BR` keys as needed); shared base/header/footer preserved
-- [ ] Trial templates return `{ subject, html, text }` and the call sites pass `tags`
-- [ ] OTP templates render the `verificationLink` CTA when `emailData.verificationLink` is provided
-- [ ] HTML escape applies to interpolated variables in the html body only
-
-### 7.3 Refactor `EmailVerificationService` → `OtpService`
-
-**Objective:** Remove the direct Prisma/OTP coupling — delegate to `OtpService`; the service keeps only the user-activation business logic.
-
-**Deliverables:**
-
-- Replace `OTPRedisService.storeOTP/validateOTP/removeOTP` calls with `OtpService.generate/verify/consume`.
-- Pass `recipient = email.trim().toLowerCase()` (the lib does NOT normalize) and a constant `tenantId` (fitness is effectively single-tenant — e.g. `'default'`).
-- Map the two TTL policies (10-min reset / 60-min verification) onto `otp.perPurpose` instead of two service instances.
-
-**Acceptance criteria:**
-
-- [ ] `EmailVerificationService` no longer imports `PrismaService` for OTP storage
-- [ ] Email verification + password reset both work via `OtpService`
-- [ ] `perPurpose` carries `email_verification: 3600`, `password_reset: 600`
-
-### 7.4 Wire the frontend resend to the new cooldown
-
-**Objective:** Cooldown did not exist in fitness; the FE "resend" button must handle the new `OTP_COOLDOWN_ACTIVE` response.
-
-**Acceptance criteria:**
-
-- [ ] On `429 OTP_COOLDOWN_ACTIVE`, the FE shows `details.remainingSeconds` and disables resend until it elapses (can use `useOtpCountdown` / `formatCooldown`)
-- [ ] Verification screen uses `useOtpInput` for the code entry
-
-### 7.5 Remove `_commons_/notification/` + E2E smoke
-
-**Objective:** Delete the old module after validation and prove the flow end-to-end.
-
-**Deliverables:**
-
-- E2E: registration → email-verification OTP; password-reset OTP; resend-cooldown rejection.
-- Remove `_commons_/notification/` and its imports once green.
-
-**Acceptance criteria:**
-
-- [ ] E2E smoke green (registration + verification + password reset + cooldown)
-- [ ] `_commons_/notification/` removed; no remaining imports of it
-- [ ] No `@prisma/client` import path runs through the lib
-
-### 7.6 Phase 6 validation
-
-**Done criteria to close Phase 6:**
-
-- [ ] Fitness builds and its notification E2E passes against `@bymax-one/nest-notification`
-- [ ] All 6 templates render correctly in a manual check
-- [ ] Audit log rows land in the fitness DB
-- [ ] PR (in the fitness repo) reviewed and merged
-- [ ] Any gaps discovered fed back into the lib spec/plan before Phase 7
-
----
-
-## 8. Phase 7 — Release v0.1.0
-
-> **Phase objective:** Finalize documentation (README, CHANGELOG, SECURITY.md, CLAUDE.md, AGENTS.md) and the release surface (the CI/CodeQL/Scorecard/Release workflows already exist and have gated every phase since §2.1 — here we add the dogfood smoke + verify badges/Scorecard), validate bundle budgets, run end-to-end mutation testing, then tag + publish v0.1.0 — only after Phase 6 validated the package in a real consumer.
+> **Phase objective:** Finalize documentation (README, CHANGELOG, SECURITY.md, CLAUDE.md, AGENTS.md) and the release surface (the CI/CodeQL/Scorecard/Release workflows already exist and have gated every phase since §2.1 — here we add the dogfood smoke + verify badges/Scorecard), validate bundle budgets, run end-to-end mutation testing, then tag + publish v0.1.0 — the dogfood smoke (§7.3) is the consumer validation that gates the release.
 >
 > **Complexity:** MEDIUM. Mechanical but requires attention (provenance, scorecard, mutation gate).
 
-### 8.1 README end
+### 7.1 README end
 
 **Objective:** Complete README, mirroring the `nest-auth/README.md` structure. Includes badges, quick start, examples, subpath table, multi-tenant security.
 
@@ -3458,7 +3358,7 @@ README.md
 - [ ] Disclaimer "SMS + Push v0.2"
 - [ ] Size ~12-18 KB
 
-### 8.2 CHANGELOG, SECURITY, CLAUDE, AGENTS
+### 7.2 CHANGELOG, SECURITY, CLAUDE, AGENTS
 
 **Files to create:**
 
@@ -3490,7 +3390,7 @@ LICENSE
 - [ ] CLAUDE.md mirrors estrutura do nest-auth
 - [ ] LICENSE is MIT
 
-### 8.3 CI/release finalization
+### 7.3 CI/release finalization
 
 > **The four workflows are created in Phase 1 (§2.1), not here.** Because the whole library is built 100% by agents, CI must gate every PR from the very first one — so `.github/workflows/{ci,codeql,scorecard,release}.yml` ship in the foundation task and are designed **incremental-safe** (see §2.1). This sub-step only finalizes the release surface.
 
@@ -3513,7 +3413,7 @@ LICENSE
 - [ ] `scripts/dogfood-smoke-test.mjs` passes
 - [ ] `release.yml` tag-gated with `--provenance`; Scorecard ≥ 7.0 (weekly cron); CodeQL clean
 
-### 8.4 Bundle size budgets
+### 7.4 Bundle size budgets
 
 **Modification — `scripts/check-size.mjs`:**
 
@@ -3542,7 +3442,7 @@ const BUDGETS = [
 - [ ] `pnpm size` shows `server` < 30KB, `shared` < 4KB, `react` < 8KB brotli
 - [ ] CI roda `pnpm size` in the `ci.yml`
 
-### 8.5 Mutation testing end
+### 7.5 Mutation testing end
 
 ```bash
 pnpm mutation:dry-run  # ensure config ok
@@ -3556,7 +3456,7 @@ pnpm mutation           # full run (~15 min)
 - [ ] Update `docs/mutation_testing_results.md` with timestamp + score
 - [ ] Equivalent mutants documented inline with `// Stryker disable next-line <Mutator>: <reason>`
 
-### 8.6 Final validation + tag + publish
+### 7.6 Final validation + tag + publish
 
 **Commands:**
 
@@ -3583,7 +3483,7 @@ npm view @bymax-one/nest-notification@0.1.0
 - [ ] OpenSSF Scorecard ≥ 7.0
 - [ ] CHANGELOG `0.1.0` entry with timestamp
 
-### 8.7 Release notes — v0.1.0
+### 7.7 Release notes — v0.1.0
 
 > **Released:** [date]
 >
@@ -3601,7 +3501,7 @@ npm view @bymax-one/nest-notification@0.1.0
 > - `forRootAsync` `useClass` / `useExisting`
 > - Multi-provider failover
 
-**Done criteria to close Phase 7:**
+**Done criteria to close Phase 6:**
 
 - [ ] Coverage 100% (release gate)
 - [ ] Bundle within budgets
@@ -3670,22 +3570,12 @@ npm view @bymax-one/nest-notification@0.1.0
             └─────────┬───────────────────────┘
                       │
                       ▼
-                  Phase 6 — Adoption in bymax-fitness-ai
+                  Phase 6 — Release v0.1.0
                       │
             ┌─────────────────────────────────┐
-            │  PrismaNotificationLogRepository│ ← §7.1
-            │  BymaxFitnessTemplateRenderer   │ ← §7.2 (6 templates)
-            │  Refactor EmailVerification     │ ← §7.3
-            │  Remove _commons_/ + E2E        │ ← §7.5
-            └─────────┬───────────────────────┘
-                      │
-                      ▼
-                  Phase 7 — Release v0.1.0
-                      │
-            ┌─────────────────────────────────┐
-            │  README + CHANGELOG + CI        │ ← §8.1-8.3
-            │  Bundle budgets + mutation 95   │ ← §8.4-8.5
-            │  Tag v0.1.0 + publish           │ ← §8.6
+            │  README + CHANGELOG + CI        │ ← §7.1-7.3
+            │  Bundle budgets + mutation 95   │ ← §7.4-7.5
+            │  Tag v0.1.0 + publish           │ ← §7.6
             └─────────────────────────────────┘
 ```
 
@@ -3732,19 +3622,14 @@ npm view @bymax-one/nest-notification@0.1.0
 | 5 | 6.2 useOtpCountdown | ~80 LoC | LOW | jest fake timers |
 | 5 | 6.3 Barrel ./react | ~10 LoC | LOW | — |
 | 5 | 6.4 Tests React | ~500 LoC | MEDIUM | renderHook + act setup |
-| 6 | 7.1 PrismaNotificationLogRepository (fitness) | ~60 LoC | LOW | Prisma migration in the consumer |
-| 6 | 7.2 BymaxFitnessTemplateRenderer (6 templates) | ~400 LoC | MEDIUM | Faithful port of hardcoded HTML + text/tags |
-| 6 | 7.3 Refactor EmailVerificationService | ~120 LoC | HIGH | Recipient normalization; perPurpose TTLs; no Prisma OTP coupling |
-| 6 | 7.4 FE resend cooldown wiring | ~60 LoC | LOW | New OTP_COOLDOWN_ACTIVE handling |
-| 6 | 7.5 Remove _commons_/ + E2E | ~200 LoC | MEDIUM | Delete only after E2E green |
-| 7 | 8.1 README | doc | LOW | — |
-| 7 | 8.2 CHANGELOG + SECURITY + CLAUDE + AGENTS | doc | LOW | — |
-| 7 | 8.3 CI/release finalization (dogfood smoke; workflows from §2.1) | ~40 LoC | LOW | — |
-| 7 | 8.4 Bundle budgets | ~30 LoC | LOW | — |
-| 7 | 8.5 Mutation testing | manual | MEDIUM | Equivalent mutants; break 95 |
-| 7 | 8.6 Tag + publish | manual | LOW | Provenance OIDC works |
+| 6 | 7.1 README | doc | LOW | — |
+| 6 | 7.2 CHANGELOG + SECURITY + CLAUDE + AGENTS | doc | LOW | — |
+| 6 | 7.3 CI/release finalization (dogfood smoke; workflows from §2.1) | ~40 LoC | LOW | — |
+| 6 | 7.4 Bundle budgets | ~30 LoC | LOW | — |
+| 6 | 7.5 Mutation testing | manual | MEDIUM | Equivalent mutants; break 95 |
+| 6 | 7.6 Tag + publish | manual | LOW | Provenance OIDC works |
 
-**Total estimated LoC (source + tests):** ~7,500 LoC (lib ~7,000 + fitness adoption ~500).
+**Total estimated LoC (source + tests):** ~7,000 LoC (lib).
 
 ---
 

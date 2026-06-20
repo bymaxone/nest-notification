@@ -1,6 +1,6 @@
 # Development Tasks — @bymax-one/nest-notification
 
-> **Last updated:** 2026-06-19
+> **Last updated:** 2026-06-20
 > **Source roadmap:** [`../development_plan.md`](../development_plan.md) (plan rev 1.1.0) · **Spec:** [`../technical_specification.md`](../technical_specification.md) (rev 1.1.0)
 
 Tasks live **one file per phase** in this folder (`docs/tasks/phase-NN-<slug>.md`), following the Bymax task-doc convention (same pattern as `bymax-one/rust-auth`). Each phase file is self-contained: context, rules-of-phase, reference docs, a task index, the tasks (each with an executable **Agent prompt**), and a completion log.
@@ -18,11 +18,8 @@ Tasks live **one file per phase** in this folder (`docs/tasks/phase-NN-<slug>.md
 | 3 | [`phase-03-templating-rate-limiting.md`](./phase-03-templating-rate-limiting.md) | 8 / 8 | 🟢 Done |
 | 4 | [`phase-04-multitenant-audit.md`](./phase-04-multitenant-audit.md) | 8 / 8 | 🟢 Done |
 | 5 | [`phase-05-frontend-react.md`](./phase-05-frontend-react.md) | 5 / 5 | 🟢 Done |
-| 6 | [`phase-06-adoption-bymax-fitness.md`](./phase-06-adoption-bymax-fitness.md) | 0 / 6 | 🔴 Not started |
-| 7 | [`phase-07-release.md`](./phase-07-release.md) | 0 / 7 | 🔴 Not started |
-| | **Total** | **42 / 55** | 🟡 76% |
-
-> Phases 1–5 + 7 are in this repo; **Phase 6 (Adoption)** runs in the `bymax-fitness-ai` repo and validates the package before release.
+| 6 | [`phase-06-release.md`](./phase-06-release.md) | 0 / 7 | 🔴 Not started |
+| | **Total** | **42 / 49** | 🟡 86% |
 
 ---
 
