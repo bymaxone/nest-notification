@@ -1,6 +1,6 @@
 # Phase 1 — Foundation + Interfaces (`IEmailProvider` + `IOtpStorage`)
 
-> **Status**: 🔄 In Progress · **Progress**: 1 / 11 tasks · **Last updated**: 2026-06-19
+> **Status**: 🔄 In Progress · **Progress**: 2 / 11 tasks · **Last updated**: 2026-06-19
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 2 (Phase 1)
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md)
 
@@ -40,7 +40,7 @@ The flagship decision baked in here is the **dissolution of the Prisma coupling*
 | ID | Task | Status | Priority | Size | Depends on |
 |---|---|---|---|---|---|
 | 1.1 | Project scaffold **+ complete CI** (package.json, tsconfig×, tsup 3 entries, jest×, stryker, eslint, check-size, check:no-prisma, **ci/codeql/scorecard/release workflows — incremental-safe**) | ✅ | P0 | L | — |
-| 1.2 | Shared types + constants (`src/shared`) | ⬜ | P0 | S | 1.1 |
+| 1.2 | Shared types + constants (`src/shared`) | ✅ | P0 | S | 1.1 |
 | 1.3 | Main interfaces (`IEmailProvider`, `IOtpStorage` + atomic methods, renderer, log, SMS/Push sketches, module options, `NotificationRequest`) | ⬜ | P0 | M | 1.1, 1.2 |
 | 1.4 | Injection tokens + error catalog (incl. `OTP_EMAIL_DELIVERY_NOT_CONFIGURED`) + `NotificationException` + default-options constants | ⬜ | P0 | M | 1.2, 1.3 |
 | 1.5 | Options validation + resolution (`ResolvedNotificationOptions` + `resolveForPurpose`, `maxAttachmentBytes`, `maskRecipient`) | ⬜ | P0 | M | 1.3, 1.4 |
@@ -161,7 +161,7 @@ Completion Protocol:
 
 ### Task 1.2 — Shared types + constants (`src/shared`)
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: S
 - **Depends on**: 1.1
@@ -172,12 +172,12 @@ Define the zero-dependency public types and constants importable from the fronte
 
 #### Acceptance criteria
 
-- [ ] `OtpPurpose` is `'email_verification' | 'password_reset' | 'mfa_oob' | 'phone_verification' | 'magic_link' | (string & {})` with JSDoc noting `phone_verification` = SMS-delivered (v0.2/manual) and `magic_link` = long token via URL
-- [ ] `NOTIFICATION_ERROR_CODES` lists all **21** codes (incl. `OTP_EMAIL_DELIVERY_NOT_CONFIGURED`), `as const`
-- [ ] `DEFAULT_TTLS` carries rationale per constant
-- [ ] No `@nestjs`/`node:` import in `src/shared` (`grep` returns empty); `import type` used for types
-- [ ] `import('@bymax-one/nest-notification/shared')` resolves in a fixture; bundle < 4 KB brotli
-- [ ] Coverage 100%
+- [x] `OtpPurpose` is `'email_verification' | 'password_reset' | 'mfa_oob' | 'phone_verification' | 'magic_link' | (string & {})` with JSDoc noting `phone_verification` = SMS-delivered (v0.2/manual) and `magic_link` = long token via URL
+- [x] `NOTIFICATION_ERROR_CODES` lists all **21** codes (incl. `OTP_EMAIL_DELIVERY_NOT_CONFIGURED`), `as const`
+- [x] `DEFAULT_TTLS` carries rationale per constant
+- [x] No `@nestjs`/`node:` import in `src/shared` (`grep` returns empty); `import type` used for types
+- [x] `import('@bymax-one/nest-notification/shared')` resolves in a fixture; bundle < 4 KB brotli
+- [x] Coverage 100%
 
 #### Files to create / modify
 
@@ -823,3 +823,4 @@ in `docs/development_plan.md`. 5. Append `- 1.11 ✅ <YYYY-MM-DD> — <summary>`
 > Append-only. One line per completed task: `- <task-id> ✅ YYYY-MM-DD — <one-line summary>`.
 
 - 1.1 ✅ 2026-06-19 — Scaffold + incremental-safe CI: package.json (zero deps, 3 subpaths, optional peers), tsconfig family, tsup (3 entries), jest×4, stryker, eslint flat, check-size (30/4/8 KB), check:no-prisma, ci/codeql/scorecard/release workflows. All gates green on empty sources.
+- 1.2 ✅ 2026-06-19 — Shared subpath: `OtpPurpose`/`NotificationChannel`/`NotificationErrorResponse` types, the 21-code `NOTIFICATION_ERROR_CODES`, `DEFAULT_TTLS`; zero NestJS/Node imports; 100% coverage.
