@@ -1,6 +1,6 @@
 # Phase 1 — Foundation + Interfaces (`IEmailProvider` + `IOtpStorage`)
 
-> **Status**: 🔄 In Progress · **Progress**: 3 / 11 tasks · **Last updated**: 2026-06-19
+> **Status**: 🔄 In Progress · **Progress**: 4 / 11 tasks · **Last updated**: 2026-06-19
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 2 (Phase 1)
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md)
 
@@ -42,7 +42,7 @@ The flagship decision baked in here is the **dissolution of the Prisma coupling*
 | 1.1 | Project scaffold **+ complete CI** (package.json, tsconfig×, tsup 3 entries, jest×, stryker, eslint, check-size, check:no-prisma, **ci/codeql/scorecard/release workflows — incremental-safe**) | ✅ | P0 | L | — |
 | 1.2 | Shared types + constants (`src/shared`) | ✅ | P0 | S | 1.1 |
 | 1.3 | Main interfaces (`IEmailProvider`, `IOtpStorage` + atomic methods, renderer, log, SMS/Push sketches, module options, `NotificationRequest`) | ✅ | P0 | M | 1.1, 1.2 |
-| 1.4 | Injection tokens + error catalog (incl. `OTP_EMAIL_DELIVERY_NOT_CONFIGURED`) + `NotificationException` + default-options constants | ⬜ | P0 | M | 1.2, 1.3 |
+| 1.4 | Injection tokens + error catalog (incl. `OTP_EMAIL_DELIVERY_NOT_CONFIGURED`) + `NotificationException` + default-options constants | ✅ | P0 | M | 1.2, 1.3 |
 | 1.5 | Options validation + resolution (`ResolvedNotificationOptions` + `resolveForPurpose`, `maxAttachmentBytes`, `maskRecipient`) | ⬜ | P0 | M | 1.3, 1.4 |
 | 1.6 | No-op providers + minimal `DefaultTemplateRenderer` (escape html body only) | ⬜ | P0 | S | 1.3 |
 | 1.7 | Crypto utils — `hash`, `code-generator` (digit-by-digit), `safeCompare` (length-guard) | ⬜ | P0 | M | 1.4 |
@@ -310,7 +310,7 @@ Completion Protocol:
 
 ### Task 1.4 — Injection tokens + error catalog + `NotificationException` + default constants
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: 1.2, 1.3
@@ -321,12 +321,12 @@ Define the 7 `Symbol` injection tokens, the `NOTIFICATION_ERROR_DEFINITIONS` cat
 
 #### Acceptance criteria
 
-- [ ] 7 unique `Symbol` tokens
-- [ ] `NOTIFICATION_ERROR_DEFINITIONS` covers all 21 codes; the code strings match `shared/constants/error-codes.ts` **byte-for-byte** (CI/script gate)
-- [ ] `OTP_EMAIL_DELIVERY_NOT_CONFIGURED` present (500)
-- [ ] `NotificationException` produces the exact `NotificationErrorResponse` shape; accepts `overrideStatus`/`overrideMessage`; error lookups via `Map.get` (no object-injection)
-- [ ] `DEFAULT_OTP_OPTIONS` includes `consumeOnVerify:false`; `DEFAULT_EMAIL_OPTIONS` includes `maxAttachmentBytes: 10_485_760`; `DEFAULT_AUDIT_OPTIONS` includes `swallowErrors:true`
-- [ ] Coverage 100% on `notification-exception.ts`
+- [x] 7 unique `Symbol` tokens
+- [x] `NOTIFICATION_ERROR_DEFINITIONS` covers all 21 codes; the code strings match `shared/constants/error-codes.ts` **byte-for-byte** (CI/script gate)
+- [x] `OTP_EMAIL_DELIVERY_NOT_CONFIGURED` present (500)
+- [x] `NotificationException` produces the exact `NotificationErrorResponse` shape; accepts `overrideStatus`/`overrideMessage`; error lookups via `Map.get` (no object-injection)
+- [x] `DEFAULT_OTP_OPTIONS` includes `consumeOnVerify:false`; `DEFAULT_EMAIL_OPTIONS` includes `maxAttachmentBytes: 10_485_760`; `DEFAULT_AUDIT_OPTIONS` includes `swallowErrors:true`
+- [x] Coverage 100% on `notification-exception.ts`
 
 #### Files to create / modify
 
@@ -825,3 +825,4 @@ in `docs/development_plan.md`. 5. Append `- 1.11 ✅ <YYYY-MM-DD> — <summary>`
 - 1.1 ✅ 2026-06-19 — Scaffold + incremental-safe CI: package.json (zero deps, 3 subpaths, optional peers), tsconfig family, tsup (3 entries), jest×4, stryker, eslint flat, check-size (30/4/8 KB), check:no-prisma, ci/codeql/scorecard/release workflows. All gates green on empty sources.
 - 1.2 ✅ 2026-06-19 — Shared subpath: `OtpPurpose`/`NotificationChannel`/`NotificationErrorResponse` types, the 21-code `NOTIFICATION_ERROR_CODES`, `DEFAULT_TTLS`; zero NestJS/Node imports; 100% coverage.
 - 1.3 ✅ 2026-06-19 — Interfaces: `IEmailProvider`, `IOtpStorage` (atomic `consumeAttempt`/`tryAcquireCooldown`/`clearCooldown`, Prisma-dissolution note), renderer, log repo, SMS/Push v0.2 sketches, module options (+`NotificationRequest`, async factory). Zero `any`.
+- 1.4 ✅ 2026-06-19 — 7 Symbol DI tokens, the 21-entry `NOTIFICATION_ERROR_DEFINITIONS` (+`OTP_EMAIL_DELIVERY_NOT_CONFIGURED`, `Map`-based lookup), `NotificationException`, `NOTIFICATION_PURPOSES`, `DEFAULT_*_OPTIONS`. Server/shared parity asserted; 100% coverage.
