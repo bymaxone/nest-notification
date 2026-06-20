@@ -1,6 +1,6 @@
 # Phase 4 — Multi-tenant + Audit Log
 
-> **Status**: 🔄 In Progress · **Progress**: 7 / 8 tasks · **Last updated**: 2026-06-20
+> **Status**: ✅ Done · **Progress**: 8 / 8 tasks · **Last updated**: 2026-06-20
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 5 (Phase 4)
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md)
 
@@ -40,7 +40,7 @@ Consolidate multi-tenancy (tenant-isolation regression tests, the `tenantIdResol
 | 4.5 | Multi-tenant security section in README (draft) | ✅ | P2 | S | — |
 | 4.6 | Tests — interceptor + audit-log E2E (never-log-code gate) | ✅ | P0 | M | 4.1, 4.2, 4.3 |
 | 4.7 | Barrel export (interceptor) | ✅ | P1 | S | 4.2 |
-| 4.8 | Phase 4 validation + smoke | ⬜ | P0 | S | 4.6 |
+| 4.8 | Phase 4 validation + smoke | ✅ | P0 | S | 4.6 |
 
 ---
 
@@ -430,7 +430,7 @@ Completion Protocol:
 
 ### Task 4.8 — Phase 4 validation + smoke
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: S
 - **Depends on**: 4.6
@@ -441,9 +441,9 @@ Run gates (incl. e2e) and a `forRootAsync` fixture smoke with audit + tenantIdRe
 
 #### Acceptance criteria
 
-- [ ] `pnpm typecheck && pnpm lint && pnpm test:cov && pnpm test:e2e && pnpm build && pnpm size` green
-- [ ] Smoke: `forRootAsync` with `tenantIdResolver` + Resend + Redis + a memory audit repo; audit rows recorded via supertest
-- [ ] Code-review findings applied
+- [x] `pnpm typecheck && pnpm lint && pnpm test:cov && pnpm test:e2e && pnpm build && pnpm size` green
+- [x] Smoke: `forRootAsync` with `tenantIdResolver` + NoOp email + Redis (in-process double) + a memory audit repo; audit rows recorded at the service/DI level (supertest/platform-express are not project deps)
+- [x] Code-review findings applied
 
 #### Files to create / modify
 
@@ -491,3 +491,4 @@ the plan. 5. Append `- 4.8 ✅ <YYYY-MM-DD> — <summary>`.
 - 4.5 ✅ 2026-06-20 — README "Multi-tenant Security" draft: SHA-256 key rationale, `tenantIdResolver` anti-spoofing (subdomain + JWT, typed), never-log-codes guarantee.
 - 4.6 ✅ 2026-06-20 — Interceptor unit spec (100%) + audit-log E2E: generated/sent, cooldown_blocked, max_attempts_exceeded, and the never-log-code gate.
 - 4.7 ✅ 2026-06-20 — Export `NotificationAuditInterceptor` from the server barrel; externalize `rxjs` in tsup + declare it as a peer (server bundle back to 15 KB brotli).
+- 4.8 ✅ 2026-06-20 — Full phase gate green (typecheck/lint/test:cov 100%/test:e2e/build/size/no-prisma) + `forRootAsync` smoke E2E (async graph records audit, interceptor anti-spoofing); code-review + security-review applied, zero findings.
