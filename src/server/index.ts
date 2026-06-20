@@ -123,6 +123,9 @@ export { hashTenantRecipient } from './utils/hash'
 export { generateOtpCode } from './utils/code-generator'
 export { safeCompare } from './utils/timing-safe-compare'
 
+// Cooldown presentation helpers — for consumers building Retry-After headers / countdowns
+export { toRetryAfterHeader, cooldownExpiresAt, formatCooldown } from './utils/cooldown-helpers'
+
 // Errors and exception
 export {
   NotificationException,
