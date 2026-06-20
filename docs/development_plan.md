@@ -228,23 +228,28 @@ This closes a common XSS vector: if you interpolate `{{userName}}` in HTML witho
 >
 > **Critical paths for 95% coverage:** `src/server/config/validate-options.ts`, `src/server/errors/notification-exception.ts`, `src/server/bymax-notification.module.ts` (conditional registration).
 
-### 2.1 Project scaffold
+### 2.1 Project scaffold + complete CI
 
-**Objective:** Create the folder structure, configuration files and base dependencies, mirroring the canonical `bymax-one/nest-auth` configs (template documented in the monorepo-level `bymax-one/EXTRACTION_ROADMAP.md §3`).
+**Objective:** Create the folder structure, configuration files, base dependencies **and the complete CI** in one foundation step — mirroring the canonical `bymax-one/nest-auth` configs and the gold-standard, Redis-aware CI of `bymax-one/nest-cache`. Because the library is built 100% by agents, the CI must gate every PR from the very first one; the four workflows are therefore created here, not at release, and every per-PR gate is **incremental-safe** (passes at every phase, depends on no later-phase resource).
 
 **Files to create:**
 
 ```
 nest-notification/
+├── .github/workflows/
+│   ├── ci.yml            # verify: typecheck·lint·check:no-prisma·test:cov·test:e2e·build·integrity·size (no mutation)
+│   ├── codeql.yml        # javascript-typescript, security-extended, push/PR/weekly
+│   ├── scorecard.yml     # OpenSSF Scorecard, push/weekly, SARIF + publish_results
+│   └── release.yml       # tag v*.*.*-driven ONLY: OIDC --provenance publish + dogfood smoke + CHANGELOG release
 ├── .gitignore
 ├── .prettierrc
 ├── .npmignore
 ├── eslint.config.mjs
-├── jest.config.ts
+├── jest.config.ts                 # passWithNoTests: true; coverage 100% over implemented src
 ├── jest.coverage.config.ts
-├── jest.e2e.config.ts
+├── jest.e2e.config.ts             # passWithNoTests: true (e2e specs first appear in Phase 4)
 ├── jest.stryker.config.ts
-├── stryker.config.json
+├── stryker.config.json            # high 100 / low 95 / break 95
 ├── tsconfig.json
 ├── tsconfig.build.json
 ├── tsconfig.server.json
@@ -257,6 +262,8 @@ nest-notification/
 ├── src/shared/index.ts          # empty in this step
 └── src/react/index.ts           # empty in this step
 ```
+
+> **Incremental-safe CI (must hold at every phase).** `ci.yml`'s `verify` job runs exactly `pnpm typecheck && lint && check:no-prisma && test:cov && test:e2e && build && <integrity> && size`. It passes from this first PR (empty sources + zero tests) because: jest configs set `passWithNoTests: true`; coverage is enforced only over implemented files (`collectCoverageFrom`); the build-output integrity loop tolerates the still-empty `react` bundle; size budgets pass on small bundles. **Mutation is never in `ci.yml`** (pre-release gate, §8.5). **`release.yml` only runs on a `v*.*.*` tag**, so it never fires during phases. Full workflow spec + the gold-standard reference: §8.3.
 
 > The `test/e2e/` directory is created on demand when the first `*.e2e-spec.ts` is added — do NOT create a `.gitkeep` placeholder.
 
@@ -3403,7 +3410,7 @@ pnpm typecheck && pnpm lint && pnpm test:cov && pnpm build && pnpm size
 
 ## 8. Phase 7 — Release v0.1.0
 
-> **Phase objective:** Finalize documentation (README, CHANGELOG, SECURITY.md, CLAUDE.md, AGENTS.md), configure CI workflows, validate bundle budgets, run end-to-end mutation testing, then tag + publish v0.1.0 — only after Phase 6 validated the package in a real consumer.
+> **Phase objective:** Finalize documentation (README, CHANGELOG, SECURITY.md, CLAUDE.md, AGENTS.md) and the release surface (the CI/CodeQL/Scorecard/Release workflows already exist and have gated every phase since §2.1 — here we add the dogfood smoke + verify badges/Scorecard), validate bundle budgets, run end-to-end mutation testing, then tag + publish v0.1.0 — only after Phase 6 validated the package in a real consumer.
 >
 > **Complexity:** MEDIUM. Mechanical but requires attention (provenance, scorecard, mutation gate).
 
@@ -3483,70 +3490,28 @@ LICENSE
 - [ ] CLAUDE.md mirrors estrutura do nest-auth
 - [ ] LICENSE is MIT
 
-### 8.3 CI workflows
+### 8.3 CI/release finalization
 
-**Files to create:**
+> **The four workflows are created in Phase 1 (§2.1), not here.** Because the whole library is built 100% by agents, CI must gate every PR from the very first one — so `.github/workflows/{ci,codeql,scorecard,release}.yml` ship in the foundation task and are designed **incremental-safe** (see §2.1). This sub-step only finalizes the release surface.
 
-```
-.github/workflows/
-├── ci.yml
-├── codeql.yml
-├── release.yml
-└── scorecard.yml
-```
+**The CI established in Phase 1 (gold-standard mirror of `bymax-one/nest-cache`):**
 
-Copy from `bymax-one/nest-auth/.github/workflows/` and adapt:
+- `ci.yml` — `verify` job on Node 24 / pnpm 10.8.1, least-privilege `permissions: contents: read`, `concurrency` cancel-in-progress: `typecheck` · `lint` · `check:no-prisma` · `test:cov` · `test:e2e` · `build` · build-output integrity (server/shared/react × mjs/cjs/d.ts) · `size` · coverage artifact · PR dependency-review (non-blocking). **No mutation step** (pre-release only).
+- `codeql.yml` — javascript-typescript, `security-extended`, push/PR/weekly.
+- `scorecard.yml` — push + weekly, SARIF upload + `publish_results`.
+- `release.yml` — tag `v*.*.*`-driven only: `npm-publish` environment, tag↔version guard, `prepublishOnly`, release-shape gates (`size` + dogfood smoke), OIDC `pnpm publish --provenance`, CHANGELOG-extract + `gh release create`.
 
-- Replace `nest-auth` por `nest-notification`
-- Add `pnpm check:no-prisma` step in `ci.yml` (regression gate)
-- Ajustar matriz for Node 24
-- Manter `release.yml` with `pnpm publish --provenance`
+**Incremental-safety (why it passes at every phase):** jest `passWithNoTests: true`; coverage enforced only over implemented files; build-output integrity tolerates the empty `react` subpath; size budgets pass on small bundles; e2e specs first appear in Phase 4 (pass-with-no-tests before that); mutation and publish are out of the per-PR path.
 
-**Skeleton — `ci.yml` (relevant additions):**
+**This sub-step (finalization) creates:**
 
-```yaml
-name: CI
-
-on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-
-jobs:
-  build-test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v3
-        with: { version: 10.8.1 }
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm typecheck
-      - run: pnpm lint
-      - run: pnpm check:no-prisma   # ← GATE: lib must never import Prisma
-      - run: pnpm test:cov
-      - run: pnpm build
-      - run: pnpm size
-      - uses: codecov/codecov-action@v4
-
-  dependency-review:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/dependency-review-action@v4
-```
+- `scripts/dogfood-smoke-test.mjs` — the release-shape smoke `release.yml` invokes (imports all 3 subpaths, runs a minimal `forRoot` + hook smoke).
 
 **Acceptance criteria:**
 
-- [ ] 4 workflows created
-- [ ] `ci.yml` includes step `pnpm check:no-prisma`
-- [ ] `release.yml` uses `--provenance`
-- [ ] Scorecard cron weekly
+- [ ] The 4 workflows already exist (from Phase 1) and `ci.yml` has been green across every phase
+- [ ] `scripts/dogfood-smoke-test.mjs` passes
+- [ ] `release.yml` tag-gated with `--provenance`; Scorecard ≥ 7.0 (weekly cron); CodeQL clean
 
 ### 8.4 Bundle size budgets
 
@@ -3730,7 +3695,7 @@ npm view @bymax-one/nest-notification@0.1.0
 
 | Phase | Sub-step | Est. LoC | Complexity | Main risk |
 |---|---|---|---|---|
-| 1 | 2.1 Scaffold | ~30 LoC + configs | LOW | Tooling version |
+| 1 | 2.1 Scaffold + complete CI (4 workflows, incremental-safe) | ~30 LoC + configs + ~300 LoC YAML | MEDIUM | CI must pass at every phase (passWithNoTests, coverage on implemented files, empty-react integrity) |
 | 1 | 2.2 Shared types | ~70 LoC | LOW | — |
 | 1 | 2.3 Interfaces (7 files) | ~250 LoC | MEDIUM | Document Prisma decoupling in IOtpStorage |
 | 1 | 2.4 Constants + tokens + error codes + exception | ~280 LoC | MEDIUM | Sync between server and shared error codes |
@@ -3774,7 +3739,7 @@ npm view @bymax-one/nest-notification@0.1.0
 | 6 | 7.5 Remove _commons_/ + E2E | ~200 LoC | MEDIUM | Delete only after E2E green |
 | 7 | 8.1 README | doc | LOW | — |
 | 7 | 8.2 CHANGELOG + SECURITY + CLAUDE + AGENTS | doc | LOW | — |
-| 7 | 8.3 CI workflows (4 files) | ~300 LoC YAML | LOW | — |
+| 7 | 8.3 CI/release finalization (dogfood smoke; workflows from §2.1) | ~40 LoC | LOW | — |
 | 7 | 8.4 Bundle budgets | ~30 LoC | LOW | — |
 | 7 | 8.5 Mutation testing | manual | MEDIUM | Equivalent mutants; break 95 |
 | 7 | 8.6 Tag + publish | manual | LOW | Provenance OIDC works |
