@@ -1,6 +1,6 @@
 # Phase 1 — Foundation + Interfaces (`IEmailProvider` + `IOtpStorage`)
 
-> **Status**: 🔄 In Progress · **Progress**: 8 / 11 tasks · **Last updated**: 2026-06-19
+> **Status**: 🔄 In Progress · **Progress**: 9 / 11 tasks · **Last updated**: 2026-06-19
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 2 (Phase 1)
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md)
 
@@ -47,7 +47,7 @@ The flagship decision baked in here is the **dissolution of the Prisma coupling*
 | 1.6 | No-op providers + minimal `DefaultTemplateRenderer` (escape html body only) | ✅ | P0 | S | 1.3 |
 | 1.7 | Crypto utils — `hash`, `code-generator` (digit-by-digit), `safeCompare` (length-guard) | ✅ | P0 | M | 1.4 |
 | 1.8 | Dynamic module — synchronous `forRoot()` with conditional registration | ✅ | P0 | M | 1.5, 1.6 |
-| 1.9 | Server barrel exports | ⬜ | P1 | S | 1.3–1.8 |
+| 1.9 | Server barrel exports | ✅ | P1 | S | 1.3–1.8 |
 | 1.10 | Tests for Phase 1 (100% coverage) | ⬜ | P0 | L | 1.3–1.9 |
 | 1.11 | Phase 1 validation (gates + error-codes sync + smoke) | ⬜ | P0 | S | 1.10 |
 
@@ -642,7 +642,7 @@ Completion Protocol:
 
 ### Task 1.9 — Server barrel exports
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: S
 - **Depends on**: 1.3, 1.4, 1.5, 1.6, 1.7, 1.8
@@ -653,9 +653,9 @@ Expose the public server API in `src/server/index.ts`: module, 7 tokens, `NOTIFI
 
 #### Acceptance criteria
 
-- [ ] All public symbols exported; no `_internal*` leakage
-- [ ] `pnpm build` emits `dist/server/index.{mjs,cjs,d.ts}`; `Object.keys` lists the expected set
-- [ ] `import('@bymax-one/nest-notification').BymaxNotificationModule.forRoot({...})` works in a fixture
+- [x] All public symbols exported; no `_internal*` leakage
+- [x] `pnpm build` emits `dist/server/index.{mjs,cjs,d.ts}`; `Object.keys` lists the expected set
+- [x] `import('@bymax-one/nest-notification').BymaxNotificationModule.forRoot({...})` works in a fixture
 
 #### Files to create / modify
 
@@ -830,3 +830,4 @@ in `docs/development_plan.md`. 5. Append `- 1.11 ✅ <YYYY-MM-DD> — <summary>`
 - 1.6 ✅ 2026-06-19 — `NoOpEmailProvider` (logs to+subject, never body), `NoOpNotificationLogRepository` (silent discard), `DefaultTemplateRenderer` (`{{var}}` interpolation, html-only escape, `en` fallback). 100% coverage.
 - 1.7 ✅ 2026-06-19 — Crypto utils: `hashTenantRecipient` (sha256), `generateOtpCode` (per-char CSPRNG, no `10**length` overflow, confusion-free charsets), `safeCompare` (length-guarded `timingSafeEqual`). 100% line/branch.
 - 1.8 ✅ 2026-06-19 — `BymaxNotificationModule.forRoot` (conditional channel registration, instance-vs-class `useValue`/`useClass`, audit/renderer fallbacks, BOOTSTRAP_OK log) + `forRootAsync` options stub. 100% coverage.
+- 1.9 ✅ 2026-06-19 — Server barrel: module, 7 tokens, `NOTIFICATION_PURPOSES`, interface + resolved-options types, reference providers, errors, shared re-exports. Build emits all 3 subpaths; `forRoot` smoke green.
