@@ -9,6 +9,7 @@ import type {
   NotificationLogEntry
 } from '../interfaces/notification-log-repository.interface'
 import { InMemoryOtpStorage } from '../providers/in-memory-otp.storage'
+import { toRetryAfterHeader } from '../utils/cooldown-helpers'
 
 import type { EmailService } from './email.service'
 import { OtpService } from './otp.service'
@@ -86,9 +87,30 @@ describe('OtpService.generate', () => {
       const details = body.error.details
       expect(typeof details.remainingSeconds).toBe('number')
       expect(details.remainingSeconds as number).toBeGreaterThan(0)
-      expect(details.retryAfter).toBe(String(details.remainingSeconds))
+      expect(details.retryAfter).toBe(toRetryAfterHeader(details.remainingSeconds as number))
       expect(typeof details.expiresAt).toBe('number')
       expect(details.expiresAt as number).toBeGreaterThan(Date.now())
+    }
+  })
+
+  // The `Retry-After` hint is derived through `toRetryAfterHeader`, which rounds a
+  // fractional remaining cooldown UP and clamps it — never the raw `String(...)`
+  // of the value. A mocked fractional remainder proves the rounding path.
+  it('should derive retryAfter from a fractional remainingSeconds via toRetryAfterHeader', async () => {
+    const service = new OtpService(makeOptions(), storage, audit)
+    await service.generate({ ...ref, deliverVia: 'manual' })
+    jest.spyOn(storage, 'getCooldown').mockResolvedValue(30.4)
+
+    expect.assertions(3)
+    try {
+      await service.generate({ ...ref, deliverVia: 'manual' })
+    } catch (error) {
+      const details = (
+        error as { getResponse: () => { error: { details: Record<string, unknown> } } }
+      ).getResponse().error.details
+      expect(details.remainingSeconds).toBe(30.4)
+      expect(details.retryAfter).toBe(toRetryAfterHeader(30.4))
+      expect(details.retryAfter).toBe('31')
     }
   })
 
