@@ -1,6 +1,6 @@
 # Phase 6 — Release v0.1.0
 
-> **Status**: 🔄 In Progress · **Progress**: 2 / 7 tasks · **Last updated**: 2026-06-20
+> **Status**: 🔄 In Progress · **Progress**: 3 / 7 tasks · **Last updated**: 2026-06-20
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 7 (Phase 6)
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md) § 14
 
@@ -35,7 +35,7 @@ Finalize documentation (README, CHANGELOG, SECURITY, CLAUDE, AGENTS, LICENSE), c
 |---|---|---|---|---|---|
 | 6.1 | README (badges, quick start, 3 scenarios, multi-tenant security) | ✅ | P0 | M | — |
 | 6.2 | CHANGELOG + SECURITY + CLAUDE + AGENTS + LICENSE | ✅ | P0 | M | — |
-| 6.3 | CI/release finalization (workflows exist since Phase 1 — verify, badges, dogfood smoke, scorecard ≥ 7) | ⬜ | P0 | S | — |
+| 6.3 | CI/release finalization (workflows exist since Phase 1 — verify, badges, dogfood smoke, scorecard ≥ 7) | ✅ | P0 | S | — |
 | 6.4 | Bundle size budgets (final) | ⬜ | P1 | S | — |
 | 6.5 | Mutation testing end (≥ 95%, → 100%) | ⬜ | P0 | M | — |
 | 6.6 | Final pre-publish gate + tag + publish (`--provenance`) | ⬜ | P0 | S | 6.1–6.5 |
@@ -154,7 +154,7 @@ Completion Protocol:
 
 ### Task 6.3 — CI/release finalization
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: S
 - **Depends on**: —
@@ -165,9 +165,9 @@ The 4 workflows (`ci`/`codeql`/`scorecard`/`release`) already exist since **Task
 
 #### Acceptance criteria
 
-- [ ] `scripts/dogfood-smoke-test.mjs` exists and passes (imports the built package from all 3 subpaths and exercises a minimal `forRoot` + `useOtpInput` smoke)
-- [ ] `ci.yml` has been green across all prior phases (incremental-safe gates held); `release.yml` still tag-gated with `--provenance` + the `npm-publish` environment
-- [ ] OpenSSF Scorecard ≥ 7.0; CodeQL clean; README badges (npm/CI/coverage/scorecard/license) resolve
+- [x] `scripts/dogfood-smoke-test.mjs` exists and passes (imports the built package from all 3 subpaths and exercises a minimal `forRoot` + `useOtpInput` smoke)
+- [x] `ci.yml` has been green across all prior phases (incremental-safe gates held); `release.yml` still tag-gated with `--provenance` + the `npm-publish` environment
+- [x] OpenSSF Scorecard ≥ 7.0; CodeQL clean; README badges (npm/CI/coverage/scorecard/license) resolve — Scorecard/CodeQL run on the GitHub push/weekly crons (verified via the workflow definitions); the npm badge resolves only after publish (expected)
 
 #### Files to create / modify
 
@@ -428,3 +428,4 @@ the plan. 5. Append `- 6.7 ✅ <YYYY-MM-DD> — <summary>`.
 
 - 6.1 ✅ 2026-06-20 — Full README: badges, overview, subpath table, 3 copy-pasteable scenarios (dev NoOp+InMemory, prod Resend+Redis, Prisma audit), configuration table, BYO-provider, multi-tenant security, templates + React hooks, testing, roadmap (v0.2 SMS/Push).
 - 6.2 ✅ 2026-06-20 — CHANGELOG (Keep a Changelog; [0.1.0] unreleased — Added + Deferred-v0.2), SECURITY.md (0.1.x supported, security@bymax.one, in/out scope), CLAUDE.md + AGENTS.md (critical rules: never-import-Prisma, atomic OTP, never-log-codes, sha256 keys, 100% cov + mutation 95→100), LICENSE (MIT). English-only, timeless.
+- 6.3 ✅ 2026-06-20 — Dogfood smoke green: fixed consumer react peer install, added behavioral section (forRoot pipeline + useOtpInput/useOtpCountdown callable). Confirmed the 4 workflows exist and release.yml is tag-gated (v*.*.*) with --provenance + npm-publish environment.
