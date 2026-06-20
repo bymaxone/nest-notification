@@ -35,7 +35,7 @@ Finalize documentation (README, CHANGELOG, SECURITY, CLAUDE, AGENTS, LICENSE), c
 |---|---|---|---|---|---|
 | 7.1 | README (badges, quick start, 3 scenarios, multi-tenant security) | ⬜ | P0 | M | — |
 | 7.2 | CHANGELOG + SECURITY + CLAUDE + AGENTS + LICENSE | ⬜ | P0 | M | — |
-| 7.3 | CI workflows (ci/codeql/scorecard/release) | ⬜ | P0 | M | — |
+| 7.3 | CI/release finalization (workflows exist since Phase 1 — verify, badges, dogfood smoke, scorecard ≥ 7) | ⬜ | P0 | S | — |
 | 7.4 | Bundle size budgets (final) | ⬜ | P1 | S | — |
 | 7.5 | Mutation testing end (≥ 95%, → 100%) | ⬜ | P0 | M | — |
 | 7.6 | Final pre-publish gate + tag + publish (`--provenance`) | ⬜ | P0 | S | 7.1–7.5 |
@@ -152,24 +152,26 @@ Completion Protocol:
 
 ---
 
-### Task 7.3 — CI workflows
+### Task 7.3 — CI/release finalization
 
 - **Status**: ⬜ Not started
 - **Priority**: P0
-- **Size**: M
+- **Size**: S
 - **Depends on**: —
 
 #### Description
 
-Add `ci.yml` (typecheck/lint/check:no-prisma/test:cov/build/size + dependency-review), `codeql.yml`, `scorecard.yml`, `release.yml` (`--provenance`).
+The 4 workflows (`ci`/`codeql`/`scorecard`/`release`) already exist since **Task 1.1** and have gated every phase. This task only **finalizes the release surface**: add the `scripts/dogfood-smoke-test.mjs` referenced by `release.yml`, confirm the README badges resolve, and verify the OpenSSF Scorecard ≥ 7.0 and CodeQL clean. No workflow is created here.
 
 #### Acceptance criteria
 
-- [ ] 4 workflows; `ci.yml` includes the `pnpm check:no-prisma` gate and Node 24 matrix; `release.yml` uses `--provenance`; Scorecard weekly cron
+- [ ] `scripts/dogfood-smoke-test.mjs` exists and passes (imports the built package from all 3 subpaths and exercises a minimal `forRoot` + `useOtpInput` smoke)
+- [ ] `ci.yml` has been green across all prior phases (incremental-safe gates held); `release.yml` still tag-gated with `--provenance` + the `npm-publish` environment
+- [ ] OpenSSF Scorecard ≥ 7.0; CodeQL clean; README badges (npm/CI/coverage/scorecard/license) resolve
 
 #### Files to create / modify
 
-- `.github/workflows/{ci,codeql,scorecard,release}.yml`
+- `scripts/dogfood-smoke-test.mjs` (the workflows themselves are unchanged from Phase 1)
 
 #### Agent prompt
 
@@ -177,26 +179,30 @@ Add `ci.yml` (typecheck/lint/check:no-prisma/test:cov/build/size + dependency-re
 You are a senior DevOps/NestJS engineer working on the nest-notification project.
 
 PROJECT: @bymax-one/nest-notification — public NestJS notification lib, releasing v0.1.0 with provenance.
+The CI/CodeQL/Scorecard/Release workflows were created in Task 1.1 and have gated every phase.
 
 CURRENT PHASE: 7 (Release) — Task 7.3 of 7
 
+PRECONDITIONS
+- The 4 workflows exist and are green (incremental-safe since Phase 1).
+
 REQUIRED READING (only these):
 - `docs/development_plan.md` §8.3.
-- `bymax-one/nest-auth/.github/workflows/*.yml` (to adapt).
+- `.github/workflows/release.yml` (the release-shape gates it expects).
 
 TASK
-Add the 4 CI workflows.
+Finalize the release surface — do NOT recreate the workflows.
 
 DELIVERABLES
-1. `ci.yml` (pnpm 10.8.1, Node 24, install --frozen-lockfile, typecheck, lint, check:no-prisma,
-   test:cov, build, size, codecov, dependency-review on PR), `codeql.yml`, `scorecard.yml` (weekly),
-   `release.yml` (`pnpm publish --provenance`).
+1. `scripts/dogfood-smoke-test.mjs` — imports the built package from `.`/`./shared`/`./react`, runs a
+   minimal `BymaxNotificationModule.forRoot(...)` + `useOtpInput`/`useOtpCountdown` smoke; non-zero exit on failure.
+2. Confirm README badges resolve, Scorecard ≥ 7.0, CodeQL clean.
 
 Constraints:
-- English-only, timeless comments.
+- English-only, timeless comments. Do not weaken any gate.
 
 Verification:
-- Workflows lint; `check:no-prisma` step present; release uses provenance.
+- `node scripts/dogfood-smoke-test.mjs` passes; the latest `ci.yml` run on the branch is green.
 
 Completion Protocol:
 1. Status ✅ (block + index). 2. Tick AC. 3. Index row + progress `3/7`. 4. Update the Phase 7 row.

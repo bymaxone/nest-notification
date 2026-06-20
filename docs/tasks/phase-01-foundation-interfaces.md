@@ -22,6 +22,7 @@ The flagship decision baked in here is the **dissolution of the Prisma coupling*
 4. **DI tokens are `Symbol`s**; explicit `@Inject(TOKEN)`. Only configured channels are registered (opt-in).
 5. **Security primitives are correct**: codes via `crypto.randomInt` built digit-by-digit (no `10**length` overflow); `safeCompare` length-guards before `crypto.timingSafeEqual`; Redis identifiers hashed `sha256(tenantId:recipient)`.
 6. **100% line/branch coverage** on every implemented file before the phase closes; mutation focus on the crypto utils.
+7. **CI is complete and green from the very first PR.** The four workflows (`ci` · `codeql` · `scorecard` · `release`) are created in Task 1.1 and every PR/branch gate is **incremental-safe** — it must pass at *every* phase, not depend on later-phase resources: jest configs set `passWithNoTests: true`; coverage is enforced only on implemented files (`collectCoverageFrom`); the build-output integrity check tolerates the still-empty `react` subpath; size budgets pass on small/empty bundles; `check:no-prisma` runs on `src/`. **Mutation is a pre-release gate only — never on per-PR CI.** Heavy/last-phase steps (`--provenance` publish, dogfood smoke, CHANGELOG extraction) live in the tag-driven `release` workflow, which does not run during phases.
 
 ---
 
@@ -38,7 +39,7 @@ The flagship decision baked in here is the **dissolution of the Prisma coupling*
 
 | ID | Task | Status | Priority | Size | Depends on |
 |---|---|---|---|---|---|
-| 1.1 | Project scaffold (package.json, tsconfig×, tsup 3 entries, jest×, stryker, eslint, check-size, check:no-prisma) | ⬜ | P0 | M | — |
+| 1.1 | Project scaffold **+ complete CI** (package.json, tsconfig×, tsup 3 entries, jest×, stryker, eslint, check-size, check:no-prisma, **ci/codeql/scorecard/release workflows — incremental-safe**) | ⬜ | P0 | L | — |
 | 1.2 | Shared types + constants (`src/shared`) | ⬜ | P0 | S | 1.1 |
 | 1.3 | Main interfaces (`IEmailProvider`, `IOtpStorage` + atomic methods, renderer, log, SMS/Push sketches, module options, `NotificationRequest`) | ⬜ | P0 | M | 1.1, 1.2 |
 | 1.4 | Injection tokens + error catalog (incl. `OTP_EMAIL_DELIVERY_NOT_CONFIGURED`) + `NotificationException` + default-options constants | ⬜ | P0 | M | 1.2, 1.3 |
@@ -54,31 +55,35 @@ The flagship decision baked in here is the **dissolution of the Prisma coupling*
 
 ## Tasks
 
-### Task 1.1 — Project scaffold
+### Task 1.1 — Project scaffold + complete CI
 
 - **Status**: ⬜ Not started
 - **Priority**: P0
-- **Size**: M
+- **Size**: L
 - **Depends on**: —
 
 #### Description
 
-Create the repo scaffold: `package.json` (scope `@bymax-one`, version `0.1.0`, zero `dependencies`, required + optional peer deps, canonical scripts + `check:no-prisma`), the `tsconfig.*` family, `tsup.config.ts` (3 entries), the jest configs (+ jsdom for react), `stryker.config.json` (high 100 / low 95 / break 95), eslint flat config, `scripts/check-size.mjs` (server 30KB / shared 4KB / react 8KB brotli), and the empty `src/{server,shared,react}/index.ts`.
+Create the full repo scaffold **and the complete CI** in one foundation task, so every subsequent PR (all phases, 100%-agent-built) is gated by a green pipeline from day one. Scaffold: `package.json` (scope `@bymax-one`, version `0.1.0`, zero `dependencies`, required + optional peer deps, canonical scripts + `check:no-prisma`), the `tsconfig.*` family, `tsup.config.ts` (3 entries), the jest configs (`passWithNoTests: true`, + jsdom for react), `stryker.config.json` (high 100 / low 95 / break 95), eslint flat config, `scripts/check-size.mjs` (server 30KB / shared 4KB / react 8KB brotli), and the empty `src/{server,shared,react}/index.ts`. CI: the four GitHub Actions workflows mirrored from `bymax-one/nest-cache`, made **incremental-safe** (pass at every phase, no later-phase dependency).
 
 #### Acceptance criteria
 
-- [ ] `package.json`: name `@bymax-one/nest-notification`, version `0.1.0`, `type: module`, `sideEffects: false`, `"dependencies": {}`, 3 `exports` subpaths, all peer deps optional, `check:no-prisma` script
+- [ ] `package.json`: name `@bymax-one/nest-notification`, version `0.1.0`, `type: module`, `sideEffects: false`, `"dependencies": {}`, 3 `exports` subpaths, all peer deps optional, scripts incl. `check:no-prisma`, `test:cov`, `test:e2e`
 - [ ] `tsconfig.json` strict (`noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`), aliases for 3 subpaths
 - [ ] `tsup.config.ts` with 3 entries (server node24, shared zero-extern, react es2022 external `react`), `dts: true`, `format: ['esm','cjs']`
-- [ ] `stryker.config.json` thresholds high 100 / low 95 / break 95
-- [ ] `pnpm install` + `pnpm typecheck` + `pnpm lint` + `pnpm build` + `pnpm check:no-prisma` all pass on empty sources
-- [ ] No `test/e2e/.gitkeep` (directory created on demand) — no placeholder files anywhere
+- [ ] jest configs set **`passWithNoTests: true`**; coverage 100% via `collectCoverageFrom` over implemented `src/**` (excludes `*.spec.ts`, `index.ts`); `stryker.config.json` high 100 / low 95 / break 95
+- [ ] **`.github/workflows/ci.yml`** — `concurrency` + `permissions: contents: read`; `verify` job (Node 24, pnpm 10.8.1): dependency-review (PR, non-blocking), `typecheck`, `lint`, `check:no-prisma`, `test:cov`, `test:e2e`, `build`, build-output integrity (loops `server`/`shared`/`react` × `mjs`/`cjs`/`d.ts` — tolerates the empty react bundle), `size`, coverage artifact upload
+- [ ] **`codeql.yml`** (javascript-typescript, security-extended, PR+push+weekly), **`scorecard.yml`** (push+weekly, SARIF upload, `publish_results`), **`release.yml`** (tag `v*.*.*`-driven only: OIDC `--provenance` publish behind an `npm-publish` environment, tag↔version guard, `prepublishOnly`, release-shape gates incl. `size` + dogfood smoke, CHANGELOG-extract via env var)
+- [ ] **Incremental-safe proof:** with empty sources + zero tests, `pnpm install && pnpm typecheck && pnpm lint && pnpm check:no-prisma && pnpm test:cov && pnpm test:e2e && pnpm build && pnpm size` is all green (the CI `verify` job would pass)
+- [ ] **Mutation is NOT in `ci.yml`** (pre-release gate only); `release.yml` never runs during phases
+- [ ] No `test/e2e/.gitkeep` / placeholder files anywhere
 
 #### Files to create / modify
 
 - `package.json`, `tsconfig.json`, `tsconfig.build.json`, `tsconfig.server.json`, `tsconfig.e2e.json`, `tsconfig.jest.json`, `tsup.config.ts`
 - `jest.config.ts`, `jest.coverage.config.ts`, `jest.e2e.config.ts`, `jest.stryker.config.ts`, `stryker.config.json`
 - `eslint.config.mjs`, `.prettierrc`, `.gitignore`, `.npmignore`, `scripts/check-size.mjs`
+- `.github/workflows/{ci,codeql,scorecard,release}.yml`
 - `src/server/index.ts`, `src/shared/index.ts`, `src/react/index.ts` (placeholder comment only)
 
 #### Agent prompt
@@ -100,9 +105,13 @@ REQUIRED READING (only these):
 - `docs/development_plan.md` §2.1 (scaffold detail incl. the package.json field list) + Appendix C
   (reference configs — copy from `bymax-one/nest-auth`, adapt to 3 subpaths).
 - `docs/technical_specification.md` §3.2 (subpath exports) + §13 (peer deps).
+- `bymax-one/nest-cache/.github/workflows/{ci,codeql,scorecard,release}.yml` (gold-standard, Redis-aware
+  CI to mirror) — adapt to this lib (add `check:no-prisma`; e2e uses `ioredis-mock`, no Docker/testcontainers).
 
 TASK
-Create the full project scaffold (configs + empty source entry points). No library code yet.
+Create the full project scaffold (configs + empty source entry points) AND the complete, incremental-safe
+CI. The CI must be green from THIS first PR and at every later phase — no dependency on later-phase
+resources. No library code yet.
 
 DELIVERABLES
 1. `package.json` — name `@bymax-one/nest-notification`, version `0.1.0`, `type: module`,
@@ -112,17 +121,35 @@ DELIVERABLES
    size/clean/prepublishOnly/release) + `check:no-prisma` (`grep -r "@prisma/client" src/ && exit 1 || exit 0`),
    `engines.node >=24`, `publishConfig.access public`.
 2. `tsconfig.*` family (strict, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`), `tsup.config.ts`
-   (3 entries), jest configs (+ `jest-environment-jsdom` for `react/*`), `stryker.config.json`
-   (high 100 / low 95 / break 95), `eslint.config.mjs` (flat v9, keep eslint-plugin-security/import),
-   `.prettierrc`, `.gitignore`, `.npmignore`, `scripts/check-size.mjs` (budgets 30/4/8 KB brotli).
-3. `src/{server,shared,react}/index.ts` with a placeholder comment only.
+   (3 entries), jest configs with **`passWithNoTests: true`** (+ `jest-environment-jsdom` for `react/*`) and
+   `coverageThreshold` 100% over `collectCoverageFrom: ['src/**/*.ts','!**/*.spec.ts','!**/index.ts']`,
+   `stryker.config.json` (high 100 / low 95 / break 95), `eslint.config.mjs` (flat v9, keep
+   eslint-plugin-security/import), `.prettierrc`, `.gitignore`, `.npmignore`, `scripts/check-size.mjs`
+   (budgets 30/4/8 KB brotli).
+3. `.github/workflows/` — mirror `bymax-one/nest-cache`, adapted:
+   - `ci.yml`: `on` push/PR(main)+dispatch; `concurrency`; `permissions: contents: read`; one `verify`
+     job (Node 24, pnpm 10.8.1, `pnpm install --frozen-lockfile`): dependency-review (PR, `continue-on-error`),
+     `typecheck`, `lint`, `check:no-prisma`, `test:cov`, `test:e2e`, `build`, build-output integrity
+     (loop `server shared react` × `mjs cjs d.ts`; the empty react bundle still emits — keep it in the loop),
+     `size`, upload coverage artifact. **No mutation step.**
+   - `codeql.yml` (javascript-typescript, `security-extended`, push/PR/weekly), `scorecard.yml`
+     (push/weekly, SARIF upload + `publish_results: true`, least-priv job perms), `release.yml`
+     (tag `v*.*.*`-driven + dispatch ONLY; `npm-publish` environment; tag↔`package.json` version guard;
+     `prepublishOnly`; release-shape gates `pnpm size` + `node scripts/dogfood-smoke-test.mjs`; OIDC
+     `pnpm publish --provenance --no-git-checks`; CHANGELOG extract passed via env var, `gh release create`).
+4. `src/{server,shared,react}/index.ts` with a placeholder comment only.
 
 Constraints:
-- Do NOT create `.gitkeep` or empty-dir placeholders (Bymax rule). `tsup` has 3 entries (nest-auth has 5 — do not copy verbatim). English-only, timeless comments.
+- **CI must pass with empty sources and zero tests** (`passWithNoTests`, coverage over implemented files,
+  size on small bundles). Mutation runs ONLY pre-release. `release.yml` must not run during phases (tag-gated).
+- Do NOT create `.gitkeep` or empty-dir placeholders (Bymax rule). `tsup` has 3 entries (nest-auth has 5 —
+  do not copy verbatim). English-only, timeless comments (no Phase/Task refs in YAML).
 
 Verification:
-- `pnpm install` (no missing-peer warnings), `pnpm typecheck`, `pnpm lint`, `pnpm build` (emits
-  `.mjs/.cjs/.d.ts` for all 3 subpaths), `pnpm check:no-prisma` — all green.
+- `pnpm install` (no missing-peer warnings), then `pnpm typecheck && pnpm lint && pnpm check:no-prisma &&
+  pnpm test:cov && pnpm test:e2e && pnpm build && pnpm size` — ALL green on empty sources (this is exactly
+  what `ci.yml`'s `verify` job runs). Build emits `.mjs/.cjs/.d.ts` for all 3 subpaths.
+- `actionlint` (or a YAML lint) is clean on the 4 workflows; `release.yml` triggers only on tags.
 
 Completion Protocol:
 1. Set status ✅ (block + index). 2. Tick acceptance criteria. 3. Update the index row + progress `1/11`.
