@@ -1,6 +1,6 @@
 # Phase 4 — Multi-tenant + Audit Log
 
-> **Status**: 🔄 In Progress · **Progress**: 1 / 8 tasks · **Last updated**: 2026-06-20
+> **Status**: 🔄 In Progress · **Progress**: 2 / 8 tasks · **Last updated**: 2026-06-20
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 5 (Phase 4)
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md)
 
@@ -34,7 +34,7 @@ Consolidate multi-tenancy (tenant-isolation regression tests, the `tenantIdResol
 | ID | Task | Status | Priority | Size | Depends on |
 |---|---|---|---|---|---|
 | 4.1 | Tenant-isolation E2E suite | ✅ | P0 | M | 2.3, 2.5 |
-| 4.2 | `NotificationAuditInterceptor` (opt-in, anti-spoofing) | ⬜ | P1 | M | 2.6 |
+| 4.2 | `NotificationAuditInterceptor` (opt-in, anti-spoofing) | ✅ | P1 | M | 2.6 |
 | 4.3 | Complete `forRootAsync()` | ⬜ | P0 | M | 1.8, 2.7 |
 | 4.4 | Prisma fragment + `PrismaNotificationLogRepository` example | ⬜ | P2 | S | 1.3 |
 | 4.5 | Multi-tenant security section in README (draft) | ⬜ | P2 | S | — |
@@ -106,7 +106,7 @@ Completion Protocol:
 
 ### Task 4.2 — `NotificationAuditInterceptor`
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: M
 - **Depends on**: 2.6
@@ -117,10 +117,10 @@ An opt-in interceptor that records audit entries for `NotificationService.dispat
 
 #### Acceptance criteria
 
-- [ ] Logs `verb:'sent'` + `providerName:'__interceptor__'` on success; `verb:'failed'` + `errorMessage` then re-throws on failure
-- [ ] When `tenantIdResolver` is set, extracts `tenantId` from the request, overriding `payload.tenantId`
-- [ ] Failures swallowed by default; recognizes the dispatch input by shape; not auto-registered (consumer opts in via `APP_INTERCEPTOR`)
-- [ ] Coverage 100%
+- [x] Logs `verb:'sent'` + `providerName:'__interceptor__'` on success; `verb:'failed'` + `errorMessage` then re-throws on failure
+- [x] When `tenantIdResolver` is set, extracts `tenantId` from the request, overriding `payload.tenantId`
+- [x] Failures swallowed by default; recognizes the dispatch input by shape; not auto-registered (consumer opts in via `APP_INTERCEPTOR`)
+- [x] Coverage 100%
 
 #### Files to create / modify
 
@@ -485,3 +485,4 @@ the plan. 5. Append `- 4.8 ✅ <YYYY-MM-DD> — <summary>`.
 > Append-only. One line per completed task: `- <task-id> ✅ YYYY-MM-DD — <one-line summary>`.
 
 - 4.1 ✅ 2026-06-20 — Tenant-isolation E2E suite: per-tenant OTP/cooldown independence, no cross-tenant verify leak, hex-only Redis keys.
+- 4.2 ✅ 2026-06-20 — `NotificationAuditInterceptor`: anti-spoofing tenant resolution, never serializes the payload, swallow-by-default, 100% coverage.
