@@ -1,4 +1,4 @@
-import { Logger } from '@nestjs/common'
+import { Logger, Module } from '@nestjs/common'
 import type { DynamicModule, Provider } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 
@@ -11,6 +11,7 @@ import {
 } from './bymax-notification.constants'
 import { BymaxNotificationModule } from './bymax-notification.module'
 import type {
+  BymaxNotificationModuleAsyncOptions,
   IEmailProvider,
   INotificationLogRepository,
   IOtpStorage
@@ -203,17 +204,37 @@ describe('BymaxNotificationModule resolved options container', () => {
   })
 })
 
+const CONFIG = Symbol('CONFIG')
+
+/** A tiny module exporting a config value, used to prove `forRootAsync` inject works. */
+@Module({
+  providers: [{ provide: CONFIG, useValue: { from: 'cfg@acme.com' } }],
+  exports: [CONFIG]
+})
+class ConfigStubModule {}
+
 describe('BymaxNotificationModule.forRootAsync', () => {
-  // The async form returns a global module exposing the options token.
-  it('should return a global module exposing the options token', () => {
+  // The async form returns a global module exposing every public token + service.
+  it('should return a global module exposing the public tokens and services', () => {
     const module = BymaxNotificationModule.forRootAsync({ useFactory: () => ({ email: validEmail }) })
 
     expect(module.global).toBe(true)
-    expect(module.exports).toEqual([BYMAX_NOTIFICATION_OPTIONS])
     expect(module.imports).toEqual([])
+    expect(module.exports).toEqual(
+      expect.arrayContaining([
+        BYMAX_NOTIFICATION_OPTIONS,
+        BYMAX_NOTIFICATION_LOG_REPOSITORY,
+        BYMAX_NOTIFICATION_EMAIL_PROVIDER,
+        BYMAX_NOTIFICATION_TEMPLATE_RENDERER,
+        BYMAX_NOTIFICATION_OTP_STORAGE,
+        EmailService,
+        OtpService,
+        NotificationService
+      ])
+    )
   })
 
-  // imports and inject are passed through when supplied.
+  // imports and inject are passed through to the raw-options provider when supplied.
   it('should pass through imports and inject', () => {
     const module = BymaxNotificationModule.forRootAsync({
       imports: [],
@@ -235,6 +256,92 @@ describe('BymaxNotificationModule.forRootAsync', () => {
 
     const options = moduleRef.get(BYMAX_NOTIFICATION_OPTIONS)
     expect(options.otp?.defaultLength).toBe(6)
+  })
+
+  // A full async config wires every channel token: instances pass through, classes instantiate.
+  it('should wire every channel token from a full async config', async () => {
+    const renderer = new DefaultTemplateRenderer({ templates: {} })
+    const moduleRef = await Test.createTestingModule({
+      imports: [
+        BymaxNotificationModule.forRootAsync({
+          useFactory: () => ({
+            email: { provider: emailProvider, defaultFrom: 'noreply@example.com', templateRenderer: renderer },
+            otp: { storage: FakeOtpStorage },
+            audit: { repository: auditRepository }
+          })
+        })
+      ]
+    }).compile()
+
+    expect(moduleRef.get(BYMAX_NOTIFICATION_EMAIL_PROVIDER)).toBe(emailProvider)
+    expect(moduleRef.get(BYMAX_NOTIFICATION_OTP_STORAGE)).toBeInstanceOf(FakeOtpStorage)
+    expect(moduleRef.get(BYMAX_NOTIFICATION_TEMPLATE_RENDERER)).toBe(renderer)
+    expect(moduleRef.get(BYMAX_NOTIFICATION_LOG_REPOSITORY)).toBe(auditRepository)
+    expect(moduleRef.get(EmailService)).toBeInstanceOf(EmailService)
+    expect(moduleRef.get(OtpService)).toBeInstanceOf(OtpService)
+  })
+
+  // An OTP-only async config: email token is null, audit + renderer fall back to defaults.
+  it('should default absent channels and audit in async mode', async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [
+        BymaxNotificationModule.forRootAsync({ useFactory: () => ({ otp: { storage: new FakeOtpStorage() } }) })
+      ]
+    }).compile()
+
+    expect(moduleRef.get(BYMAX_NOTIFICATION_EMAIL_PROVIDER)).toBeNull()
+    expect(moduleRef.get(BYMAX_NOTIFICATION_OTP_STORAGE)).toBeInstanceOf(FakeOtpStorage)
+    expect(moduleRef.get(BYMAX_NOTIFICATION_LOG_REPOSITORY)).toBeInstanceOf(NoOpNotificationLogRepository)
+    expect(moduleRef.get(BYMAX_NOTIFICATION_TEMPLATE_RENDERER)).toBeInstanceOf(DefaultTemplateRenderer)
+  })
+
+  // An email-only async config resolves the OTP storage token to null.
+  it('should resolve the otp storage token to null when otp is absent', async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [BymaxNotificationModule.forRootAsync({ useFactory: () => ({ email: validEmail }) })]
+    }).compile()
+
+    expect(moduleRef.get(BYMAX_NOTIFICATION_OTP_STORAGE)).toBeNull()
+  })
+
+  // The factory receives injected dependencies (e.g. a ConfigService) positionally.
+  it('should resolve options from an injected dependency', async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [
+        BymaxNotificationModule.forRootAsync({
+          imports: [ConfigStubModule],
+          inject: [CONFIG],
+          useFactory: (cfg: { from: string }) => ({
+            email: { provider: emailProvider, defaultFrom: cfg.from }
+          })
+        })
+      ]
+    }).compile()
+
+    expect(moduleRef.get(BYMAX_NOTIFICATION_OPTIONS).email?.defaultFrom).toBe('cfg@acme.com')
+  })
+
+  // The unsupported async forms fail fast with an explicit message.
+  it('should reject the useClass async form', () => {
+    expect(() =>
+      BymaxNotificationModule.forRootAsync({
+        useClass: class {}
+      } as unknown as BymaxNotificationModuleAsyncOptions)
+    ).toThrow('not yet implemented')
+  })
+
+  it('should reject the useExisting async form', () => {
+    expect(() =>
+      BymaxNotificationModule.forRootAsync({
+        useExisting: 'SOME_TOKEN'
+      } as unknown as BymaxNotificationModuleAsyncOptions)
+    ).toThrow('not yet implemented')
+  })
+
+  it('should require a useFactory', () => {
+    expect(() =>
+      BymaxNotificationModule.forRootAsync({} as unknown as BymaxNotificationModuleAsyncOptions)
+    ).toThrow('requires a `useFactory`')
   })
 })
 

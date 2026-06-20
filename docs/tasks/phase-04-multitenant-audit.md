@@ -1,6 +1,6 @@
 # Phase 4 — Multi-tenant + Audit Log
 
-> **Status**: 🔄 In Progress · **Progress**: 2 / 8 tasks · **Last updated**: 2026-06-20
+> **Status**: 🔄 In Progress · **Progress**: 3 / 8 tasks · **Last updated**: 2026-06-20
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 5 (Phase 4)
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md)
 
@@ -35,7 +35,7 @@ Consolidate multi-tenancy (tenant-isolation regression tests, the `tenantIdResol
 |---|---|---|---|---|---|
 | 4.1 | Tenant-isolation E2E suite | ✅ | P0 | M | 2.3, 2.5 |
 | 4.2 | `NotificationAuditInterceptor` (opt-in, anti-spoofing) | ✅ | P1 | M | 2.6 |
-| 4.3 | Complete `forRootAsync()` | ⬜ | P0 | M | 1.8, 2.7 |
+| 4.3 | Complete `forRootAsync()` | ✅ | P0 | M | 1.8, 2.7 |
 | 4.4 | Prisma fragment + `PrismaNotificationLogRepository` example | ⬜ | P2 | S | 1.3 |
 | 4.5 | Multi-tenant security section in README (draft) | ⬜ | P2 | S | — |
 | 4.6 | Tests — interceptor + audit-log E2E (never-log-code gate) | ⬜ | P0 | M | 4.1, 4.2, 4.3 |
@@ -167,7 +167,7 @@ Completion Protocol:
 
 ### Task 4.3 — Complete `forRootAsync()`
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: 1.8, 2.7
@@ -178,9 +178,9 @@ Finish `forRootAsync()`: resolve options via `useFactory`, then wire all channel
 
 #### Acceptance criteria
 
-- [ ] `forRootAsync({useFactory})` resolves options from another module (e.g. `ConfigService`); `useClass`/`useExisting` throw an explicit "not yet implemented (v0.2)"
-- [ ] Async-wired EmailService/OtpService inject correctly; audit defaults to NoOp
-- [ ] Coverage 100% on the `forRootAsync` path
+- [x] `forRootAsync({useFactory})` resolves options from another module (e.g. `ConfigService`); `useClass`/`useExisting` throw an explicit "not yet implemented (v0.2)"
+- [x] Async-wired EmailService/OtpService inject correctly; audit defaults to NoOp
+- [x] Coverage 100% on the `forRootAsync` path
 
 #### Files to create / modify
 
@@ -486,3 +486,4 @@ the plan. 5. Append `- 4.8 ✅ <YYYY-MM-DD> — <summary>`.
 
 - 4.1 ✅ 2026-06-20 — Tenant-isolation E2E suite: per-tenant OTP/cooldown independence, no cross-tenant verify leak, hex-only Redis keys.
 - 4.2 ✅ 2026-06-20 — `NotificationAuditInterceptor`: anti-spoofing tenant resolution, never serializes the payload, swallow-by-default, 100% coverage.
+- 4.3 ✅ 2026-06-20 — `forRootAsync` fully wires every channel token + the three services from a `useFactory`; `useClass`/`useExisting` rejected; 100% coverage.
