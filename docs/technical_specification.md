@@ -1,7 +1,7 @@
 # @bymax-one/nest-notification — Complete Technical Specification
 
 > **Spec revision:** 1.1.0 (post-audit) — target package version `0.1.0`
-> **Last updated:** 2026-06-19
+> **Last updated:** 2026-06-20
 > **Status:** Audited — ready for implementation
 > **Type:** Public npm package (`@bymax-one/nest-notification`)
 
