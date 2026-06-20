@@ -25,7 +25,29 @@ const emailProvider: IEmailProvider = {
 }
 const validEmail = { provider: emailProvider, defaultFrom: 'noreply@example.com' }
 
-class FakeOtpStorage {}
+/** Minimal IOtpStorage stub used to exercise channel registration (no real storage). */
+class FakeOtpStorage implements IOtpStorage {
+  readonly name = 'fake'
+  async set(): Promise<void> {}
+  async get(): Promise<null> {
+    return null
+  }
+  async consumeAttempt(): Promise<{ status: 'not_found' }> {
+    return { status: 'not_found' }
+  }
+  async update(): Promise<void> {}
+  async delete(): Promise<void> {}
+  async tryAcquireCooldown(): Promise<boolean> {
+    return true
+  }
+  async getCooldown(): Promise<number> {
+    return 0
+  }
+  async clearCooldown(): Promise<void> {}
+  isConfigured(): boolean {
+    return true
+  }
+}
 const auditRepository = { name: 'fake', create: async () => undefined } as INotificationLogRepository
 
 type AnyProvider = Provider & { provide?: unknown }
@@ -63,7 +85,7 @@ describe('BymaxNotificationModule.forRoot', () => {
 
   // OTP-only config registers the storage token (and omits the email tokens).
   it('should register the OTP storage token when otp is configured', () => {
-    const module = BymaxNotificationModule.forRoot({ otp: { storage: new FakeOtpStorage() as IOtpStorage } })
+    const module = BymaxNotificationModule.forRoot({ otp: { storage: new FakeOtpStorage() } })
 
     expect(findProvider(module, BYMAX_NOTIFICATION_OTP_STORAGE)).toBeDefined()
     expect(findProvider(module, BYMAX_NOTIFICATION_EMAIL_PROVIDER)).toBeUndefined()
@@ -72,7 +94,7 @@ describe('BymaxNotificationModule.forRoot', () => {
   // A class reference must become a useClass provider so NestJS instantiates it.
   it('should wire a class provider with useClass', () => {
     const module = BymaxNotificationModule.forRoot({
-      otp: { storage: FakeOtpStorage as unknown as IOtpStorage }
+      otp: { storage: FakeOtpStorage }
     })
     const provider = findProvider(module, BYMAX_NOTIFICATION_OTP_STORAGE)
 
@@ -134,7 +156,7 @@ describe('BymaxNotificationModule.forRoot', () => {
   it('should emit a bootstrap log naming the active channels', () => {
     const logSpy = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
 
-    BymaxNotificationModule.forRoot({ email: validEmail, otp: { storage: new FakeOtpStorage() as IOtpStorage } })
+    BymaxNotificationModule.forRoot({ email: validEmail, otp: { storage: new FakeOtpStorage() } })
 
     const logged = String(logSpy.mock.calls[0]?.[0])
     expect(logged).toContain('BYMAX_NOTIFICATION_MODULE_BOOTSTRAP_OK')
@@ -191,7 +213,7 @@ describe('BymaxNotificationModule.forRootAsync', () => {
   it('should validate and resolve options from the factory', async () => {
     const moduleRef = await Test.createTestingModule({
       imports: [
-        BymaxNotificationModule.forRootAsync({ useFactory: () => ({ otp: { storage: new FakeOtpStorage() as IOtpStorage } }) })
+        BymaxNotificationModule.forRootAsync({ useFactory: () => ({ otp: { storage: new FakeOtpStorage() } }) })
       ]
     }).compile()
 

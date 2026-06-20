@@ -27,7 +27,7 @@ describe('safeCompare', () => {
   // unequal pair keeps the same byte length so the byte comparison runs (not the
   // length guard): é and ë are both two UTF-8 bytes.
   it('should compare UTF-8 content correctly', () => {
-    expect(safeCompare('café☕', 'café☕')).toBe(true)
+    expect(safeCompare('café世', 'café世')).toBe(true)
     expect(safeCompare('café', 'cafë')).toBe(false)
   })
 })
