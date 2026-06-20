@@ -12,8 +12,11 @@ import { useEffect, useRef, useState } from 'react'
 
 import type { UseOtpCountdownOptions, UseOtpCountdownState } from './types'
 
+/** Milliseconds in one second. */
+const MS_PER_SECOND = 1000
+
 /** Default recompute cadence when the caller does not specify one. */
-const DEFAULT_TICK_MS = 1000
+const DEFAULT_TICK_MS = MS_PER_SECOND
 
 /** Seconds in one minute. */
 const SECONDS_PER_MINUTE = 60
@@ -26,7 +29,7 @@ function computeRemaining(expiresAt: number | null): number {
   if (expiresAt === null) {
     return 0
   }
-  return Math.max(0, Math.floor((expiresAt - Date.now()) / 1000))
+  return Math.max(0, Math.floor((expiresAt - Date.now()) / MS_PER_SECOND))
 }
 
 /** Two-digit zero-padded string for a clock component. */

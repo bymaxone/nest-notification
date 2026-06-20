@@ -50,6 +50,9 @@ const config: Config = {
     }
   },
   coverageReporters: ['text', 'lcov', 'clover'],
+  // Bound the worker pool so any run (CI or local) stays within a safe memory
+  // envelope, mirroring the aggregated coverage config.
+  maxWorkers: '50%',
   clearMocks: true,
   restoreMocks: true,
   passWithNoTests: true

@@ -16,6 +16,33 @@ import type { OtpInputType, UseOtpInputOptions, UseOtpInputState } from './types
 /** Default number of slots when the caller does not specify a length. */
 const DEFAULT_LENGTH = 6
 
+/** Stable ref objects, one per slot. */
+type SlotRefs = ReadonlyArray<RefObject<HTMLInputElement | null>>
+
+/** Completion callback signature. */
+type OnComplete = (code: string) => void | Promise<void>
+
+/** Commits a fresh slot array to state. */
+type Commit = (next: string[]) => void
+
+/** Everything the slot handlers need, recomputed when any input changes. */
+interface HandlerContext {
+  values: string[]
+  type: OtpInputType
+  length: number
+  sanitizeOnPaste: boolean
+  setValues: Commit
+  focus: (index: number) => void
+  complete: (next: readonly string[]) => void
+}
+
+/** Curried event handlers for the slot inputs. */
+interface OtpHandlers {
+  onChange: (index: number) => (event: ChangeEvent<HTMLInputElement>) => void
+  onKeyDown: (index: number) => (event: KeyboardEvent<HTMLInputElement>) => void
+  onPaste: (event: ClipboardEvent<HTMLInputElement>) => void
+}
+
 /** Single-character validation pattern for the given character class. */
 function charPattern(type: OtpInputType): RegExp {
   switch (type) {
@@ -54,6 +81,94 @@ function makeEmptyValues(length: number): string[] {
   return Array.from({ length }, () => '')
 }
 
+/** Returns a copy of `values` with the slot at `index` replaced. */
+function replaceAt(values: readonly string[], index: number, value: string): string[] {
+  return values.map((slot, i) => (i === index ? value : slot))
+}
+
+/** Focuses the input at `index`, ignoring negative (no wrap) and missing slots. */
+function focusSlot(refs: SlotRefs, index: number): void {
+  if (index < 0) {
+    return
+  }
+  refs.at(index)?.current?.focus()
+}
+
+/**
+ * Fires the completion callback in a microtask once every slot is filled, so
+ * React commits the slot state before the consumer reads it. The ref is read at
+ * resolution time so a callback recreated each render is never stale.
+ */
+function deferComplete(ref: RefObject<OnComplete | undefined>, next: readonly string[]): void {
+  if (!next.every((value) => value !== '')) {
+    return
+  }
+  const code = next.join('')
+  void Promise.resolve().then(() => {
+    ref.current?.(code)
+  })
+}
+
+/** Applies a single-character change at `index`, advancing focus when filled. */
+function applyChange(ctx: HandlerContext, index: number, rawValue: string): void {
+  // Mobile Safari fires `onChange` with the whole pasted string; the paste
+  // handler owns that path.
+  if (rawValue.length > 1) {
+    return
+  }
+  if (rawValue !== '' && !isValidChar(rawValue, ctx.type)) {
+    return
+  }
+  const char = normalizeChar(rawValue, ctx.type)
+  const next = replaceAt(ctx.values, index, char)
+  ctx.setValues(next)
+  if (char !== '') {
+    ctx.focus(index + 1)
+  }
+  ctx.complete(next)
+}
+
+/** Handles Backspace (clear + focus previous) and Arrow navigation. */
+function applyKeyDown(ctx: HandlerContext, index: number, key: string): void {
+  if (key === 'Backspace' && ctx.values.at(index) === '' && index > 0) {
+    ctx.setValues(replaceAt(ctx.values, index - 1, ''))
+    ctx.focus(index - 1)
+    return
+  }
+  if (key === 'ArrowLeft') {
+    ctx.focus(index - 1)
+    return
+  }
+  if (key === 'ArrowRight') {
+    ctx.focus(index + 1)
+  }
+}
+
+/** Distributes pasted text across slots: sanitize, filter, slice, then focus. */
+function applyPaste(ctx: HandlerContext, text: string): void {
+  const cleaned = ctx.sanitizeOnPaste ? text.replace(/[\s-]+/g, '') : text
+  const filled = filterValid(cleaned, ctx.type).slice(0, ctx.length)
+  const next = Array.from({ length: ctx.length }, (_, i) => filled.charAt(i))
+  ctx.setValues(next)
+  ctx.focus(filled.length - 1)
+  ctx.complete(next)
+}
+
+/** Suppresses the native paste and distributes the clipboard text. */
+function handlePaste(ctx: HandlerContext, event: ClipboardEvent<HTMLInputElement>): void {
+  event.preventDefault()
+  applyPaste(ctx, event.clipboardData.getData('text'))
+}
+
+/** Builds the three slot event handlers bound to the current context. */
+function buildHandlers(ctx: HandlerContext): OtpHandlers {
+  return {
+    onChange: (index) => (event) => applyChange(ctx, index, event.target.value),
+    onKeyDown: (index) => (event) => applyKeyDown(ctx, index, event.key),
+    onPaste: (event) => handlePaste(ctx, event)
+  }
+}
+
 /**
  * Hook that manages an N-slot OTP input with auto-focus, paste distribution, and
  * Backspace/Arrow navigation.
@@ -71,117 +186,39 @@ export function useOtpInput(options: UseOtpInputOptions = {}): UseOtpInputState 
   } = options
 
   const [values, setValues] = useState<string[]>(() => makeEmptyValues(length))
+  const refs = useMemo<SlotRefs>(() => Array.from({ length }, () => ({ current: null })), [length])
 
-  // Stable ref identities so `focus()` targets the live DOM node across renders.
-  const refs = useMemo<ReadonlyArray<RefObject<HTMLInputElement | null>>>(
-    () => Array.from({ length }, () => ({ current: null })),
-    [length]
-  )
-
-  // Track the latest callback in a ref so the deferred microtask never fires a
-  // stale closure when the consumer recreates `onComplete` each render.
+  // Track the latest callback so the deferred microtask never fires stale.
   const onCompleteRef = useRef(onComplete)
   onCompleteRef.current = onComplete
 
-  const focusInput = useCallback(
-    (index: number): void => {
-      // A negative index (Backspace/ArrowLeft at slot 0) must not wrap to the
-      // last slot via `Array.at`; an index past the end resolves to `undefined`
-      // and is a harmless no-op.
-      if (index < 0) {
-        return
-      }
-      refs.at(index)?.current?.focus()
-    },
-    [refs]
-  )
-
-  const scheduleComplete = useCallback(
+  const focus = useCallback((index: number): void => focusSlot(refs, index), [refs])
+  const complete = useCallback(
     (next: readonly string[]): void => {
-      if (!autoSubmit || !next.every((value) => value !== '')) {
-        return
+      if (autoSubmit) {
+        deferComplete(onCompleteRef, next)
       }
-      const code = next.join('')
-      // Defer to a microtask so React commits the slot state before the consumer
-      // reads it (e.g. issues a verify request) from inside the callback.
-      void Promise.resolve().then(() => {
-        onCompleteRef.current?.(code)
-      })
     },
     [autoSubmit]
   )
-
-  const setValue = useCallback((index: number, value: string): void => {
-    setValues((prev) => prev.map((slot, i) => (i === index ? value : slot)))
-  }, [])
-
-  const onChange = useCallback(
-    (index: number) =>
-      (event: ChangeEvent<HTMLInputElement>): void => {
-        const raw = event.target.value
-        // Mobile Safari fires `onChange` with the whole pasted string; the paste
-        // handler owns that path.
-        if (raw.length > 1) {
-          return
-        }
-        if (raw !== '' && !isValidChar(raw, type)) {
-          return
-        }
-        const char = normalizeChar(raw, type)
-        const next = values.map((slot, i) => (i === index ? char : slot))
-        setValues(next)
-        if (char !== '') {
-          focusInput(index + 1)
-        }
-        scheduleComplete(next)
-      },
-    [values, type, focusInput, scheduleComplete]
+  const setValue = useCallback(
+    (index: number, value: string): void => setValues((prev) => replaceAt(prev, index, value)),
+    []
   )
-
-  const onKeyDown = useCallback(
-    (index: number) =>
-      (event: KeyboardEvent<HTMLInputElement>): void => {
-        if (event.key === 'Backspace' && values.at(index) === '' && index > 0) {
-          setValues(values.map((slot, i) => (i === index - 1 ? '' : slot)))
-          focusInput(index - 1)
-          return
-        }
-        if (event.key === 'ArrowLeft') {
-          focusInput(index - 1)
-          return
-        }
-        if (event.key === 'ArrowRight') {
-          focusInput(index + 1)
-        }
-      },
-    [values, focusInput]
-  )
-
-  const onPaste = useCallback(
-    (event: ClipboardEvent<HTMLInputElement>): void => {
-      event.preventDefault()
-      const raw = event.clipboardData.getData('text')
-      const sanitized = sanitizeOnPaste ? raw.replace(/[\s-]+/g, '') : raw
-      const filled = filterValid(sanitized, type).slice(0, length)
-      const next = Array.from({ length }, (_, i) => filled.charAt(i))
-      setValues(next)
-      focusInput(filled.length - 1)
-      scheduleComplete(next)
-    },
-    [sanitizeOnPaste, type, length, focusInput, scheduleComplete]
-  )
-
   const reset = useCallback((): void => {
     setValues(makeEmptyValues(length))
-    focusInput(0)
-  }, [length, focusInput])
+    focus(0)
+  }, [length, focus])
+
+  const handlers = useMemo(
+    () => buildHandlers({ values, type, length, sanitizeOnPaste, setValues, focus, complete }),
+    [values, type, length, sanitizeOnPaste, focus, complete]
+  )
 
   return {
     values,
     setValue,
-    onChange,
-    onKeyDown,
-    onPaste,
+    ...handlers,
     refs,
     reset,
     code: values.join(''),
