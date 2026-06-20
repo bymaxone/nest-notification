@@ -1,6 +1,6 @@
 # Phase 2 — EmailService + OtpService (atomic)
 
-> **Status**: 🔄 In Progress · **Progress**: 2 / 10 tasks · **Last updated**: 2026-06-19
+> **Status**: 🔄 In Progress · **Progress**: 3 / 10 tasks · **Last updated**: 2026-06-19
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 3 (Phase 2)
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md)
 
@@ -42,7 +42,7 @@ OTP email delivery is delegated to `EmailService` (which owns the renderer/escap
 |---|---|---|---|---|---|
 | 2.1 | `ResendEmailProvider` — lazy-loaded reference adapter | ✅ | P0 | M | 1.3 |
 | 2.2 | `InMemoryOtpStorage` — atomic dev/test storage | ✅ | P0 | M | 1.3 |
-| 2.3 | `RedisOtpStorage` — Lua `consumeAttempt` + NX cooldown (production) | ⬜ | P0 | L | 1.3, 1.7 |
+| 2.3 | `RedisOtpStorage` — Lua `consumeAttempt` + NX cooldown (production) | ✅ | P0 | L | 1.3, 1.7 |
 | 2.4 | `EmailService` — send + sendTemplate + attachment guard + audit (mask) | ⬜ | P0 | M | 1.4, 1.5 |
 | 2.5 | `OtpService` — generate/verify/consume/resend/getStatus (atomic) | ⬜ | P0 | L | 2.3, 2.4 |
 | 2.6 | `NotificationService` — channel-agnostic dispatch (discriminated) | ⬜ | P0 | M | 2.4, 2.5 |
@@ -182,7 +182,7 @@ Completion Protocol:
 
 ### Task 2.3 — `RedisOtpStorage` (production)
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: L
 - **Depends on**: 1.3, 1.7
@@ -193,11 +193,11 @@ Implement `IOtpStorage` over Redis with sha256 key hashing and the atomic primit
 
 #### Acceptance criteria
 
-- [ ] Keys `{namespace}:otp:{purpose}:{sha256(tenantId:recipient)}` / `…:otp_cd:…` — never contain plaintext recipient/tenantId; different tenants → different keys
-- [ ] `consumeAttempt` Lua: GET → expiry/max check → INCR → `SET … PX {PTTL}`; returns `not_found`/`max_attempts`/`ok`; two interleaved calls never exceed `maxAttempts`
-- [ ] `update` uses `SET … KEEPTTL XX` (no resurrection, preserves TTL); `tryAcquireCooldown` uses `SET … NX EX` (true then false); `getCooldown` 0 when absent; `clearCooldown` deletes
-- [ ] `get` returns parsed entry / deletes corrupted JSON; `RedisLike` declares `eval`/`pttl`
-- [ ] Coverage 100% (ioredis-mock; stub the one path if the mock lacks `eval`/`KEEPTTL`)
+- [x] Keys `{namespace}:otp:{purpose}:{sha256(tenantId:recipient)}` / `…:otp_cd:…` — never contain plaintext recipient/tenantId; different tenants → different keys
+- [x] `consumeAttempt` Lua: GET → expiry/max check → INCR → `SET … PX {PTTL}`; returns `not_found`/`max_attempts`/`ok`; two interleaved calls never exceed `maxAttempts`
+- [x] `update` uses `SET … KEEPTTL XX` (no resurrection, preserves TTL); `tryAcquireCooldown` uses `SET … NX EX` (true then false); `getCooldown` 0 when absent; `clearCooldown` deletes
+- [x] `get` returns parsed entry / deletes corrupted JSON; `RedisLike` declares `eval`/`pttl`
+- [x] Coverage 100% (hand-rolled faithful Redis double whose `eval` replicates the Lua atomically)
 
 #### Files to create / modify
 
@@ -670,3 +670,4 @@ in `docs/development_plan.md`. 5. Append `- 2.10 ✅ <YYYY-MM-DD> — <summary>`
 
 - 2.1 ✅ 2026-06-19 — ResendEmailProvider with lazy `import('resend')`, from-header formatting, body-safe error logging; 100% coverage incl. not-installed path.
 - 2.2 ✅ 2026-06-19 — InMemoryOtpStorage over two Maps, atomic consumeAttempt, self-evicting get/cooldown, clear()/size() helpers; 100% coverage.
+- 2.3 ✅ 2026-06-19 — RedisOtpStorage with sha256 PII-free keys, atomic Lua consumeAttempt, SET NX EX cooldown, KEEPTTL XX update; 100% coverage + interleaving regression.

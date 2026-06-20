@@ -14,7 +14,7 @@ Tasks live **one file per phase** in this folder (`docs/tasks/phase-NN-<slug>.md
 | Phase | File | Tasks | Status |
 |---|---|---|---|
 | 1 | [`phase-01-foundation-interfaces.md`](./phase-01-foundation-interfaces.md) | 11 / 11 | 🟢 Done |
-| 2 | [`phase-02-email-otp-services.md`](./phase-02-email-otp-services.md) | 2 / 10 | 🟡 In progress |
+| 2 | [`phase-02-email-otp-services.md`](./phase-02-email-otp-services.md) | 3 / 10 | 🟡 In progress |
 | 3 | [`phase-03-templating-rate-limiting.md`](./phase-03-templating-rate-limiting.md) | 0 / 8 | 🔴 Not started |
 | 4 | [`phase-04-multitenant-audit.md`](./phase-04-multitenant-audit.md) | 0 / 8 | 🔴 Not started |
 | 5 | [`phase-05-frontend-react.md`](./phase-05-frontend-react.md) | 0 / 5 | 🔴 Not started |
