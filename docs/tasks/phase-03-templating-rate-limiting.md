@@ -1,6 +1,6 @@
 # Phase 3 — Templating + Rate Limiting
 
-> **Status**: 🔄 In Progress · **Progress**: 5 / 8 tasks · **Last updated**: 2026-06-20
+> **Status**: 🔄 In Progress · **Progress**: 6 / 8 tasks · **Last updated**: 2026-06-20
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 4 (Phase 3)
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md)
 
@@ -33,7 +33,7 @@ Refine the `DefaultTemplateRenderer` (robust i18n fallback chain, nested paths, 
 | ID | Task | Status | Priority | Size | Depends on |
 |---|---|---|---|---|---|
 | 3.1 | `DefaultTemplateRenderer` refinement (fallback chain, nested paths, missing-var modes, html-only escape) | ✅ | P0 | M | 1.6 |
-| 3.2 | Template adapter docs (Handlebars / React Email / MJML) in `docs/templates/` | ⬜ | P2 | S | — |
+| 3.2 | Template adapter docs (Handlebars / React Email / MJML) in `docs/templates/` | ✅ | P2 | S | — |
 | 3.3 | Cooldown helpers (`toRetryAfterHeader`, `cooldownExpiresAt`, `formatCooldown`) | ✅ | P1 | S | — |
 | 3.4 | `OtpService` cooldown details (`retryAfter`, `expiresAt` on `OTP_COOLDOWN_ACTIVE`) | ✅ | P1 | S | 2.5, 3.3 |
 | 3.5 | Barrel exports (cooldown helpers + renderer types) | ✅ | P1 | S | 3.1, 3.3 |
@@ -110,7 +110,7 @@ Completion Protocol:
 
 ### Task 3.2 — Template adapter docs
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P2
 - **Size**: S
 - **Depends on**: —
@@ -121,8 +121,8 @@ Add reference adapter examples (Handlebars, React Email, MJML) under `docs/templ
 
 #### Acceptance criteria
 
-- [ ] `docs/templates/{handlebars,react-email,mjml}-renderer.example.md` created
-- [ ] Each: setup (`pnpm add`), full `IEmailTemplateRenderer` adapter, engine-specific security caveats (e.g. Handlebars `{{var}}` vs `{{{var}}}`), module registration snippet
+- [x] `docs/templates/{handlebars,react-email,mjml}-renderer.example.md` created
+- [x] Each: setup (`pnpm add`), full `IEmailTemplateRenderer` adapter, engine-specific security caveats (e.g. Handlebars `{{var}}` vs `{{{var}}}`), module registration snippet
 
 #### Files to create / modify
 
@@ -491,3 +491,4 @@ the plan. 5. Append `- 3.8 ✅ <YYYY-MM-DD> — <summary>`.
 - 3.6 ✅ 2026-06-20 — Added `CANONICAL_EMAIL_TEMPLATES` constant + `CanonicalEmailTemplate` type (no HTML shipped), per-template variable JSDoc; exported from the barrel.
 - 3.4 ✅ 2026-06-20 — `OTP_COOLDOWN_ACTIVE` now carries `retryAfter` (via `toRetryAfterHeader`) and `expiresAt` (via `cooldownExpiresAt`) alongside `remainingSeconds`; spec asserts the three details.
 - 3.5 ✅ 2026-06-20 — Barrel now exports the cooldown helpers and the refined renderer types (`TemplateDefinition`, `DefaultTemplateRendererOptions`, `MissingVariableMode`); build clean, symbols verified in the bundle.
+- 3.2 ✅ 2026-06-20 — Wrote Handlebars / React Email / MJML adapter example docs (verified against handlebars@4, @react-email/render@1, mjml@4) with setup, full adapter, security caveats, and module registration.
