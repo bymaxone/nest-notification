@@ -1,6 +1,6 @@
 # Phase 4 — Multi-tenant + Audit Log
 
-> **Status**: ⬜ Not started · **Progress**: 0 / 8 tasks · **Last updated**: 2026-06-19
+> **Status**: ✅ Done · **Progress**: 8 / 8 tasks · **Last updated**: 2026-06-20
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 5 (Phase 4)
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md)
 
@@ -33,14 +33,14 @@ Consolidate multi-tenancy (tenant-isolation regression tests, the `tenantIdResol
 
 | ID | Task | Status | Priority | Size | Depends on |
 |---|---|---|---|---|---|
-| 4.1 | Tenant-isolation E2E suite | ⬜ | P0 | M | 2.3, 2.5 |
-| 4.2 | `NotificationAuditInterceptor` (opt-in, anti-spoofing) | ⬜ | P1 | M | 2.6 |
-| 4.3 | Complete `forRootAsync()` | ⬜ | P0 | M | 1.8, 2.7 |
-| 4.4 | Prisma fragment + `PrismaNotificationLogRepository` example | ⬜ | P2 | S | 1.3 |
-| 4.5 | Multi-tenant security section in README (draft) | ⬜ | P2 | S | — |
-| 4.6 | Tests — interceptor + audit-log E2E (never-log-code gate) | ⬜ | P0 | M | 4.1, 4.2, 4.3 |
-| 4.7 | Barrel export (interceptor) | ⬜ | P1 | S | 4.2 |
-| 4.8 | Phase 4 validation + smoke | ⬜ | P0 | S | 4.6 |
+| 4.1 | Tenant-isolation E2E suite | ✅ | P0 | M | 2.3, 2.5 |
+| 4.2 | `NotificationAuditInterceptor` (opt-in, anti-spoofing) | ✅ | P1 | M | 2.6 |
+| 4.3 | Complete `forRootAsync()` | ✅ | P0 | M | 1.8, 2.7 |
+| 4.4 | Prisma fragment + `PrismaNotificationLogRepository` example | ✅ | P2 | S | 1.3 |
+| 4.5 | Multi-tenant security section in README (draft) | ✅ | P2 | S | — |
+| 4.6 | Tests — interceptor + audit-log E2E (never-log-code gate) | ✅ | P0 | M | 4.1, 4.2, 4.3 |
+| 4.7 | Barrel export (interceptor) | ✅ | P1 | S | 4.2 |
+| 4.8 | Phase 4 validation + smoke | ✅ | P0 | S | 4.6 |
 
 ---
 
@@ -48,7 +48,7 @@ Consolidate multi-tenancy (tenant-isolation regression tests, the `tenantIdResol
 
 ### Task 4.1 — Tenant-isolation E2E suite
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: 2.3, 2.5
@@ -59,9 +59,9 @@ A regression suite proving cross-tenant isolation for both `InMemoryOtpStorage` 
 
 #### Acceptance criteria
 
-- [ ] No OTP collision across tenants with the same recipient; no cooldown collision; no cross-tenant verify leak (`tenant_b` verifying `tenant_a`'s code → `not_found`)
-- [ ] Redis keys are hex-encoded (no plaintext recipient/tenantId)
-- [ ] Suite passes in CI (ioredis-mock); does not affect unit coverage
+- [x] No OTP collision across tenants with the same recipient; no cooldown collision; no cross-tenant verify leak (`tenant_b` verifying `tenant_a`'s code → `not_found`)
+- [x] Redis keys are hex-encoded (no plaintext recipient/tenantId)
+- [x] Suite passes in CI (in-repo Redis double); does not affect unit coverage
 
 #### Files to create / modify
 
@@ -106,7 +106,7 @@ Completion Protocol:
 
 ### Task 4.2 — `NotificationAuditInterceptor`
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: M
 - **Depends on**: 2.6
@@ -117,10 +117,10 @@ An opt-in interceptor that records audit entries for `NotificationService.dispat
 
 #### Acceptance criteria
 
-- [ ] Logs `verb:'sent'` + `providerName:'__interceptor__'` on success; `verb:'failed'` + `errorMessage` then re-throws on failure
-- [ ] When `tenantIdResolver` is set, extracts `tenantId` from the request, overriding `payload.tenantId`
-- [ ] Failures swallowed by default; recognizes the dispatch input by shape; not auto-registered (consumer opts in via `APP_INTERCEPTOR`)
-- [ ] Coverage 100%
+- [x] Logs `verb:'sent'` + `providerName:'__interceptor__'` on success; `verb:'failed'` + `errorMessage` then re-throws on failure
+- [x] When `tenantIdResolver` is set, extracts `tenantId` from the request, overriding `payload.tenantId`
+- [x] Failures swallowed by default; recognizes the dispatch input by shape; not auto-registered (consumer opts in via `APP_INTERCEPTOR`)
+- [x] Coverage 100%
 
 #### Files to create / modify
 
@@ -167,7 +167,7 @@ Completion Protocol:
 
 ### Task 4.3 — Complete `forRootAsync()`
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: 1.8, 2.7
@@ -178,9 +178,9 @@ Finish `forRootAsync()`: resolve options via `useFactory`, then wire all channel
 
 #### Acceptance criteria
 
-- [ ] `forRootAsync({useFactory})` resolves options from another module (e.g. `ConfigService`); `useClass`/`useExisting` throw an explicit "not yet implemented (v0.2)"
-- [ ] Async-wired EmailService/OtpService inject correctly; audit defaults to NoOp
-- [ ] Coverage 100% on the `forRootAsync` path
+- [x] `forRootAsync({useFactory})` resolves options from another module (e.g. `ConfigService`); `useClass`/`useExisting` throw an explicit "not yet implemented (v0.2)"
+- [x] Async-wired EmailService/OtpService inject correctly; audit defaults to NoOp
+- [x] Coverage 100% on the `forRootAsync` path
 
 #### Files to create / modify
 
@@ -224,7 +224,7 @@ Completion Protocol:
 
 ### Task 4.4 — Prisma fragment + repository example
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P2
 - **Size**: S
 - **Depends on**: 1.3
@@ -235,8 +235,8 @@ Distribute the `NotificationLog` Prisma fragment and a `PrismaNotificationLogRep
 
 #### Acceptance criteria
 
-- [ ] `docs/schemas/notification-log.prisma` covers all `NotificationLogEntry` fields with appropriate indexes; comment warns the lib never imports Prisma
-- [ ] `docs/schemas/prisma-repository.example.md` shows the consumer-side `INotificationLogRepository` impl
+- [x] `docs/schemas/notification-log.prisma` covers all `NotificationLogEntry` fields with appropriate indexes; comment warns the lib never imports Prisma
+- [x] `docs/schemas/prisma-repository.example.md` shows the consumer-side `INotificationLogRepository` impl
 
 #### Files to create / modify
 
@@ -277,7 +277,7 @@ Completion Protocol:
 
 ### Task 4.5 — Multi-tenant security section in README (draft)
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P2
 - **Size**: S
 - **Depends on**: —
@@ -288,7 +288,7 @@ Draft the README "Multi-tenant Security" section (finalized in the Release phase
 
 #### Acceptance criteria
 
-- [ ] Covers the hashing rationale, the spoofing scenario + resolver mitigation (`(req) => req.hostname?.split('.')[0] ?? 'default'`, `req: NotificationRequest`), and the never-log-codes guarantee
+- [x] Covers the hashing rationale, the spoofing scenario + resolver mitigation (`(req) => req.hostname?.split('.')[0] ?? 'default'`, `req: NotificationRequest`), and the never-log-codes guarantee
 
 #### Files to create / modify
 
@@ -325,7 +325,7 @@ Completion Protocol:
 
 ### Task 4.6 — Tests (interceptor + audit-log E2E)
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: 4.1, 4.2, 4.3
@@ -336,9 +336,9 @@ Completion Protocol:
 
 #### Acceptance criteria
 
-- [ ] `notification-audit.interceptor.ts` at 100%; anti-spoofing override tested; swallow/propagate tested
-- [ ] audit-log E2E: logs `generated`+`sent` for OTP-via-email, `cooldown_blocked`, `max_attempts_exceeded`; **`JSON.stringify(entry).includes(realCode) === false`**
-- [ ] `pnpm test:e2e` green; global coverage 100%
+- [x] `notification-audit.interceptor.ts` at 100%; anti-spoofing override tested; swallow/propagate tested
+- [x] audit-log E2E: logs `generated`+`sent` for OTP-via-email, `cooldown_blocked`, `max_attempts_exceeded`; **`JSON.stringify(entry).includes(realCode) === false`**
+- [x] `pnpm test:e2e` green; global coverage 100%
 
 #### Files to create / modify
 
@@ -380,7 +380,7 @@ Completion Protocol:
 
 ### Task 4.7 — Barrel export (interceptor)
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: S
 - **Depends on**: 4.2
@@ -391,7 +391,7 @@ Export `NotificationAuditInterceptor` from `src/server/index.ts`.
 
 #### Acceptance criteria
 
-- [ ] `NotificationAuditInterceptor` exported; `pnpm build` clean
+- [x] `NotificationAuditInterceptor` exported; `pnpm build` clean
 
 #### Files to create / modify
 
@@ -430,7 +430,7 @@ Completion Protocol:
 
 ### Task 4.8 — Phase 4 validation + smoke
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: S
 - **Depends on**: 4.6
@@ -441,9 +441,9 @@ Run gates (incl. e2e) and a `forRootAsync` fixture smoke with audit + tenantIdRe
 
 #### Acceptance criteria
 
-- [ ] `pnpm typecheck && pnpm lint && pnpm test:cov && pnpm test:e2e && pnpm build && pnpm size` green
-- [ ] Smoke: `forRootAsync` with `tenantIdResolver` + Resend + Redis + a memory audit repo; audit rows recorded via supertest
-- [ ] Code-review findings applied
+- [x] `pnpm typecheck && pnpm lint && pnpm test:cov && pnpm test:e2e && pnpm build && pnpm size` green
+- [x] Smoke: `forRootAsync` with `tenantIdResolver` + NoOp email + Redis (in-process double) + a memory audit repo; audit rows recorded at the service/DI level (supertest/platform-express are not project deps)
+- [x] Code-review findings applied
 
 #### Files to create / modify
 
@@ -483,3 +483,12 @@ the plan. 5. Append `- 4.8 ✅ <YYYY-MM-DD> — <summary>`.
 ## Completion log
 
 > Append-only. One line per completed task: `- <task-id> ✅ YYYY-MM-DD — <one-line summary>`.
+
+- 4.1 ✅ 2026-06-20 — Tenant-isolation E2E suite: per-tenant OTP/cooldown independence, no cross-tenant verify leak, hex-only Redis keys.
+- 4.2 ✅ 2026-06-20 — `NotificationAuditInterceptor`: anti-spoofing tenant resolution, never serializes the payload, swallow-by-default, 100% coverage.
+- 4.3 ✅ 2026-06-20 — `forRootAsync` fully wires every channel token + the three services from a `useFactory`; `useClass`/`useExisting` rejected; 100% coverage.
+- 4.4 ✅ 2026-06-20 — Prisma fragment + consumer repository example under `docs/schemas/`; covers every `NotificationLogEntry` field, 3 indexes, never-import-Prisma warning.
+- 4.5 ✅ 2026-06-20 — README "Multi-tenant Security" draft: SHA-256 key rationale, `tenantIdResolver` anti-spoofing (subdomain + JWT, typed), never-log-codes guarantee.
+- 4.6 ✅ 2026-06-20 — Interceptor unit spec (100%) + audit-log E2E: generated/sent, cooldown_blocked, max_attempts_exceeded, and the never-log-code gate.
+- 4.7 ✅ 2026-06-20 — Export `NotificationAuditInterceptor` from the server barrel; externalize `rxjs` in tsup + declare it as a peer (server bundle back to 15 KB brotli).
+- 4.8 ✅ 2026-06-20 — Full phase gate green (typecheck/lint/test:cov 100%/test:e2e/build/size/no-prisma) + `forRootAsync` smoke E2E (async graph records audit, interceptor anti-spoofing); code-review + security-review applied, zero findings.

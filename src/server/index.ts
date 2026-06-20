@@ -34,6 +34,9 @@ export {
   type OtpDispatchPayload
 } from './services/notification.service'
 
+// Interceptors
+export { NotificationAuditInterceptor } from './interceptors/notification-audit.interceptor'
+
 // Injection tokens
 export {
   BYMAX_NOTIFICATION_OPTIONS,

@@ -6,6 +6,9 @@ import { defineConfig } from 'tsup'
 const PEER_EXTERNALS = [
   /^@nestjs\//,
   'reflect-metadata',
+  // Required peer of @nestjs/common; the audit interceptor returns an Observable.
+  'rxjs',
+  /^rxjs\//,
   'ioredis',
   'resend',
   '@sendgrid/mail',
