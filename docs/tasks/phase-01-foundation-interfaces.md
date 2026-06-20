@@ -1,6 +1,6 @@
 # Phase 1 — Foundation + Interfaces (`IEmailProvider` + `IOtpStorage`)
 
-> **Status**: 🔄 In Progress · **Progress**: 10 / 11 tasks · **Last updated**: 2026-06-19
+> **Status**: ✅ Done · **Progress**: 11 / 11 tasks · **Last updated**: 2026-06-19
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 2 (Phase 1)
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md)
 
@@ -49,7 +49,7 @@ The flagship decision baked in here is the **dissolution of the Prisma coupling*
 | 1.8 | Dynamic module — synchronous `forRoot()` with conditional registration | ✅ | P0 | M | 1.5, 1.6 |
 | 1.9 | Server barrel exports | ✅ | P1 | S | 1.3–1.8 |
 | 1.10 | Tests for Phase 1 (100% coverage) | ✅ | P0 | L | 1.3–1.9 |
-| 1.11 | Phase 1 validation (gates + error-codes sync + smoke) | ⬜ | P0 | S | 1.10 |
+| 1.11 | Phase 1 validation (gates + error-codes sync + smoke) | ✅ | P0 | S | 1.10 |
 
 ---
 
@@ -764,7 +764,7 @@ Completion Protocol:
 
 ### Task 1.11 — Phase 1 validation
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: S
 - **Depends on**: 1.10
@@ -775,10 +775,10 @@ Run all gates, the error-codes sync gate (server vs shared), and a smoke test th
 
 #### Acceptance criteria
 
-- [ ] `pnpm typecheck && pnpm lint && pnpm test:cov && pnpm build && pnpm size && pnpm check:no-prisma` all green
-- [ ] Error-codes sync gate passes (server `NOTIFICATION_ERROR_DEFINITIONS` codes == shared `NOTIFICATION_ERROR_CODES`)
-- [ ] Smoke: `forRoot({ email:{ provider:new NoOpEmailProvider(), defaultFrom:'noreply@example.com' } })` → `module.global===true`, expected provider count, `DEFAULT_TTLS`/`NOTIFICATION_PURPOSES`/`NOTIFICATION_ERROR_CODES` resolve
-- [ ] No file > 800 lines, no function > 50 lines
+- [x] `pnpm typecheck && pnpm lint && pnpm test:cov && pnpm build && pnpm size && pnpm check:no-prisma` all green
+- [x] Error-codes sync gate passes (server `NOTIFICATION_ERROR_DEFINITIONS` codes == shared `NOTIFICATION_ERROR_CODES`)
+- [x] Smoke: `forRoot({ email:{ provider:new NoOpEmailProvider(), defaultFrom:'noreply@example.com' } })` → `module.global===true`, expected provider count, `DEFAULT_TTLS`/`NOTIFICATION_PURPOSES`/`NOTIFICATION_ERROR_CODES` resolve
+- [x] No file > 800 lines, no function > 50 lines
 
 #### Files to create / modify
 
@@ -832,3 +832,4 @@ in `docs/development_plan.md`. 5. Append `- 1.11 ✅ <YYYY-MM-DD> — <summary>`
 - 1.8 ✅ 2026-06-19 — `BymaxNotificationModule.forRoot` (conditional channel registration, instance-vs-class `useValue`/`useClass`, audit/renderer fallbacks, BOOTSTRAP_OK log) + `forRootAsync` options stub. 100% coverage.
 - 1.9 ✅ 2026-06-19 — Server barrel: module, 7 tokens, `NOTIFICATION_PURPOSES`, interface + resolved-options types, reference providers, errors, shared re-exports. Build emits all 3 subpaths; `forRoot` smoke green.
 - 1.10 ✅ 2026-06-19 — Unit specs (authored TDD-first per task) reach 100% line/branch globally and per file across 14 suites / 100 tests, incl. leading-zeros + 20-digit no-throw, safeCompare length-mismatch, html-only escape, and server/shared error-code parity.
+- 1.11 ✅ 2026-06-19 — All gates green (typecheck/lint/test:cov/build/size/check:no-prisma), error-codes sync gate (21 codes server==shared), `forRoot` smoke (global, 4 providers, shared constants). Largest file 186 lines; no function > 50.
