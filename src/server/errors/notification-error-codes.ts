@@ -44,6 +44,11 @@ export const NOTIFICATION_ERROR_DEFINITIONS = {
     status: HttpStatus.BAD_REQUEST,
     message: 'Invalid recipient email'
   },
+  EMAIL_MISSING_BODY: {
+    code: NOTIFICATION_ERROR_CODES.EMAIL_MISSING_BODY,
+    status: HttpStatus.BAD_REQUEST,
+    message: 'Email payload requires either a template or a subject and html body'
+  },
   TEMPLATE_NOT_FOUND: {
     code: NOTIFICATION_ERROR_CODES.TEMPLATE_NOT_FOUND,
     status: HttpStatus.INTERNAL_SERVER_ERROR,

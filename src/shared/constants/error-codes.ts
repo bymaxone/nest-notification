@@ -12,7 +12,7 @@
  * Stable error-code identifiers, keyed by their symbolic name.
  *
  * Values are namespaced under `notification.*` and never change once published —
- * consumers branch on them to localize messages. The 21 entries cover the email,
+ * consumers branch on them to localize messages. The 22 entries cover the email,
  * template, OTP, SMS, push, audit, and channel-config failure surfaces.
  */
 export const NOTIFICATION_ERROR_CODES = {
@@ -20,6 +20,8 @@ export const NOTIFICATION_ERROR_CODES = {
   EMAIL_SEND_FAILED: 'notification.email_send_failed',
   EMAIL_ATTACHMENTS_TOO_LARGE: 'notification.email_attachments_too_large',
   EMAIL_INVALID_RECIPIENT: 'notification.email_invalid_recipient',
+  /** The email payload carries neither a `template` nor a `subject` + `html` body source. */
+  EMAIL_MISSING_BODY: 'notification.email_missing_body',
   TEMPLATE_NOT_FOUND: 'notification.template_not_found',
   TEMPLATE_RENDER_FAILED: 'notification.template_render_failed',
   OTP_STORAGE_NOT_CONFIGURED: 'notification.otp_storage_not_configured',

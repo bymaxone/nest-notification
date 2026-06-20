@@ -107,18 +107,19 @@ describe('NotificationService.dispatch — email', () => {
     expect(email.send).toHaveBeenCalledWith(expect.objectContaining({ subject: 'S', html: '<p>H</p>' }))
   })
 
-  // Neither a template nor subject+html → EMAIL_INVALID_RECIPIENT.
-  it('should throw EMAIL_INVALID_RECIPIENT when the payload has no body source', async () => {
+  // Neither a template nor subject+html → EMAIL_MISSING_BODY (the recipient is fine;
+  // the body source is what's missing, so the error must say so accurately).
+  it('should throw EMAIL_MISSING_BODY when the payload has no body source', async () => {
     await expect(
       build(makeEmail()).dispatch({ channel: 'email', tenantId: 't', payload: { to: 'a@x.com' } })
-    ).rejects.toMatchObject({ code: 'notification.email_invalid_recipient' })
+    ).rejects.toMatchObject({ code: 'notification.email_missing_body' })
   })
 
-  // A subject without html is still an invalid body source.
-  it('should throw EMAIL_INVALID_RECIPIENT when only subject is provided', async () => {
+  // A subject without html is still a missing body source.
+  it('should throw EMAIL_MISSING_BODY when only subject is provided', async () => {
     await expect(
       build(makeEmail()).dispatch({ channel: 'email', tenantId: 't', payload: { to: 'a@x.com', subject: 'S' } })
-    ).rejects.toMatchObject({ code: 'notification.email_invalid_recipient' })
+    ).rejects.toMatchObject({ code: 'notification.email_missing_body' })
   })
 
   // Dispatching to email when the channel is absent throws CHANNEL_DISABLED.

@@ -79,7 +79,7 @@ export class NotificationService {
    * @param input - The channel-discriminated dispatch request.
    * @returns The channel-discriminated result.
    * @throws NotificationException `CHANNEL_DISABLED` (channel not configured) or
-   * `EMAIL_INVALID_RECIPIENT` (email payload has neither a template nor subject+html).
+   * `EMAIL_MISSING_BODY` (email payload has neither a template nor subject+html).
    */
   async dispatch(input: DispatchInput): Promise<DispatchResult> {
     if (input.channel === 'email') {
@@ -144,7 +144,7 @@ export class NotificationService {
       const input = this.toSendInput(tenantId, payload.subject, payload.html, payload)
       return (await email.send(input)).messageId
     }
-    throw new NotificationException('EMAIL_INVALID_RECIPIENT', {
+    throw new NotificationException('EMAIL_MISSING_BODY', {
       hint: 'payload requires either `template` OR `{ subject, html }`'
     })
   }
