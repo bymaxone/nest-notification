@@ -1,6 +1,6 @@
 # Phase 1 — Foundation + Interfaces (`IEmailProvider` + `IOtpStorage`)
 
-> **Status**: 🔄 In Progress · **Progress**: 6 / 11 tasks · **Last updated**: 2026-06-19
+> **Status**: 🔄 In Progress · **Progress**: 7 / 11 tasks · **Last updated**: 2026-06-19
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 2 (Phase 1)
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md)
 
@@ -45,7 +45,7 @@ The flagship decision baked in here is the **dissolution of the Prisma coupling*
 | 1.4 | Injection tokens + error catalog (incl. `OTP_EMAIL_DELIVERY_NOT_CONFIGURED`) + `NotificationException` + default-options constants | ✅ | P0 | M | 1.2, 1.3 |
 | 1.5 | Options validation + resolution (`ResolvedNotificationOptions` + `resolveForPurpose`, `maxAttachmentBytes`, `maskRecipient`) | ✅ | P0 | M | 1.3, 1.4 |
 | 1.6 | No-op providers + minimal `DefaultTemplateRenderer` (escape html body only) | ✅ | P0 | S | 1.3 |
-| 1.7 | Crypto utils — `hash`, `code-generator` (digit-by-digit), `safeCompare` (length-guard) | ⬜ | P0 | M | 1.4 |
+| 1.7 | Crypto utils — `hash`, `code-generator` (digit-by-digit), `safeCompare` (length-guard) | ✅ | P0 | M | 1.4 |
 | 1.8 | Dynamic module — synchronous `forRoot()` with conditional registration | ⬜ | P0 | M | 1.5, 1.6 |
 | 1.9 | Server barrel exports | ⬜ | P1 | S | 1.3–1.8 |
 | 1.10 | Tests for Phase 1 (100% coverage) | ⬜ | P0 | L | 1.3–1.9 |
@@ -509,7 +509,7 @@ Completion Protocol:
 
 ### Task 1.7 — Crypto utils (`hash`, `code-generator`, `safeCompare`)
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: 1.4
@@ -520,10 +520,10 @@ Implement the security-critical utilities: `hashTenantRecipient` (sha256), `gene
 
 #### Acceptance criteria
 
-- [ ] `hashTenantRecipient('a','b')` = 64-hex, deterministic, order-sensitive
-- [ ] `generateOtpCode(6,'numeric')` = 6 digits (leading zeros preserved); `generateOtpCode(20,'numeric')` returns 20 digits without throwing (overflow regression); alpha/alphanumeric exclude I/O/0/1; length ∉ [1,32] throws `OTP_INVALID_LENGTH`
-- [ ] `safeCompare` returns true/false correctly and returns `false` (no throw) on length mismatch
-- [ ] Coverage **100%** on all 3 files; mutation 100% (no surviving non-equivalent mutants)
+- [x] `hashTenantRecipient('a','b')` = 64-hex, deterministic, order-sensitive
+- [x] `generateOtpCode(6,'numeric')` = 6 digits (leading zeros preserved); `generateOtpCode(20,'numeric')` returns 20 digits without throwing (overflow regression); alpha/alphanumeric exclude I/O/0/1; length ∉ [1,32] throws `OTP_INVALID_LENGTH`
+- [x] `safeCompare` returns true/false correctly and returns `false` (no throw) on length mismatch
+- [x] Coverage **100%** on all 3 files; mutation 100% (no surviving non-equivalent mutants) — line/branch 100%; Stryker is a pre-release gate
 
 #### Files to create / modify
 
@@ -828,3 +828,4 @@ in `docs/development_plan.md`. 5. Append `- 1.11 ✅ <YYYY-MM-DD> — <summary>`
 - 1.4 ✅ 2026-06-19 — 7 Symbol DI tokens, the 21-entry `NOTIFICATION_ERROR_DEFINITIONS` (+`OTP_EMAIL_DELIVERY_NOT_CONFIGURED`, `Map`-based lookup), `NotificationException`, `NOTIFICATION_PURPOSES`, `DEFAULT_*_OPTIONS`. Server/shared parity asserted; 100% coverage.
 - 1.5 ✅ 2026-06-19 — `validateOptions` (all rejection rules incl. sms/push v0.2), `resolveOptions` → deep-frozen `ResolvedNotificationOptions` with `resolveForPurpose`, `maxAttachmentBytes` (10 MiB), identity `maskRecipient`. 100% coverage.
 - 1.6 ✅ 2026-06-19 — `NoOpEmailProvider` (logs to+subject, never body), `NoOpNotificationLogRepository` (silent discard), `DefaultTemplateRenderer` (`{{var}}` interpolation, html-only escape, `en` fallback). 100% coverage.
+- 1.7 ✅ 2026-06-19 — Crypto utils: `hashTenantRecipient` (sha256), `generateOtpCode` (per-char CSPRNG, no `10**length` overflow, confusion-free charsets), `safeCompare` (length-guarded `timingSafeEqual`). 100% line/branch.
