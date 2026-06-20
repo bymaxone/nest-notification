@@ -1,6 +1,6 @@
 # Phase 2 — EmailService + OtpService (atomic)
 
-> **Status**: 🔄 In Progress · **Progress**: 3 / 10 tasks · **Last updated**: 2026-06-19
+> **Status**: 🔄 In Progress · **Progress**: 4 / 10 tasks · **Last updated**: 2026-06-19
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 3 (Phase 2)
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md)
 
@@ -43,7 +43,7 @@ OTP email delivery is delegated to `EmailService` (which owns the renderer/escap
 | 2.1 | `ResendEmailProvider` — lazy-loaded reference adapter | ✅ | P0 | M | 1.3 |
 | 2.2 | `InMemoryOtpStorage` — atomic dev/test storage | ✅ | P0 | M | 1.3 |
 | 2.3 | `RedisOtpStorage` — Lua `consumeAttempt` + NX cooldown (production) | ✅ | P0 | L | 1.3, 1.7 |
-| 2.4 | `EmailService` — send + sendTemplate + attachment guard + audit (mask) | ⬜ | P0 | M | 1.4, 1.5 |
+| 2.4 | `EmailService` — send + sendTemplate + attachment guard + audit (mask) | ✅ | P0 | M | 1.4, 1.5 |
 | 2.5 | `OtpService` — generate/verify/consume/resend/getStatus (atomic) | ⬜ | P0 | L | 2.3, 2.4 |
 | 2.6 | `NotificationService` — channel-agnostic dispatch (discriminated) | ⬜ | P0 | M | 2.4, 2.5 |
 | 2.7 | Module wiring — register services conditionally | ⬜ | P0 | S | 2.4, 2.5, 2.6 |
@@ -247,7 +247,7 @@ Completion Protocol:
 
 ### Task 2.4 — `EmailService`
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: 1.4, 1.5
@@ -258,11 +258,11 @@ Implement `send()` (raw body) and `sendTemplate()` (delegates to the renderer), 
 
 #### Acceptance criteria
 
-- [ ] `send` returns `messageId`; throws `EMAIL_PROVIDER_NOT_CONFIGURED` (no provider), `EMAIL_SEND_FAILED` (provider throws), `EMAIL_ATTACHMENTS_TOO_LARGE` (sum > `maxAttachmentBytes`)
-- [ ] applies `defaultFrom/defaultFromName/defaultReplyTo`; concatenates `defaultTags`+caller tags
-- [ ] `sendTemplate` → `hasTemplate(template, locale)` + `en` fallback → `TEMPLATE_NOT_FOUND`/`TEMPLATE_RENDER_FAILED`; appends `{name:'template',value}`
-- [ ] audit on success + failure; `recipient` passes through `maskRecipient`; never propagates audit error when `swallowErrors:true`; propagates `AUDIT_LOG_FAILED` when false; never logs body
-- [ ] Coverage 100%
+- [x] `send` returns `messageId`; throws `EMAIL_PROVIDER_NOT_CONFIGURED` (no provider), `EMAIL_SEND_FAILED` (provider throws), `EMAIL_ATTACHMENTS_TOO_LARGE` (sum > `maxAttachmentBytes`)
+- [x] applies `defaultFrom/defaultFromName/defaultReplyTo`; concatenates `defaultTags`+caller tags
+- [x] `sendTemplate` → `hasTemplate(template, locale)` + `en` fallback → `TEMPLATE_NOT_FOUND`/`TEMPLATE_RENDER_FAILED`; appends `{name:'template',value}`
+- [x] audit on success + failure; `recipient` passes through `maskRecipient`; never propagates audit error when `swallowErrors:true`; propagates `AUDIT_LOG_FAILED` when false; never logs body
+- [x] Coverage 100%
 
 #### Files to create / modify
 
@@ -671,3 +671,4 @@ in `docs/development_plan.md`. 5. Append `- 2.10 ✅ <YYYY-MM-DD> — <summary>`
 - 2.1 ✅ 2026-06-19 — ResendEmailProvider with lazy `import('resend')`, from-header formatting, body-safe error logging; 100% coverage incl. not-installed path.
 - 2.2 ✅ 2026-06-19 — InMemoryOtpStorage over two Maps, atomic consumeAttempt, self-evicting get/cooldown, clear()/size() helpers; 100% coverage.
 - 2.3 ✅ 2026-06-19 — RedisOtpStorage with sha256 PII-free keys, atomic Lua consumeAttempt, SET NX EX cooldown, KEEPTTL XX update; 100% coverage + interleaving regression.
+- 2.4 ✅ 2026-06-19 — EmailService send/sendTemplate with defaults, attachment guard, en fallback, masked fire-and-forget audit; body never logged; 100% coverage.
