@@ -37,7 +37,7 @@
 
 The library generalizes the hand-rolled notification module a typical NestJS app ships, with three critical architectural corrections:
 
-1. **Zero Prisma coupling** — a hand-rolled `EmailVerificationService` typically imports `PrismaService` directly. In this lib, **all OTP storage goes behind the `IOtpStorage` interface** (default `RedisOtpStorage`), and email verification becomes **a use case of the OTP channel**, not a service coupled to the user schema.
+1. **Zero Prisma coupling** — a hand-rolled email-verification service typically imports a Prisma client directly. In this lib, **all OTP storage goes behind the `IOtpStorage` interface** (default `RedisOtpStorage`), and email verification becomes **a use case of the OTP channel**, not a service coupled to the user schema.
 2. **Pluggable templates** — hand-rolled email services tend to hardcode branded HTML. In this lib, **rendering goes through `IEmailTemplateRenderer`** (default: simple interpolation; consumers can plug in Handlebars/MJML/React Email).
 3. **Injectable email provider** — the original imported `resend` as a direct dependency. In the new lib, **Resend is just the default reference `IEmailProvider`**; the consumer chooses.
 
@@ -1296,7 +1296,7 @@ export class NoOpEmailProvider implements IEmailProvider {
 
 ### 5.2 `IOtpStorage`
 
-The key interface to solve the **Prisma coupling** that exists today in `_commons_/notification/`. All OTP persistence goes through here.
+The key interface to solve the **Prisma coupling** a hand-rolled OTP store would otherwise impose. All OTP persistence goes through here.
 
 ```typescript
 /**
@@ -2241,7 +2241,7 @@ export class EmailService {
 
 ### 6.2 `OtpService`
 
-Public OTP service. Replaces a hand-rolled `OTPService` + `OTPRedisService` + `EmailVerificationService`.
+Public OTP service. Replaces a hand-rolled OTP service, Redis store, and email-verification service.
 
 ```typescript
 @Injectable()

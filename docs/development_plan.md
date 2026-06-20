@@ -164,7 +164,7 @@ The task carries the full prompt for AI agent execution (Role / Project / Precon
 
 #### 1.10.1 Dissolving the Prisma coupling (highlight Phase 1)
 
-A hand-rolled `EmailVerificationService` that imports `PrismaService` directly to persist OTP codes in an `email_verification` table — the typical pattern a consumer ships before adopting this lib — creates 3 problems:
+A hand-rolled email-verification service that imports a Prisma client directly to persist OTP codes in an `email_verification` table — the typical pattern a consumer ships before adopting this lib — creates 3 problems:
 
 1. **Non-portable** — any consumer using TypeORM/Drizzle/Mongo would need to refactor
 2. **Leaks the schema** — the lib forced a specific shape (`{ email, code, expiresAt }`) on the user table
@@ -457,7 +457,7 @@ JSDoc must call out: never log body, never leak credentials, throw `Error` on fa
   - `{ valid: false; reason: 'max_attempts' }`
   - `{ valid: false; reason: 'invalid_code'; remainingAttempts: number }`
 
-**JSDoc highlight (Prisma decoupling):** "This interface DISSOLVES the Prisma coupling a hand-rolled `EmailVerificationService` would otherwise impose. No `@prisma/client` import lives anywhere in this library."
+**JSDoc highlight (Prisma decoupling):** "This interface DISSOLVES the Prisma coupling a hand-rolled email-verification service would otherwise impose. No `@prisma/client` import lives anywhere in this library."
 
 Implementation contract (full text in spec §5.2):
 - **`consumeAttempt` MUST be atomic** — lookup + attempt increment in one indivisible step (Redis: Lua script; in-memory: a single synchronous read-modify-write). A plain `get`+`update` races and lets `maxAttempts` be bypassed under concurrency.

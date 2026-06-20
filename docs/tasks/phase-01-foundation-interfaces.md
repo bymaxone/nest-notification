@@ -10,7 +10,7 @@
 
 This phase establishes the complete project scaffold and the **public contracts** of the library: the provider/storage/renderer/audit interfaces, the injection tokens, the error catalog + exception, options validation/resolution, the crypto utilities, and the dynamic-module skeleton with conditional registration. No channel services exist yet — at the end of the phase a consumer can install the lib in a NestJS fixture and call `BymaxNotificationModule.forRoot({ ... })` without error.
 
-The flagship decision baked in here is the **dissolution of the Prisma coupling** a hand-rolled `EmailVerificationService` would otherwise impose: all OTP persistence goes behind `IOtpStorage`, which declares **atomic** primitives (`consumeAttempt`, `tryAcquireCooldown`, `clearCooldown`) so the `maxAttempts`/anti-resend guarantees hold under concurrency. The lib NEVER imports `@prisma/client`.
+The flagship decision baked in here is the **dissolution of the Prisma coupling** a hand-rolled email-verification service would otherwise impose: all OTP persistence goes behind `IOtpStorage`, which declares **atomic** primitives (`consumeAttempt`, `tryAcquireCooldown`, `clearCooldown`) so the `maxAttempts`/anti-resend guarantees hold under concurrency. The lib NEVER imports `@prisma/client`.
 
 ---
 
@@ -94,7 +94,7 @@ You are a senior NestJS/TypeScript library engineer working on the nest-notifica
 PROJECT: @bymax-one/nest-notification — a public, MIT, multi-tenant, multi-channel notification
 library for NestJS (email + OTP in v0.1; SMS/push v0.2). Zero runtime deps (everything via optional
 peer deps), Node 24+, NestJS 11, pnpm, 3 subpaths (`.` server, `./shared` zero-dep types, `./react`
-hooks). Generalizes a hand-rolled `_commons_/notification/`-style module with the Prisma coupling dissolved.
+hooks). Generalizes a hand-rolled notification module with the Prisma coupling dissolved.
 
 CURRENT PHASE: 1 (Foundation) — Task 1.1 of 11 (FIRST)
 
