@@ -14,8 +14,8 @@
 
 import {
   DEFAULT_AUDIT_OPTIONS,
+  DEFAULT_EMAIL_OPTIONS,
   DEFAULT_GLOBAL_OPTIONS,
-  DEFAULT_MAX_ATTACHMENT_BYTES,
   DEFAULT_OTP_OPTIONS
 } from '../constants/default-options.constants'
 import type {
@@ -102,8 +102,8 @@ function resolveGlobal(global: GlobalOptions | undefined): ResolvedGlobalOptions
 function resolveEmail(email: EmailChannelOptions): ResolvedEmailOptions {
   return {
     defaultFrom: email.defaultFrom,
-    defaultTags: email.defaultTags ?? [],
-    maxAttachmentBytes: email.maxAttachmentBytes ?? DEFAULT_MAX_ATTACHMENT_BYTES,
+    defaultTags: email.defaultTags ?? DEFAULT_EMAIL_OPTIONS.defaultTags,
+    maxAttachmentBytes: email.maxAttachmentBytes ?? DEFAULT_EMAIL_OPTIONS.maxAttachmentBytes,
     ...(email.defaultFromName !== undefined ? { defaultFromName: email.defaultFromName } : {}),
     ...(email.defaultReplyTo !== undefined ? { defaultReplyTo: email.defaultReplyTo } : {})
   }
