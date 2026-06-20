@@ -18,7 +18,7 @@ Tasks live **one file per phase** in this folder (`docs/tasks/phase-NN-<slug>.md
 | 3 | [`phase-03-templating-rate-limiting.md`](./phase-03-templating-rate-limiting.md) | 8 / 8 | 🟢 Done |
 | 4 | [`phase-04-multitenant-audit.md`](./phase-04-multitenant-audit.md) | 8 / 8 | 🟢 Done |
 | 5 | [`phase-05-frontend-react.md`](./phase-05-frontend-react.md) | 5 / 5 | 🟢 Done |
-| 6 | [`phase-06-release.md`](./phase-06-release.md) | 5 / 7 | 🟡 In progress |
+| 6 | [`phase-06-release.md`](./phase-06-release.md) | 5 / 7 | 🟡 In progress (prep done; publish pending) |
 | | **Total** | **47 / 49** | 🟡 96% |
 
 ---
