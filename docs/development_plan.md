@@ -74,7 +74,7 @@ The phase order respects the dependency graph (Appendix A): interfaces before se
 
 ### 1.4 Progress
 
-- **Overall progress:** 🔄 3 / 7 phases done (43%) — 33 / 55 tasks (60%)
+- **Overall progress:** 🔄 3 / 7 phases done (43%) — 34 / 55 tasks (62%)
 - **Active phase:** **Phase 4** (Multi-tenant + Audit Log) — 🔄 In Progress
 - **Blocked:** none
 
@@ -85,7 +85,7 @@ The phase order respects the dependency graph (Appendix A): interfaces before se
 | 1 | [Foundation + Interfaces](./tasks/phase-01-foundation-interfaces.md) | ✅ Done | 11/11 | MEDIUM | 2026-06-20 |
 | 2 | [EmailService + OtpService (atomic)](./tasks/phase-02-email-otp-services.md) | ✅ Done | 10/10 | HIGH | 2026-06-20 |
 | 3 | [Templating + Rate Limiting](./tasks/phase-03-templating-rate-limiting.md) | ✅ Done | 8/8 | MEDIUM | 2026-06-20 |
-| 4 | [Multi-tenant + Audit Log](./tasks/phase-04-multitenant-audit.md) | 🔄 In Progress | 4/8 | MEDIUM | 2026-06-20 |
+| 4 | [Multi-tenant + Audit Log](./tasks/phase-04-multitenant-audit.md) | 🔄 In Progress | 5/8 | MEDIUM | 2026-06-20 |
 | 5 | [Frontend (`./react`)](./tasks/phase-05-frontend-react.md) | 📋 ToDo | 0/5 | MEDIUM | — |
 | 6 | [Adoption in bymax-fitness-ai](./tasks/phase-06-adoption-bymax-fitness.md) | 📋 ToDo | 0/6 | HIGH | — |
 | 7 | [Release v0.1.0](./tasks/phase-07-release.md) | 📋 ToDo | 0/7 | MEDIUM | — |

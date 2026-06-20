@@ -1,6 +1,6 @@
 # Phase 4 — Multi-tenant + Audit Log
 
-> **Status**: 🔄 In Progress · **Progress**: 4 / 8 tasks · **Last updated**: 2026-06-20
+> **Status**: 🔄 In Progress · **Progress**: 5 / 8 tasks · **Last updated**: 2026-06-20
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 5 (Phase 4)
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md)
 
@@ -37,7 +37,7 @@ Consolidate multi-tenancy (tenant-isolation regression tests, the `tenantIdResol
 | 4.2 | `NotificationAuditInterceptor` (opt-in, anti-spoofing) | ✅ | P1 | M | 2.6 |
 | 4.3 | Complete `forRootAsync()` | ✅ | P0 | M | 1.8, 2.7 |
 | 4.4 | Prisma fragment + `PrismaNotificationLogRepository` example | ✅ | P2 | S | 1.3 |
-| 4.5 | Multi-tenant security section in README (draft) | ⬜ | P2 | S | — |
+| 4.5 | Multi-tenant security section in README (draft) | ✅ | P2 | S | — |
 | 4.6 | Tests — interceptor + audit-log E2E (never-log-code gate) | ⬜ | P0 | M | 4.1, 4.2, 4.3 |
 | 4.7 | Barrel export (interceptor) | ⬜ | P1 | S | 4.2 |
 | 4.8 | Phase 4 validation + smoke | ⬜ | P0 | S | 4.6 |
@@ -277,7 +277,7 @@ Completion Protocol:
 
 ### Task 4.5 — Multi-tenant security section in README (draft)
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P2
 - **Size**: S
 - **Depends on**: —
@@ -288,7 +288,7 @@ Draft the README "Multi-tenant Security" section (finalized in the Release phase
 
 #### Acceptance criteria
 
-- [ ] Covers the hashing rationale, the spoofing scenario + resolver mitigation (`(req) => req.hostname?.split('.')[0] ?? 'default'`, `req: NotificationRequest`), and the never-log-codes guarantee
+- [x] Covers the hashing rationale, the spoofing scenario + resolver mitigation (`(req) => req.hostname?.split('.')[0] ?? 'default'`, `req: NotificationRequest`), and the never-log-codes guarantee
 
 #### Files to create / modify
 
@@ -488,3 +488,4 @@ the plan. 5. Append `- 4.8 ✅ <YYYY-MM-DD> — <summary>`.
 - 4.2 ✅ 2026-06-20 — `NotificationAuditInterceptor`: anti-spoofing tenant resolution, never serializes the payload, swallow-by-default, 100% coverage.
 - 4.3 ✅ 2026-06-20 — `forRootAsync` fully wires every channel token + the three services from a `useFactory`; `useClass`/`useExisting` rejected; 100% coverage.
 - 4.4 ✅ 2026-06-20 — Prisma fragment + consumer repository example under `docs/schemas/`; covers every `NotificationLogEntry` field, 3 indexes, never-import-Prisma warning.
+- 4.5 ✅ 2026-06-20 — README "Multi-tenant Security" draft: SHA-256 key rationale, `tenantIdResolver` anti-spoofing (subdomain + JWT, typed), never-log-codes guarantee.
