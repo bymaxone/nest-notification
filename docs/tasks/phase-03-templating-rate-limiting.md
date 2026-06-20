@@ -1,6 +1,6 @@
 # Phase 3 — Templating + Rate Limiting
 
-> **Status**: 🔄 In Progress · **Progress**: 6 / 8 tasks · **Last updated**: 2026-06-20
+> **Status**: 🔄 In Progress · **Progress**: 7 / 8 tasks · **Last updated**: 2026-06-20
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 4 (Phase 3)
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md)
 
@@ -38,7 +38,7 @@ Refine the `DefaultTemplateRenderer` (robust i18n fallback chain, nested paths, 
 | 3.4 | `OtpService` cooldown details (`retryAfter`, `expiresAt` on `OTP_COOLDOWN_ACTIVE`) | ✅ | P1 | S | 2.5, 3.3 |
 | 3.5 | Barrel exports (cooldown helpers + renderer types) | ✅ | P1 | S | 3.1, 3.3 |
 | 3.6 | `CANONICAL_EMAIL_TEMPLATES` naming convention | ✅ | P1 | S | — |
-| 3.7 | Tests for Phase 3 (renderer extensions + cooldown helpers) | ⬜ | P0 | M | 3.1, 3.3, 3.4 |
+| 3.7 | Tests for Phase 3 (renderer extensions + cooldown helpers) | ✅ | P0 | M | 3.1, 3.3, 3.4 |
 | 3.8 | Phase 3 validation + close | ⬜ | P0 | S | 3.7 |
 
 ---
@@ -379,7 +379,7 @@ Completion Protocol:
 
 ### Task 3.7 — Tests for Phase 3
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: 3.1, 3.3, 3.4
@@ -390,8 +390,8 @@ Completion Protocol:
 
 #### Acceptance criteria
 
-- [ ] `default-template-renderer.ts` + `cooldown-helpers.ts` at 100%; global 100%
-- [ ] Escape-scope test (html escaped, subject/text raw); cooldown formatting matrix; cooldown-details assertion
+- [x] `default-template-renderer.ts` + `cooldown-helpers.ts` at 100%; global 100%
+- [x] Escape-scope test (html escaped, subject/text raw); cooldown formatting matrix; cooldown-details assertion
 
 #### Files to create / modify
 
@@ -492,3 +492,4 @@ the plan. 5. Append `- 3.8 ✅ <YYYY-MM-DD> — <summary>`.
 - 3.4 ✅ 2026-06-20 — `OTP_COOLDOWN_ACTIVE` now carries `retryAfter` (via `toRetryAfterHeader`) and `expiresAt` (via `cooldownExpiresAt`) alongside `remainingSeconds`; spec asserts the three details.
 - 3.5 ✅ 2026-06-20 — Barrel now exports the cooldown helpers and the refined renderer types (`TemplateDefinition`, `DefaultTemplateRendererOptions`, `MissingVariableMode`); build clean, symbols verified in the bundle.
 - 3.2 ✅ 2026-06-20 — Wrote Handlebars / React Email / MJML adapter example docs (verified against handlebars@4, @react-email/render@1, mjml@4) with setup, full adapter, security caveats, and module registration.
+- 3.7 ✅ 2026-06-20 — Phase 3 tests consolidated: renderer extensions (fallback/nested/missing-var/escape-scope/construction), cooldown matrix, OTP cooldown-details; full suite 245 tests at 100% line/branch global.
