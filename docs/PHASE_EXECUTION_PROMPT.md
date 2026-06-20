@@ -87,11 +87,16 @@ STEP -1 — Verify the base branch exists (precondition)
 ────────────────────────────────────────────────────────────────────────────
 main is already seeded with docs/ and pushed to origin, so phase PRs have a
 valid base. Just confirm before starting, and only act if something is off:
-  • `git rev-parse HEAD` succeeds and `git ls-remote --heads origin main` is
-    non-empty → precondition met, proceed to STEP 0.
-  • If (and only if) HEAD is missing or origin/main is absent: stage docs/,
-    commit `chore(repo): seed main with project documentation`, and push main.
-  • Start every phase from the latest origin/main: `git fetch origin && git switch main && git pull`.
+  • `git rev-parse HEAD` succeeds AND `git ls-remote --heads origin main`
+    exits 0 with non-empty output → precondition met, proceed to STEP 0.
+    (A non-zero exit means a missing/renamed remote, not an empty result —
+    treat that as "origin/main absent" below, do not assume the remote is fine.)
+  • If (and only if) HEAD is missing or that check did not succeed with output:
+    stage docs/, commit `chore(repo): seed main with project documentation`,
+    and push main.
+  • Start every phase from the latest origin/main: `git fetch origin`, then
+    `git switch main` — or, if no local `main` exists yet (fresh clone/worktree),
+    `git switch -c main --track origin/main` — then `git pull --ff-only`.
 
 ────────────────────────────────────────────────────────────────────────────
 STEP 0 — Pick the next phase
