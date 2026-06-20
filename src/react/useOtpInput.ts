@@ -169,6 +169,43 @@ function buildHandlers(ctx: HandlerContext): OtpHandlers {
   }
 }
 
+/** Imperative single-slot setter exposed on the hook's public state. */
+type SetValue = (index: number, value: string) => void
+
+/**
+ * Slot-state primitive: holds the per-slot values, keeps them sized to `length`,
+ * and exposes an imperative setter that runs the same completion path as typing.
+ *
+ * @param length - Current number of slots; state resizes when it changes.
+ * @param complete - Completion callback invoked with the next slot array.
+ * @returns The slot values, the raw commit setter, and the imperative setter.
+ */
+function useSlotValues(
+  length: number,
+  complete: (next: readonly string[]) => void
+): [string[], Commit, SetValue] {
+  const [values, setValues] = useState<string[]>(() => makeEmptyValues(length))
+
+  // Mirror the committed slots so the imperative setter reads the freshest
+  // values and composes successive synchronous writes without an extra render.
+  const valuesRef = useRef(values)
+  valuesRef.current = values
+
+  // Mirror the `onChange`/`onPaste` flow: write the slot, then run the same
+  // completion path so a fully-filled programmatic value fires `onComplete`.
+  const setValue = useCallback<SetValue>(
+    (index, value) => {
+      const next = replaceAt(valuesRef.current, index, value)
+      valuesRef.current = next
+      setValues(next)
+      complete(next)
+    },
+    [complete]
+  )
+
+  return [values, setValues, setValue]
+}
+
 /**
  * Hook that manages an N-slot OTP input with auto-focus, paste distribution, and
  * Backspace/Arrow navigation.
@@ -185,7 +222,6 @@ export function useOtpInput(options: UseOtpInputOptions = {}): UseOtpInputState 
     onComplete
   } = options
 
-  const [values, setValues] = useState<string[]>(() => makeEmptyValues(length))
   const refs = useMemo<SlotRefs>(() => Array.from({ length }, () => ({ current: null })), [length])
 
   // Track the latest callback so the deferred microtask never fires stale.
@@ -201,14 +237,13 @@ export function useOtpInput(options: UseOtpInputOptions = {}): UseOtpInputState 
     },
     [autoSubmit]
   )
-  const setValue = useCallback(
-    (index: number, value: string): void => setValues((prev) => replaceAt(prev, index, value)),
-    []
-  )
+
+  const [values, setValues, setValue] = useSlotValues(length, complete)
+
   const reset = useCallback((): void => {
     setValues(makeEmptyValues(length))
     focus(0)
-  }, [length, focus])
+  }, [length, focus, setValues])
 
   const handlers = useMemo(
     () => buildHandlers({ values, type, length, sanitizeOnPaste, setValues, focus, complete }),

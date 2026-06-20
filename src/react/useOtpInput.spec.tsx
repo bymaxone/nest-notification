@@ -359,4 +359,62 @@ describe('useOtpInput', () => {
     expect(result.current.code).toBe('')
     expect(focusSpies[0]).toHaveBeenCalledTimes(1)
   })
+
+  // Filling every slot through the imperative setter runs the completion path,
+  // so a programmatic fill fires onComplete just like typing or pasting.
+  it('should fire onComplete once when setValue fills the final slot', async () => {
+    const onComplete = jest.fn()
+    const { result } = renderHook(() => useOtpInput({ length: 2, onComplete }))
+
+    act(() => {
+      result.current.setValue(0, '1')
+    })
+    act(() => {
+      result.current.setValue(1, '2')
+    })
+    expect(onComplete).not.toHaveBeenCalled()
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(result.current.code).toBe('12')
+    expect(result.current.isComplete).toBe(true)
+    expect(onComplete).toHaveBeenCalledTimes(1)
+    expect(onComplete).toHaveBeenCalledWith('12')
+  })
+
+  // autoSubmit:false suppresses the completion callback on a programmatic fill.
+  it('should not fire onComplete via setValue when autoSubmit is false', async () => {
+    const onComplete = jest.fn()
+    const { result } = renderHook(() =>
+      useOtpInput({ length: 1, onComplete, autoSubmit: false })
+    )
+
+    act(() => {
+      result.current.setValue(0, '9')
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(result.current.isComplete).toBe(true)
+    expect(onComplete).not.toHaveBeenCalled()
+  })
+
+  // A partial programmatic fill leaves the completion callback untouched.
+  it('should not fire onComplete via setValue while a slot stays empty', async () => {
+    const onComplete = jest.fn()
+    const { result } = renderHook(() => useOtpInput({ length: 2, onComplete }))
+
+    act(() => {
+      result.current.setValue(0, '1')
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(result.current.isComplete).toBe(false)
+    expect(onComplete).not.toHaveBeenCalled()
+  })
 })
