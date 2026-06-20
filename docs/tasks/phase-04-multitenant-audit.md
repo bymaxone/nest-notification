@@ -1,6 +1,6 @@
 # Phase 4 — Multi-tenant + Audit Log
 
-> **Status**: 🔄 In Progress · **Progress**: 0 / 8 tasks · **Last updated**: 2026-06-20
+> **Status**: 🔄 In Progress · **Progress**: 1 / 8 tasks · **Last updated**: 2026-06-20
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 5 (Phase 4)
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md)
 
@@ -33,7 +33,7 @@ Consolidate multi-tenancy (tenant-isolation regression tests, the `tenantIdResol
 
 | ID | Task | Status | Priority | Size | Depends on |
 |---|---|---|---|---|---|
-| 4.1 | Tenant-isolation E2E suite | ⬜ | P0 | M | 2.3, 2.5 |
+| 4.1 | Tenant-isolation E2E suite | ✅ | P0 | M | 2.3, 2.5 |
 | 4.2 | `NotificationAuditInterceptor` (opt-in, anti-spoofing) | ⬜ | P1 | M | 2.6 |
 | 4.3 | Complete `forRootAsync()` | ⬜ | P0 | M | 1.8, 2.7 |
 | 4.4 | Prisma fragment + `PrismaNotificationLogRepository` example | ⬜ | P2 | S | 1.3 |
@@ -48,7 +48,7 @@ Consolidate multi-tenancy (tenant-isolation regression tests, the `tenantIdResol
 
 ### Task 4.1 — Tenant-isolation E2E suite
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: 2.3, 2.5
@@ -59,9 +59,9 @@ A regression suite proving cross-tenant isolation for both `InMemoryOtpStorage` 
 
 #### Acceptance criteria
 
-- [ ] No OTP collision across tenants with the same recipient; no cooldown collision; no cross-tenant verify leak (`tenant_b` verifying `tenant_a`'s code → `not_found`)
-- [ ] Redis keys are hex-encoded (no plaintext recipient/tenantId)
-- [ ] Suite passes in CI (ioredis-mock); does not affect unit coverage
+- [x] No OTP collision across tenants with the same recipient; no cooldown collision; no cross-tenant verify leak (`tenant_b` verifying `tenant_a`'s code → `not_found`)
+- [x] Redis keys are hex-encoded (no plaintext recipient/tenantId)
+- [x] Suite passes in CI (in-repo Redis double); does not affect unit coverage
 
 #### Files to create / modify
 
@@ -483,3 +483,5 @@ the plan. 5. Append `- 4.8 ✅ <YYYY-MM-DD> — <summary>`.
 ## Completion log
 
 > Append-only. One line per completed task: `- <task-id> ✅ YYYY-MM-DD — <one-line summary>`.
+
+- 4.1 ✅ 2026-06-20 — Tenant-isolation E2E suite: per-tenant OTP/cooldown independence, no cross-tenant verify leak, hex-only Redis keys.
