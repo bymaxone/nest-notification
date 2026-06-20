@@ -1,6 +1,6 @@
 # Phase 2 — EmailService + OtpService (atomic)
 
-> **Status**: 🔄 In Progress · **Progress**: 1 / 10 tasks · **Last updated**: 2026-06-19
+> **Status**: 🔄 In Progress · **Progress**: 2 / 10 tasks · **Last updated**: 2026-06-19
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 3 (Phase 2)
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md)
 
@@ -41,7 +41,7 @@ OTP email delivery is delegated to `EmailService` (which owns the renderer/escap
 | ID | Task | Status | Priority | Size | Depends on |
 |---|---|---|---|---|---|
 | 2.1 | `ResendEmailProvider` — lazy-loaded reference adapter | ✅ | P0 | M | 1.3 |
-| 2.2 | `InMemoryOtpStorage` — atomic dev/test storage | ⬜ | P0 | M | 1.3 |
+| 2.2 | `InMemoryOtpStorage` — atomic dev/test storage | ✅ | P0 | M | 1.3 |
 | 2.3 | `RedisOtpStorage` — Lua `consumeAttempt` + NX cooldown (production) | ⬜ | P0 | L | 1.3, 1.7 |
 | 2.4 | `EmailService` — send + sendTemplate + attachment guard + audit (mask) | ⬜ | P0 | M | 1.4, 1.5 |
 | 2.5 | `OtpService` — generate/verify/consume/resend/getStatus (atomic) | ⬜ | P0 | L | 2.3, 2.4 |
@@ -120,7 +120,7 @@ plan. 5. Append `- 2.1 ✅ <YYYY-MM-DD> — <summary>`.
 
 ### Task 2.2 — `InMemoryOtpStorage` (atomic dev/test storage)
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: 1.3
@@ -131,11 +131,11 @@ Implement `IOtpStorage` over two `Map`s — atomic by construction (no `await` b
 
 #### Acceptance criteria
 
-- [ ] `consumeAttempt` returns `not_found` (missing/expired, deleting expired), `max_attempts` (deletes at limit), or `ok` with `attempts` incremented by exactly 1
-- [ ] `tryAcquireCooldown` true first then false while active; `getCooldown` remaining secs; `clearCooldown` resets
-- [ ] `update` no-op for a missing key; `delete` idempotent; `get` self-evicts past `expiresAt`; tuples never collide
-- [ ] `clear()`/`size()` helpers are NOT part of `IOtpStorage`
-- [ ] Coverage 100%
+- [x] `consumeAttempt` returns `not_found` (missing/expired, deleting expired), `max_attempts` (deletes at limit), or `ok` with `attempts` incremented by exactly 1
+- [x] `tryAcquireCooldown` true first then false while active; `getCooldown` remaining secs; `clearCooldown` resets
+- [x] `update` no-op for a missing key; `delete` idempotent; `get` self-evicts past `expiresAt`; tuples never collide
+- [x] `clear()`/`size()` helpers are NOT part of `IOtpStorage`
+- [x] Coverage 100%
 
 #### Files to create / modify
 
@@ -669,3 +669,4 @@ in `docs/development_plan.md`. 5. Append `- 2.10 ✅ <YYYY-MM-DD> — <summary>`
 > Append-only. One line per completed task: `- <task-id> ✅ YYYY-MM-DD — <one-line summary>`.
 
 - 2.1 ✅ 2026-06-19 — ResendEmailProvider with lazy `import('resend')`, from-header formatting, body-safe error logging; 100% coverage incl. not-installed path.
+- 2.2 ✅ 2026-06-19 — InMemoryOtpStorage over two Maps, atomic consumeAttempt, self-evicting get/cooldown, clear()/size() helpers; 100% coverage.
