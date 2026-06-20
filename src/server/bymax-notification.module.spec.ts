@@ -17,6 +17,9 @@ import type {
 } from './interfaces'
 import { DefaultTemplateRenderer } from './providers/default-template-renderer'
 import { NoOpNotificationLogRepository } from './providers/no-op-notification-log.repository'
+import { EmailService } from './services/email.service'
+import { NotificationService } from './services/notification.service'
+import { OtpService } from './services/otp.service'
 
 const emailProvider: IEmailProvider = {
   name: 'fake',
@@ -63,17 +66,30 @@ describe('BymaxNotificationModule.forRoot', () => {
     expect(module.global).toBe(true)
   })
 
-  // Email-only config registers exactly: options + audit (no-op) + provider + renderer.
-  it('should register four providers for an email-only config', () => {
+  // Email-only config registers the 4 token providers + EmailService + NotificationService.
+  it('should register the token providers and email/notification services for email-only', () => {
     const module = BymaxNotificationModule.forRoot({ email: validEmail })
 
-    expect(module.providers).toHaveLength(4)
+    expect(module.providers).toHaveLength(6)
     expect(module.exports).toEqual([
       BYMAX_NOTIFICATION_OPTIONS,
       BYMAX_NOTIFICATION_LOG_REPOSITORY,
       BYMAX_NOTIFICATION_EMAIL_PROVIDER,
-      BYMAX_NOTIFICATION_TEMPLATE_RENDERER
+      BYMAX_NOTIFICATION_TEMPLATE_RENDERER,
+      EmailService,
+      NotificationService
     ])
+  })
+
+  // OtpService is registered (and exported) only when the OTP channel is configured.
+  it('should register OtpService only for an OTP-configured module', () => {
+    const emailOnly = BymaxNotificationModule.forRoot({ email: validEmail })
+    const withOtp = BymaxNotificationModule.forRoot({ otp: { storage: new FakeOtpStorage() } })
+
+    expect(emailOnly.exports).not.toContain(OtpService)
+    expect(withOtp.exports).toContain(OtpService)
+    expect(withOtp.exports).not.toContain(EmailService)
+    expect(withOtp.exports).toContain(NotificationService)
   })
 
   // Unconfigured channels must not register their token.
@@ -219,5 +235,29 @@ describe('BymaxNotificationModule.forRootAsync', () => {
 
     const options = moduleRef.get(BYMAX_NOTIFICATION_OPTIONS)
     expect(options.otp?.defaultLength).toBe(6)
+  })
+})
+
+describe('BymaxNotificationModule service wiring (smoke)', () => {
+  // An email-only consumer can resolve EmailService + NotificationService; OtpService is absent.
+  it('should resolve EmailService and NotificationService but not OtpService for email-only', async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [BymaxNotificationModule.forRoot({ email: validEmail })]
+    }).compile()
+
+    expect(moduleRef.get(EmailService)).toBeInstanceOf(EmailService)
+    expect(moduleRef.get(NotificationService)).toBeInstanceOf(NotificationService)
+    expect(() => moduleRef.get(OtpService)).toThrow()
+  })
+
+  // An OTP-only consumer can resolve OtpService + NotificationService; EmailService is absent.
+  it('should resolve OtpService and NotificationService but not EmailService for otp-only', async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [BymaxNotificationModule.forRoot({ otp: { storage: new FakeOtpStorage() } })]
+    }).compile()
+
+    expect(moduleRef.get(OtpService)).toBeInstanceOf(OtpService)
+    expect(moduleRef.get(NotificationService)).toBeInstanceOf(NotificationService)
+    expect(() => moduleRef.get(EmailService)).toThrow()
   })
 })

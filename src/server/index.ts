@@ -11,6 +11,29 @@
 // Dynamic module
 export { BymaxNotificationModule } from './bymax-notification.module'
 
+// Services
+export {
+  EmailService,
+  type EmailSendInput,
+  type EmailSendTemplateInput
+} from './services/email.service'
+export {
+  OtpService,
+  type OtpGenerateInput,
+  type OtpVerifyInput,
+  type OtpConsumeInput,
+  type OtpStatusInput,
+  type OtpGenerateResult,
+  type OtpStatusResult
+} from './services/otp.service'
+export {
+  NotificationService,
+  type DispatchInput,
+  type DispatchResult,
+  type EmailDispatchPayload,
+  type OtpDispatchPayload
+} from './services/notification.service'
+
 // Injection tokens
 export {
   BYMAX_NOTIFICATION_OPTIONS,
@@ -79,6 +102,21 @@ export {
   type DefaultTemplateRendererOptions,
   type TemplateSource
 } from './providers/default-template-renderer'
+export {
+  ResendEmailProvider,
+  type ResendEmailProviderOptions
+} from './providers/resend-email.provider'
+export { InMemoryOtpStorage, type InMemoryStorageSize } from './providers/in-memory-otp.storage'
+export {
+  RedisOtpStorage,
+  type RedisOtpStorageOptions,
+  type RedisLike
+} from './providers/redis-otp.storage'
+
+// Utilities — for advanced consumers writing custom storages/providers
+export { hashTenantRecipient } from './utils/hash'
+export { generateOtpCode } from './utils/code-generator'
+export { safeCompare } from './utils/timing-safe-compare'
 
 // Errors and exception
 export {

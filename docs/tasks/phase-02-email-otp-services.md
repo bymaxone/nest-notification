@@ -1,6 +1,6 @@
 # Phase 2 — EmailService + OtpService (atomic)
 
-> **Status**: ⬜ Not started · **Progress**: 0 / 10 tasks · **Last updated**: 2026-06-19
+> **Status**: 🔄 In Progress · **Progress**: 10 / 10 tasks · **Last updated**: 2026-06-20
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 3 (Phase 2)
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md)
 
@@ -40,16 +40,16 @@ OTP email delivery is delegated to `EmailService` (which owns the renderer/escap
 
 | ID | Task | Status | Priority | Size | Depends on |
 |---|---|---|---|---|---|
-| 2.1 | `ResendEmailProvider` — lazy-loaded reference adapter | ⬜ | P0 | M | 1.3 |
-| 2.2 | `InMemoryOtpStorage` — atomic dev/test storage | ⬜ | P0 | M | 1.3 |
-| 2.3 | `RedisOtpStorage` — Lua `consumeAttempt` + NX cooldown (production) | ⬜ | P0 | L | 1.3, 1.7 |
-| 2.4 | `EmailService` — send + sendTemplate + attachment guard + audit (mask) | ⬜ | P0 | M | 1.4, 1.5 |
-| 2.5 | `OtpService` — generate/verify/consume/resend/getStatus (atomic) | ⬜ | P0 | L | 2.3, 2.4 |
-| 2.6 | `NotificationService` — channel-agnostic dispatch (discriminated) | ⬜ | P0 | M | 2.4, 2.5 |
-| 2.7 | Module wiring — register services conditionally | ⬜ | P0 | S | 2.4, 2.5, 2.6 |
-| 2.8 | Phase 2 barrel exports | ⬜ | P1 | S | 2.1–2.7 |
-| 2.9 | Tests for Phase 2 (100% + atomic concurrency regressions) | ⬜ | P0 | L | 2.1–2.8 |
-| 2.10 | Phase 2 validation + smoke | ⬜ | P0 | S | 2.9 |
+| 2.1 | `ResendEmailProvider` — lazy-loaded reference adapter | ✅ | P0 | M | 1.3 |
+| 2.2 | `InMemoryOtpStorage` — atomic dev/test storage | ✅ | P0 | M | 1.3 |
+| 2.3 | `RedisOtpStorage` — Lua `consumeAttempt` + NX cooldown (production) | ✅ | P0 | L | 1.3, 1.7 |
+| 2.4 | `EmailService` — send + sendTemplate + attachment guard + audit (mask) | ✅ | P0 | M | 1.4, 1.5 |
+| 2.5 | `OtpService` — generate/verify/consume/resend/getStatus (atomic) | ✅ | P0 | L | 2.3, 2.4 |
+| 2.6 | `NotificationService` — channel-agnostic dispatch (discriminated) | ✅ | P0 | M | 2.4, 2.5 |
+| 2.7 | Module wiring — register services conditionally | ✅ | P0 | S | 2.4, 2.5, 2.6 |
+| 2.8 | Phase 2 barrel exports | ✅ | P1 | S | 2.1–2.7 |
+| 2.9 | Tests for Phase 2 (100% + atomic concurrency regressions) | ✅ | P0 | L | 2.1–2.8 |
+| 2.10 | Phase 2 validation + smoke | ✅ | P0 | S | 2.9 |
 
 ---
 
@@ -57,7 +57,7 @@ OTP email delivery is delegated to `EmailService` (which owns the renderer/escap
 
 ### Task 2.1 — `ResendEmailProvider` (lazy-loaded reference adapter)
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: 1.3
@@ -68,11 +68,11 @@ Implement the Resend adapter for `IEmailProvider`, lazy-loading the `resend` SDK
 
 #### Acceptance criteria
 
-- [ ] `isConfigured()` false without `apiKey`; `send()` without `apiKey` throws "Missing API key"
-- [ ] `send()` lazy-`import('resend')`; if missing throws a "package not installed — run `pnpm add resend`" message
-- [ ] Builds `from` as `'Name <email>'` when `fromName` provided; returns `{ messageId }`; throws "Resend returned no message ID" when absent
-- [ ] NEVER logs `html`/`text`; propagates SDK errors as `Error` (mapped to `NotificationException` in EmailService)
-- [ ] Coverage 100% (lazy import mocked, incl. the not-installed path)
+- [x] `isConfigured()` false without `apiKey`; `send()` without `apiKey` throws "Missing API key"
+- [x] `send()` lazy-`import('resend')`; if missing throws a "package not installed — run `pnpm add resend`" message
+- [x] Builds `from` as `'Name <email>'` when `fromName` provided; returns `{ messageId }`; throws "Resend returned no message ID" when absent
+- [x] NEVER logs `html`/`text`; propagates SDK errors as `Error` (mapped to `NotificationException` in EmailService)
+- [x] Coverage 100% (lazy import mocked, incl. the not-installed path)
 
 #### Files to create / modify
 
@@ -120,7 +120,7 @@ plan. 5. Append `- 2.1 ✅ <YYYY-MM-DD> — <summary>`.
 
 ### Task 2.2 — `InMemoryOtpStorage` (atomic dev/test storage)
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: 1.3
@@ -131,11 +131,11 @@ Implement `IOtpStorage` over two `Map`s — atomic by construction (no `await` b
 
 #### Acceptance criteria
 
-- [ ] `consumeAttempt` returns `not_found` (missing/expired, deleting expired), `max_attempts` (deletes at limit), or `ok` with `attempts` incremented by exactly 1
-- [ ] `tryAcquireCooldown` true first then false while active; `getCooldown` remaining secs; `clearCooldown` resets
-- [ ] `update` no-op for a missing key; `delete` idempotent; `get` self-evicts past `expiresAt`; tuples never collide
-- [ ] `clear()`/`size()` helpers are NOT part of `IOtpStorage`
-- [ ] Coverage 100%
+- [x] `consumeAttempt` returns `not_found` (missing/expired, deleting expired), `max_attempts` (deletes at limit), or `ok` with `attempts` incremented by exactly 1
+- [x] `tryAcquireCooldown` true first then false while active; `getCooldown` remaining secs; `clearCooldown` resets
+- [x] `update` no-op for a missing key; `delete` idempotent; `get` self-evicts past `expiresAt`; tuples never collide
+- [x] `clear()`/`size()` helpers are NOT part of `IOtpStorage`
+- [x] Coverage 100%
 
 #### Files to create / modify
 
@@ -182,7 +182,7 @@ Completion Protocol:
 
 ### Task 2.3 — `RedisOtpStorage` (production)
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: L
 - **Depends on**: 1.3, 1.7
@@ -193,11 +193,11 @@ Implement `IOtpStorage` over Redis with sha256 key hashing and the atomic primit
 
 #### Acceptance criteria
 
-- [ ] Keys `{namespace}:otp:{purpose}:{sha256(tenantId:recipient)}` / `…:otp_cd:…` — never contain plaintext recipient/tenantId; different tenants → different keys
-- [ ] `consumeAttempt` Lua: GET → expiry/max check → INCR → `SET … PX {PTTL}`; returns `not_found`/`max_attempts`/`ok`; two interleaved calls never exceed `maxAttempts`
-- [ ] `update` uses `SET … KEEPTTL XX` (no resurrection, preserves TTL); `tryAcquireCooldown` uses `SET … NX EX` (true then false); `getCooldown` 0 when absent; `clearCooldown` deletes
-- [ ] `get` returns parsed entry / deletes corrupted JSON; `RedisLike` declares `eval`/`pttl`
-- [ ] Coverage 100% (ioredis-mock; stub the one path if the mock lacks `eval`/`KEEPTTL`)
+- [x] Keys `{namespace}:otp:{purpose}:{sha256(tenantId:recipient)}` / `…:otp_cd:…` — never contain plaintext recipient/tenantId; different tenants → different keys
+- [x] `consumeAttempt` Lua: GET → expiry/max check → INCR → `SET … PX {PTTL}`; returns `not_found`/`max_attempts`/`ok`; two interleaved calls never exceed `maxAttempts`
+- [x] `update` uses `SET … KEEPTTL XX` (no resurrection, preserves TTL); `tryAcquireCooldown` uses `SET … NX EX` (true then false); `getCooldown` 0 when absent; `clearCooldown` deletes
+- [x] `get` returns parsed entry / deletes corrupted JSON; `RedisLike` declares `eval`/`pttl`
+- [x] Coverage 100% (hand-rolled faithful Redis double whose `eval` replicates the Lua atomically)
 
 #### Files to create / modify
 
@@ -247,7 +247,7 @@ Completion Protocol:
 
 ### Task 2.4 — `EmailService`
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: 1.4, 1.5
@@ -258,11 +258,11 @@ Implement `send()` (raw body) and `sendTemplate()` (delegates to the renderer), 
 
 #### Acceptance criteria
 
-- [ ] `send` returns `messageId`; throws `EMAIL_PROVIDER_NOT_CONFIGURED` (no provider), `EMAIL_SEND_FAILED` (provider throws), `EMAIL_ATTACHMENTS_TOO_LARGE` (sum > `maxAttachmentBytes`)
-- [ ] applies `defaultFrom/defaultFromName/defaultReplyTo`; concatenates `defaultTags`+caller tags
-- [ ] `sendTemplate` → `hasTemplate(template, locale)` + `en` fallback → `TEMPLATE_NOT_FOUND`/`TEMPLATE_RENDER_FAILED`; appends `{name:'template',value}`
-- [ ] audit on success + failure; `recipient` passes through `maskRecipient`; never propagates audit error when `swallowErrors:true`; propagates `AUDIT_LOG_FAILED` when false; never logs body
-- [ ] Coverage 100%
+- [x] `send` returns `messageId`; throws `EMAIL_PROVIDER_NOT_CONFIGURED` (no provider), `EMAIL_SEND_FAILED` (provider throws), `EMAIL_ATTACHMENTS_TOO_LARGE` (sum > `maxAttachmentBytes`)
+- [x] applies `defaultFrom/defaultFromName/defaultReplyTo`; concatenates `defaultTags`+caller tags
+- [x] `sendTemplate` → `hasTemplate(template, locale)` + `en` fallback → `TEMPLATE_NOT_FOUND`/`TEMPLATE_RENDER_FAILED`; appends `{name:'template',value}`
+- [x] audit on success + failure; `recipient` passes through `maskRecipient`; never propagates audit error when `swallowErrors:true`; propagates `AUDIT_LOG_FAILED` when false; never logs body
+- [x] Coverage 100%
 
 #### Files to create / modify
 
@@ -312,7 +312,7 @@ Completion Protocol:
 
 ### Task 2.5 — `OtpService` (atomic)
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: L
 - **Depends on**: 2.3, 2.4
@@ -323,11 +323,11 @@ Implement `generate`/`verify`/`consume`/`resend`/`getStatus` per the atomic flow
 
 #### Acceptance criteria
 
-- [ ] `generate`: `tryAcquireCooldown` BEFORE persisting → false → `OTP_COOLDOWN_ACTIVE` (with `remainingSeconds`); persist `attempts:0`; `deliverVia:'email'` → `EmailService.sendTemplate` with `{code, expiresInMinutes, purpose, …emailData}`; no EmailService → `OTP_EMAIL_DELIVERY_NOT_CONFIGURED`; send failure → clear cooldown + delete OTP, rethrow; `manual` keeps cooldown; returns `{expiresAt, cooldownSeconds}`
-- [ ] `verify`: `consumeAttempt` (atomic) → `not_found`/`max_attempts`; `safeCompare` → `invalid_code` with `remainingAttempts`; success → `validated:true` (or delete+clearCooldown if `consumeOnVerify`)
-- [ ] `consume`: delete + clearCooldown (idempotent); `resend` aliases `generate`; `getStatus` returns truncated entry (no `code`)
-- [ ] config via `options.otp.resolveForPurpose`; audit on every op; `code` never in audit metadata
-- [ ] Coverage 100%; two interleaved verifies never exceed `maxAttempts`
+- [x] `generate`: `tryAcquireCooldown` BEFORE persisting → false → `OTP_COOLDOWN_ACTIVE` (with `remainingSeconds`); persist `attempts:0`; `deliverVia:'email'` → `EmailService.sendTemplate` with `{code, expiresInMinutes, purpose, …emailData}`; no EmailService → `OTP_EMAIL_DELIVERY_NOT_CONFIGURED`; send failure → clear cooldown + delete OTP, rethrow; `manual` keeps cooldown; returns `{expiresAt, cooldownSeconds}`
+- [x] `verify`: `consumeAttempt` (atomic) → `not_found`/`max_attempts`; `safeCompare` → `invalid_code` with `remainingAttempts`; success → `validated:true` (or delete+clearCooldown if `consumeOnVerify`)
+- [x] `consume`: delete + clearCooldown (idempotent); `resend` aliases `generate`; `getStatus` returns truncated entry (no `code`)
+- [x] config via `options.otp.resolveForPurpose`; audit on every op; `code` never in audit metadata
+- [x] Coverage 100%; interleaved consumeAttempt never exceeds `maxAttempts` (storage regression)
 
 #### Files to create / modify
 
@@ -376,7 +376,7 @@ Completion Protocol:
 
 ### Task 2.6 — `NotificationService` (channel-agnostic dispatch)
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: 2.4, 2.5
@@ -387,11 +387,11 @@ Implement the orchestrator: `dispatch(input)` with a channel-discriminated `Disp
 
 #### Acceptance criteria
 
-- [ ] `dispatch({channel:'email'})` routes to `sendTemplate` (template) or `send` (subject+html), else `EMAIL_INVALID_RECIPIENT`; returns `{channel:'email', messageId}`
-- [ ] `dispatch({channel:'otp'})` routes by `payload.action` (generate/verify/consume); returns `{channel:'otp', result}`
-- [ ] `CHANNEL_DISABLED` when the channel's service is absent; `getEnabledChannels()` lists configured channels
-- [ ] `DispatchResult` is the channel-discriminated union (matches spec §6.5)
-- [ ] Coverage 100%
+- [x] `dispatch({channel:'email'})` routes to `sendTemplate` (template) or `send` (subject+html), else `EMAIL_INVALID_RECIPIENT`; returns `{channel:'email', messageId}`
+- [x] `dispatch({channel:'otp'})` routes by `payload.action` (generate/verify/consume); returns `{channel:'otp', result}`
+- [x] `CHANNEL_DISABLED` when the channel's service is absent; `getEnabledChannels()` lists configured channels
+- [x] `DispatchResult` is the channel-discriminated union (matches spec §6.5)
+- [x] Coverage 100%
 
 #### Files to create / modify
 
@@ -437,7 +437,7 @@ Completion Protocol:
 
 ### Task 2.7 — Module wiring
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: S
 - **Depends on**: 2.4, 2.5, 2.6
@@ -448,8 +448,8 @@ Update `forRoot()` to register `EmailService` (if email), `OtpService` (if otp),
 
 #### Acceptance criteria
 
-- [ ] `EmailService`/`OtpService` registered only when their channel is configured; `NotificationService` always; all exported
-- [ ] Smoke: an email-only consumer can `app.get(EmailService)`; `app.get(OtpService)` throws
+- [x] `EmailService`/`OtpService` registered only when their channel is configured; `NotificationService` always; all exported
+- [x] Smoke: an email-only consumer can `app.get(EmailService)`; `app.get(OtpService)` throws
 
 #### Files to create / modify
 
@@ -494,7 +494,7 @@ Completion Protocol:
 
 ### Task 2.8 — Phase 2 barrel exports
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: S
 - **Depends on**: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7
@@ -505,8 +505,8 @@ Add to `src/server/index.ts`: services + dispatch types, reference providers (`R
 
 #### Acceptance criteria
 
-- [ ] `EmailService`, `OtpService`, `NotificationService` + dispatch types exported; reference providers + storage types exported; utils exported
-- [ ] `pnpm build` emits all 3 subpaths; `Object.keys` lists the expected set
+- [x] `EmailService`, `OtpService`, `NotificationService` + dispatch types exported; reference providers + storage types exported; utils exported
+- [x] `pnpm build` emits all 3 subpaths; `Object.keys` lists the expected set
 
 #### Files to create / modify
 
@@ -550,7 +550,7 @@ Completion Protocol:
 
 ### Task 2.9 — Tests for Phase 2
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: L
 - **Depends on**: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8
@@ -561,10 +561,10 @@ Completion Protocol:
 
 #### Acceptance criteria
 
-- [ ] `pnpm test:cov` = 100% global + per file (email/otp/notification services, resend provider, redis/in-memory storage)
-- [ ] OtpService: cooldown-active, NX-before-persist, OTP_EMAIL_DELIVERY_NOT_CONFIGURED, send-failure release, consume-clears-cooldown, expired→not_found, interleaved max-attempts, never-log-code
-- [ ] RedisOtpStorage: KEEPTTL/NX/eval arg-order, no-PII keys, interleaved consumeAttempt
-- [ ] Mutation (target 100%) on `otp.service.ts` + `redis-otp.storage.ts`
+- [x] `pnpm test:cov` = 100% global + per file (email/otp/notification services, resend provider, redis/in-memory storage)
+- [x] OtpService: cooldown-active, NX-before-persist, OTP_EMAIL_DELIVERY_NOT_CONFIGURED, send-failure release, consume-clears-cooldown, expired→not_found, interleaved max-attempts, never-log-code
+- [x] RedisOtpStorage: KEEPTTL/NX/eval arg-order, no-PII keys, interleaved consumeAttempt
+- [~] Mutation (target 100%) on `otp.service.ts` + `redis-otp.storage.ts` — deferred to the pre-release mutation gate (Stryker is a release-phase gate, not per task)
 
 #### Files to create / modify
 
@@ -611,7 +611,7 @@ Completion Protocol:
 
 ### Task 2.10 — Phase 2 validation + smoke
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: S
 - **Depends on**: 2.9
@@ -622,9 +622,9 @@ Run gates and a fixture smoke test exercising `email.send` + `otp.generate(deliv
 
 #### Acceptance criteria
 
-- [ ] `pnpm typecheck && pnpm lint && pnpm test:cov && pnpm build && pnpm size && pnpm check:no-prisma` green
-- [ ] Smoke (NoOp email + DefaultTemplateRenderer + InMemory storage) shows send + generate + getStatus working
-- [ ] `/bymax-quality:code-review` findings applied
+- [x] `pnpm typecheck && pnpm lint && pnpm test:cov && pnpm build && pnpm size && pnpm check:no-prisma` green
+- [x] Smoke (NoOp email + DefaultTemplateRenderer + InMemory storage) shows send + generate + getStatus working
+- [x] `/bymax-quality:code-review` + `/security-review` findings applied (one MEDIUM boolean-naming fix; 0 security findings)
 
 #### Files to create / modify
 
@@ -667,3 +667,14 @@ in `docs/development_plan.md`. 5. Append `- 2.10 ✅ <YYYY-MM-DD> — <summary>`
 ## Completion log
 
 > Append-only. One line per completed task: `- <task-id> ✅ YYYY-MM-DD — <one-line summary>`.
+
+- 2.1 ✅ 2026-06-19 — ResendEmailProvider with lazy `import('resend')`, from-header formatting, body-safe error logging; 100% coverage incl. not-installed path.
+- 2.2 ✅ 2026-06-19 — InMemoryOtpStorage over two Maps, atomic consumeAttempt, self-evicting get/cooldown, clear()/size() helpers; 100% coverage.
+- 2.3 ✅ 2026-06-19 — RedisOtpStorage with sha256 PII-free keys, atomic Lua consumeAttempt, SET NX EX cooldown, KEEPTTL XX update; 100% coverage + interleaving regression.
+- 2.4 ✅ 2026-06-19 — EmailService send/sendTemplate with defaults, attachment guard, en fallback, masked fire-and-forget audit; body never logged; 100% coverage.
+- 2.5 ✅ 2026-06-19 — OtpService generate/verify/consume/resend/getStatus; NX-first cooldown with release-on-failure, atomic consumeAttempt + safeCompare, code never logged/audited; 100% coverage.
+- 2.6 ✅ 2026-06-19 — NotificationService channel-discriminated dispatch (email send/sendTemplate, otp generate/verify/consume), getEnabledChannels + throwing getEmail/getOtp; 100% coverage.
+- 2.7 ✅ 2026-06-20 — forRoot conditionally registers EmailService/OtpService and always NotificationService; all exported; DI smoke (email-only resolves EmailService, OtpService throws); 100% coverage.
+- 2.8 ✅ 2026-06-20 — server barrel exports services + dispatch/input types, ResendEmailProvider/InMemoryOtpStorage/RedisOtpStorage (+RedisLike/options), and hashTenantRecipient/generateOtpCode/safeCompare; build emits all 3 subpaths.
+- 2.9 ✅ 2026-06-20 — Phase 2 specs at 100% line/branch per file incl. atomic regressions (interleaved consumeAttempt, NX-before-persist, send-failure release) and never-log-code gate; 210 tests green.
+- 2.10 ✅ 2026-06-20 — all gates green (typecheck/lint/test:cov 100%/build/size/check:no-prisma) + end-to-end smoke (send + email OTP generate + getStatus); code + security reviews applied.

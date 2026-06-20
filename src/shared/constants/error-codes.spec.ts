@@ -4,8 +4,8 @@ import { NOTIFICATION_ERROR_CODES } from './error-codes'
 describe('NOTIFICATION_ERROR_CODES', () => {
   // The catalog is a fixed public contract; a count drift means a code was
   // added/removed without updating the server definitions or this gate.
-  it('should declare exactly 21 error codes', () => {
-    expect(Object.keys(NOTIFICATION_ERROR_CODES)).toHaveLength(21)
+  it('should declare exactly 22 error codes', () => {
+    expect(Object.keys(NOTIFICATION_ERROR_CODES)).toHaveLength(22)
   })
 
   // Every value must be namespaced under `notification.` so consumer code can
@@ -29,6 +29,12 @@ describe('NOTIFICATION_ERROR_CODES', () => {
     expect(NOTIFICATION_ERROR_CODES.OTP_EMAIL_DELIVERY_NOT_CONFIGURED).toBe(
       'notification.otp_email_delivery_not_configured'
     )
+  })
+
+  // Distinguishes a payload with no body source from a genuinely invalid recipient,
+  // so consumers can localize an accurate message instead of a misleading one.
+  it('should include EMAIL_MISSING_BODY', () => {
+    expect(NOTIFICATION_ERROR_CODES.EMAIL_MISSING_BODY).toBe('notification.email_missing_body')
   })
 })
 
