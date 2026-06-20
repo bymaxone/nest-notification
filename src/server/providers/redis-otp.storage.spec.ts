@@ -298,6 +298,19 @@ describe('RedisOtpStorage', () => {
     expect(setSpy).toHaveBeenCalledWith(expect.stringContaining(':otp_cd:'), '1', 'EX', 60, 'NX')
   })
 
+  // A non-positive cooldown ttl means "no lock": never issue SET … EX 0 (Redis
+  // rejects it), clear any stale key, and report the acquire as free.
+  it('should treat a non-positive cooldown ttl as no-lock and skip the SET', async () => {
+    const setSpy = jest.spyOn(redis, 'set')
+    const delSpy = jest.spyOn(redis, 'del')
+
+    const acquired = await storage.tryAcquireCooldown(T, R, P, 0)
+
+    expect(acquired).toBe(true)
+    expect(setSpy).not.toHaveBeenCalled()
+    expect(delSpy).toHaveBeenCalledWith(expect.stringContaining(':otp_cd:'))
+  })
+
   // getCooldown is 0 when the key is absent and the remaining seconds otherwise.
   it('should report cooldown seconds and 0 when absent', async () => {
     expect(await storage.getCooldown(T, R, P)).toBe(0)

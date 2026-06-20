@@ -198,11 +198,16 @@ export class RedisOtpStorage implements IOtpStorage {
   /**
    * Atomic cooldown acquire with `SET … NX EX` — only the first concurrent caller wins.
    *
+   * A non-positive `ttlSeconds` means "no resend cooldown is configured". Redis rejects
+   * `SET … EX 0` with `ERR invalid expire time`, so this short-circuits: it never issues
+   * the `SET`, clears any stale cooldown key, and reports success (there is nothing to
+   * lock, so the caller is always free to proceed).
+   *
    * @param tenantId - Tenant isolation scope.
    * @param recipient - Pre-normalized recipient identifier.
    * @param purpose - OTP purpose.
-   * @param ttlSeconds - Cooldown duration in seconds.
-   * @returns `true` when acquired, `false` when a cooldown is already active.
+   * @param ttlSeconds - Cooldown duration in seconds; `<= 0` means no cooldown.
+   * @returns `true` when acquired (or when no cooldown applies), `false` when a cooldown is already active.
    */
   async tryAcquireCooldown(
     tenantId: string,
@@ -210,13 +215,12 @@ export class RedisOtpStorage implements IOtpStorage {
     purpose: string,
     ttlSeconds: number
   ): Promise<boolean> {
-    const result = await this.redis.set(
-      this.cooldownKey(tenantId, recipient, purpose),
-      '1',
-      'EX',
-      ttlSeconds,
-      'NX'
-    )
+    const key = this.cooldownKey(tenantId, recipient, purpose)
+    if (ttlSeconds <= 0) {
+      await this.redis.del(key)
+      return true
+    }
+    const result = await this.redis.set(key, '1', 'EX', ttlSeconds, 'NX')
     return result === 'OK'
   }
 
