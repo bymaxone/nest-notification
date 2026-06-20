@@ -80,6 +80,7 @@ export class ReactEmailTemplateRenderer implements IEmailTemplateRenderer {
 ## Module registration
 
 ```typescript
+import type { ComponentType } from 'react'
 import { BymaxNotificationModule } from '@bymax-one/nest-notification'
 import { ReactEmailTemplateRenderer } from './react-email-template-renderer'
 import { OtpCodeEmail } from './emails/otp-code'
@@ -87,7 +88,7 @@ import { OtpCodeEmail } from './emails/otp-code'
 const templateRenderer = new ReactEmailTemplateRenderer({
   'otp_code::en': {
     subject: (data) => `Your code is ${String(data.code)}`,
-    component: OtpCodeEmail as ReactEmailTemplateRenderer['templates'][string]['component']
+    component: OtpCodeEmail as ComponentType<Record<string, unknown>>
   }
 })
 
