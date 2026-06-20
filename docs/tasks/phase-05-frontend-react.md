@@ -1,6 +1,6 @@
 # Phase 5 — Frontend (`./react`)
 
-> **Status**: 🔄 In Progress · **Progress**: 2 / 5 tasks · **Last updated**: 2026-06-20
+> **Status**: 🔄 In Progress · **Progress**: 3 / 5 tasks · **Last updated**: 2026-06-20
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 6 (Phase 5)
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md)
 
@@ -33,7 +33,7 @@ Implement the `./react` subpath: `useOtpInput` (N single-digit inputs with auto-
 |---|---|---|---|---|---|
 | 5.1 | `useOtpInput` hook | ✅ | P0 | M | 1.1 |
 | 5.2 | `useOtpCountdown` hook | ✅ | P0 | S | 1.1 |
-| 5.3 | `./react` barrel export | ⬜ | P1 | S | 5.1, 5.2 |
+| 5.3 | `./react` barrel export | ✅ | P1 | S | 5.1, 5.2 |
 | 5.4 | Tests — RTL (`renderHook`/`act`/fake timers) | ⬜ | P0 | M | 5.1, 5.2, 5.3 |
 | 5.5 | Phase 5 validation | ⬜ | P0 | S | 5.4 |
 
@@ -162,7 +162,7 @@ Completion Protocol:
 
 ### Task 5.3 — `./react` barrel export
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: S
 - **Depends on**: 5.1, 5.2
@@ -173,8 +173,8 @@ Export the hooks + their types from `src/react/index.ts`.
 
 #### Acceptance criteria
 
-- [ ] `useOtpInput`, `useOtpCountdown` + the 4 option/state types exported
-- [ ] `pnpm build` emits `dist/react/index.{mjs,cjs,d.ts}` with `react` external
+- [x] `useOtpInput`, `useOtpCountdown` + the 4 option/state types exported
+- [x] `pnpm build` emits `dist/react/index.{mjs,cjs,d.ts}` with `react` external
 
 #### Files to create / modify
 
@@ -323,3 +323,4 @@ the plan. 5. Append `- 5.5 ✅ <YYYY-MM-DD> — <summary>`.
 
 - 5.1 ✅ 2026-06-20 — `useOtpInput` + `types.ts`: N-slot OTP state, validation by class, auto-focus, Backspace/Arrow nav, paste distribute/sanitize/filter, microtask-deferred `onComplete`; 100% coverage.
 - 5.2 ✅ 2026-06-20 — `useOtpCountdown`: reactive countdown to `expiresAt`, one-shot `onExpired`, configurable tick, `MM:SS`/`HH:MM:SS` formatting, interval cleanup on expiry/unmount; 100% coverage.
+- 5.3 ✅ 2026-06-20 — `./react` barrel exports both hooks + the 4 option/state types; `pnpm build` emits `dist/react/index.{mjs,cjs,d.ts}` with `react` external (1.43 kB brotli).

@@ -17,10 +17,10 @@ Tasks live **one file per phase** in this folder (`docs/tasks/phase-NN-<slug>.md
 | 2 | [`phase-02-email-otp-services.md`](./phase-02-email-otp-services.md) | 10 / 10 | 🟢 Done |
 | 3 | [`phase-03-templating-rate-limiting.md`](./phase-03-templating-rate-limiting.md) | 8 / 8 | 🟢 Done |
 | 4 | [`phase-04-multitenant-audit.md`](./phase-04-multitenant-audit.md) | 8 / 8 | 🟢 Done |
-| 5 | [`phase-05-frontend-react.md`](./phase-05-frontend-react.md) | 2 / 5 | 🟡 In progress |
+| 5 | [`phase-05-frontend-react.md`](./phase-05-frontend-react.md) | 3 / 5 | 🟡 In progress |
 | 6 | [`phase-06-adoption-bymax-fitness.md`](./phase-06-adoption-bymax-fitness.md) | 0 / 6 | 🔴 Not started |
 | 7 | [`phase-07-release.md`](./phase-07-release.md) | 0 / 7 | 🔴 Not started |
-| | **Total** | **39 / 55** | 🟡 71% |
+| | **Total** | **40 / 55** | 🟡 73% |
 
 > Phases 1–5 + 7 are in this repo; **Phase 6 (Adoption)** runs in the `bymax-fitness-ai` repo and validates the package before release.
 
