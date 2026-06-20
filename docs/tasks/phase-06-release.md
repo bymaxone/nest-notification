@@ -1,6 +1,6 @@
 # Phase 6 — Release v0.1.0
 
-> **Status**: 🔄 In Progress · **Progress**: 0 / 7 tasks · **Last updated**: 2026-06-20
+> **Status**: 🔄 In Progress · **Progress**: 1 / 7 tasks · **Last updated**: 2026-06-20
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 7 (Phase 6)
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md) § 14
 
@@ -33,7 +33,7 @@ Finalize documentation (README, CHANGELOG, SECURITY, CLAUDE, AGENTS, LICENSE), c
 
 | ID | Task | Status | Priority | Size | Depends on |
 |---|---|---|---|---|---|
-| 6.1 | README (badges, quick start, 3 scenarios, multi-tenant security) | ⬜ | P0 | M | — |
+| 6.1 | README (badges, quick start, 3 scenarios, multi-tenant security) | ✅ | P0 | M | — |
 | 6.2 | CHANGELOG + SECURITY + CLAUDE + AGENTS + LICENSE | ⬜ | P0 | M | — |
 | 6.3 | CI/release finalization (workflows exist since Phase 1 — verify, badges, dogfood smoke, scorecard ≥ 7) | ⬜ | P0 | S | — |
 | 6.4 | Bundle size budgets (final) | ⬜ | P1 | S | — |
@@ -47,7 +47,7 @@ Finalize documentation (README, CHANGELOG, SECURITY, CLAUDE, AGENTS, LICENSE), c
 
 ### Task 6.1 — README
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: —
@@ -58,8 +58,8 @@ Write the README mirroring `bymax-one/nest-auth`: badges, overview, features, su
 
 #### Acceptance criteria
 
-- [ ] 3 complete copy-pasteable scenarios (dev NoOp+InMemory; prod Resend+Redis; with Prisma audit)
-- [ ] Badges (npm, CI, coverage, mutation, scorecard, license); subpath table; multi-tenant security section; provider examples table → `docs/templates/`; "SMS + Push v0.2" disclaimer; ~12–18 KB
+- [x] 3 complete copy-pasteable scenarios (dev NoOp+InMemory; prod Resend+Redis; with Prisma audit)
+- [x] Badges (npm, CI, coverage, mutation, scorecard, license); subpath table; multi-tenant security section; provider examples table → `docs/templates/`; "SMS + Push v0.2" disclaimer; ~12–18 KB
 
 #### Files to create / modify
 
@@ -425,3 +425,5 @@ the plan. 5. Append `- 6.7 ✅ <YYYY-MM-DD> — <summary>`.
 ## Completion log
 
 > Append-only. One line per completed task: `- <task-id> ✅ YYYY-MM-DD — <one-line summary>`.
+
+- 6.1 ✅ 2026-06-20 — Full README: badges, overview, subpath table, 3 copy-pasteable scenarios (dev NoOp+InMemory, prod Resend+Redis, Prisma audit), configuration table, BYO-provider, multi-tenant security, templates + React hooks, testing, roadmap (v0.2 SMS/Push).
