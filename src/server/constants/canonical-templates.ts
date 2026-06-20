@@ -9,7 +9,7 @@
  *
  * Using these constants is OPTIONAL — `emailService.sendTemplate({ template })`
  * accepts any string; the benefit is IDE autocompletion and a single source of
- * truth for the names a `bymax-fitness`-style consumer already ships.
+ * truth for the canonical template names a typical consumer ships.
  */
 
 /**

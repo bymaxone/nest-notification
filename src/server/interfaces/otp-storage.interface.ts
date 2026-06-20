@@ -3,9 +3,9 @@
  * @layer domain
  *
  * Single persistence interface for all OTP state. This interface DISSOLVES the
- * Prisma coupling that existed in `bymax-fitness-ai/_commons_/notification/
- * EmailVerificationService`: the library never imports the Prisma client (nor any
- * ORM) — every consumer plugs in their own storage (Redis, in-memory, …).
+ * Prisma coupling that a typical consumer's hand-rolled OTP store would otherwise
+ * impose: the library never imports the Prisma client (nor any ORM) — every
+ * consumer plugs in their own storage (Redis, in-memory, …).
  */
 
 /** A stored OTP entry. */

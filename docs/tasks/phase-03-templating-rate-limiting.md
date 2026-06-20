@@ -8,7 +8,7 @@
 
 ## Context
 
-Refine the `DefaultTemplateRenderer` (robust i18n fallback chain, nested paths, missing-variable modes, **escape only the html body**, construction-time validation), expose the cooldown UX helpers, surface `details.retryAfter`/`expiresAt` on `OTP_COOLDOWN_ACTIVE`, and document the canonical template names (matching what `bymax-fitness` actually ships). The atomic cooldown primitives already exist from Phase 2 — this phase tests their edges and exposes them to consumers building `Retry-After` headers and countdown UIs.
+Refine the `DefaultTemplateRenderer` (robust i18n fallback chain, nested paths, missing-variable modes, **escape only the html body**, construction-time validation), expose the cooldown UX helpers, surface `details.retryAfter`/`expiresAt` on `OTP_COOLDOWN_ACTIVE`, and document the canonical template names (matching the set a typical consumer ships). The atomic cooldown primitives already exist from Phase 2 — this phase tests their edges and exposes them to consumers building `Retry-After` headers and countdown UIs.
 
 ---
 
@@ -331,7 +331,7 @@ Completion Protocol:
 
 #### Description
 
-Document the canonical template names (no HTML shipped) — including the fitness-real set: `otp_code`, `otp_password_reset`, `otp_resent`, `welcome`, `password_reset_success`, `trial_expiring`, `trial_expired`, `new_login_alert`, `mfa_enabled`/`mfa_disabled`.
+Document the canonical template names (no HTML shipped) — the typical consumer set: `otp_code`, `otp_password_reset`, `otp_resent`, `welcome`, `password_reset_success`, `trial_expiring`, `trial_expired`, `new_login_alert`, `mfa_enabled`/`mfa_disabled`.
 
 #### Acceptance criteria
 
