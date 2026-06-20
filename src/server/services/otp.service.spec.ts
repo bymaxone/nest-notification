@@ -118,6 +118,22 @@ describe('OtpService.generate', () => {
     expect(await storage.getCooldown(ref.tenantId, ref.recipient, ref.purpose)).toBe(0)
   })
 
+  // A persistence failure (storage.set rejects) must release the cooldown so the
+  // recipient is never locked out behind a cooldown with no live OTP, then rethrow.
+  it('should release the cooldown and propagate the error when persistence fails', async () => {
+    const service = new OtpService(makeOptions(), storage, audit)
+    jest.spyOn(storage, 'set').mockRejectedValue(new Error('redis set failed'))
+
+    await expect(service.generate({ ...ref, deliverVia: 'manual' })).rejects.toThrow(
+      'redis set failed'
+    )
+    expect(await storage.get(ref.tenantId, ref.recipient, ref.purpose)).toBeNull()
+    expect(await storage.getCooldown(ref.tenantId, ref.recipient, ref.purpose)).toBe(0)
+    expect(audit.create).toHaveBeenCalledWith(
+      expect.objectContaining({ verb: 'failed', metadata: { errorMessage: 'redis set failed' } })
+    )
+  })
+
   // A delivery failure releases the cooldown and deletes the orphan, then rethrows.
   it('should release the cooldown and delete the OTP on delivery failure', async () => {
     emailSendTemplate.mockRejectedValue(new Error('smtp down'))

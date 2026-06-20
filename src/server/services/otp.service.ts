@@ -9,9 +9,9 @@
  *    The service never does its own `get`+`update` to increment.
  * 2. **Atomic cooldown with release-on-failure** — `generate` claims the resend
  *    cooldown with `storage.tryAcquireCooldown` (`SET NX EX`) BEFORE issuing a code,
- *    and releases it (plus deletes the orphan OTP) if email delivery fails, so a
- *    bounced email never locks the user out and concurrent resends cannot both
- *    reset the counter.
+ *    and releases it (plus deletes the orphan OTP) if persistence OR delivery fails,
+ *    so a storage outage or a bounced email never locks the user out and concurrent
+ *    resends cannot both reset the counter.
  *
  * The plaintext code never leaves storage: it is never logged, never placed in an
  * audit entry, and `getStatus` never returns it. Verification compares in constant
@@ -134,7 +134,8 @@ export class OtpService {
    * @param input - The recipient, purpose, and delivery options.
    * @returns The expiry timestamp and the resend cooldown length.
    * @throws NotificationException `OTP_STORAGE_NOT_CONFIGURED`, `OTP_COOLDOWN_ACTIVE`,
-   * `OTP_EMAIL_DELIVERY_NOT_CONFIGURED`, or rethrows a delivery error after releasing the lock.
+   * `OTP_EMAIL_DELIVERY_NOT_CONFIGURED`, or rethrows a persistence/delivery error after
+   * releasing the cooldown lock.
    */
   async generate(input: OtpGenerateInput): Promise<OtpGenerateResult> {
     const otp = this.requireOtpOptions()
@@ -142,13 +143,7 @@ export class OtpService {
     await this.acquireCooldownOrThrow(input, cfg.resendCooldownSeconds)
     const code = generateOtpCode(cfg.length, cfg.codeType)
     const expiresAt = Date.now() + cfg.ttlSeconds * MS_PER_SECOND
-    await this.storage.set(input.tenantId, input.recipient, input.purpose, {
-      code,
-      expiresAt,
-      attempts: 0,
-      maxAttempts: cfg.maxAttempts
-    })
-    await this.deliverOtp(input, code, cfg)
+    await this.persistAndDeliver(input, code, expiresAt, cfg)
     await this.audit(this.otpAuditEntry('generated', input, undefined))
     return { expiresAt, cooldownSeconds: cfg.resendCooldownSeconds }
   }
@@ -259,7 +254,39 @@ export class OtpService {
     })
   }
 
-  /** Delivers the code by email when requested, releasing the lock on failure. */
+  /**
+   * Persists the OTP then delivers it, releasing the cooldown lock (and deleting the
+   * orphan entry) if EITHER step fails — so a storage outage or a bounced email can
+   * never leave the recipient locked out behind a cooldown with no live code. The
+   * plaintext code is never placed in the failure audit entry. The original typed
+   * error is re-thrown after the lock is released.
+   */
+  private async persistAndDeliver(
+    input: OtpGenerateInput,
+    code: string,
+    expiresAt: number,
+    cfg: OtpPurposeConfig
+  ): Promise<void> {
+    try {
+      await this.storage.set(input.tenantId, input.recipient, input.purpose, {
+        code,
+        expiresAt,
+        attempts: 0,
+        maxAttempts: cfg.maxAttempts
+      })
+      await this.deliverOtp(input, code, cfg)
+    } catch (error) {
+      await this.releaseOtp(input)
+      await this.audit(
+        this.otpAuditEntry('failed', input, {
+          errorMessage: error instanceof Error ? error.message : String(error)
+        })
+      )
+      throw error
+    }
+  }
+
+  /** Delivers the code by email when requested; throws on failure (release is handled by the caller). */
   private async deliverOtp(
     input: OtpGenerateInput,
     code: string,
@@ -270,20 +297,9 @@ export class OtpService {
       return
     }
     if (!this.emailService) {
-      await this.releaseOtp(input)
       throw new NotificationException('OTP_EMAIL_DELIVERY_NOT_CONFIGURED')
     }
-    try {
-      await this.emailService.sendTemplate(this.buildOtpEmail(input, code, cfg))
-    } catch (error) {
-      await this.releaseOtp(input)
-      await this.audit(
-        this.otpAuditEntry('failed', input, {
-          errorMessage: error instanceof Error ? error.message : String(error)
-        })
-      )
-      throw error
-    }
+    await this.emailService.sendTemplate(this.buildOtpEmail(input, code, cfg))
   }
 
   /** Clears the cooldown and deletes the OTP — used to undo a failed delivery. */
