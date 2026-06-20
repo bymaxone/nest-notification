@@ -1,6 +1,6 @@
 # Phase 5 — Frontend (`./react`)
 
-> **Status**: 🔄 In Progress · **Progress**: 0 / 5 tasks · **Last updated**: 2026-06-20
+> **Status**: 🔄 In Progress · **Progress**: 1 / 5 tasks · **Last updated**: 2026-06-20
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 6 (Phase 5)
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md)
 
@@ -31,7 +31,7 @@ Implement the `./react` subpath: `useOtpInput` (N single-digit inputs with auto-
 
 | ID | Task | Status | Priority | Size | Depends on |
 |---|---|---|---|---|---|
-| 5.1 | `useOtpInput` hook | ⬜ | P0 | M | 1.1 |
+| 5.1 | `useOtpInput` hook | ✅ | P0 | M | 1.1 |
 | 5.2 | `useOtpCountdown` hook | ⬜ | P0 | S | 1.1 |
 | 5.3 | `./react` barrel export | ⬜ | P1 | S | 5.1, 5.2 |
 | 5.4 | Tests — RTL (`renderHook`/`act`/fake timers) | ⬜ | P0 | M | 5.1, 5.2, 5.3 |
@@ -43,7 +43,7 @@ Implement the `./react` subpath: `useOtpInput` (N single-digit inputs with auto-
 
 ### Task 5.1 — `useOtpInput` hook
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: 1.1
@@ -54,10 +54,10 @@ Manage N single-digit inputs: validation per `type`, auto-focus next, Backspace 
 
 #### Acceptance criteria
 
-- [ ] Initializes `length` empty strings; valid char fills + focuses next; invalid char rejected; alpha/alphanumeric uppercased
-- [ ] Backspace on empty slot clears+focuses previous; Arrow Left/Right navigate; paste distributes, sanitizes spaces/hyphens, filters invalid
-- [ ] `onComplete` fires when full and `autoSubmit:true` (microtask-deferred); `reset()` clears + focuses slot 0; `code`/`isComplete` derived
-- [ ] Coverage 100%
+- [x] Initializes `length` empty strings; valid char fills + focuses next; invalid char rejected; alpha/alphanumeric uppercased
+- [x] Backspace on empty slot clears+focuses previous; Arrow Left/Right navigate; paste distributes, sanitizes spaces/hyphens, filters invalid
+- [x] `onComplete` fires when full and `autoSubmit:true` (microtask-deferred); `reset()` clears + focuses slot 0; `code`/`isComplete` derived
+- [x] Coverage 100%
 
 #### Files to create / modify
 
@@ -320,3 +320,5 @@ the plan. 5. Append `- 5.5 ✅ <YYYY-MM-DD> — <summary>`.
 ## Completion log
 
 > Append-only. One line per completed task: `- <task-id> ✅ YYYY-MM-DD — <one-line summary>`.
+
+- 5.1 ✅ 2026-06-20 — `useOtpInput` + `types.ts`: N-slot OTP state, validation by class, auto-focus, Backspace/Arrow nav, paste distribute/sanitize/filter, microtask-deferred `onComplete`; 100% coverage.

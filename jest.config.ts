@@ -16,7 +16,7 @@ const config: Config = {
   testEnvironment: 'node',
   rootDir: 'src',
   coverageDirectory: '<rootDir>/../coverage',
-  testMatch: ['**/*.spec.ts', '**/*.test.ts'],
+  testMatch: ['**/*.spec.ts', '**/*.spec.tsx', '**/*.test.ts'],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'json'],
   // Mirror the subpath aliases declared in tsconfig.json "paths" so tests
   // exercise the exact import specifiers consumers and the tsup bundler use.
