@@ -1,0 +1,421 @@
+# Phase 7 — Release v0.1.0
+
+> **Status**: ⬜ Not started · **Progress**: 0 / 7 tasks · **Last updated**: 2026-06-19
+> **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 8 (Phase 7)
+> **Source spec**: [`docs/technical_specification.md`](../technical_specification.md) § 14
+
+---
+
+## Context
+
+Finalize documentation (README, CHANGELOG, SECURITY, CLAUDE, AGENTS, LICENSE), configure CI, validate bundle budgets, run end-to-end mutation testing, then tag + publish v0.1.0 — **only after Phase 6 validated the package in a real consumer**.
+
+---
+
+## Rules-of-phase
+
+1. **Release gate = coverage 100% + mutation ≥ 95% (Stryker break 95), driven as close to 100% as achievable** — surviving mutants killed or documented as equivalent inline.
+2. **Provenance + supply chain.** `pnpm publish --provenance` via GH Actions OIDC; CodeQL clean; OpenSSF Scorecard ≥ 7.0; `pnpm check:no-prisma` in CI.
+3. **Bundle budgets enforced in CI:** server < 30 KB, shared < 4 KB, react < 8 KB brotli.
+4. **SMS/Push documented as deferred to v0.2** (interfaces present, services not implemented).
+5. **Publish only on explicit user confirmation** — tasks 7.6 STOPS before tagging/publishing for human sign-off.
+
+---
+
+## Reference docs
+
+- [`docs/technical_specification.md`](../technical_specification.md) — §14.7 (release deliverables), §12 (what is NOT in the package), §13 (dependencies).
+- [`docs/development_plan.md`](../development_plan.md) — § 8.1–§8.7.
+
+---
+
+## Task index
+
+| ID | Task | Status | Priority | Size | Depends on |
+|---|---|---|---|---|---|
+| 7.1 | README (badges, quick start, 3 scenarios, multi-tenant security) | ⬜ | P0 | M | — |
+| 7.2 | CHANGELOG + SECURITY + CLAUDE + AGENTS + LICENSE | ⬜ | P0 | M | — |
+| 7.3 | CI workflows (ci/codeql/scorecard/release) | ⬜ | P0 | M | — |
+| 7.4 | Bundle size budgets (final) | ⬜ | P1 | S | — |
+| 7.5 | Mutation testing end (≥ 95%, → 100%) | ⬜ | P0 | M | — |
+| 7.6 | Final pre-publish gate + tag + publish (`--provenance`) | ⬜ | P0 | S | 7.1–7.5 |
+| 7.7 | Release notes v0.1.0 | ⬜ | P1 | S | 7.6 |
+
+---
+
+## Tasks
+
+### Task 7.1 — README
+
+- **Status**: ⬜ Not started
+- **Priority**: P0
+- **Size**: M
+- **Depends on**: —
+
+#### Description
+
+Write the README mirroring `bymax-one/nest-auth`: badges, overview, features, subpath table, 3 copy-pasteable quick-start scenarios, configuration, bring-your-own-provider, the multi-tenant security section, templates, testing, roadmap.
+
+#### Acceptance criteria
+
+- [ ] 3 complete copy-pasteable scenarios (dev NoOp+InMemory; prod Resend+Redis; with Prisma audit)
+- [ ] Badges (npm, CI, coverage, mutation, scorecard, license); subpath table; multi-tenant security section; provider examples table → `docs/templates/`; "SMS + Push v0.2" disclaimer; ~12–18 KB
+
+#### Files to create / modify
+
+- `README.md`
+
+#### Agent prompt
+
+````
+You are a senior NestJS engineer/technical writer working on the nest-notification project.
+
+PROJECT: @bymax-one/nest-notification — public NestJS notification lib, releasing v0.1.0.
+
+CURRENT PHASE: 7 (Release) — Task 7.1 of 7
+
+REQUIRED READING (only these):
+- `docs/development_plan.md` §8.1 (README structure) + §5.5 (security section).
+- `bymax-one/nest-auth/README.md` (structure to mirror).
+
+TASK
+Write the README.
+
+DELIVERABLES
+1. `README.md` with the structure above; 3 copy-pasteable scenarios; multi-tenant security; roadmap
+   (v0.2 SMS/Push, v0.3 failover).
+
+Constraints:
+- English-only. Examples must reflect the atomic API (consumeAttempt/cooldown via the public methods).
+
+Verification:
+- Renders; all code blocks are valid; ~12–18 KB.
+
+Completion Protocol:
+1. Status ✅ (block + index). 2. Tick AC. 3. Index row + progress `1/7`. 4. Update the Phase 7 row in the plan.
+5. Append `- 7.1 ✅ <YYYY-MM-DD> — <summary>`.
+````
+
+---
+
+### Task 7.2 — CHANGELOG + SECURITY + CLAUDE + AGENTS + LICENSE
+
+- **Status**: ⬜ Not started
+- **Priority**: P0
+- **Size**: M
+- **Depends on**: —
+
+#### Description
+
+Author the supporting docs mirroring `nest-auth`.
+
+#### Acceptance criteria
+
+- [ ] `CHANGELOG.md` (Keep a Changelog; `[0.1.0]` Added + Deferred-v0.2); `SECURITY.md` (supported versions, `security@bymax.one`, in/out scope); `CLAUDE.md` + `AGENTS.md` (critical rules incl. never-import-Prisma, atomic OTP, never-log-codes, 100%/mutation 95); `LICENSE` (MIT)
+
+#### Files to create / modify
+
+- `CHANGELOG.md`, `SECURITY.md`, `CLAUDE.md`, `AGENTS.md`, `LICENSE`
+
+#### Agent prompt
+
+````
+You are a senior NestJS engineer/technical writer working on the nest-notification project.
+
+PROJECT: @bymax-one/nest-notification — public NestJS notification lib, releasing v0.1.0.
+
+CURRENT PHASE: 7 (Release) — Task 7.2 of 7
+
+REQUIRED READING (only these):
+- `docs/development_plan.md` §8.2.
+- `bymax-one/nest-auth/{CHANGELOG,SECURITY,CLAUDE,AGENTS}.md`, `LICENSE` (to mirror).
+
+TASK
+Write the 5 supporting docs.
+
+DELIVERABLES
+1. `CHANGELOG.md`, `SECURITY.md`, `CLAUDE.md`, `AGENTS.md`, `LICENSE` per the structures above. CLAUDE.md
+   critical rules MUST include: never import `@prisma/client`; atomic OTP (consumeAttempt/NX cooldown);
+   never log codes; sha256 keys; 100% coverage + mutation 95→100.
+
+Constraints:
+- English-only, timeless (no Phase/Task refs in committed docs-as-config). No `Co-Authored-By` in any
+  example commit message.
+
+Verification:
+- Files present and consistent with the lib's actual API.
+
+Completion Protocol:
+1. Status ✅ (block + index). 2. Tick AC. 3. Index row + progress `2/7`. 4. Update the Phase 7 row.
+5. Append `- 7.2 ✅ <YYYY-MM-DD> — <summary>`.
+````
+
+---
+
+### Task 7.3 — CI workflows
+
+- **Status**: ⬜ Not started
+- **Priority**: P0
+- **Size**: M
+- **Depends on**: —
+
+#### Description
+
+Add `ci.yml` (typecheck/lint/check:no-prisma/test:cov/build/size + dependency-review), `codeql.yml`, `scorecard.yml`, `release.yml` (`--provenance`).
+
+#### Acceptance criteria
+
+- [ ] 4 workflows; `ci.yml` includes the `pnpm check:no-prisma` gate and Node 24 matrix; `release.yml` uses `--provenance`; Scorecard weekly cron
+
+#### Files to create / modify
+
+- `.github/workflows/{ci,codeql,scorecard,release}.yml`
+
+#### Agent prompt
+
+````
+You are a senior DevOps/NestJS engineer working on the nest-notification project.
+
+PROJECT: @bymax-one/nest-notification — public NestJS notification lib, releasing v0.1.0 with provenance.
+
+CURRENT PHASE: 7 (Release) — Task 7.3 of 7
+
+REQUIRED READING (only these):
+- `docs/development_plan.md` §8.3.
+- `bymax-one/nest-auth/.github/workflows/*.yml` (to adapt).
+
+TASK
+Add the 4 CI workflows.
+
+DELIVERABLES
+1. `ci.yml` (pnpm 10.8.1, Node 24, install --frozen-lockfile, typecheck, lint, check:no-prisma,
+   test:cov, build, size, codecov, dependency-review on PR), `codeql.yml`, `scorecard.yml` (weekly),
+   `release.yml` (`pnpm publish --provenance`).
+
+Constraints:
+- English-only, timeless comments.
+
+Verification:
+- Workflows lint; `check:no-prisma` step present; release uses provenance.
+
+Completion Protocol:
+1. Status ✅ (block + index). 2. Tick AC. 3. Index row + progress `3/7`. 4. Update the Phase 7 row.
+5. Append `- 7.3 ✅ <YYYY-MM-DD> — <summary>`.
+````
+
+---
+
+### Task 7.4 — Bundle size budgets (final)
+
+- **Status**: ⬜ Not started
+- **Priority**: P1
+- **Size**: S
+- **Depends on**: —
+
+#### Description
+
+Finalize `scripts/check-size.mjs` budgets: server 30 KB, shared 4 KB, react 8 KB brotli; wire into CI.
+
+#### Acceptance criteria
+
+- [ ] `pnpm size` reports server < 30 KB, shared < 4 KB, react < 8 KB brotli; runs in `ci.yml`
+
+#### Files to create / modify
+
+- `scripts/check-size.mjs`
+
+#### Agent prompt
+
+````
+You are a senior build engineer working on the nest-notification project.
+
+PROJECT: @bymax-one/nest-notification — public NestJS notification lib.
+
+CURRENT PHASE: 7 (Release) — Task 7.4 of 7
+
+REQUIRED READING (only these):
+- `docs/development_plan.md` §8.4.
+
+TASK
+Finalize the bundle budgets.
+
+DELIVERABLES
+1. `scripts/check-size.mjs` with BUDGETS server 30_000 / shared 4_000 / react 8_000 brotli; non-zero
+   exit on breach.
+
+Verification:
+- `pnpm size` green within budgets.
+
+Completion Protocol:
+1. Status ✅ (block + index). 2. Tick AC. 3. Index row + progress `4/7`. 4. Update the Phase 7 row.
+5. Append `- 7.4 ✅ <YYYY-MM-DD> — <summary>`.
+````
+
+---
+
+### Task 7.5 — Mutation testing end
+
+- **Status**: ⬜ Not started
+- **Priority**: P0
+- **Size**: M
+- **Depends on**: —
+
+#### Description
+
+Run the full Stryker mutation suite; drive the score as close to 100% as achievable (break 95); document equivalent mutants inline; record results.
+
+#### Acceptance criteria
+
+- [ ] Mutation score ≥ 95% global (break 95), driven toward 100%; critical paths (`code-generator`, `timing-safe-compare`, `hash`, `redis-otp.storage`, `otp.service`) at 100% (no surviving non-equivalent mutants)
+- [ ] `docs/mutation_testing_results.md` updated; equivalent mutants annotated `// Stryker disable next-line <Mutator>: <reason>`
+
+#### Files to create / modify
+
+- `docs/mutation_testing_plan.md`, `docs/mutation_testing_results.md`, inline `// Stryker disable` where justified
+
+#### Agent prompt
+
+````
+You are a senior NestJS test/quality engineer working on the nest-notification project.
+
+PROJECT: @bymax-one/nest-notification — public NestJS notification lib. Release gate: mutation ≥ 95%
+(break 95), driven as close to 100% as achievable.
+
+CURRENT PHASE: 7 (Release) — Task 7.5 of 7
+
+REQUIRED READING (only these):
+- `docs/development_plan.md` §8.5.
+
+TASK
+Run mutation testing and close the gaps.
+
+DELIVERABLES
+1. `pnpm mutation:dry-run` then `pnpm mutation`; kill surviving mutants (add assertions) or annotate
+   equivalents inline; update `docs/mutation_testing_results.md` (timestamp + score); ensure crypto utils
+   + redis storage + otp service at 100%.
+
+Constraints:
+- Prefer killing mutants over disabling. Document every disable. English-only.
+
+Verification:
+- `pnpm mutation` ≥ 95% global; critical paths 100%.
+
+Completion Protocol:
+1. Status ✅ (block + index). 2. Tick AC. 3. Index row + progress `5/7`. 4. Update the Phase 7 row.
+5. Append `- 7.5 ✅ <YYYY-MM-DD> — <summary>`.
+````
+
+---
+
+### Task 7.6 — Final pre-publish gate + tag + publish
+
+- **Status**: ⬜ Not started
+- **Priority**: P0
+- **Size**: S
+- **Depends on**: 7.1, 7.2, 7.3, 7.4, 7.5
+
+#### Description
+
+Run `prepublishOnly`, confirm the version, then tag `v0.1.0` and publish with provenance — **after explicit human confirmation**.
+
+#### Acceptance criteria
+
+- [ ] `pnpm prepublishOnly` green (typecheck + lint + test:cov:all + build); version `0.1.0`
+- [ ] `git push --follow-tags` fires `release.yml`; package on npm with the Provenance badge; Scorecard ≥ 7.0
+- [ ] Tagging/publishing performed ONLY after the user confirms
+
+#### Files to create / modify
+
+- (release only — version bump)
+
+#### Agent prompt
+
+````
+You are a senior release engineer working on the nest-notification project.
+
+PROJECT: @bymax-one/nest-notification — public NestJS notification lib, v0.1.0.
+
+CURRENT PHASE: 7 (Release) — Task 7.6 of 7
+
+PRECONDITIONS
+- Tasks 7.1–7.5 done; Phase 6 (adoption) validated the package in bymax-fitness-ai.
+
+REQUIRED READING (only these):
+- `docs/development_plan.md` §8.6.
+
+TASK
+Run the pre-publish gate and prepare the release; STOP for human confirmation before tagging/publishing.
+
+DELIVERABLES
+1. `pnpm prepublishOnly` green; `pnpm version 0.1.0`. THEN, after explicit confirmation:
+   `git push --follow-tags` (triggers `release.yml`); verify `npm view @bymax-one/nest-notification@0.1.0`.
+
+Constraints:
+- Do NOT tag or publish without explicit user confirmation. No `Co-Authored-By` in the commit.
+
+Verification:
+- `pnpm prepublishOnly` green; (post-publish) provenance badge present.
+
+Completion Protocol:
+1. Status ✅ (block + index). 2. Tick AC. 3. Index row + progress `6/7`. 4. Update the Phase 7 row.
+5. Append `- 7.6 ✅ <YYYY-MM-DD> — <summary>`.
+````
+
+---
+
+### Task 7.7 — Release notes v0.1.0
+
+- **Status**: ⬜ Not started
+- **Priority**: P1
+- **Size**: S
+- **Depends on**: 7.6
+
+#### Description
+
+Publish the GitHub release notes for v0.1.0.
+
+#### Acceptance criteria
+
+- [ ] Highlights (email + OTP GA, multi-tenant, pluggable providers, zero deps, Prisma-free) + Deferred-to-v0.2 list; CHANGELOG `[0.1.0]` dated
+
+#### Files to create / modify
+
+- GitHub release (via `gh release create`), `CHANGELOG.md` date
+
+#### Agent prompt
+
+````
+You are a senior release engineer working on the nest-notification project.
+
+PROJECT: @bymax-one/nest-notification — public NestJS notification lib, v0.1.0.
+
+CURRENT PHASE: 7 (Release) — Task 7.7 of 7 (LAST)
+
+PRECONDITIONS
+- Task 7.6 done: tagged + published.
+
+REQUIRED READING (only these):
+- `docs/development_plan.md` §8.7.
+
+TASK
+Publish the release notes.
+
+DELIVERABLES
+1. `gh release create v0.1.0` with the highlights + deferred-v0.2 list; date the CHANGELOG `[0.1.0]`.
+
+Constraints:
+- Use the `gh` CLI. English-only.
+
+Verification:
+- Release visible on GitHub; CHANGELOG dated.
+
+Completion Protocol:
+1. Status ✅ (block + index). 2. Tick AC. 3. Index row + progress `7/7`. 4. Mark the Phase 7 row ✅ in
+the plan. 5. Append `- 7.7 ✅ <YYYY-MM-DD> — <summary>`.
+````
+
+---
+
+## Completion log
+
+> Append-only. One line per completed task: `- <task-id> ✅ YYYY-MM-DD — <one-line summary>`.
