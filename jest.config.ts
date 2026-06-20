@@ -16,7 +16,7 @@ const config: Config = {
   testEnvironment: 'node',
   rootDir: 'src',
   coverageDirectory: '<rootDir>/../coverage',
-  testMatch: ['**/*.spec.ts', '**/*.test.ts'],
+  testMatch: ['**/*.spec.ts', '**/*.spec.tsx', '**/*.test.ts'],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'json'],
   // Mirror the subpath aliases declared in tsconfig.json "paths" so tests
   // exercise the exact import specifiers consumers and the tsup bundler use.
@@ -50,6 +50,9 @@ const config: Config = {
     }
   },
   coverageReporters: ['text', 'lcov', 'clover'],
+  // Bound the worker pool so any run (CI or local) stays within a safe memory
+  // envelope, mirroring the aggregated coverage config.
+  maxWorkers: '50%',
   clearMocks: true,
   restoreMocks: true,
   passWithNoTests: true

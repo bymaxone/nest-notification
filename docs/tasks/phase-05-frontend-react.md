@@ -1,6 +1,6 @@
 # Phase 5 — Frontend (`./react`)
 
-> **Status**: ⬜ Not started · **Progress**: 0 / 5 tasks · **Last updated**: 2026-06-19
+> **Status**: ✅ Done · **Progress**: 5 / 5 tasks · **Last updated**: 2026-06-20
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 6 (Phase 5)
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md)
 
@@ -31,11 +31,11 @@ Implement the `./react` subpath: `useOtpInput` (N single-digit inputs with auto-
 
 | ID | Task | Status | Priority | Size | Depends on |
 |---|---|---|---|---|---|
-| 5.1 | `useOtpInput` hook | ⬜ | P0 | M | 1.1 |
-| 5.2 | `useOtpCountdown` hook | ⬜ | P0 | S | 1.1 |
-| 5.3 | `./react` barrel export | ⬜ | P1 | S | 5.1, 5.2 |
-| 5.4 | Tests — RTL (`renderHook`/`act`/fake timers) | ⬜ | P0 | M | 5.1, 5.2, 5.3 |
-| 5.5 | Phase 5 validation | ⬜ | P0 | S | 5.4 |
+| 5.1 | `useOtpInput` hook | ✅ | P0 | M | 1.1 |
+| 5.2 | `useOtpCountdown` hook | ✅ | P0 | S | 1.1 |
+| 5.3 | `./react` barrel export | ✅ | P1 | S | 5.1, 5.2 |
+| 5.4 | Tests — RTL (`renderHook`/`act`/fake timers) | ✅ | P0 | M | 5.1, 5.2, 5.3 |
+| 5.5 | Phase 5 validation | ✅ | P0 | S | 5.4 |
 
 ---
 
@@ -43,7 +43,7 @@ Implement the `./react` subpath: `useOtpInput` (N single-digit inputs with auto-
 
 ### Task 5.1 — `useOtpInput` hook
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: 1.1
@@ -54,10 +54,10 @@ Manage N single-digit inputs: validation per `type`, auto-focus next, Backspace 
 
 #### Acceptance criteria
 
-- [ ] Initializes `length` empty strings; valid char fills + focuses next; invalid char rejected; alpha/alphanumeric uppercased
-- [ ] Backspace on empty slot clears+focuses previous; Arrow Left/Right navigate; paste distributes, sanitizes spaces/hyphens, filters invalid
-- [ ] `onComplete` fires when full and `autoSubmit:true` (microtask-deferred); `reset()` clears + focuses slot 0; `code`/`isComplete` derived
-- [ ] Coverage 100%
+- [x] Initializes `length` empty strings; valid char fills + focuses next; invalid char rejected; alpha/alphanumeric uppercased
+- [x] Backspace on empty slot clears+focuses previous; Arrow Left/Right navigate; paste distributes, sanitizes spaces/hyphens, filters invalid
+- [x] `onComplete` fires when full and `autoSubmit:true` (microtask-deferred); `reset()` clears + focuses slot 0; `code`/`isComplete` derived
+- [x] Coverage 100%
 
 #### Files to create / modify
 
@@ -105,7 +105,7 @@ Completion Protocol:
 
 ### Task 5.2 — `useOtpCountdown` hook
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: S
 - **Depends on**: 1.1
@@ -116,9 +116,9 @@ Reactive countdown to `expiresAt` with `onExpired`, configurable tick, and `MM:S
 
 #### Acceptance criteria
 
-- [ ] `expiresAt:null` → `{remainingSeconds:0, expired:true, formatted:'00:00'}`; non-null computes initial value, decrements per tick
-- [ ] `onExpired` fires once at 0; interval cleared after expiry and on unmount; re-render with new `expiresAt` resets immediately
-- [ ] `formatted` `MM:SS` (<1h) / `HH:MM:SS` (≥1h); Coverage 100%
+- [x] `expiresAt:null` → `{remainingSeconds:0, expired:true, formatted:'00:00'}`; non-null computes initial value, decrements per tick
+- [x] `onExpired` fires once at 0; interval cleared after expiry and on unmount; re-render with new `expiresAt` resets immediately
+- [x] `formatted` `MM:SS` (<1h) / `HH:MM:SS` (≥1h); Coverage 100%
 
 #### Files to create / modify
 
@@ -162,7 +162,7 @@ Completion Protocol:
 
 ### Task 5.3 — `./react` barrel export
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: S
 - **Depends on**: 5.1, 5.2
@@ -173,8 +173,8 @@ Export the hooks + their types from `src/react/index.ts`.
 
 #### Acceptance criteria
 
-- [ ] `useOtpInput`, `useOtpCountdown` + the 4 option/state types exported
-- [ ] `pnpm build` emits `dist/react/index.{mjs,cjs,d.ts}` with `react` external
+- [x] `useOtpInput`, `useOtpCountdown` + the 4 option/state types exported
+- [x] `pnpm build` emits `dist/react/index.{mjs,cjs,d.ts}` with `react` external
 
 #### Files to create / modify
 
@@ -214,7 +214,7 @@ Completion Protocol:
 
 ### Task 5.4 — Tests (RTL)
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: 5.1, 5.2, 5.3
@@ -225,9 +225,9 @@ Completion Protocol:
 
 #### Acceptance criteria
 
-- [ ] `useOtpInput`: init, valid/invalid char, uppercase, Backspace, Arrows, paste (distribute/sanitize/filter), `onComplete`, `reset`, derived values
-- [ ] `useOtpCountdown`: null case, decrement, `onExpired` once, interval cleanup, format, re-render reset
-- [ ] Coverage 100%; `jest-environment-jsdom`
+- [x] `useOtpInput`: init, valid/invalid char, uppercase, Backspace, Arrows, paste (distribute/sanitize/filter), `onComplete`, `reset`, derived values
+- [x] `useOtpCountdown`: null case, decrement, `onExpired` once, interval cleanup, format, re-render reset
+- [x] Coverage 100%; `jest-environment-jsdom`
 
 #### Files to create / modify
 
@@ -267,7 +267,7 @@ Completion Protocol:
 
 ### Task 5.5 — Phase 5 validation
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: S
 - **Depends on**: 5.4
@@ -278,9 +278,9 @@ Run gates and confirm the `./react` bundle budget; close the phase.
 
 #### Acceptance criteria
 
-- [ ] `pnpm typecheck && pnpm lint && pnpm test:cov && pnpm build && pnpm size` green
-- [ ] `dist/react/index.mjs` < 8 KB brotli; `react` external; both hooks at 100%
-- [ ] Code-review findings applied
+- [x] `pnpm typecheck && pnpm lint && pnpm test:cov && pnpm build && pnpm size` green
+- [x] `dist/react/index.mjs` < 8 KB brotli; `react` external; both hooks at 100%
+- [x] Code-review findings applied
 
 #### Files to create / modify
 
@@ -320,3 +320,9 @@ the plan. 5. Append `- 5.5 ✅ <YYYY-MM-DD> — <summary>`.
 ## Completion log
 
 > Append-only. One line per completed task: `- <task-id> ✅ YYYY-MM-DD — <one-line summary>`.
+
+- 5.1 ✅ 2026-06-20 — `useOtpInput` + `types.ts`: N-slot OTP state, validation by class, auto-focus, Backspace/Arrow nav, paste distribute/sanitize/filter, microtask-deferred `onComplete`; 100% coverage.
+- 5.2 ✅ 2026-06-20 — `useOtpCountdown`: reactive countdown to `expiresAt`, one-shot `onExpired`, configurable tick, `MM:SS`/`HH:MM:SS` formatting, interval cleanup on expiry/unmount; 100% coverage.
+- 5.3 ✅ 2026-06-20 — `./react` barrel exports both hooks + the 4 option/state types; `pnpm build` emits `dist/react/index.{mjs,cjs,d.ts}` with `react` external (1.43 kB brotli).
+- 5.4 ✅ 2026-06-20 — RTL specs (`renderHook`/`act`, `jest.useFakeTimers`) under `jest-environment jsdom`: 34 cases, both hooks at 100% line/branch; `testMatch` extended to `*.spec.tsx`.
+- 5.5 ✅ 2026-06-20 — Phase gate green: `typecheck`/`lint` (0 warnings, no suppressions)/`test:cov` (100% line/branch, 317 tests)/`build`/`check:no-prisma`/`size` all pass; `react` external, hooks bundle 1.56 kB brotli (< 8 KB budget); code-review + security-review clean (zero findings).

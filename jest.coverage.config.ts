@@ -12,7 +12,11 @@ const config: Config = {
   preset: 'ts-jest',
   testEnvironment: 'node',
   rootDir: '.',
-  testMatch: ['<rootDir>/src/**/*.spec.ts', '<rootDir>/test/e2e/**/*.e2e-spec.ts'],
+  testMatch: [
+    '<rootDir>/src/**/*.spec.ts',
+    '<rootDir>/src/**/*.spec.tsx',
+    '<rootDir>/test/e2e/**/*.e2e-spec.ts'
+  ],
   // This config scans the whole project (rootDir '.'), so exclude build output
   // and Stryker sandboxes: both hold copies of `src/` sharing this package's
   // Haste module name, which otherwise crashes jest-haste-map on the alias.
