@@ -1,6 +1,6 @@
 # Phase 4 — Multi-tenant + Audit Log
 
-> **Status**: 🔄 In Progress · **Progress**: 6 / 8 tasks · **Last updated**: 2026-06-20
+> **Status**: 🔄 In Progress · **Progress**: 7 / 8 tasks · **Last updated**: 2026-06-20
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 5 (Phase 4)
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md)
 
@@ -39,7 +39,7 @@ Consolidate multi-tenancy (tenant-isolation regression tests, the `tenantIdResol
 | 4.4 | Prisma fragment + `PrismaNotificationLogRepository` example | ✅ | P2 | S | 1.3 |
 | 4.5 | Multi-tenant security section in README (draft) | ✅ | P2 | S | — |
 | 4.6 | Tests — interceptor + audit-log E2E (never-log-code gate) | ✅ | P0 | M | 4.1, 4.2, 4.3 |
-| 4.7 | Barrel export (interceptor) | ⬜ | P1 | S | 4.2 |
+| 4.7 | Barrel export (interceptor) | ✅ | P1 | S | 4.2 |
 | 4.8 | Phase 4 validation + smoke | ⬜ | P0 | S | 4.6 |
 
 ---
@@ -380,7 +380,7 @@ Completion Protocol:
 
 ### Task 4.7 — Barrel export (interceptor)
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: S
 - **Depends on**: 4.2
@@ -391,7 +391,7 @@ Export `NotificationAuditInterceptor` from `src/server/index.ts`.
 
 #### Acceptance criteria
 
-- [ ] `NotificationAuditInterceptor` exported; `pnpm build` clean
+- [x] `NotificationAuditInterceptor` exported; `pnpm build` clean
 
 #### Files to create / modify
 
@@ -490,3 +490,4 @@ the plan. 5. Append `- 4.8 ✅ <YYYY-MM-DD> — <summary>`.
 - 4.4 ✅ 2026-06-20 — Prisma fragment + consumer repository example under `docs/schemas/`; covers every `NotificationLogEntry` field, 3 indexes, never-import-Prisma warning.
 - 4.5 ✅ 2026-06-20 — README "Multi-tenant Security" draft: SHA-256 key rationale, `tenantIdResolver` anti-spoofing (subdomain + JWT, typed), never-log-codes guarantee.
 - 4.6 ✅ 2026-06-20 — Interceptor unit spec (100%) + audit-log E2E: generated/sent, cooldown_blocked, max_attempts_exceeded, and the never-log-code gate.
+- 4.7 ✅ 2026-06-20 — Export `NotificationAuditInterceptor` from the server barrel; externalize `rxjs` in tsup + declare it as a peer (server bundle back to 15 KB brotli).
