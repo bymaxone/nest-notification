@@ -16,6 +16,7 @@ import type {
   INotificationLogRepository,
   IOtpStorage
 } from './interfaces'
+import { NotificationException } from './errors/notification-exception'
 import { DefaultTemplateRenderer } from './providers/default-template-renderer'
 import { NoOpNotificationLogRepository } from './providers/no-op-notification-log.repository'
 import { EmailService } from './services/email.service'
@@ -342,6 +343,54 @@ describe('BymaxNotificationModule.forRootAsync', () => {
     expect(() =>
       BymaxNotificationModule.forRootAsync({} as unknown as BymaxNotificationModuleAsyncOptions)
     ).toThrow('requires a `useFactory`')
+  })
+})
+
+describe('BymaxNotificationModule.forRootAsync channel-absent invariant', () => {
+  // Email-only async config: email works, OTP reports CHANNEL_DISABLED (no spurious service).
+  it('should disable the otp channel when only email is configured async', async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [BymaxNotificationModule.forRootAsync({ useFactory: () => ({ email: validEmail }) })]
+    }).compile()
+    const notifications = moduleRef.get(NotificationService)
+
+    expect(notifications.getEmail()).toBeInstanceOf(EmailService)
+    expect(notifications.getEnabledChannels()).toEqual(['email'])
+    expect(() => notifications.getOtp()).toThrow(NotificationException)
+    expect(moduleRef.get(OtpService, { strict: false })).toBeUndefined()
+  })
+
+  // OTP-only async config: symmetric — OTP works, email reports CHANNEL_DISABLED.
+  it('should disable the email channel when only otp is configured async', async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [
+        BymaxNotificationModule.forRootAsync({
+          useFactory: () => ({ otp: { storage: new FakeOtpStorage() } })
+        })
+      ]
+    }).compile()
+    const notifications = moduleRef.get(NotificationService)
+
+    expect(notifications.getOtp()).toBeInstanceOf(OtpService)
+    expect(notifications.getEnabledChannels()).toEqual(['otp'])
+    expect(() => notifications.getEmail()).toThrow(NotificationException)
+    expect(moduleRef.get(EmailService, { strict: false })).toBeUndefined()
+  })
+
+  // Both channels async: both services resolve and both are reported enabled.
+  it('should enable both channels when email and otp are configured async', async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [
+        BymaxNotificationModule.forRootAsync({
+          useFactory: () => ({ email: validEmail, otp: { storage: new FakeOtpStorage() } })
+        })
+      ]
+    }).compile()
+    const notifications = moduleRef.get(NotificationService)
+
+    expect(notifications.getEmail()).toBeInstanceOf(EmailService)
+    expect(notifications.getOtp()).toBeInstanceOf(OtpService)
+    expect(notifications.getEnabledChannels()).toEqual(['email', 'otp'])
   })
 })
 

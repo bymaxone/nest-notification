@@ -7,8 +7,9 @@
  * fully synchronous and registers a channel's token only when that channel is
  * present. `forRootAsync` resolves the consumer options through DI: because the
  * configured channels are unknown until the factory runs, it registers every
- * channel token (an absent channel resolves to `null`) and always registers the
- * three services, which guard against their absent channel internally.
+ * channel token (an absent channel resolves to `null`) and registers the channel
+ * services as factories that resolve to `undefined` when their channel is absent —
+ * mirroring the sync rule, so `NotificationService` reports the channel disabled.
  */
 
 import { Logger, Module } from '@nestjs/common'
@@ -117,7 +118,7 @@ export class BymaxNotificationModule {
       inject: asyncOptions.inject ?? []
     }
     const tokenProviders = this.buildAsyncTokenProviders()
-    const serviceProviders: Type<unknown>[] = [EmailService, OtpService, NotificationService]
+    const serviceProviders = this.buildAsyncServiceProviders()
     return {
       module: BymaxNotificationModule,
       global: true,
@@ -129,9 +130,57 @@ export class BymaxNotificationModule {
         BYMAX_NOTIFICATION_EMAIL_PROVIDER,
         BYMAX_NOTIFICATION_TEMPLATE_RENDERER,
         BYMAX_NOTIFICATION_OTP_STORAGE,
-        ...serviceProviders
+        EmailService,
+        OtpService,
+        NotificationService
       ]
     }
+  }
+
+  /**
+   * Builds the async channel-service providers, mirroring the conditional wiring of
+   * the sync path. `EmailService`/`OtpService` are factory providers that resolve to
+   * `undefined` when their required channel dependency (the email provider / OTP
+   * storage token) is absent, so the `@Optional()`-injected `NotificationService`
+   * keeps throwing `CHANNEL_DISABLED` for that channel and `getEnabledChannels()`
+   * omits it. `NotificationService` is always registered.
+   */
+  private static buildAsyncServiceProviders(): Array<FactoryProvider | Type<unknown>> {
+    return [
+      {
+        provide: EmailService,
+        useFactory: (
+          options: ResolvedNotificationOptions,
+          provider: IEmailProvider | null,
+          renderer: IEmailTemplateRenderer,
+          auditLog: INotificationLogRepository
+        ): EmailService | undefined =>
+          provider ? new EmailService(options, provider, renderer, auditLog) : undefined,
+        inject: [
+          BYMAX_NOTIFICATION_OPTIONS,
+          BYMAX_NOTIFICATION_EMAIL_PROVIDER,
+          BYMAX_NOTIFICATION_TEMPLATE_RENDERER,
+          BYMAX_NOTIFICATION_LOG_REPOSITORY
+        ]
+      },
+      {
+        provide: OtpService,
+        useFactory: (
+          options: ResolvedNotificationOptions,
+          storage: IOtpStorage | null,
+          auditLog: INotificationLogRepository,
+          emailService?: EmailService
+        ): OtpService | undefined =>
+          storage ? new OtpService(options, storage, auditLog, emailService) : undefined,
+        inject: [
+          BYMAX_NOTIFICATION_OPTIONS,
+          BYMAX_NOTIFICATION_OTP_STORAGE,
+          BYMAX_NOTIFICATION_LOG_REPOSITORY,
+          { token: EmailService, optional: true }
+        ]
+      },
+      NotificationService
+    ]
   }
 
   /**
