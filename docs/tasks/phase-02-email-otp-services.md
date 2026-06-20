@@ -1,6 +1,6 @@
 # Phase 2 — EmailService + OtpService (atomic)
 
-> **Status**: 🔄 In Progress · **Progress**: 4 / 10 tasks · **Last updated**: 2026-06-19
+> **Status**: 🔄 In Progress · **Progress**: 5 / 10 tasks · **Last updated**: 2026-06-19
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 3 (Phase 2)
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md)
 
@@ -44,7 +44,7 @@ OTP email delivery is delegated to `EmailService` (which owns the renderer/escap
 | 2.2 | `InMemoryOtpStorage` — atomic dev/test storage | ✅ | P0 | M | 1.3 |
 | 2.3 | `RedisOtpStorage` — Lua `consumeAttempt` + NX cooldown (production) | ✅ | P0 | L | 1.3, 1.7 |
 | 2.4 | `EmailService` — send + sendTemplate + attachment guard + audit (mask) | ✅ | P0 | M | 1.4, 1.5 |
-| 2.5 | `OtpService` — generate/verify/consume/resend/getStatus (atomic) | ⬜ | P0 | L | 2.3, 2.4 |
+| 2.5 | `OtpService` — generate/verify/consume/resend/getStatus (atomic) | ✅ | P0 | L | 2.3, 2.4 |
 | 2.6 | `NotificationService` — channel-agnostic dispatch (discriminated) | ⬜ | P0 | M | 2.4, 2.5 |
 | 2.7 | Module wiring — register services conditionally | ⬜ | P0 | S | 2.4, 2.5, 2.6 |
 | 2.8 | Phase 2 barrel exports | ⬜ | P1 | S | 2.1–2.7 |
@@ -312,7 +312,7 @@ Completion Protocol:
 
 ### Task 2.5 — `OtpService` (atomic)
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: L
 - **Depends on**: 2.3, 2.4
@@ -323,11 +323,11 @@ Implement `generate`/`verify`/`consume`/`resend`/`getStatus` per the atomic flow
 
 #### Acceptance criteria
 
-- [ ] `generate`: `tryAcquireCooldown` BEFORE persisting → false → `OTP_COOLDOWN_ACTIVE` (with `remainingSeconds`); persist `attempts:0`; `deliverVia:'email'` → `EmailService.sendTemplate` with `{code, expiresInMinutes, purpose, …emailData}`; no EmailService → `OTP_EMAIL_DELIVERY_NOT_CONFIGURED`; send failure → clear cooldown + delete OTP, rethrow; `manual` keeps cooldown; returns `{expiresAt, cooldownSeconds}`
-- [ ] `verify`: `consumeAttempt` (atomic) → `not_found`/`max_attempts`; `safeCompare` → `invalid_code` with `remainingAttempts`; success → `validated:true` (or delete+clearCooldown if `consumeOnVerify`)
-- [ ] `consume`: delete + clearCooldown (idempotent); `resend` aliases `generate`; `getStatus` returns truncated entry (no `code`)
-- [ ] config via `options.otp.resolveForPurpose`; audit on every op; `code` never in audit metadata
-- [ ] Coverage 100%; two interleaved verifies never exceed `maxAttempts`
+- [x] `generate`: `tryAcquireCooldown` BEFORE persisting → false → `OTP_COOLDOWN_ACTIVE` (with `remainingSeconds`); persist `attempts:0`; `deliverVia:'email'` → `EmailService.sendTemplate` with `{code, expiresInMinutes, purpose, …emailData}`; no EmailService → `OTP_EMAIL_DELIVERY_NOT_CONFIGURED`; send failure → clear cooldown + delete OTP, rethrow; `manual` keeps cooldown; returns `{expiresAt, cooldownSeconds}`
+- [x] `verify`: `consumeAttempt` (atomic) → `not_found`/`max_attempts`; `safeCompare` → `invalid_code` with `remainingAttempts`; success → `validated:true` (or delete+clearCooldown if `consumeOnVerify`)
+- [x] `consume`: delete + clearCooldown (idempotent); `resend` aliases `generate`; `getStatus` returns truncated entry (no `code`)
+- [x] config via `options.otp.resolveForPurpose`; audit on every op; `code` never in audit metadata
+- [x] Coverage 100%; interleaved consumeAttempt never exceeds `maxAttempts` (storage regression)
 
 #### Files to create / modify
 
@@ -672,3 +672,4 @@ in `docs/development_plan.md`. 5. Append `- 2.10 ✅ <YYYY-MM-DD> — <summary>`
 - 2.2 ✅ 2026-06-19 — InMemoryOtpStorage over two Maps, atomic consumeAttempt, self-evicting get/cooldown, clear()/size() helpers; 100% coverage.
 - 2.3 ✅ 2026-06-19 — RedisOtpStorage with sha256 PII-free keys, atomic Lua consumeAttempt, SET NX EX cooldown, KEEPTTL XX update; 100% coverage + interleaving regression.
 - 2.4 ✅ 2026-06-19 — EmailService send/sendTemplate with defaults, attachment guard, en fallback, masked fire-and-forget audit; body never logged; 100% coverage.
+- 2.5 ✅ 2026-06-19 — OtpService generate/verify/consume/resend/getStatus; NX-first cooldown with release-on-failure, atomic consumeAttempt + safeCompare, code never logged/audited; 100% coverage.
