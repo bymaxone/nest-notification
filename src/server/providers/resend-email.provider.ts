@@ -77,8 +77,13 @@ const RESEND_MODULE: string = 'resend'
 export class ResendEmailProvider implements IEmailProvider {
   readonly name = 'resend'
   private readonly logger = new Logger(ResendEmailProvider.name)
-  /** Lazily instantiated SDK client; `null` until the first `send()`. */
-  private client: ResendLike | null = null
+  /**
+   * Cached in-flight (or resolved) SDK client initialization. `null` until the first
+   * `send()` and after a failed init. Caching the PROMISE (not just the client)
+   * collapses concurrent first sends onto a single dynamic `import()` + instantiation;
+   * a failed init resets this back to `null` so a transient error can be retried.
+   */
+  private clientPromise: Promise<ResendLike> | null = null
 
   /**
    * @param options - Adapter options; `apiKey` is required to actually send.
@@ -105,7 +110,7 @@ export class ResendEmailProvider implements IEmailProvider {
    */
   async send(options: EmailSendOptions): Promise<EmailSendResult> {
     const client = await this.getClient()
-    const from = options.fromName ? `${options.fromName} <${options.from}>` : (options.from ?? '')
+    const from = this.formatFrom(options.from, options.fromName)
     const result = await client.emails.send({
       from,
       to: options.to,
@@ -131,21 +136,55 @@ export class ResendEmailProvider implements IEmailProvider {
   }
 
   /**
-   * Returns the cached SDK client, lazily importing `resend` on first use.
+   * Formats the RFC-5322 `from` header. The `Name <address>` display-name form is
+   * only used when a non-empty address exists — otherwise it would emit the literal
+   * `Name <undefined>` / `Name <>`. Falls back to the bare address (or `''`).
+   *
+   * @param from - The sender address, if any.
+   * @param fromName - The sender display name, if any.
+   * @returns `"Name <address>"`, the bare address, or `''`.
+   */
+  private formatFrom(from: string | undefined, fromName: string | undefined): string {
+    const address = from ?? ''
+    if (fromName && address) {
+      return `${fromName} <${address}>`
+    }
+    return address
+  }
+
+  /**
+   * Returns the cached SDK client, lazily importing `resend` on first use. Concurrent
+   * first calls share one in-flight initialization promise so the dynamic import and
+   * constructor run exactly once; a failed init is dropped from the cache so a later
+   * call can retry instead of being permanently bricked.
    *
    * @returns The instantiated client.
    * @throws Error When `apiKey` is missing or the `resend` package is not installed.
    */
-  private async getClient(): Promise<ResendLike> {
-    if (this.client) {
-      return this.client
+  private getClient(): Promise<ResendLike> {
+    this.clientPromise ??= this.createClient()
+    return this.clientPromise
+  }
+
+  /**
+   * Builds a fresh SDK client, resetting the cached promise on any failure so the
+   * provider is not permanently bricked by a transient init error.
+   *
+   * @returns The instantiated client.
+   * @throws Error When `apiKey` is missing or the `resend` package is not installed.
+   */
+  private async createClient(): Promise<ResendLike> {
+    try {
+      const apiKey = this.options.apiKey
+      if (!apiKey) {
+        throw new Error('ResendEmailProvider: missing API key — pass { apiKey } to the constructor')
+      }
+      const ResendCtor = await this.loadResendConstructor()
+      return new ResendCtor(apiKey)
+    } catch (error) {
+      this.clientPromise = null
+      throw error
     }
-    if (!this.options.apiKey) {
-      throw new Error('ResendEmailProvider: missing API key — pass { apiKey } to the constructor')
-    }
-    const ResendCtor = await this.loadResendConstructor()
-    this.client = new ResendCtor(this.options.apiKey)
-    return this.client
   }
 
   /**

@@ -79,6 +79,16 @@ describe('ResendEmailProvider', () => {
     expect(mockSend).toHaveBeenCalledWith(expect.objectContaining({ from: '' }))
   })
 
+  // A display name with NO address must not emit the broken `Name <undefined>` /
+  // `Name <>` header — it falls back to the bare (empty) address instead.
+  it('should not apply the display-name format when fromName is set but from is absent', async () => {
+    const { from: _from, ...withoutFrom } = baseOptions
+
+    await new ResendEmailProvider({ apiKey: 'k' }).send({ ...withoutFrom, fromName: 'Acme' })
+
+    expect(mockSend).toHaveBeenCalledWith(expect.objectContaining({ from: '' }))
+  })
+
   // The SDK client is instantiated once and reused across sends (lazy + cached).
   it('should construct the SDK client only once across multiple sends', async () => {
     const provider = new ResendEmailProvider({ apiKey: 'k' })
@@ -88,6 +98,33 @@ describe('ResendEmailProvider', () => {
 
     expect(mockResendCtor).toHaveBeenCalledTimes(1)
     expect(mockSend).toHaveBeenCalledTimes(2)
+  })
+
+  // Concurrent first sends must share one in-flight init: the dynamic import and
+  // constructor run exactly once even when several callers race on a fresh provider.
+  it('should perform the dynamic import only once under concurrent first sends', async () => {
+    const provider = new ResendEmailProvider({ apiKey: 'k' })
+
+    await Promise.all([provider.send(baseOptions), provider.send(baseOptions)])
+
+    expect(mockResendCtor).toHaveBeenCalledTimes(1)
+    expect(mockSend).toHaveBeenCalledTimes(2)
+  })
+
+  // A failed init must not permanently brick the provider: the cached promise is
+  // dropped so a later send re-imports and succeeds once the dependency is present.
+  it('should reset the cached init after a failed load so a later send can retry', async () => {
+    const provider = new ResendEmailProvider({ apiKey: 'k' })
+    mockResendMissing = true
+    jest.resetModules() // force the virtual mock factory to throw on the first import
+
+    await expect(provider.send(baseOptions)).rejects.toThrow('`resend` package is not installed')
+
+    mockResendMissing = false
+    jest.resetModules() // the dependency is "installed" again
+
+    await expect(provider.send(baseOptions)).resolves.toEqual({ messageId: 'msg_123' })
+    expect(mockResendCtor).toHaveBeenCalledTimes(1)
   })
 
   // A provider error is surfaced as an Error and logged WITHOUT the email body.
