@@ -33,6 +33,9 @@ import type {
 } from './interfaces/notification-module-options.interface'
 import { DefaultTemplateRenderer } from './providers/default-template-renderer'
 import { NoOpNotificationLogRepository } from './providers/no-op-notification-log.repository'
+import { EmailService } from './services/email.service'
+import { NotificationService } from './services/notification.service'
+import { OtpService } from './services/otp.service'
 
 /** A DI provider that carries a `provide` token (excludes bare-class providers). */
 type TokenProvider = ClassProvider | ValueProvider | FactoryProvider
@@ -61,15 +64,16 @@ export class BymaxNotificationModule {
   static forRoot(options: BymaxNotificationModuleOptions): DynamicModule {
     validateOptions(options)
     const resolved = resolveOptions(options)
-    const providers = this.buildProviders(options, resolved)
+    const tokenProviders = this.buildProviders(options, resolved)
+    const serviceProviders = this.buildServiceProviders(resolved)
     this.logger.log(
       `[BYMAX_NOTIFICATION_MODULE_BOOTSTRAP_OK] Initialized with channels: ${activeChannels(resolved).join(', ')}`
     )
     return {
       module: BymaxNotificationModule,
       global: true,
-      providers,
-      exports: providers.map((provider) => provider.provide)
+      providers: [...tokenProviders, ...serviceProviders],
+      exports: [...tokenProviders.map((provider) => provider.provide), ...serviceProviders]
     }
   }
 
@@ -115,13 +119,30 @@ export class BymaxNotificationModule {
     if (resolved.email && options.email) {
       providers.push(resolveAsProvider(BYMAX_NOTIFICATION_EMAIL_PROVIDER, options.email.provider))
       providers.push(resolveRenderer(options.email.templateRenderer))
-      // EmailService is registered here once the email service is implemented.
     }
     if (resolved.otp && options.otp) {
       providers.push(resolveAsProvider(BYMAX_NOTIFICATION_OTP_STORAGE, options.otp.storage))
-      // OtpService is registered here once the OTP service is implemented.
     }
     return providers
+  }
+
+  /**
+   * Builds the channel service providers. `EmailService`/`OtpService` are
+   * registered only when their channel is configured; `NotificationService` is
+   * always registered (it injects the channel services with `@Optional()`).
+   */
+  private static buildServiceProviders(
+    resolved: Readonly<ResolvedNotificationOptions>
+  ): Type<unknown>[] {
+    const services: Type<unknown>[] = []
+    if (resolved.email) {
+      services.push(EmailService)
+    }
+    if (resolved.otp) {
+      services.push(OtpService)
+    }
+    services.push(NotificationService)
+    return services
   }
 }
 
