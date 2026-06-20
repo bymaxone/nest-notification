@@ -1,6 +1,6 @@
 # Phase 1 — Foundation + Interfaces (`IEmailProvider` + `IOtpStorage`)
 
-> **Status**: 🔄 In Progress · **Progress**: 4 / 11 tasks · **Last updated**: 2026-06-19
+> **Status**: 🔄 In Progress · **Progress**: 5 / 11 tasks · **Last updated**: 2026-06-19
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 2 (Phase 1)
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md)
 
@@ -43,7 +43,7 @@ The flagship decision baked in here is the **dissolution of the Prisma coupling*
 | 1.2 | Shared types + constants (`src/shared`) | ✅ | P0 | S | 1.1 |
 | 1.3 | Main interfaces (`IEmailProvider`, `IOtpStorage` + atomic methods, renderer, log, SMS/Push sketches, module options, `NotificationRequest`) | ✅ | P0 | M | 1.1, 1.2 |
 | 1.4 | Injection tokens + error catalog (incl. `OTP_EMAIL_DELIVERY_NOT_CONFIGURED`) + `NotificationException` + default-options constants | ✅ | P0 | M | 1.2, 1.3 |
-| 1.5 | Options validation + resolution (`ResolvedNotificationOptions` + `resolveForPurpose`, `maxAttachmentBytes`, `maskRecipient`) | ⬜ | P0 | M | 1.3, 1.4 |
+| 1.5 | Options validation + resolution (`ResolvedNotificationOptions` + `resolveForPurpose`, `maxAttachmentBytes`, `maskRecipient`) | ✅ | P0 | M | 1.3, 1.4 |
 | 1.6 | No-op providers + minimal `DefaultTemplateRenderer` (escape html body only) | ⬜ | P0 | S | 1.3 |
 | 1.7 | Crypto utils — `hash`, `code-generator` (digit-by-digit), `safeCompare` (length-guard) | ⬜ | P0 | M | 1.4 |
 | 1.8 | Dynamic module — synchronous `forRoot()` with conditional registration | ⬜ | P0 | M | 1.5, 1.6 |
@@ -382,7 +382,7 @@ Completion Protocol:
 
 ### Task 1.5 — Options validation + resolution
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: 1.3, 1.4
@@ -393,9 +393,9 @@ Implement `validate-options.ts` (clear messages; rejects `sms`/`push` in v0.1) a
 
 #### Acceptance criteria
 
-- [ ] `validateOptions` rejects: no channel; email missing `provider`/`defaultFrom`/malformed from; otp missing `storage`; `defaultLength` ∉ [1,32] (→ `OTP_INVALID_LENGTH`); bad `codeType`; `ttl<=0`; `maxAttempts<1`; `cooldown<0`; `sms`/`push` configured (v0.1); audit missing `repository`
-- [ ] `resolveOptions` deep-freezes the result; omits sections for unconfigured channels; `otp.resolveForPurpose(p)` returns `perPurpose[p]` merged over otp defaults; `email.maxAttachmentBytes` defaults to 10 MiB; `audit.maskRecipient` defaults to identity
-- [ ] Coverage 100% on both files
+- [x] `validateOptions` rejects: no channel; email missing `provider`/`defaultFrom`/malformed from; otp missing `storage`; `defaultLength` ∉ [1,32] (→ `OTP_INVALID_LENGTH`); bad `codeType`; `ttl<=0`; `maxAttempts<1`; `cooldown<0`; `sms`/`push` configured (v0.1); audit missing `repository`
+- [x] `resolveOptions` deep-freezes the result; omits sections for unconfigured channels; `otp.resolveForPurpose(p)` returns `perPurpose[p]` merged over otp defaults; `email.maxAttachmentBytes` defaults to 10 MiB; `audit.maskRecipient` defaults to identity
+- [x] Coverage 100% on both files
 
 #### Files to create / modify
 
@@ -826,3 +826,4 @@ in `docs/development_plan.md`. 5. Append `- 1.11 ✅ <YYYY-MM-DD> — <summary>`
 - 1.2 ✅ 2026-06-19 — Shared subpath: `OtpPurpose`/`NotificationChannel`/`NotificationErrorResponse` types, the 21-code `NOTIFICATION_ERROR_CODES`, `DEFAULT_TTLS`; zero NestJS/Node imports; 100% coverage.
 - 1.3 ✅ 2026-06-19 — Interfaces: `IEmailProvider`, `IOtpStorage` (atomic `consumeAttempt`/`tryAcquireCooldown`/`clearCooldown`, Prisma-dissolution note), renderer, log repo, SMS/Push v0.2 sketches, module options (+`NotificationRequest`, async factory). Zero `any`.
 - 1.4 ✅ 2026-06-19 — 7 Symbol DI tokens, the 21-entry `NOTIFICATION_ERROR_DEFINITIONS` (+`OTP_EMAIL_DELIVERY_NOT_CONFIGURED`, `Map`-based lookup), `NotificationException`, `NOTIFICATION_PURPOSES`, `DEFAULT_*_OPTIONS`. Server/shared parity asserted; 100% coverage.
+- 1.5 ✅ 2026-06-19 — `validateOptions` (all rejection rules incl. sms/push v0.2), `resolveOptions` → deep-frozen `ResolvedNotificationOptions` with `resolveForPurpose`, `maxAttachmentBytes` (10 MiB), identity `maskRecipient`. 100% coverage.
