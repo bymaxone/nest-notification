@@ -74,7 +74,7 @@ The phase order respects the dependency graph (Appendix A): interfaces before se
 
 ### 1.4 Progress
 
-- **Overall progress:** 🔄 1 / 7 phases done (14%) — 19 / 55 tasks (35%)
+- **Overall progress:** 🔄 1 / 7 phases done (14%) — 21 / 55 tasks (38%)
 - **Active phase:** **Phase 2** (EmailService + OtpService) — 🔄 In Progress
 - **Blocked:** none
 
@@ -83,7 +83,7 @@ The phase order respects the dependency graph (Appendix A): interfaces before se
 | ID | Phase | Status | Progress | Complexity | Last updated |
 | --- | --- | --- | --- | --- | --- |
 | 1 | [Foundation + Interfaces](./tasks/phase-01-foundation-interfaces.md) | ✅ Done | 11/11 | MEDIUM | 2026-06-20 |
-| 2 | [EmailService + OtpService (atomic)](./tasks/phase-02-email-otp-services.md) | 🔄 In Progress | 8/10 | HIGH | 2026-06-20 |
+| 2 | [EmailService + OtpService (atomic)](./tasks/phase-02-email-otp-services.md) | 🔄 In Progress | 10/10 | HIGH | 2026-06-20 |
 | 3 | [Templating + Rate Limiting](./tasks/phase-03-templating-rate-limiting.md) | 📋 ToDo | 0/8 | MEDIUM | — |
 | 4 | [Multi-tenant + Audit Log](./tasks/phase-04-multitenant-audit.md) | 📋 ToDo | 0/8 | MEDIUM | — |
 | 5 | [Frontend (`./react`)](./tasks/phase-05-frontend-react.md) | 📋 ToDo | 0/5 | MEDIUM | — |

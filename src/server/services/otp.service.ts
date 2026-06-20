@@ -237,13 +237,13 @@ export class OtpService {
     ref: OtpRecipientRef,
     cooldownSeconds: number
   ): Promise<void> {
-    const acquired = await this.storage.tryAcquireCooldown(
+    const hasCooldownLock = await this.storage.tryAcquireCooldown(
       ref.tenantId,
       ref.recipient,
       ref.purpose,
       cooldownSeconds
     )
-    if (acquired) {
+    if (hasCooldownLock) {
       return
     }
     const remainingSeconds = await this.storage.getCooldown(
