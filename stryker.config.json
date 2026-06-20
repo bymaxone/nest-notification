@@ -14,7 +14,7 @@
   "typescriptChecker": {
     "prioritizePerformanceOverAccuracy": true
   },
-  "disableTypeChecks": "src/**/*.ts",
+  "disableTypeChecks": "src/**/*.{ts,tsx}",
   "ignoreStatic": false,
   "mutate": [
     "src/**/*.ts",

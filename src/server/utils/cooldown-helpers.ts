@@ -45,6 +45,7 @@ export function toRetryAfterHeader(remainingSeconds: number): string {
  * ```
  */
 export function cooldownExpiresAt(remainingSeconds: number): number {
+  // Stryker disable next-line EqualityOperator: at remainingSeconds === 0 the fall-through computes `Date.now() + 0 * MS_PER_SECOND === Date.now()`, so `<= 0` and `< 0` are observationally identical.
   if (remainingSeconds <= 0) {
     return Date.now()
   }
@@ -65,6 +66,7 @@ export function cooldownExpiresAt(remainingSeconds: number): number {
  * ```
  */
 export function formatCooldown(remainingSeconds: number): string {
+  // Stryker disable next-line EqualityOperator: at remainingSeconds === 0 the fall-through yields totalSeconds 0, no h/m parts, and the `parts.length === 0` guard appends '0s' — identical output, so `<= 0` and `< 0` are equivalent.
   if (remainingSeconds <= 0) {
     return '0s'
   }

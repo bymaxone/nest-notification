@@ -173,6 +173,55 @@ describe('NotificationAuditInterceptor', () => {
     expect(repo.entries).toHaveLength(0)
   })
 
+  // Non-object and null args are rejected by the shape guard — pins the
+  // `typeof value !== 'object' || value === null` branch. `swallowErrors: false`
+  // ensures a broken guard that property-accesses `null` surfaces as a throw
+  // rather than being silently swallowed (which would mask the mutant).
+  it('skips a null argument without recording', async () => {
+    const repo = new CapturingRepo()
+    const interceptor = new NotificationAuditInterceptor(buildOptions({ swallowErrors: false }), repo)
+    const ctx = buildContext([null, 'a string', 42])
+
+    await expect(firstValueFrom(interceptor.intercept(ctx, handlerOf(of('ok'))))).resolves.toBe('ok')
+    expect(repo.entries).toHaveLength(0)
+  })
+
+  // An object shaped like a dispatch input but whose `payload` is not an object is
+  // rejected — pins the `typeof payload === 'object' && payload !== null` guard. A
+  // broken guard would record an entry (mis-detection), which the length check fails.
+  it('skips an arg with a non-object payload', async () => {
+    const repo = new CapturingRepo()
+    const interceptor = new NotificationAuditInterceptor(buildOptions({ swallowErrors: false }), repo)
+    const ctx = buildContext([{ channel: 'otp', tenantId: 't', payload: 'not-an-object' }])
+
+    await expect(firstValueFrom(interceptor.intercept(ctx, handlerOf(of('ok'))))).resolves.toBe('ok')
+    expect(repo.entries).toHaveLength(0)
+  })
+
+  // An object with a valid channel but a null payload is also rejected — pins the
+  // `payload !== null` half of the guard.
+  it('skips an arg with a null payload', async () => {
+    const repo = new CapturingRepo()
+    const interceptor = new NotificationAuditInterceptor(buildOptions({ swallowErrors: false }), repo)
+    const ctx = buildContext([{ channel: 'email', tenantId: 't', payload: null }])
+
+    await expect(firstValueFrom(interceptor.intercept(ctx, handlerOf(of('ok'))))).resolves.toBe('ok')
+    expect(repo.entries).toHaveLength(0)
+  })
+
+  // An object whose channel is neither 'email' nor 'otp' is rejected — pins the
+  // channel discrimination, then the valid input later in the arg list is recorded.
+  it('skips a wrong-channel arg but records a later valid dispatch input', async () => {
+    const repo = new CapturingRepo()
+    const interceptor = new NotificationAuditInterceptor(buildOptions(), repo)
+    const ctx = buildContext([{ channel: 'sms', tenantId: 't', payload: {} }, otpInput])
+
+    await firstValueFrom(interceptor.intercept(ctx, handlerOf(of('ok'))))
+
+    expect(repo.entries).toHaveLength(1)
+    expect(repo.entries[0]?.channel).toBe('otp')
+  })
+
   // By default an audit write failure is swallowed and the flow proceeds.
   it('swallows audit write failures by default', async () => {
     const repo = new CapturingRepo()
@@ -192,9 +241,13 @@ describe('NotificationAuditInterceptor', () => {
     const interceptor = new NotificationAuditInterceptor(buildOptions({ swallowErrors: false }), repo)
     const ctx = buildContext([otpInput])
 
+    // Assert the rethrow carries the underlying cause — pins the `{ cause }` detail.
     await expect(
       firstValueFrom(interceptor.intercept(ctx, handlerOf(of('ok'))))
-    ).rejects.toMatchObject({ code: 'notification.audit_log_failed' })
+    ).rejects.toMatchObject({
+      code: 'notification.audit_log_failed',
+      response: { error: { details: { cause: 'db down' } } }
+    })
   })
 
   // A non-Error audit rejection is stringified into the AUDIT_LOG_FAILED cause.

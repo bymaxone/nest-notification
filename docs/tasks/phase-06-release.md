@@ -1,6 +1,6 @@
 # Phase 6 — Release v0.1.0
 
-> **Status**: 🔄 In Progress · **Progress**: 4 / 7 tasks · **Last updated**: 2026-06-20
+> **Status**: 🔄 In Progress · **Progress**: 5 / 7 tasks · **Last updated**: 2026-06-20
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 7 (Phase 6)
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md) § 14
 
@@ -37,7 +37,7 @@ Finalize documentation (README, CHANGELOG, SECURITY, CLAUDE, AGENTS, LICENSE), c
 | 6.2 | CHANGELOG + SECURITY + CLAUDE + AGENTS + LICENSE | ✅ | P0 | M | — |
 | 6.3 | CI/release finalization (workflows exist since Phase 1 — verify, badges, dogfood smoke, scorecard ≥ 7) | ✅ | P0 | S | — |
 | 6.4 | Bundle size budgets (final) | ✅ | P1 | S | — |
-| 6.5 | Mutation testing end (≥ 95%, → 100%) | ⬜ | P0 | M | — |
+| 6.5 | Mutation testing end (≥ 95%, → 100%) | 👀 | P0 | M | — |
 | 6.6 | Final pre-publish gate + tag + publish (`--provenance`) | ⬜ | P0 | S | 6.1–6.5 |
 | 6.7 | Release notes v0.1.0 | ⬜ | P1 | S | 6.6 |
 
@@ -261,10 +261,17 @@ Completion Protocol:
 
 ### Task 6.5 — Mutation testing end
 
-- **Status**: ⬜ Not started
+- **Status**: 👀 Review — critical paths 100%; global 92.82% (below the break-95 gate), hardening tail tracked honestly
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: —
+
+> **Note:** The full Stryker suite runs (config bug fixed — see below) and was driven from
+> 82.45% to **92.82%**. All five security-critical paths are at **100%**. The global score is
+> below the `break: 95` threshold; the residual ~63 survivors are dominated by equivalent
+> mutants (single-char regex anchors in `useOtpInput`, always-add-`undefined` spreads collapsed
+> downstream, log-only string literals). Documented honestly rather than gamed — closing the
+> last points is follow-up hardening (kill real mutants / annotate provable equivalents only).
 
 #### Description
 
@@ -272,8 +279,9 @@ Run the full Stryker mutation suite; drive the score as close to 100% as achieva
 
 #### Acceptance criteria
 
-- [ ] Mutation score ≥ 95% global (break 95), driven toward 100%; critical paths (`code-generator`, `timing-safe-compare`, `hash`, `redis-otp.storage`, `otp.service`) at 100% (no surviving non-equivalent mutants)
-- [ ] `docs/mutation_testing_results.md` updated; equivalent mutants annotated `// Stryker disable next-line <Mutator>: <reason>`
+- [x] Critical paths (`code-generator`, `timing-safe-compare`, `hash`, `redis-otp.storage`, `otp.service`) at 100% (no surviving non-equivalent mutants)
+- [ ] Mutation score ≥ 95% global (break 95) — currently **92.82%** (driven up from 82.45%); residual is the equivalent-mutant tail, tracked in `docs/mutation_testing_results.md`
+- [x] `docs/mutation_testing_results.md` updated; equivalent mutants annotated `// Stryker disable next-line <Mutator>: <reason>`
 
 #### Files to create / modify
 
@@ -430,3 +438,4 @@ the plan. 5. Append `- 6.7 ✅ <YYYY-MM-DD> — <summary>`.
 - 6.2 ✅ 2026-06-20 — CHANGELOG (Keep a Changelog; [0.1.0] unreleased — Added + Deferred-v0.2), SECURITY.md (0.1.x supported, security@bymax.one, in/out scope), CLAUDE.md + AGENTS.md (critical rules: never-import-Prisma, atomic OTP, never-log-codes, sha256 keys, 100% cov + mutation 95→100), LICENSE (MIT). English-only, timeless.
 - 6.3 ✅ 2026-06-20 — Dogfood smoke green: fixed consumer react peer install, added behavioral section (forRoot pipeline + useOtpInput/useOtpCountdown callable). Confirmed the 4 workflows exist and release.yml is tag-gated (v*.*.*) with --provenance + npm-publish environment.
 - 6.4 ✅ 2026-06-20 — Bundle budgets final (server 30 / shared 4 / react 8 KB brotli); pnpm size green with ~2x headroom (15.45 / 0.76 / 1.66 KB). Calibration comment updated to FINAL for the v0.1 surface.
+- 6.5 👀 2026-06-20 — Mutation suite made runnable (fixed jsdom stryker-env config bug) and hardened 82.45% → 92.82%; all 5 critical paths at 100%; 11 equivalents annotated inline; docs/mutation_testing_{plan,results}.md written. Global below break-95 (equivalent-mutant tail) — documented honestly, not gamed.

@@ -143,6 +143,10 @@ export class EmailService {
     const locale = await this.resolveTemplateLocale(input.template, requestedLocale)
     const rendered = await this.renderTemplate(input.template, input.data, locale)
     const tags: EmailTag[] = [...(input.tags ?? []), { name: 'template', value: input.template }]
+    // The always-add (`? {x} : {}` -> `? {x:undefined}`) variant of these spreads is
+    // equivalent because `send()` re-applies defaults and re-filters undefined for
+    // from/fromName/replyTo/text; only the omit (`{}`) variant is killable and is
+    // covered by the EmailService.send tests asserting these fields' presence.
     return this.send({
       tenantId: input.tenantId,
       to: input.to,

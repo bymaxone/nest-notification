@@ -86,9 +86,33 @@ describe('EmailService.send', () => {
         ]
       })
     )
-    expect(audit.create).toHaveBeenCalledWith(
-      expect.objectContaining({ verb: 'sent', recipient: 'masked:jane@acme.com', messageId: 'msg_1', userId: 'u1' })
-    )
+    // Exact audit shape (minus the volatile timestamp): pins the messageId and
+    // userId conditional spreads in the audit-entry builder.
+    const sentEntry = audit.create.mock.calls[0]?.[0]
+    expect(sentEntry).toMatchObject({
+      channel: 'email',
+      verb: 'sent',
+      recipient: 'masked:jane@acme.com',
+      providerName: 'resend',
+      messageId: 'msg_1',
+      userId: 'u1'
+    })
+    expect('errorMessage' in sentEntry!).toBe(false)
+  })
+
+  // A NotificationException thrown inside send (e.g. attachments too large, raised
+  // before the provider call) is rethrown verbatim — never remapped to
+  // EMAIL_SEND_FAILED and never audited as a provider "failed". Pins the
+  // `error instanceof NotificationException` rethrow branch.
+  it('should rethrow a NotificationException without remapping or auditing failed', async () => {
+    const provider = makeProvider()
+    const audit = makeAudit()
+    const service = new EmailService(makeOptions({ maxAttachmentBytes: 1 }), provider, makeRenderer(), audit)
+
+    await expect(
+      service.send({ ...baseInput, attachments: [{ filename: 'big', content: 'toolong' }] })
+    ).rejects.toMatchObject({ code: 'notification.email_attachments_too_large' })
+    expect(audit.create).not.toHaveBeenCalledWith(expect.objectContaining({ verb: 'failed' }))
   })
 
   // All optional envelope fields and a caller-supplied from must reach the provider.
@@ -96,6 +120,10 @@ describe('EmailService.send', () => {
     const provider = makeProvider()
     const service = new EmailService(makeOptions(), provider, makeRenderer(), makeAudit())
 
+    const attachments = [
+      { filename: 'a.txt', content: 'hello' },
+      { filename: 'b.bin', content: Buffer.from([1, 2, 3]) }
+    ]
     await service.send({
       ...baseInput,
       from: 'custom@acme.com',
@@ -104,22 +132,50 @@ describe('EmailService.send', () => {
       text: 'plain',
       cc: 'cc@acme.com',
       bcc: ['bcc@acme.com'],
-      attachments: [
-        { filename: 'a.txt', content: 'hello' },
-        { filename: 'b.bin', content: Buffer.from([1, 2, 3]) }
-      ]
+      attachments
     })
 
-    expect(provider.send).toHaveBeenCalledWith(
-      expect.objectContaining({
-        from: 'custom@acme.com',
-        fromName: 'Custom',
-        replyTo: 'r@acme.com',
-        text: 'plain',
-        cc: 'cc@acme.com',
-        bcc: ['bcc@acme.com']
-      })
-    )
+    // Exact match: every optional field — including cc/bcc/attachments and the
+    // default-tag concatenation — must be forwarded, so dropping any spread fails.
+    expect(provider.send).toHaveBeenCalledWith({
+      to: 'jane@acme.com',
+      from: 'custom@acme.com',
+      subject: 'S',
+      html: '<p>B</p>',
+      tags: [],
+      fromName: 'Custom',
+      replyTo: 'r@acme.com',
+      text: 'plain',
+      cc: 'cc@acme.com',
+      bcc: ['bcc@acme.com'],
+      attachments
+    })
+  })
+
+  // Attachments exactly at the byte budget are accepted — pins the `> maxBytes`
+  // boundary so a `>= maxBytes` mutant (which would reject the exact size) dies.
+  // A string content of length 5 is 5 bytes; the budget is 5.
+  it('should accept attachments exactly at the byte budget', async () => {
+    const provider = makeProvider()
+    const service = new EmailService(makeOptions({ maxAttachmentBytes: 5 }), provider, makeRenderer(), makeAudit())
+
+    await expect(
+      service.send({ ...baseInput, attachments: [{ filename: 'edge', content: 'abcde' }] })
+    ).resolves.toEqual({ messageId: 'msg_1' })
+    expect(provider.send).toHaveBeenCalledTimes(1)
+  })
+
+  // A Buffer attachment is measured by its byte length (`content.length`), not the
+  // string path — pins the `typeof content === 'string'` branch. Three bytes are
+  // under the budget of 3? No: exactly 3, which must pass; four bytes must fail.
+  it('should measure Buffer attachment size by byte length', async () => {
+    const provider = makeProvider()
+    const service = new EmailService(makeOptions({ maxAttachmentBytes: 3 }), provider, makeRenderer(), makeAudit())
+
+    await expect(
+      service.send({ ...baseInput, attachments: [{ filename: 'buf', content: Buffer.from([1, 2, 3, 4]) }] })
+    ).rejects.toMatchObject({ code: 'notification.email_attachments_too_large' })
+    expect(provider.send).not.toHaveBeenCalled()
   })
 
   // With no caller and no default name/reply-to, those header keys are omitted.
@@ -130,8 +186,29 @@ describe('EmailService.send', () => {
     await service.send(baseInput)
 
     const sent = provider.send.mock.calls[0]?.[0]
-    expect(sent).not.toHaveProperty('fromName')
-    expect(sent).not.toHaveProperty('replyTo')
+    // Every optional that the minimal input omits must be absent as a KEY (not just
+    // `undefined`) — pins each conditional spread's omission branch against the
+    // always-add (`true`) mutant that would inject `key: undefined`.
+    for (const key of ['fromName', 'replyTo', 'text', 'cc', 'bcc', 'attachments']) {
+      expect(key in sent!).toBe(false)
+    }
+  })
+
+  // A failed send audits an entry that carries errorMessage but no messageId/userId
+  // — pins the messageId/userId/errorMessage conditional spreads in the audit builder.
+  it('should build the failed audit entry with errorMessage and without messageId', async () => {
+    const provider = makeProvider()
+    provider.send.mockRejectedValue(new Error('smtp down'))
+    const audit = makeAudit()
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), audit)
+
+    await expect(service.send(baseInput)).rejects.toMatchObject({
+      code: 'notification.email_send_failed'
+    })
+    const failedEntry = audit.create.mock.calls[0]?.[0]
+    expect(failedEntry).toMatchObject({ verb: 'failed', errorMessage: 'smtp down' })
+    expect('messageId' in failedEntry!).toBe(false)
+    expect('userId' in failedEntry!).toBe(false)
   })
 
   // A masked array recipient must be joined with ", " in the audit entry.
@@ -215,15 +292,41 @@ describe('EmailService.send', () => {
     await expect(service.send(baseInput)).resolves.toEqual({ messageId: 'msg_1' })
   })
 
-  // With swallowErrors false an audit failure surfaces as AUDIT_LOG_FAILED.
+  // With swallowErrors false an audit failure surfaces as AUDIT_LOG_FAILED carrying
+  // the underlying cause — pins the `{ cause }` detail object on the rethrow.
   it('should propagate AUDIT_LOG_FAILED when swallowErrors is false', async () => {
     const audit = makeAudit()
     audit.create.mockRejectedValue(new Error('db down'))
     const service = new EmailService(makeOptions({}, { swallowErrors: false }), makeProvider(), makeRenderer(), audit)
 
+    expect.assertions(2)
+    try {
+      await service.send(baseInput)
+    } catch (error) {
+      expect((error as NotificationException).code).toBe('notification.audit_log_failed')
+      const details = (
+        error as { getResponse: () => { error: { details: Record<string, unknown> } } }
+      ).getResponse().error.details
+      expect(details.cause).toBe('db down')
+    }
+  })
+
+  // When the SUCCESS-path audit throws AUDIT_LOG_FAILED (a NotificationException) and
+  // only that first audit call fails, the catch must RETHROW it verbatim — not fall
+  // through to a second audit + EMAIL_SEND_FAILED. Pins the `instanceof
+  // NotificationException` rethrow guard inside the provider catch.
+  it('should rethrow a NotificationException raised by the success-path audit', async () => {
+    const provider = makeProvider()
+    const audit = makeAudit()
+    // First (success) audit write fails; any later write succeeds.
+    audit.create.mockRejectedValueOnce(new Error('db down')).mockResolvedValue(undefined)
+    const service = new EmailService(makeOptions({}, { swallowErrors: false }), provider, makeRenderer(), audit)
+
     await expect(service.send(baseInput)).rejects.toMatchObject({
       code: 'notification.audit_log_failed'
     })
+    // The provider DID succeed; the failure came from the audit, so no EMAIL_SEND_FAILED.
+    expect(provider.send).toHaveBeenCalledTimes(1)
   })
 
   // A non-Error audit rejection is stringified into the AUDIT_LOG_FAILED cause.
@@ -263,6 +366,13 @@ describe('EmailService.sendTemplate', () => {
         ]
       })
     )
+    // The minimal template payload supplies no from-override/fromName/replyTo/userId,
+    // so those keys must be ABSENT in the inner send input — pins the omission side
+    // of the template-path conditional spreads against the always-add mutants.
+    const inner = provider.send.mock.calls[0]?.[0]
+    for (const key of ['fromName', 'replyTo', 'userId']) {
+      expect(key in inner!).toBe(false)
+    }
   })
 
   // Optional from/fromName/replyTo flow through the template path.
@@ -283,9 +393,47 @@ describe('EmailService.sendTemplate', () => {
       userId: 'u1'
     })
 
-    expect(provider.send).toHaveBeenCalledWith(
-      expect.objectContaining({ from: 'f@acme.com', fromName: 'F', replyTo: 'r@acme.com' })
-    )
+    // Exact match: the send input built by sendTemplate carries from/fromName/replyTo
+    // /userId; the renderer returned no `text`, so `text` must be ABSENT — pins both
+    // sides of every conditional spread in the template path.
+    const sent = provider.send.mock.calls[0]?.[0]
+    expect(sent?.from).toBe('f@acme.com')
+    expect(sent?.fromName).toBe('F')
+    expect(sent?.replyTo).toBe('r@acme.com')
+    expect('text' in sent!).toBe(false)
+  })
+
+  // userId supplied to sendTemplate must reach the inner send() and thus the audit
+  // entry — pins the userId conditional spread in the template path (the inner send
+  // input is not directly observable, but the audit entry carries the userId).
+  it('should forward userId from sendTemplate into the audit entry', async () => {
+    const provider = makeProvider()
+    const renderer = makeRenderer()
+    const audit = makeAudit()
+    const service = new EmailService(makeOptions(), provider, renderer, audit)
+
+    await service.sendTemplate({
+      tenantId: 't',
+      to: 'a@x.com',
+      template: 'welcome',
+      data: {},
+      userId: 'user-9'
+    })
+
+    expect(audit.create).toHaveBeenCalledWith(expect.objectContaining({ userId: 'user-9' }))
+  })
+
+  // sendTemplate without a userId must NOT surface a userId key in the audit entry.
+  it('should omit userId from the audit entry when sendTemplate has none', async () => {
+    const provider = makeProvider()
+    const renderer = makeRenderer()
+    const audit = makeAudit()
+    const service = new EmailService(makeOptions(), provider, renderer, audit)
+
+    await service.sendTemplate({ tenantId: 't', to: 'a@x.com', template: 'welcome', data: {} })
+
+    const entry = audit.create.mock.calls[0]?.[0]
+    expect('userId' in entry!).toBe(false)
   })
 
   // When the requested locale has no template, the en fallback is used.

@@ -50,13 +50,24 @@ describe('NotificationService.dispatch — email', () => {
       }
     })
 
-    expect(email.sendTemplate).toHaveBeenCalledWith(
-      expect.objectContaining({ template: 'welcome', data: { n: 1 }, locale: 'pt', from: 'f@x.com', userId: 'u' })
-    )
+    // Exact match: every optional field must be forwarded verbatim — pins each
+    // conditional-spread so dropping any field (mutant → {}) is caught.
+    expect(email.sendTemplate).toHaveBeenCalledWith({
+      tenantId: 't',
+      to: 'a@x.com',
+      template: 'welcome',
+      data: { n: 1 },
+      locale: 'pt',
+      from: 'f@x.com',
+      fromName: 'F',
+      replyTo: 'r@x.com',
+      tags: [{ name: 'k', value: 'v' }],
+      userId: 'u'
+    })
     expect(result).toEqual({ channel: 'email', messageId: 'tpl_1' })
   })
 
-  // A minimal template payload defaults data to {} and omits absent fields.
+  // A minimal template payload defaults data to {} and omits every absent field.
   it('should default data to {} for a minimal template payload', async () => {
     const email = makeEmail()
     await build(email).dispatch({
@@ -65,9 +76,21 @@ describe('NotificationService.dispatch — email', () => {
       payload: { to: 'a@x.com', template: 'welcome' }
     })
 
-    expect(email.sendTemplate).toHaveBeenCalledWith(
-      expect.objectContaining({ template: 'welcome', data: {} })
-    )
+    // Exact match: absent optionals must NOT appear (no `locale: undefined` etc.) —
+    // pins the conditional spreads from the omission side.
+    const sent = email.sendTemplate.mock.calls[0]?.[0]
+    expect(sent).toEqual({
+      tenantId: 't',
+      to: 'a@x.com',
+      template: 'welcome',
+      data: {}
+    })
+    // `'key' in obj` distinguishes an absent key from an `undefined`-valued one,
+    // which jest's `toEqual` collapses — this pins the `... ? {} : ...` -> always-add
+    // (`true`) mutants that would inject `locale: undefined` etc.
+    for (const key of ['locale', 'from', 'fromName', 'replyTo', 'tags', 'userId']) {
+      expect(key in sent!).toBe(false)
+    }
   })
 
   // A raw payload with subject + html routes to send, forwarding optional fields.
@@ -89,13 +112,23 @@ describe('NotificationService.dispatch — email', () => {
       }
     })
 
-    expect(email.send).toHaveBeenCalledWith(
-      expect.objectContaining({ subject: 'S', html: '<p>H</p>', text: 'H', from: 'f@x.com', userId: 'u' })
-    )
+    // Exact match across every optional envelope field (text + the common fields).
+    expect(email.send).toHaveBeenCalledWith({
+      tenantId: 't',
+      to: 'a@x.com',
+      subject: 'S',
+      html: '<p>H</p>',
+      text: 'H',
+      from: 'f@x.com',
+      fromName: 'F',
+      replyTo: 'r@x.com',
+      tags: [{ name: 'k', value: 'v' }],
+      userId: 'u'
+    })
     expect(result).toEqual({ channel: 'email', messageId: 'raw_1' })
   })
 
-  // A minimal raw payload omits all optional fields.
+  // A minimal raw payload omits every optional field.
   it('should route a minimal subject+html payload to send', async () => {
     const email = makeEmail()
     await build(email).dispatch({
@@ -104,15 +137,28 @@ describe('NotificationService.dispatch — email', () => {
       payload: { to: 'a@x.com', subject: 'S', html: '<p>H</p>' }
     })
 
-    expect(email.send).toHaveBeenCalledWith(expect.objectContaining({ subject: 'S', html: '<p>H</p>' }))
+    // Exact match: no `text`/`from`/… keys when their payload fields are absent.
+    const sent = email.send.mock.calls[0]?.[0]
+    expect(sent).toEqual({ tenantId: 't', to: 'a@x.com', subject: 'S', html: '<p>H</p>' })
+    for (const key of ['text', 'from', 'fromName', 'replyTo', 'tags', 'userId']) {
+      expect(key in sent!).toBe(false)
+    }
   })
 
   // Neither a template nor subject+html → EMAIL_MISSING_BODY (the recipient is fine;
-  // the body source is what's missing, so the error must say so accurately).
+  // the body source is what's missing, so the error must say so accurately). The
+  // details carry a non-empty hint — pins the hint object and string literal.
   it('should throw EMAIL_MISSING_BODY when the payload has no body source', async () => {
-    await expect(
-      build(makeEmail()).dispatch({ channel: 'email', tenantId: 't', payload: { to: 'a@x.com' } })
-    ).rejects.toMatchObject({ code: 'notification.email_missing_body' })
+    expect.assertions(2)
+    try {
+      await build(makeEmail()).dispatch({ channel: 'email', tenantId: 't', payload: { to: 'a@x.com' } })
+    } catch (error) {
+      expect((error as { code: string }).code).toBe('notification.email_missing_body')
+      const details = (
+        error as { getResponse: () => { error: { details: { hint: string } } } }
+      ).getResponse().error.details
+      expect(details.hint).toContain('template')
+    }
   })
 
   // A subject without html is still a missing body source.
@@ -122,15 +168,23 @@ describe('NotificationService.dispatch — email', () => {
     ).rejects.toMatchObject({ code: 'notification.email_missing_body' })
   })
 
-  // Dispatching to email when the channel is absent throws CHANNEL_DISABLED.
+  // Dispatching to email when the channel is absent throws CHANNEL_DISABLED with the
+  // channel named in the details — pins the `{ channel: 'email' }` detail object.
   it('should throw CHANNEL_DISABLED when the email channel is absent', async () => {
-    await expect(
-      build(undefined, makeOtp()).dispatch({
+    expect.assertions(2)
+    try {
+      await build(undefined, makeOtp()).dispatch({
         channel: 'email',
         tenantId: 't',
         payload: { to: 'a@x.com', template: 'welcome' }
       })
-    ).rejects.toMatchObject({ code: 'notification.channel_disabled' })
+    } catch (error) {
+      expect((error as { code: string }).code).toBe('notification.channel_disabled')
+      const details = (
+        error as { getResponse: () => { error: { details: { channel: string } } } }
+      ).getResponse().error.details
+      expect(details.channel).toBe('email')
+    }
   })
 })
 
@@ -152,9 +206,17 @@ describe('NotificationService.dispatch — otp', () => {
       }
     })
 
-    expect(otp.generate).toHaveBeenCalledWith(
-      expect.objectContaining({ recipient: 'a@x.com', deliverVia: 'email', emailData: { name: 'A' }, userId: 'u' })
-    )
+    // Exact match: every OTP generate optional must be forwarded verbatim.
+    expect(otp.generate).toHaveBeenCalledWith({
+      tenantId: 't',
+      recipient: 'a@x.com',
+      purpose: 'email_verification',
+      deliverVia: 'email',
+      emailTemplate: 'otp_code',
+      emailData: { name: 'A' },
+      locale: 'en',
+      userId: 'u'
+    })
     expect(result).toEqual({ channel: 'otp', result: { expiresAt: 1, cooldownSeconds: 60 } })
   })
 
@@ -167,7 +229,11 @@ describe('NotificationService.dispatch — otp', () => {
       payload: { recipient: 'a@x.com', purpose: 'p' }
     })
 
-    expect(otp.generate).toHaveBeenCalledWith({ tenantId: 't', recipient: 'a@x.com', purpose: 'p' })
+    const sent = otp.generate.mock.calls[0]?.[0]
+    expect(sent).toEqual({ tenantId: 't', recipient: 'a@x.com', purpose: 'p' })
+    for (const key of ['deliverVia', 'emailTemplate', 'emailData', 'locale', 'userId']) {
+      expect(key in sent!).toBe(false)
+    }
   })
 
   // The verify action forwards the supplied code.
@@ -179,9 +245,14 @@ describe('NotificationService.dispatch — otp', () => {
       payload: { recipient: 'a@x.com', purpose: 'p', action: 'verify', code: '123456', userId: 'u' }
     })
 
-    expect(otp.verify).toHaveBeenCalledWith(
-      expect.objectContaining({ recipient: 'a@x.com', code: '123456', userId: 'u' })
-    )
+    // Exact match: the verify ref carries userId only when supplied.
+    expect(otp.verify).toHaveBeenCalledWith({
+      tenantId: 't',
+      recipient: 'a@x.com',
+      purpose: 'p',
+      code: '123456',
+      userId: 'u'
+    })
   })
 
   // A verify action without a code falls back to an empty string (fails closed).
@@ -193,7 +264,11 @@ describe('NotificationService.dispatch — otp', () => {
       payload: { recipient: 'a@x.com', purpose: 'p', action: 'verify' }
     })
 
-    expect(otp.verify).toHaveBeenCalledWith(expect.objectContaining({ code: '' }))
+    // Exact: no userId key when the payload omits it — pins the userId spread in
+    // the verify ref (the `... ? {} : ...` -> always-add mutant injects undefined).
+    const sent = otp.verify.mock.calls[0]?.[0]
+    expect(sent).toEqual({ tenantId: 't', recipient: 'a@x.com', purpose: 'p', code: '' })
+    expect('userId' in sent!).toBe(false)
   })
 
   // The consume action routes to consume.
@@ -208,15 +283,23 @@ describe('NotificationService.dispatch — otp', () => {
     expect(otp.consume).toHaveBeenCalledWith({ tenantId: 't', recipient: 'a@x.com', purpose: 'p' })
   })
 
-  // Dispatching to OTP when the channel is absent throws CHANNEL_DISABLED.
+  // Dispatching to OTP when the channel is absent throws CHANNEL_DISABLED naming the
+  // otp channel in details — pins the `{ channel: 'otp' }` detail object.
   it('should throw CHANNEL_DISABLED when the OTP channel is absent', async () => {
-    await expect(
-      build(makeEmail(), undefined).dispatch({
+    expect.assertions(2)
+    try {
+      await build(makeEmail(), undefined).dispatch({
         channel: 'otp',
         tenantId: 't',
         payload: { recipient: 'a@x.com', purpose: 'p' }
       })
-    ).rejects.toMatchObject({ code: 'notification.channel_disabled' })
+    } catch (error) {
+      expect((error as { code: string }).code).toBe('notification.channel_disabled')
+      const details = (
+        error as { getResponse: () => { error: { details: { channel: string } } } }
+      ).getResponse().error.details
+      expect(details.channel).toBe('otp')
+    }
   })
 })
 
