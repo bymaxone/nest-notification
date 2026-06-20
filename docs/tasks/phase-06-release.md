@@ -1,6 +1,6 @@
 # Phase 6 — Release v0.1.0
 
-> **Status**: 🔄 In Progress · **Progress**: 1 / 7 tasks · **Last updated**: 2026-06-20
+> **Status**: 🔄 In Progress · **Progress**: 2 / 7 tasks · **Last updated**: 2026-06-20
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 7 (Phase 6)
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md) § 14
 
@@ -34,7 +34,7 @@ Finalize documentation (README, CHANGELOG, SECURITY, CLAUDE, AGENTS, LICENSE), c
 | ID | Task | Status | Priority | Size | Depends on |
 |---|---|---|---|---|---|
 | 6.1 | README (badges, quick start, 3 scenarios, multi-tenant security) | ✅ | P0 | M | — |
-| 6.2 | CHANGELOG + SECURITY + CLAUDE + AGENTS + LICENSE | ⬜ | P0 | M | — |
+| 6.2 | CHANGELOG + SECURITY + CLAUDE + AGENTS + LICENSE | ✅ | P0 | M | — |
 | 6.3 | CI/release finalization (workflows exist since Phase 1 — verify, badges, dogfood smoke, scorecard ≥ 7) | ⬜ | P0 | S | — |
 | 6.4 | Bundle size budgets (final) | ⬜ | P1 | S | — |
 | 6.5 | Mutation testing end (≥ 95%, → 100%) | ⬜ | P0 | M | — |
@@ -100,7 +100,7 @@ Completion Protocol:
 
 ### Task 6.2 — CHANGELOG + SECURITY + CLAUDE + AGENTS + LICENSE
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: —
@@ -111,7 +111,7 @@ Author the supporting docs mirroring `nest-auth`.
 
 #### Acceptance criteria
 
-- [ ] `CHANGELOG.md` (Keep a Changelog; `[0.1.0]` Added + Deferred-v0.2); `SECURITY.md` (supported versions, `security@bymax.one`, in/out scope); `CLAUDE.md` + `AGENTS.md` (critical rules incl. never-import-Prisma, atomic OTP, never-log-codes, 100%/mutation 95); `LICENSE` (MIT)
+- [x] `CHANGELOG.md` (Keep a Changelog; `[0.1.0]` Added + Deferred-v0.2); `SECURITY.md` (supported versions, `security@bymax.one`, in/out scope); `CLAUDE.md` + `AGENTS.md` (critical rules incl. never-import-Prisma, atomic OTP, never-log-codes, 100%/mutation 95); `LICENSE` (MIT)
 
 #### Files to create / modify
 
@@ -427,3 +427,4 @@ the plan. 5. Append `- 6.7 ✅ <YYYY-MM-DD> — <summary>`.
 > Append-only. One line per completed task: `- <task-id> ✅ YYYY-MM-DD — <one-line summary>`.
 
 - 6.1 ✅ 2026-06-20 — Full README: badges, overview, subpath table, 3 copy-pasteable scenarios (dev NoOp+InMemory, prod Resend+Redis, Prisma audit), configuration table, BYO-provider, multi-tenant security, templates + React hooks, testing, roadmap (v0.2 SMS/Push).
+- 6.2 ✅ 2026-06-20 — CHANGELOG (Keep a Changelog; [0.1.0] unreleased — Added + Deferred-v0.2), SECURITY.md (0.1.x supported, security@bymax.one, in/out scope), CLAUDE.md + AGENTS.md (critical rules: never-import-Prisma, atomic OTP, never-log-codes, sha256 keys, 100% cov + mutation 95→100), LICENSE (MIT). English-only, timeless.
