@@ -1,6 +1,6 @@
 # Phase 1 — Foundation + Interfaces (`IEmailProvider` + `IOtpStorage`)
 
-> **Status**: 🔄 In Progress · **Progress**: 5 / 11 tasks · **Last updated**: 2026-06-19
+> **Status**: 🔄 In Progress · **Progress**: 6 / 11 tasks · **Last updated**: 2026-06-19
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 2 (Phase 1)
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md)
 
@@ -44,7 +44,7 @@ The flagship decision baked in here is the **dissolution of the Prisma coupling*
 | 1.3 | Main interfaces (`IEmailProvider`, `IOtpStorage` + atomic methods, renderer, log, SMS/Push sketches, module options, `NotificationRequest`) | ✅ | P0 | M | 1.1, 1.2 |
 | 1.4 | Injection tokens + error catalog (incl. `OTP_EMAIL_DELIVERY_NOT_CONFIGURED`) + `NotificationException` + default-options constants | ✅ | P0 | M | 1.2, 1.3 |
 | 1.5 | Options validation + resolution (`ResolvedNotificationOptions` + `resolveForPurpose`, `maxAttachmentBytes`, `maskRecipient`) | ✅ | P0 | M | 1.3, 1.4 |
-| 1.6 | No-op providers + minimal `DefaultTemplateRenderer` (escape html body only) | ⬜ | P0 | S | 1.3 |
+| 1.6 | No-op providers + minimal `DefaultTemplateRenderer` (escape html body only) | ✅ | P0 | S | 1.3 |
 | 1.7 | Crypto utils — `hash`, `code-generator` (digit-by-digit), `safeCompare` (length-guard) | ⬜ | P0 | M | 1.4 |
 | 1.8 | Dynamic module — synchronous `forRoot()` with conditional registration | ⬜ | P0 | M | 1.5, 1.6 |
 | 1.9 | Server barrel exports | ⬜ | P1 | S | 1.3–1.8 |
@@ -445,7 +445,7 @@ Completion Protocol:
 
 ### Task 1.6 — No-op providers + minimal `DefaultTemplateRenderer`
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: S
 - **Depends on**: 1.3
@@ -456,10 +456,10 @@ Implement `NoOpEmailProvider` (logs `to`+`subject` only, never the body), `NoOpN
 
 #### Acceptance criteria
 
-- [ ] `NoOpEmailProvider.send()` returns a `messageId` and NEVER logs `html`/`text`
-- [ ] `NoOpNotificationLogRepository.create()` resolves to nothing (idempotent)
-- [ ] `DefaultTemplateRenderer.render` applies `escapeHtml` only to the html body (`fill(subject,false)`, `fill(html,true)`, `fill(text,false)`); falls back to `en`; throws with the template name when missing
-- [ ] Coverage 100% on all three files
+- [x] `NoOpEmailProvider.send()` returns a `messageId` and NEVER logs `html`/`text`
+- [x] `NoOpNotificationLogRepository.create()` resolves to nothing (idempotent)
+- [x] `DefaultTemplateRenderer.render` applies `escapeHtml` only to the html body (`fill(subject,false)`, `fill(html,true)`, `fill(text,false)`); falls back to `en`; throws with the template name when missing
+- [x] Coverage 100% on all three files
 
 #### Files to create / modify
 
@@ -827,3 +827,4 @@ in `docs/development_plan.md`. 5. Append `- 1.11 ✅ <YYYY-MM-DD> — <summary>`
 - 1.3 ✅ 2026-06-19 — Interfaces: `IEmailProvider`, `IOtpStorage` (atomic `consumeAttempt`/`tryAcquireCooldown`/`clearCooldown`, Prisma-dissolution note), renderer, log repo, SMS/Push v0.2 sketches, module options (+`NotificationRequest`, async factory). Zero `any`.
 - 1.4 ✅ 2026-06-19 — 7 Symbol DI tokens, the 21-entry `NOTIFICATION_ERROR_DEFINITIONS` (+`OTP_EMAIL_DELIVERY_NOT_CONFIGURED`, `Map`-based lookup), `NotificationException`, `NOTIFICATION_PURPOSES`, `DEFAULT_*_OPTIONS`. Server/shared parity asserted; 100% coverage.
 - 1.5 ✅ 2026-06-19 — `validateOptions` (all rejection rules incl. sms/push v0.2), `resolveOptions` → deep-frozen `ResolvedNotificationOptions` with `resolveForPurpose`, `maxAttachmentBytes` (10 MiB), identity `maskRecipient`. 100% coverage.
+- 1.6 ✅ 2026-06-19 — `NoOpEmailProvider` (logs to+subject, never body), `NoOpNotificationLogRepository` (silent discard), `DefaultTemplateRenderer` (`{{var}}` interpolation, html-only escape, `en` fallback). 100% coverage.
