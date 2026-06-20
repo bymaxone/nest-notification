@@ -1,0 +1,53 @@
+// Prisma fragment for the @bymax-one/nest-notification audit log.
+//
+// How to use:
+//   1. Copy this `NotificationLog` model into your application's schema.prisma.
+//   2. Run `prisma migrate dev` to create the `notification_logs` table.
+//   3. Implement `INotificationLogRepository` with your `PrismaClient`
+//      (see `prisma-repository.example.md` in this folder).
+//
+// IMPORTANT: this fragment is a REFERENCE for consumers only. The library
+// `@bymax-one/nest-notification` NEVER imports `@prisma/client` — all persistence
+// flows through the `INotificationLogRepository` interface that YOU implement, so
+// the library stays database-agnostic (Prisma, TypeORM, Drizzle, Mongo, ClickHouse,
+// BigQuery, …). The `pnpm check:no-prisma` CI gate enforces this on every commit.
+//
+// Field mapping — every field mirrors `NotificationLogEntry`:
+//   timestamp     -> entry.timestamp (Unix ms; stored as DateTime)
+//   tenantId      -> entry.tenantId
+//   channel       -> entry.channel      ('email' | 'otp' | 'sms' | 'push')
+//   verb          -> entry.verb         ('sent' | 'generated' | 'verified' |
+//                                         'failed' | 'cooldown_blocked' |
+//                                         'max_attempts_exceeded')
+//   recipient     -> entry.recipient    (already masked when a masker is configured)
+//   purpose       -> entry.purpose      (OTP purpose or email template name)
+//   providerName  -> entry.providerName ('resend', 'twilio', '__interceptor__', …)
+//   messageId     -> entry.messageId    (provider correlation id)
+//   errorMessage  -> entry.errorMessage (message only — NEVER a stack trace; OTP
+//                                         codes are NEVER recorded here)
+//   userId        -> entry.userId
+//   metadata      -> entry.metadata     (arbitrary caller JSON)
+
+model NotificationLog {
+  id           String   @id @default(uuid())
+  timestamp    DateTime @default(now())
+  tenantId     String
+  channel      String
+  verb         String
+  recipient    String
+  purpose      String?
+  providerName String
+  messageId    String?
+  errorMessage String?  @db.Text
+  userId       String?
+  metadata     Json?
+
+  // Tenant-scoped recent-activity feed.
+  @@index([tenantId, timestamp(sort: Desc)])
+  // Tenant-scoped filtering by channel + verb (e.g. all failed OTP sends).
+  @@index([tenantId, channel, verb])
+  // Per-user activity timeline.
+  @@index([userId, timestamp(sort: Desc)])
+
+  @@map("notification_logs")
+}
