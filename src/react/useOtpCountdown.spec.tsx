@@ -119,4 +119,30 @@ describe('useOtpCountdown', () => {
 
     expect(result.current.remainingSeconds).toBe(120)
   })
+
+  // An already-past expiry fires onExpired on mount and never starts a clock.
+  it('should fire onExpired immediately and start no interval when already expired', () => {
+    const onExpired = jest.fn()
+    const setIntervalSpy = jest.spyOn(globalThis, 'setInterval')
+
+    const { result } = renderHook(() => useOtpCountdown({ expiresAt: -1000, onExpired }))
+
+    expect(result.current.remainingSeconds).toBe(0)
+    expect(result.current.expired).toBe(true)
+    expect(onExpired).toHaveBeenCalledTimes(1)
+    expect(setIntervalSpy).not.toHaveBeenCalled()
+
+    act(() => {
+      jest.advanceTimersByTime(10_000)
+    })
+    expect(onExpired).toHaveBeenCalledTimes(1)
+  })
+
+  // The immediate-expiry path is safe when no onExpired callback is supplied.
+  it('should reach zero immediately without throwing when already expired and no callback', () => {
+    const { result } = renderHook(() => useOtpCountdown({ expiresAt: 0 }))
+
+    expect(result.current.remainingSeconds).toBe(0)
+    expect(result.current.expired).toBe(true)
+  })
 })

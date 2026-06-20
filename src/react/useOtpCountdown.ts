@@ -76,7 +76,14 @@ export function useOtpCountdown(options: UseOtpCountdownOptions): UseOtpCountdow
     }
     // Recompute immediately so a re-render with a new `expiresAt` does not wait
     // a full tick before reflecting the change.
-    setRemainingSeconds(computeRemaining(expiresAt))
+    const initial = computeRemaining(expiresAt)
+    setRemainingSeconds(initial)
+    // Already expired: fire the one-shot callback now and skip the interval —
+    // no point ticking a clock that has already reached zero.
+    if (initial === 0) {
+      onExpiredRef.current?.()
+      return
+    }
     const interval = setInterval(() => {
       const remaining = computeRemaining(expiresAt)
       setRemainingSeconds(remaining)
