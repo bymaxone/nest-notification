@@ -1,0 +1,162 @@
+{
+  "name": "@bymax-one/nest-notification",
+  "version": "0.1.0",
+  "description": "Multi-channel notification library for NestJS — email, OTP, SMS, push — with pluggable providers and storage, multi-tenant by design, zero runtime dependencies.",
+  "author": "Bymax One <support@bymax.one>",
+  "license": "MIT",
+  "homepage": "https://github.com/bymaxone/nest-notification#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bymaxone/nest-notification.git"
+  },
+  "bugs": {
+    "url": "https://github.com/bymaxone/nest-notification/issues"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "LICENSE",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/server/index.d.ts",
+      "import": "./dist/server/index.mjs",
+      "require": "./dist/server/index.cjs"
+    },
+    "./shared": {
+      "types": "./dist/shared/index.d.ts",
+      "import": "./dist/shared/index.mjs",
+      "require": "./dist/shared/index.cjs"
+    },
+    "./react": {
+      "types": "./dist/react/index.d.ts",
+      "import": "./dist/react/index.mjs",
+      "require": "./dist/react/index.cjs"
+    }
+  },
+  "scripts": {
+    "build": "pnpm clean && tsup",
+    "lint": "eslint src scripts",
+    "lint:fix": "eslint src scripts --fix",
+    "test": "jest",
+    "test:cov": "jest --coverage",
+    "test:watch": "jest --watch",
+    "test:e2e": "jest --config jest.e2e.config.ts --runInBand",
+    "test:all": "pnpm test && pnpm test:e2e",
+    "test:cov:all": "jest --config jest.coverage.config.ts --coverage",
+    "mutation": "stryker run",
+    "mutation:incremental": "stryker run --incremental",
+    "mutation:dry-run": "stryker run --dryRunOnly",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.server.json",
+    "size": "node scripts/check-size.mjs",
+    "clean": "rm -rf dist coverage",
+    "check:no-prisma": "grep -r '@prisma/client' src && exit 1 || exit 0",
+    "prepublishOnly": "pnpm clean && pnpm typecheck && pnpm lint && pnpm check:no-prisma && pnpm test:cov:all && pnpm build",
+    "release": "pnpm publish --provenance"
+  },
+  "dependencies": {},
+  "peerDependencies": {
+    "@nestjs/common": "^11.0.0",
+    "@nestjs/core": "^11.0.0",
+    "reflect-metadata": "^0.2.0",
+    "ioredis": "^5.0.0",
+    "resend": "^4.0.0",
+    "@sendgrid/mail": "^8.0.0",
+    "@aws-sdk/client-ses": "^3.0.0",
+    "@aws-sdk/client-sns": "^3.0.0",
+    "mailgun.js": "^11.0.0",
+    "nodemailer": "^7.0.0",
+    "twilio": "^5.0.0",
+    "firebase-admin": "^13.0.0",
+    "@aws-sdk/client-dynamodb": "^3.0.0",
+    "handlebars": "^4.0.0",
+    "@react-email/render": "^1.0.0",
+    "mjml": "^4.0.0",
+    "class-validator": "^0.14.0 || ^0.15.0",
+    "class-transformer": "^0.5.0",
+    "express": "^5.0.0",
+    "@types/express": "^5.0.0",
+    "react": "^19.0.0"
+  },
+  "peerDependenciesMeta": {
+    "ioredis": { "optional": true },
+    "resend": { "optional": true },
+    "@sendgrid/mail": { "optional": true },
+    "@aws-sdk/client-ses": { "optional": true },
+    "@aws-sdk/client-sns": { "optional": true },
+    "mailgun.js": { "optional": true },
+    "nodemailer": { "optional": true },
+    "twilio": { "optional": true },
+    "firebase-admin": { "optional": true },
+    "@aws-sdk/client-dynamodb": { "optional": true },
+    "handlebars": { "optional": true },
+    "@react-email/render": { "optional": true },
+    "mjml": { "optional": true },
+    "class-validator": { "optional": true },
+    "class-transformer": { "optional": true },
+    "express": { "optional": true },
+    "@types/express": { "optional": true },
+    "react": { "optional": true }
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "@nestjs/common": "^11.1.20",
+    "@nestjs/core": "^11.1.20",
+    "@nestjs/testing": "^11.1.20",
+    "@stryker-mutator/core": "^9",
+    "@stryker-mutator/jest-runner": "^9",
+    "@stryker-mutator/typescript-checker": "^9",
+    "@testing-library/react": "^16",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^24",
+    "@types/react": "^19",
+    "@typescript-eslint/eslint-plugin": "^8.59.3",
+    "@typescript-eslint/parser": "^8.59.3",
+    "eslint": "^9.39.4",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-import-resolver-typescript": "^4.4.4",
+    "eslint-plugin-import": "^2.32.0",
+    "eslint-plugin-prettier": "^5.5.5",
+    "eslint-plugin-security": "^4.0.0",
+    "globals": "^17.6.0",
+    "jest": "^30.4.2",
+    "jest-environment-jsdom": "^30",
+    "prettier": "^3.8.3",
+    "react": "^19",
+    "react-dom": "^19",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.0",
+    "ts-jest": "^29.4.11",
+    "ts-node": "^10.9.2",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3"
+  },
+  "keywords": [
+    "nestjs",
+    "notification",
+    "email",
+    "otp",
+    "sms",
+    "push",
+    "resend",
+    "sendgrid",
+    "ses",
+    "twilio",
+    "fcm",
+    "multi-tenant",
+    "redis",
+    "transactional",
+    "saas"
+  ],
+  "packageManager": "pnpm@10.8.1",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
+}
