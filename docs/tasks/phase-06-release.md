@@ -38,7 +38,7 @@ Finalize documentation (README, CHANGELOG, SECURITY, CLAUDE, AGENTS, LICENSE), c
 | 6.3 | CI/release finalization (workflows exist since Phase 1 — verify, badges, dogfood smoke, scorecard ≥ 7) | ✅ | P0 | S | — |
 | 6.4 | Bundle size budgets (final) | ✅ | P1 | S | — |
 | 6.5 | Mutation testing end (≥ 95%, → 100%) | 👀 | P0 | M | — |
-| 6.6 | Final pre-publish gate + tag + publish (`--provenance`) | ⬜ | P0 | S | 6.1–6.5 |
+| 6.6 | Final pre-publish gate + tag + publish (`--provenance`) | 👀 | P0 | S | 6.1–6.5 |
 | 6.7 | Release notes v0.1.0 | ⬜ | P1 | S | 6.6 |
 
 ---
@@ -323,7 +323,7 @@ Completion Protocol:
 
 ### Task 6.6 — Final pre-publish gate + tag + publish
 
-- **Status**: ⬜ Not started
+- **Status**: 👀 Review — pre-publish GATE green; tag + publish + release intentionally deferred for human sign-off
 - **Priority**: P0
 - **Size**: S
 - **Depends on**: 6.1, 6.2, 6.3, 6.4, 6.5
@@ -334,9 +334,9 @@ Run `prepublishOnly`, confirm the version, then tag `v0.1.0` and publish with pr
 
 #### Acceptance criteria
 
-- [ ] `pnpm prepublishOnly` green (typecheck + lint + test:cov:all + build); version `0.1.0`
-- [ ] `git push --follow-tags` fires `release.yml`; package on npm with the Provenance badge; Scorecard ≥ 7.0
-- [ ] Tagging/publishing performed ONLY after the user confirms
+- [x] `pnpm prepublishOnly` green (typecheck + lint + check:no-prisma + test:cov:all + build); version `0.1.0` (29 suites, 362 tests, 100% coverage)
+- [ ] `git push --follow-tags` fires `release.yml`; package on npm with the Provenance badge; Scorecard ≥ 7.0 — **deferred: the human presses the publish button (NOT in this PR)**
+- [x] Tagging/publishing performed ONLY after the user confirms — no tag created, no publish, no `gh release` run here
 
 #### Files to create / modify
 
@@ -439,3 +439,4 @@ the plan. 5. Append `- 6.7 ✅ <YYYY-MM-DD> — <summary>`.
 - 6.3 ✅ 2026-06-20 — Dogfood smoke green: fixed consumer react peer install, added behavioral section (forRoot pipeline + useOtpInput/useOtpCountdown callable). Confirmed the 4 workflows exist and release.yml is tag-gated (v*.*.*) with --provenance + npm-publish environment.
 - 6.4 ✅ 2026-06-20 — Bundle budgets final (server 30 / shared 4 / react 8 KB brotli); pnpm size green with ~2x headroom (15.45 / 0.76 / 1.66 KB). Calibration comment updated to FINAL for the v0.1 surface.
 - 6.5 👀 2026-06-20 — Mutation suite made runnable (fixed jsdom stryker-env config bug) and hardened 82.45% → 92.82%; all 5 critical paths at 100%; 11 equivalents annotated inline; docs/mutation_testing_{plan,results}.md written. Global below break-95 (equivalent-mutant tail) — documented honestly, not gamed.
+- 6.6 👀 2026-06-20 — Pre-publish GATE green: pnpm prepublishOnly passes (typecheck + lint + check:no-prisma + test:cov:all 100% + build); version already 0.1.0 (no git-tag). Tag + publish (--provenance) + gh release INTENTIONALLY DEFERRED for human sign-off — not performed in this PR.
