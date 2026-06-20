@@ -157,16 +157,28 @@ STEP 3 — React to the verdict
   • READY_TO_MERGE → STEP 4.
 
 ────────────────────────────────────────────────────────────────────────────
-STEP 4 — Merge (only after the grace window) and clean up
+STEP 4 — Merge (only after the grace window), then DELETE the merged branch
 ────────────────────────────────────────────────────────────────────────────
 Re-verify the merge-gate conjunction one last time (state may have changed since
-the poll exited), then:
+the poll exited). Capture the merged PR's head branch FIRST so you can delete it
+deterministically afterwards (do not assume the name):
+  BR=$(gh pr view <PR#> --repo bymaxone/nest-notification --json headRefName -q .headRefName)
+Then merge and DELETE THE BRANCH OF THIS VERY MERGE — both the remote and the
+local ref. Finishing a merge ALWAYS includes deleting that PR's own branch; a
+merge is not "done" until its branch is gone:
   gh pr merge <PR#> --repo bymaxone/nest-notification --squash --delete-branch
   git switch main && git pull
-  git status            # must be clean
-  git worktree remove <implementer-worktree-path> --force   # if still present
-  git ls-remote --heads origin 'feat/*'   # confirm the merged branch is gone
-Never merge the instant CI goes green — honor the grace window in §5.1.
+  git status                                                 # must be clean
+  git worktree remove <implementer-worktree-path> --force    # if still present —
+        # frees the local branch (it is pinned to the worktree that created it)
+  git branch -D "$BR" 2>/dev/null || true                    # drop the local ref
+  git push origin --delete "$BR" 2>/dev/null || true         # belt-and-suspenders
+        # in case --delete-branch didn't reach the remote
+  git ls-remote --heads origin "$BR"                         # MUST print nothing
+  git branch --list "$BR"                                    # MUST print nothing
+The last two commands are the proof: if either still shows the branch, the merge
+is NOT finished — delete it before moving on. Never merge the instant CI goes
+green — honor the grace window in §5.1.
 
 ────────────────────────────────────────────────────────────────────────────
 STEP 5 — Update the plan + dashboards, then chain the next phase
@@ -396,8 +408,14 @@ replies — so the merge is immediate when the gate opens.
 - **Release a branch before a fix-agent touches it.** A branch is pinned to the
   worktree that created it; git refuses the same branch in two worktrees. Remove the
   prior worktree first: `git worktree remove <path> --force`.
-- **Clean up on merge** — `gh pr merge --squash --delete-branch` +
-  `git worktree remove <path>`; verify with `git ls-remote --heads origin 'feat/*'`.
+- **Clean up on merge — always delete the merged PR's own branch.** A merge is not
+  finished until that branch is gone from BOTH the remote and the local repo. Order:
+  `gh pr merge --squash --delete-branch` (drops the remote) → `git worktree remove
+  <path> --force` (frees the local ref, which is pinned to that worktree) →
+  `git branch -D <branch>` (drops the local ref) → `git push origin --delete <branch>`
+  as a fallback if the remote delete didn't land. Verify with
+  `git ls-remote --heads origin <branch>` AND `git branch --list <branch>` — both
+  must print nothing (§STEP 4).
 
 ### 5.5 Anti-hallucination — verify, never trust narration
 - An agent's final message **can confabulate state** (claims fixes it didn't make,
