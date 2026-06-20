@@ -417,4 +417,47 @@ describe('useOtpInput', () => {
     expect(result.current.isComplete).toBe(false)
     expect(onComplete).not.toHaveBeenCalled()
   })
+
+  // Growing `length` pads the slot state and keeps the existing characters.
+  it('should grow slot state when length increases on re-render', () => {
+    const { result, rerender } = renderHook(
+      (props: { length: number }) => useOtpInput(props),
+      { initialProps: { length: 3 } }
+    )
+    act(() => {
+      result.current.onPaste(pasteEvent('123'))
+    })
+    expect(result.current.isComplete).toBe(true)
+
+    rerender({ length: 5 })
+
+    expect(result.current.values).toEqual(['1', '2', '3', '', ''])
+    expect(result.current.code).toBe('123')
+    expect(result.current.isComplete).toBe(false)
+    expect(result.current.refs).toHaveLength(5)
+  })
+
+  // Shrinking `length` trims the trailing slots and keeps the handlers in range.
+  it('should trim slot state when length decreases on re-render', () => {
+    const { result, rerender } = renderHook(
+      (props: { length: number }) => useOtpInput(props),
+      { initialProps: { length: 6 } }
+    )
+    act(() => {
+      result.current.onPaste(pasteEvent('123456'))
+    })
+
+    rerender({ length: 4 })
+
+    expect(result.current.values).toEqual(['1', '2', '3', '4'])
+    expect(result.current.code).toBe('1234')
+    expect(result.current.isComplete).toBe(true)
+    expect(result.current.refs).toHaveLength(4)
+
+    const focusSpies = wireFocusSpies(result.current.refs)
+    act(() => {
+      result.current.onKeyDown(3)(keyEvent('ArrowRight'))
+    })
+    expect(focusSpies.some((spy) => spy.mock.calls.length > 0)).toBe(false)
+  })
 })

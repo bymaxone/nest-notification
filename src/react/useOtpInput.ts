@@ -8,7 +8,7 @@
  * `react` is an optional peer dependency, external in the published bundle.
  */
 
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChangeEvent, ClipboardEvent, KeyboardEvent, RefObject } from 'react'
 
 import type { OtpInputType, UseOtpInputOptions, UseOtpInputState } from './types'
@@ -79,6 +79,11 @@ function filterValid(input: string, type: OtpInputType): string {
 /** A fresh array of `length` empty slots. */
 function makeEmptyValues(length: number): string[] {
   return Array.from({ length }, () => '')
+}
+
+/** Resizes `values` to `length`: keeps existing slots, trims extra, pads with empty. */
+function resizeValues(values: readonly string[], length: number): string[] {
+  return Array.from({ length }, (_, i) => values.at(i) ?? '')
 }
 
 /** Returns a copy of `values` with the slot at `index` replaced. */
@@ -190,6 +195,13 @@ function useSlotValues(
   // values and composes successive synchronous writes without an extra render.
   const valuesRef = useRef(values)
   valuesRef.current = values
+
+  // Keep slot state sized to `length` when it changes after mount: trim extra
+  // slots and pad new ones with empty, so derived `code`/`isComplete` and the
+  // handlers never read against a stale slot count.
+  useEffect(() => {
+    setValues((prev) => (prev.length === length ? prev : resizeValues(prev, length)))
+  }, [length])
 
   // Mirror the `onChange`/`onPaste` flow: write the slot, then run the same
   // completion path so a fully-filled programmatic value fires `onComplete`.
