@@ -91,7 +91,7 @@ The phase order respects the dependency graph (Appendix A): interfaces before se
 
 > Each phase links to its task file in [`docs/tasks/`](./tasks/) (one file per phase). Full per-phase detail is in §2–§7; dependency graph in Appendix A, complexity matrix in Appendix B.
 
-> **Phase mapping to spec §14.** The spec slices the roadmap slightly differently (1 Email · 2 OTP · 3 Templating+Audit · 4 Shared+React · 5 Release). This plan keeps the same total scope but groups backend work into Phases 1–4, frontend into Phase 5, then mirrors the spec's **Release (6)** as the final phase.
+> **Phase mapping to spec §14.** The spec slices the roadmap slightly differently (1 Email · 2 OTP · 3 Templating+Audit · 4 Shared+React · 5 Release). This plan keeps the same total scope but groups backend work into Phases 1–4, frontend into Phase 5, then makes the spec's **Release** (its Phase 5) this plan's final phase, **Phase 6**.
 
 > **No time estimate** — this plan is intended for execution by AI agents. Duration in human days does not apply. Relative complexity per phase is in the dashboard above and detailed per sub-step in the [Complexity Matrix in Appendix B](#appendix-b--complexity-matrix). Use those signals to prioritize more careful human review on HIGH complexity phases.
 

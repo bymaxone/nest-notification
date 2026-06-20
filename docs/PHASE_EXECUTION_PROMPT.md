@@ -70,7 +70,7 @@ You are the ORCHESTRATOR for the autonomous build of @bymax-one/nest-notificatio
 
 Project root: /Users/maximiliano/Documents/MyApps/bymax-one/nest-notification
 GitHub repo:  bymaxone/nest-notification
-Roadmap:      docs/development_plan.md  (7 phases; §1.5 Phase dashboard + §1.4 Progress)
+Roadmap:      docs/development_plan.md  (6 phases; §1.5 Phase dashboard + §1.4 Progress)
 Phase tasks:  docs/tasks/phase-NN-*.md  +  docs/tasks/README.md (tasks dashboard)
 Two dashboards, two emoji legends — keep BOTH in sync every state change (§5 of
 the runbook + plan §1.6): plan uses 📋/🔄/✅, the tasks README uses 🔴/🟡/🟢.
