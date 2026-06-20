@@ -270,7 +270,7 @@ function isType(value: unknown): value is Type<unknown> {
  * does not declare, catching plain-JS callers that bypass the compiler.
  */
 function assertUseFactory(asyncOptions: BymaxNotificationModuleAsyncOptions): void {
-  const candidate = asyncOptions as unknown as Record<string, unknown>
+  const candidate = asyncOptions as { useClass?: unknown; useExisting?: unknown }
   if (candidate.useClass !== undefined || candidate.useExisting !== undefined) {
     throw new Error(
       '[BymaxNotificationModule] forRootAsync supports only `useFactory` in v0.1; ' +

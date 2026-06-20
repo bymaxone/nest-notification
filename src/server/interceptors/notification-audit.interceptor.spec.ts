@@ -209,6 +209,21 @@ describe('NotificationAuditInterceptor', () => {
     ).rejects.toBeInstanceOf(NotificationException)
   })
 
+  // Security gate: a verify payload's guessed code must never reach the entry.
+  it('never serializes the dispatch payload (no code leak)', async () => {
+    const repo = new CapturingRepo()
+    const interceptor = new NotificationAuditInterceptor(buildOptions(), repo)
+    const verifyInput: DispatchInput = {
+      channel: 'otp',
+      tenantId: 't',
+      payload: { recipient: 'maria@x.com', purpose: 'login', action: 'verify', code: 'SECRET99' }
+    }
+
+    await firstValueFrom(interceptor.intercept(buildContext([verifyInput]), handlerOf(of('ok'))))
+
+    expect(JSON.stringify(repo.entries)).not.toContain('SECRET99')
+  })
+
   // The configured mask is applied to the recipient before it is written.
   it('applies the recipient mask', async () => {
     const repo = new CapturingRepo()
