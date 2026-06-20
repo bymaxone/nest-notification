@@ -392,6 +392,34 @@ describe('BymaxNotificationModule.forRootAsync channel-absent invariant', () => 
     expect(notifications.getOtp()).toBeInstanceOf(OtpService)
     expect(notifications.getEnabledChannels()).toEqual(['email', 'otp'])
   })
+
+  // A DI-dependent class (required ctor params) must fail fast with a clear message.
+  it('should fail fast when a class with required ctor params is passed async', async () => {
+    class NeedsDiDependency {
+      constructor(readonly dependency: unknown) {}
+    }
+
+    await expect(
+      Test.createTestingModule({
+        imports: [
+          BymaxNotificationModule.forRootAsync({
+            useFactory: () => ({ otp: { storage: NeedsDiDependency as unknown as IOtpStorage } })
+          })
+        ]
+      }).compile()
+    ).rejects.toThrow('Pass a ready instance')
+  })
+
+  // A zero-argument class is still instantiated through the async path.
+  it('should instantiate a zero-argument class in async mode', async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [
+        BymaxNotificationModule.forRootAsync({ useFactory: () => ({ otp: { storage: FakeOtpStorage } }) })
+      ]
+    }).compile()
+
+    expect(moduleRef.get(OtpService)).toBeInstanceOf(OtpService)
+  })
 })
 
 describe('BymaxNotificationModule service wiring (smoke)', () => {

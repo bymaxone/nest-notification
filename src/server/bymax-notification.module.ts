@@ -332,12 +332,24 @@ function assertUseFactory(asyncOptions: BymaxNotificationModuleAsyncOptions): vo
 }
 
 /**
- * Resolves an async provider value: a class reference is instantiated with no
- * arguments, a ready instance is returned unchanged. A class whose constructor
- * needs runtime values must be supplied as an instance (mirrors the sync rule).
+ * Resolves an async provider value: a ready instance is returned unchanged, a
+ * zero-argument class reference is instantiated. A class whose constructor declares
+ * parameters cannot be `new`-ed without NestJS DI, so it fails fast with a clear
+ * message instructing the consumer to pass a ready instance (mirrors the sync rule).
+ *
+ * @throws Error When the supplied class constructor declares required parameters.
  */
 function instantiate<T>(valueOrClass: T | (new (...args: never[]) => T)): T {
-  return typeof valueOrClass === 'function'
-    ? new (valueOrClass as new (...args: never[]) => T)()
-    : valueOrClass
+  if (typeof valueOrClass !== 'function') {
+    return valueOrClass
+  }
+  const ctor = valueOrClass as new (...args: never[]) => T
+  if (ctor.length > 0) {
+    throw new Error(
+      `[BymaxNotificationModule] forRootAsync cannot construct '${ctor.name}': its constructor ` +
+        'declares required parameters and would need NestJS DI. Pass a ready instance instead of ' +
+        'a DI-dependent class in async mode.'
+    )
+  }
+  return new ctor()
 }
