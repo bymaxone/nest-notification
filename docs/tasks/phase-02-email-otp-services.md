@@ -1,6 +1,6 @@
 # Phase 2 — EmailService + OtpService (atomic)
 
-> **Status**: 🔄 In Progress · **Progress**: 7 / 10 tasks · **Last updated**: 2026-06-20
+> **Status**: 🔄 In Progress · **Progress**: 8 / 10 tasks · **Last updated**: 2026-06-20
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 3 (Phase 2)
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md)
 
@@ -47,7 +47,7 @@ OTP email delivery is delegated to `EmailService` (which owns the renderer/escap
 | 2.5 | `OtpService` — generate/verify/consume/resend/getStatus (atomic) | ✅ | P0 | L | 2.3, 2.4 |
 | 2.6 | `NotificationService` — channel-agnostic dispatch (discriminated) | ✅ | P0 | M | 2.4, 2.5 |
 | 2.7 | Module wiring — register services conditionally | ✅ | P0 | S | 2.4, 2.5, 2.6 |
-| 2.8 | Phase 2 barrel exports | ⬜ | P1 | S | 2.1–2.7 |
+| 2.8 | Phase 2 barrel exports | ✅ | P1 | S | 2.1–2.7 |
 | 2.9 | Tests for Phase 2 (100% + atomic concurrency regressions) | ⬜ | P0 | L | 2.1–2.8 |
 | 2.10 | Phase 2 validation + smoke | ⬜ | P0 | S | 2.9 |
 
@@ -494,7 +494,7 @@ Completion Protocol:
 
 ### Task 2.8 — Phase 2 barrel exports
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: S
 - **Depends on**: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7
@@ -505,8 +505,8 @@ Add to `src/server/index.ts`: services + dispatch types, reference providers (`R
 
 #### Acceptance criteria
 
-- [ ] `EmailService`, `OtpService`, `NotificationService` + dispatch types exported; reference providers + storage types exported; utils exported
-- [ ] `pnpm build` emits all 3 subpaths; `Object.keys` lists the expected set
+- [x] `EmailService`, `OtpService`, `NotificationService` + dispatch types exported; reference providers + storage types exported; utils exported
+- [x] `pnpm build` emits all 3 subpaths; `Object.keys` lists the expected set
 
 #### Files to create / modify
 
@@ -675,3 +675,4 @@ in `docs/development_plan.md`. 5. Append `- 2.10 ✅ <YYYY-MM-DD> — <summary>`
 - 2.5 ✅ 2026-06-19 — OtpService generate/verify/consume/resend/getStatus; NX-first cooldown with release-on-failure, atomic consumeAttempt + safeCompare, code never logged/audited; 100% coverage.
 - 2.6 ✅ 2026-06-19 — NotificationService channel-discriminated dispatch (email send/sendTemplate, otp generate/verify/consume), getEnabledChannels + throwing getEmail/getOtp; 100% coverage.
 - 2.7 ✅ 2026-06-20 — forRoot conditionally registers EmailService/OtpService and always NotificationService; all exported; DI smoke (email-only resolves EmailService, OtpService throws); 100% coverage.
+- 2.8 ✅ 2026-06-20 — server barrel exports services + dispatch/input types, ResendEmailProvider/InMemoryOtpStorage/RedisOtpStorage (+RedisLike/options), and hashTenantRecipient/generateOtpCode/safeCompare; build emits all 3 subpaths.
