@@ -74,15 +74,15 @@ The phase order respects the dependency graph (Appendix A): interfaces before se
 
 ### 1.4 Progress
 
-- **Overall progress:** 📋 0 / 7 phases done (0%) — 0 / 55 tasks
-- **Active phase:** **Phase 1** (Foundation) — ready to start
+- **Overall progress:** 🔄 0 / 7 phases done (0%) — 1 / 55 tasks
+- **Active phase:** **Phase 1** (Foundation) — 🔄 In Progress
 - **Blocked:** —
 
 ### 1.5 Phase dashboard
 
 | ID | Phase | Status | Progress | Complexity | Last updated |
 | --- | --- | --- | --- | --- | --- |
-| 1 | [Foundation + Interfaces](./tasks/phase-01-foundation-interfaces.md) | 📋 ToDo | 0/11 | MEDIUM | — |
+| 1 | [Foundation + Interfaces](./tasks/phase-01-foundation-interfaces.md) | 🔄 In Progress | 1/11 | MEDIUM | 2026-06-19 |
 | 2 | [EmailService + OtpService (atomic)](./tasks/phase-02-email-otp-services.md) | 📋 ToDo | 0/10 | HIGH | — |
 | 3 | [Templating + Rate Limiting](./tasks/phase-03-templating-rate-limiting.md) | 📋 ToDo | 0/8 | MEDIUM | — |
 | 4 | [Multi-tenant + Audit Log](./tasks/phase-04-multitenant-audit.md) | 📋 ToDo | 0/8 | MEDIUM | — |

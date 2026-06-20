@@ -1,6 +1,6 @@
 # Phase 1 — Foundation + Interfaces (`IEmailProvider` + `IOtpStorage`)
 
-> **Status**: ⬜ Not started · **Progress**: 0 / 11 tasks · **Last updated**: 2026-06-19
+> **Status**: 🔄 In Progress · **Progress**: 1 / 11 tasks · **Last updated**: 2026-06-19
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 2 (Phase 1)
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md)
 
@@ -39,7 +39,7 @@ The flagship decision baked in here is the **dissolution of the Prisma coupling*
 
 | ID | Task | Status | Priority | Size | Depends on |
 |---|---|---|---|---|---|
-| 1.1 | Project scaffold **+ complete CI** (package.json, tsconfig×, tsup 3 entries, jest×, stryker, eslint, check-size, check:no-prisma, **ci/codeql/scorecard/release workflows — incremental-safe**) | ⬜ | P0 | L | — |
+| 1.1 | Project scaffold **+ complete CI** (package.json, tsconfig×, tsup 3 entries, jest×, stryker, eslint, check-size, check:no-prisma, **ci/codeql/scorecard/release workflows — incremental-safe**) | ✅ | P0 | L | — |
 | 1.2 | Shared types + constants (`src/shared`) | ⬜ | P0 | S | 1.1 |
 | 1.3 | Main interfaces (`IEmailProvider`, `IOtpStorage` + atomic methods, renderer, log, SMS/Push sketches, module options, `NotificationRequest`) | ⬜ | P0 | M | 1.1, 1.2 |
 | 1.4 | Injection tokens + error catalog (incl. `OTP_EMAIL_DELIVERY_NOT_CONFIGURED`) + `NotificationException` + default-options constants | ⬜ | P0 | M | 1.2, 1.3 |
@@ -57,7 +57,7 @@ The flagship decision baked in here is the **dissolution of the Prisma coupling*
 
 ### Task 1.1 — Project scaffold + complete CI
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: L
 - **Depends on**: —
@@ -68,15 +68,15 @@ Create the full repo scaffold **and the complete CI** in one foundation task, so
 
 #### Acceptance criteria
 
-- [ ] `package.json`: name `@bymax-one/nest-notification`, version `0.1.0`, `type: module`, `sideEffects: false`, `"dependencies": {}`, 3 `exports` subpaths, all peer deps optional, scripts incl. `check:no-prisma`, `test:cov`, `test:e2e`
-- [ ] `tsconfig.json` strict (`noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`), aliases for 3 subpaths
-- [ ] `tsup.config.ts` with 3 entries (server node24, shared zero-extern, react es2022 external `react`), `dts: true`, `format: ['esm','cjs']`
-- [ ] jest configs set **`passWithNoTests: true`**; coverage 100% via `collectCoverageFrom` over implemented `src/**` (excludes `*.spec.ts`, `index.ts`); `stryker.config.json` high 100 / low 95 / break 95
-- [ ] **`.github/workflows/ci.yml`** — `concurrency` + `permissions: contents: read`; `verify` job (Node 24, pnpm 10.8.1): dependency-review (PR, non-blocking), `typecheck`, `lint`, `check:no-prisma`, `test:cov`, `test:e2e`, `build`, build-output integrity (loops `server`/`shared`/`react` × `mjs`/`cjs`/`d.ts` — tolerates the empty react bundle), `size`, coverage artifact upload
-- [ ] **`codeql.yml`** (javascript-typescript, security-extended, PR+push+weekly), **`scorecard.yml`** (push+weekly, SARIF upload, `publish_results`), **`release.yml`** (tag `v*.*.*`-driven only: OIDC `--provenance` publish behind an `npm-publish` environment, tag↔version guard, `prepublishOnly`, release-shape gates incl. `size` + dogfood smoke, CHANGELOG-extract via env var)
-- [ ] **Incremental-safe proof:** with empty sources + zero tests, `pnpm install && pnpm typecheck && pnpm lint && pnpm check:no-prisma && pnpm test:cov && pnpm test:e2e && pnpm build && pnpm size` is all green (the CI `verify` job would pass)
-- [ ] **Mutation is NOT in `ci.yml`** (pre-release gate only); `release.yml` never runs during phases
-- [ ] No `test/e2e/.gitkeep` / placeholder files anywhere
+- [x] `package.json`: name `@bymax-one/nest-notification`, version `0.1.0`, `type: module`, `sideEffects: false`, `"dependencies": {}`, 3 `exports` subpaths, all peer deps optional, scripts incl. `check:no-prisma`, `test:cov`, `test:e2e`
+- [x] `tsconfig.json` strict (`noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`), aliases for 3 subpaths
+- [x] `tsup.config.ts` with 3 entries (server node24, shared zero-extern, react es2022 external `react`), `dts: true`, `format: ['esm','cjs']`
+- [x] jest configs set **`passWithNoTests: true`**; coverage 100% via `collectCoverageFrom` over implemented `src/**` (excludes `*.spec.ts`, `index.ts`); `stryker.config.json` high 100 / low 95 / break 95
+- [x] **`.github/workflows/ci.yml`** — `concurrency` + `permissions: contents: read`; `verify` job (Node 24, pnpm 10.8.1): dependency-review (PR, non-blocking), `typecheck`, `lint`, `check:no-prisma`, `test:cov`, `test:e2e`, `build`, build-output integrity (loops `server`/`shared`/`react` × `mjs`/`cjs`/`d.ts` — tolerates the empty react bundle), `size`, coverage artifact upload
+- [x] **`codeql.yml`** (javascript-typescript, security-extended, PR+push+weekly), **`scorecard.yml`** (push+weekly, SARIF upload, `publish_results`), **`release.yml`** (tag `v*.*.*`-driven only: OIDC `--provenance` publish behind an `npm-publish` environment, tag↔version guard, `prepublishOnly`, release-shape gates incl. `size` + dogfood smoke, CHANGELOG-extract via env var)
+- [x] **Incremental-safe proof:** with empty sources + zero tests, `pnpm install && pnpm typecheck && pnpm lint && pnpm check:no-prisma && pnpm test:cov && pnpm test:e2e && pnpm build && pnpm size` is all green (the CI `verify` job would pass)
+- [x] **Mutation is NOT in `ci.yml`** (pre-release gate only); `release.yml` never runs during phases
+- [x] No `test/e2e/.gitkeep` / placeholder files anywhere
 
 #### Files to create / modify
 
@@ -821,3 +821,5 @@ in `docs/development_plan.md`. 5. Append `- 1.11 ✅ <YYYY-MM-DD> — <summary>`
 ## Completion log
 
 > Append-only. One line per completed task: `- <task-id> ✅ YYYY-MM-DD — <one-line summary>`.
+
+- 1.1 ✅ 2026-06-19 — Scaffold + incremental-safe CI: package.json (zero deps, 3 subpaths, optional peers), tsconfig family, tsup (3 entries), jest×4, stryker, eslint flat, check-size (30/4/8 KB), check:no-prisma, ci/codeql/scorecard/release workflows. All gates green on empty sources.
