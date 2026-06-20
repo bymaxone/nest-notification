@@ -83,14 +83,15 @@ operational playbook) of docs/PHASE_EXECUTION_PROMPT.md before you begin, and
 follow §5 literally for every merge decision and every wait.
 
 ────────────────────────────────────────────────────────────────────────────
-STEP -1 — Bootstrap the repository (first run only)
+STEP -1 — Verify the base branch exists (precondition)
 ────────────────────────────────────────────────────────────────────────────
-The repo currently has NO commits and the remote has NO branches. A PR needs a
-non-empty base, so before anything else:
-  • If `git rev-list --count HEAD` fails (no commits): stage the existing docs/,
-    commit as `chore(repo): seed main with project documentation`, and push main
-    to origin so phase PRs have a base branch.
-  • If main already has commits, skip this step.
+main is already seeded with docs/ and pushed to origin, so phase PRs have a
+valid base. Just confirm before starting, and only act if something is off:
+  • `git rev-parse HEAD` succeeds and `git ls-remote --heads origin main` is
+    non-empty → precondition met, proceed to STEP 0.
+  • If (and only if) HEAD is missing or origin/main is absent: stage docs/,
+    commit `chore(repo): seed main with project documentation`, and push main.
+  • Start every phase from the latest origin/main: `git fetch origin && git switch main && git pull`.
 
 ────────────────────────────────────────────────────────────────────────────
 STEP 0 — Pick the next phase
