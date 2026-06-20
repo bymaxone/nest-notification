@@ -1,6 +1,6 @@
 # Phase 3 — Templating + Rate Limiting
 
-> **Status**: 🔄 In Progress · **Progress**: 2 / 8 tasks · **Last updated**: 2026-06-20
+> **Status**: 🔄 In Progress · **Progress**: 3 / 8 tasks · **Last updated**: 2026-06-20
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 4 (Phase 3)
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md)
 
@@ -37,7 +37,7 @@ Refine the `DefaultTemplateRenderer` (robust i18n fallback chain, nested paths, 
 | 3.3 | Cooldown helpers (`toRetryAfterHeader`, `cooldownExpiresAt`, `formatCooldown`) | ✅ | P1 | S | — |
 | 3.4 | `OtpService` cooldown details (`retryAfter`, `expiresAt` on `OTP_COOLDOWN_ACTIVE`) | ⬜ | P1 | S | 2.5, 3.3 |
 | 3.5 | Barrel exports (cooldown helpers + renderer types) | ⬜ | P1 | S | 3.1, 3.3 |
-| 3.6 | `CANONICAL_EMAIL_TEMPLATES` naming convention | ⬜ | P1 | S | — |
+| 3.6 | `CANONICAL_EMAIL_TEMPLATES` naming convention | ✅ | P1 | S | — |
 | 3.7 | Tests for Phase 3 (renderer extensions + cooldown helpers) | ⬜ | P0 | M | 3.1, 3.3, 3.4 |
 | 3.8 | Phase 3 validation + close | ⬜ | P0 | S | 3.7 |
 
@@ -324,7 +324,7 @@ Completion Protocol:
 
 ### Task 3.6 — `CANONICAL_EMAIL_TEMPLATES`
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: S
 - **Depends on**: —
@@ -335,8 +335,8 @@ Document the canonical template names (no HTML shipped) — including the fitnes
 
 #### Acceptance criteria
 
-- [ ] `CANONICAL_EMAIL_TEMPLATES` const + `CanonicalEmailTemplate` type, JSDoc per template listing variables (incl. `verificationLink` for the password-reset deep link; `daysLeft`/`durationDays` for trial)
-- [ ] Exported from the barrel
+- [x] `CANONICAL_EMAIL_TEMPLATES` const + `CanonicalEmailTemplate` type, JSDoc per template listing variables (incl. `verificationLink` for the password-reset deep link; `daysLeft`/`durationDays` for trial)
+- [x] Exported from the barrel
 
 #### Files to create / modify
 
@@ -488,3 +488,4 @@ the plan. 5. Append `- 3.8 ✅ <YYYY-MM-DD> — <summary>`.
 
 - 3.1 ✅ 2026-06-20 — Refined `DefaultTemplateRenderer`: fallback-locale chain, opt-in nested paths, `onMissingVar` empty/throw, construction-time validation; html-body-only escaping preserved; 100% coverage.
 - 3.3 ✅ 2026-06-20 — Added pure cooldown helpers (`toRetryAfterHeader`, `cooldownExpiresAt`, `formatCooldown`) with no date-library dependency; 100% coverage.
+- 3.6 ✅ 2026-06-20 — Added `CANONICAL_EMAIL_TEMPLATES` constant + `CanonicalEmailTemplate` type (no HTML shipped), per-template variable JSDoc; exported from the barrel.

@@ -50,6 +50,10 @@ export {
   NOTIFICATION_PURPOSES,
   type CanonicalNotificationPurpose
 } from './constants/notification-purposes'
+export {
+  CANONICAL_EMAIL_TEMPLATES,
+  type CanonicalEmailTemplate
+} from './constants/canonical-templates'
 
 // Interface contracts (types)
 export type {
