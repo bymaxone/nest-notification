@@ -70,6 +70,28 @@ describe('OtpService.generate', () => {
     expect(audit.create).toHaveBeenCalledWith(expect.objectContaining({ verb: 'cooldown_blocked' }))
   })
 
+  // The cooldown exception must carry retry hints a consumer can turn into a
+  // `Retry-After` header / countdown: remainingSeconds, retryAfter, expiresAt.
+  it('should enrich OTP_COOLDOWN_ACTIVE with remainingSeconds, retryAfter, and expiresAt', async () => {
+    const service = new OtpService(makeOptions(), storage, audit)
+    await service.generate({ ...ref, deliverVia: 'manual' })
+
+    expect.assertions(5)
+    try {
+      await service.generate({ ...ref, deliverVia: 'manual' })
+    } catch (error) {
+      const body = (
+        error as { getResponse: () => { error: { details: Record<string, unknown> } } }
+      ).getResponse()
+      const details = body.error.details
+      expect(typeof details.remainingSeconds).toBe('number')
+      expect(details.remainingSeconds as number).toBeGreaterThan(0)
+      expect(details.retryAfter).toBe(String(details.remainingSeconds))
+      expect(typeof details.expiresAt).toBe('number')
+      expect(details.expiresAt as number).toBeGreaterThan(Date.now())
+    }
+  })
+
   // Email delivery renders the otp_code template with the auto-injected data.
   it('should deliver via email with auto-injected code/expiresInMinutes/purpose', async () => {
     const service = new OtpService(makeOptions(), storage, audit, emailServiceStub)

@@ -1,6 +1,6 @@
 # Phase 3 — Templating + Rate Limiting
 
-> **Status**: 🔄 In Progress · **Progress**: 3 / 8 tasks · **Last updated**: 2026-06-20
+> **Status**: 🔄 In Progress · **Progress**: 4 / 8 tasks · **Last updated**: 2026-06-20
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 4 (Phase 3)
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md)
 
@@ -35,7 +35,7 @@ Refine the `DefaultTemplateRenderer` (robust i18n fallback chain, nested paths, 
 | 3.1 | `DefaultTemplateRenderer` refinement (fallback chain, nested paths, missing-var modes, html-only escape) | ✅ | P0 | M | 1.6 |
 | 3.2 | Template adapter docs (Handlebars / React Email / MJML) in `docs/templates/` | ⬜ | P2 | S | — |
 | 3.3 | Cooldown helpers (`toRetryAfterHeader`, `cooldownExpiresAt`, `formatCooldown`) | ✅ | P1 | S | — |
-| 3.4 | `OtpService` cooldown details (`retryAfter`, `expiresAt` on `OTP_COOLDOWN_ACTIVE`) | ⬜ | P1 | S | 2.5, 3.3 |
+| 3.4 | `OtpService` cooldown details (`retryAfter`, `expiresAt` on `OTP_COOLDOWN_ACTIVE`) | ✅ | P1 | S | 2.5, 3.3 |
 | 3.5 | Barrel exports (cooldown helpers + renderer types) | ⬜ | P1 | S | 3.1, 3.3 |
 | 3.6 | `CANONICAL_EMAIL_TEMPLATES` naming convention | ✅ | P1 | S | — |
 | 3.7 | Tests for Phase 3 (renderer extensions + cooldown helpers) | ⬜ | P0 | M | 3.1, 3.3, 3.4 |
@@ -217,7 +217,7 @@ Completion Protocol:
 
 ### Task 3.4 — `OtpService` cooldown details
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P1
 - **Size**: S
 - **Depends on**: 2.5, 3.3
@@ -228,9 +228,9 @@ Enrich the `OTP_COOLDOWN_ACTIVE` exception with `details.retryAfter` (string) an
 
 #### Acceptance criteria
 
-- [ ] `OTP_COOLDOWN_ACTIVE` carries `remainingSeconds`, `retryAfter`, `expiresAt`
-- [ ] The `max_attempts` branch has no immediate cooldown (entry already deleted by `consumeAttempt`)
-- [ ] `otp.service.spec.ts` updated to assert `details`
+- [x] `OTP_COOLDOWN_ACTIVE` carries `remainingSeconds`, `retryAfter`, `expiresAt`
+- [x] The `max_attempts` branch has no immediate cooldown (entry already deleted by `consumeAttempt`)
+- [x] `otp.service.spec.ts` updated to assert `details`
 
 #### Files to create / modify
 
@@ -489,3 +489,4 @@ the plan. 5. Append `- 3.8 ✅ <YYYY-MM-DD> — <summary>`.
 - 3.1 ✅ 2026-06-20 — Refined `DefaultTemplateRenderer`: fallback-locale chain, opt-in nested paths, `onMissingVar` empty/throw, construction-time validation; html-body-only escaping preserved; 100% coverage.
 - 3.3 ✅ 2026-06-20 — Added pure cooldown helpers (`toRetryAfterHeader`, `cooldownExpiresAt`, `formatCooldown`) with no date-library dependency; 100% coverage.
 - 3.6 ✅ 2026-06-20 — Added `CANONICAL_EMAIL_TEMPLATES` constant + `CanonicalEmailTemplate` type (no HTML shipped), per-template variable JSDoc; exported from the barrel.
+- 3.4 ✅ 2026-06-20 — `OTP_COOLDOWN_ACTIVE` now carries `retryAfter` (via `toRetryAfterHeader`) and `expiresAt` (via `cooldownExpiresAt`) alongside `remainingSeconds`; spec asserts the three details.
