@@ -1,6 +1,6 @@
 # Phase 2 — EmailService + OtpService (atomic)
 
-> **Status**: 🔄 In Progress · **Progress**: 0 / 10 tasks · **Last updated**: 2026-06-19
+> **Status**: 🔄 In Progress · **Progress**: 1 / 10 tasks · **Last updated**: 2026-06-19
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 3 (Phase 2)
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md)
 
@@ -40,7 +40,7 @@ OTP email delivery is delegated to `EmailService` (which owns the renderer/escap
 
 | ID | Task | Status | Priority | Size | Depends on |
 |---|---|---|---|---|---|
-| 2.1 | `ResendEmailProvider` — lazy-loaded reference adapter | ⬜ | P0 | M | 1.3 |
+| 2.1 | `ResendEmailProvider` — lazy-loaded reference adapter | ✅ | P0 | M | 1.3 |
 | 2.2 | `InMemoryOtpStorage` — atomic dev/test storage | ⬜ | P0 | M | 1.3 |
 | 2.3 | `RedisOtpStorage` — Lua `consumeAttempt` + NX cooldown (production) | ⬜ | P0 | L | 1.3, 1.7 |
 | 2.4 | `EmailService` — send + sendTemplate + attachment guard + audit (mask) | ⬜ | P0 | M | 1.4, 1.5 |
@@ -57,7 +57,7 @@ OTP email delivery is delegated to `EmailService` (which owns the renderer/escap
 
 ### Task 2.1 — `ResendEmailProvider` (lazy-loaded reference adapter)
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: 1.3
@@ -68,11 +68,11 @@ Implement the Resend adapter for `IEmailProvider`, lazy-loading the `resend` SDK
 
 #### Acceptance criteria
 
-- [ ] `isConfigured()` false without `apiKey`; `send()` without `apiKey` throws "Missing API key"
-- [ ] `send()` lazy-`import('resend')`; if missing throws a "package not installed — run `pnpm add resend`" message
-- [ ] Builds `from` as `'Name <email>'` when `fromName` provided; returns `{ messageId }`; throws "Resend returned no message ID" when absent
-- [ ] NEVER logs `html`/`text`; propagates SDK errors as `Error` (mapped to `NotificationException` in EmailService)
-- [ ] Coverage 100% (lazy import mocked, incl. the not-installed path)
+- [x] `isConfigured()` false without `apiKey`; `send()` without `apiKey` throws "Missing API key"
+- [x] `send()` lazy-`import('resend')`; if missing throws a "package not installed — run `pnpm add resend`" message
+- [x] Builds `from` as `'Name <email>'` when `fromName` provided; returns `{ messageId }`; throws "Resend returned no message ID" when absent
+- [x] NEVER logs `html`/`text`; propagates SDK errors as `Error` (mapped to `NotificationException` in EmailService)
+- [x] Coverage 100% (lazy import mocked, incl. the not-installed path)
 
 #### Files to create / modify
 
@@ -667,3 +667,5 @@ in `docs/development_plan.md`. 5. Append `- 2.10 ✅ <YYYY-MM-DD> — <summary>`
 ## Completion log
 
 > Append-only. One line per completed task: `- <task-id> ✅ YYYY-MM-DD — <one-line summary>`.
+
+- 2.1 ✅ 2026-06-19 — ResendEmailProvider with lazy `import('resend')`, from-header formatting, body-safe error logging; 100% coverage incl. not-installed path.
