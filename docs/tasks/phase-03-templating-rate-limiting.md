@@ -1,6 +1,6 @@
 # Phase 3 — Templating + Rate Limiting
 
-> **Status**: 🔄 In Progress · **Progress**: 7 / 8 tasks · **Last updated**: 2026-06-20
+> **Status**: ✅ Done · **Progress**: 8 / 8 tasks · **Last updated**: 2026-06-20
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 4 (Phase 3)
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md)
 
@@ -39,7 +39,7 @@ Refine the `DefaultTemplateRenderer` (robust i18n fallback chain, nested paths, 
 | 3.5 | Barrel exports (cooldown helpers + renderer types) | ✅ | P1 | S | 3.1, 3.3 |
 | 3.6 | `CANONICAL_EMAIL_TEMPLATES` naming convention | ✅ | P1 | S | — |
 | 3.7 | Tests for Phase 3 (renderer extensions + cooldown helpers) | ✅ | P0 | M | 3.1, 3.3, 3.4 |
-| 3.8 | Phase 3 validation + close | ⬜ | P0 | S | 3.7 |
+| 3.8 | Phase 3 validation + close | ✅ | P0 | S | 3.7 |
 
 ---
 
@@ -432,7 +432,7 @@ Completion Protocol:
 
 ### Task 3.8 — Phase 3 validation + close
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: S
 - **Depends on**: 3.7
@@ -443,9 +443,9 @@ Run gates + a renderer/cooldown smoke; close the phase with `/bymax-quality:code
 
 #### Acceptance criteria
 
-- [ ] `pnpm typecheck && pnpm lint && pnpm test:cov && pnpm build && pnpm size` green
-- [ ] Smoke: renderer fallback + `formatCooldown`/`toRetryAfterHeader`; adapters documented
-- [ ] Code-review findings applied
+- [x] `pnpm typecheck && pnpm lint && pnpm test:cov && pnpm build && pnpm size` green
+- [x] Smoke: renderer fallback + `formatCooldown`/`toRetryAfterHeader`; adapters documented
+- [x] Code-review findings applied
 
 #### Files to create / modify
 
@@ -493,3 +493,4 @@ the plan. 5. Append `- 3.8 ✅ <YYYY-MM-DD> — <summary>`.
 - 3.5 ✅ 2026-06-20 — Barrel now exports the cooldown helpers and the refined renderer types (`TemplateDefinition`, `DefaultTemplateRendererOptions`, `MissingVariableMode`); build clean, symbols verified in the bundle.
 - 3.2 ✅ 2026-06-20 — Wrote Handlebars / React Email / MJML adapter example docs (verified against handlebars@4, @react-email/render@1, mjml@4) with setup, full adapter, security caveats, and module registration.
 - 3.7 ✅ 2026-06-20 — Phase 3 tests consolidated: renderer extensions (fallback/nested/missing-var/escape-scope/construction), cooldown matrix, OTP cooldown-details; full suite 245 tests at 100% line/branch global.
+- 3.8 ✅ 2026-06-20 — Phase gates green (typecheck · lint · test:cov 100% · build · check:no-prisma · size); smoke validated renderer fallback/nested/escape-scope + `formatCooldown`/`toRetryAfterHeader`; code-review + security-review at zero findings.
