@@ -1,6 +1,6 @@
 # Phase 1 — Foundation + Interfaces (`IEmailProvider` + `IOtpStorage`)
 
-> **Status**: 🔄 In Progress · **Progress**: 7 / 11 tasks · **Last updated**: 2026-06-19
+> **Status**: 🔄 In Progress · **Progress**: 8 / 11 tasks · **Last updated**: 2026-06-19
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 2 (Phase 1)
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md)
 
@@ -46,7 +46,7 @@ The flagship decision baked in here is the **dissolution of the Prisma coupling*
 | 1.5 | Options validation + resolution (`ResolvedNotificationOptions` + `resolveForPurpose`, `maxAttachmentBytes`, `maskRecipient`) | ✅ | P0 | M | 1.3, 1.4 |
 | 1.6 | No-op providers + minimal `DefaultTemplateRenderer` (escape html body only) | ✅ | P0 | S | 1.3 |
 | 1.7 | Crypto utils — `hash`, `code-generator` (digit-by-digit), `safeCompare` (length-guard) | ✅ | P0 | M | 1.4 |
-| 1.8 | Dynamic module — synchronous `forRoot()` with conditional registration | ⬜ | P0 | M | 1.5, 1.6 |
+| 1.8 | Dynamic module — synchronous `forRoot()` with conditional registration | ✅ | P0 | M | 1.5, 1.6 |
 | 1.9 | Server barrel exports | ⬜ | P1 | S | 1.3–1.8 |
 | 1.10 | Tests for Phase 1 (100% coverage) | ⬜ | P0 | L | 1.3–1.9 |
 | 1.11 | Phase 1 validation (gates + error-codes sync + smoke) | ⬜ | P0 | S | 1.10 |
@@ -575,7 +575,7 @@ Completion Protocol:
 
 ### Task 1.8 — Dynamic module (synchronous `forRoot()`)
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: 1.5, 1.6
@@ -586,12 +586,12 @@ Implement `BymaxNotificationModule.forRoot()` with conditional provider registra
 
 #### Acceptance criteria
 
-- [ ] `forRoot({email})` returns a valid global `DynamicModule`; only configured channels register their tokens
-- [ ] Audit defaults to `NoOpNotificationLogRepository`; renderer defaults to `DefaultTemplateRenderer`
-- [ ] `resolveAsProvider`: class → `useClass`, instance → `useValue`
-- [ ] Bootstrap log `BYMAX_NOTIFICATION_MODULE_BOOTSTRAP_OK` with active channels
-- [ ] No `// TODO Phase N` in code — use a timeless TODO (`// register EmailService once implemented`)
-- [ ] Coverage 100% on the module
+- [x] `forRoot({email})` returns a valid global `DynamicModule`; only configured channels register their tokens
+- [x] Audit defaults to `NoOpNotificationLogRepository`; renderer defaults to `DefaultTemplateRenderer`
+- [x] `resolveAsProvider`: class → `useClass`, instance → `useValue`
+- [x] Bootstrap log `BYMAX_NOTIFICATION_MODULE_BOOTSTRAP_OK` with active channels
+- [x] No `// TODO Phase N` in code — use a timeless TODO (`// register EmailService once implemented`)
+- [x] Coverage 100% on the module
 
 #### Files to create / modify
 
@@ -829,3 +829,4 @@ in `docs/development_plan.md`. 5. Append `- 1.11 ✅ <YYYY-MM-DD> — <summary>`
 - 1.5 ✅ 2026-06-19 — `validateOptions` (all rejection rules incl. sms/push v0.2), `resolveOptions` → deep-frozen `ResolvedNotificationOptions` with `resolveForPurpose`, `maxAttachmentBytes` (10 MiB), identity `maskRecipient`. 100% coverage.
 - 1.6 ✅ 2026-06-19 — `NoOpEmailProvider` (logs to+subject, never body), `NoOpNotificationLogRepository` (silent discard), `DefaultTemplateRenderer` (`{{var}}` interpolation, html-only escape, `en` fallback). 100% coverage.
 - 1.7 ✅ 2026-06-19 — Crypto utils: `hashTenantRecipient` (sha256), `generateOtpCode` (per-char CSPRNG, no `10**length` overflow, confusion-free charsets), `safeCompare` (length-guarded `timingSafeEqual`). 100% line/branch.
+- 1.8 ✅ 2026-06-19 — `BymaxNotificationModule.forRoot` (conditional channel registration, instance-vs-class `useValue`/`useClass`, audit/renderer fallbacks, BOOTSTRAP_OK log) + `forRootAsync` options stub. 100% coverage.
