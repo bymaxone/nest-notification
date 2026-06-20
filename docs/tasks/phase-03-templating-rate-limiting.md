@@ -1,6 +1,6 @@
 # Phase 3 — Templating + Rate Limiting
 
-> **Status**: 🔄 In Progress · **Progress**: 0 / 8 tasks · **Last updated**: 2026-06-20
+> **Status**: 🔄 In Progress · **Progress**: 1 / 8 tasks · **Last updated**: 2026-06-20
 > **Source roadmap**: [`docs/development_plan.md`](../development_plan.md) § 4 (Phase 3)
 > **Source spec**: [`docs/technical_specification.md`](../technical_specification.md)
 
@@ -32,7 +32,7 @@ Refine the `DefaultTemplateRenderer` (robust i18n fallback chain, nested paths, 
 
 | ID | Task | Status | Priority | Size | Depends on |
 |---|---|---|---|---|---|
-| 3.1 | `DefaultTemplateRenderer` refinement (fallback chain, nested paths, missing-var modes, html-only escape) | ⬜ | P0 | M | 1.6 |
+| 3.1 | `DefaultTemplateRenderer` refinement (fallback chain, nested paths, missing-var modes, html-only escape) | ✅ | P0 | M | 1.6 |
 | 3.2 | Template adapter docs (Handlebars / React Email / MJML) in `docs/templates/` | ⬜ | P2 | S | — |
 | 3.3 | Cooldown helpers (`toRetryAfterHeader`, `cooldownExpiresAt`, `formatCooldown`) | ⬜ | P1 | S | — |
 | 3.4 | `OtpService` cooldown details (`retryAfter`, `expiresAt` on `OTP_COOLDOWN_ACTIVE`) | ⬜ | P1 | S | 2.5, 3.3 |
@@ -47,7 +47,7 @@ Refine the `DefaultTemplateRenderer` (robust i18n fallback chain, nested paths, 
 
 ### Task 3.1 — `DefaultTemplateRenderer` refinement
 
-- **Status**: ⬜ Not started
+- **Status**: ✅ Done
 - **Priority**: P0
 - **Size**: M
 - **Depends on**: 1.6
@@ -58,12 +58,12 @@ Upgrade the minimal renderer: configurable `fallbackLocales`, `onMissingVar` (`e
 
 #### Acceptance criteria
 
-- [ ] Construction validates every registered template (invalid shape throws on construction)
-- [ ] Fallback chain `[locale, ...fallbackLocales]`; `fallbackLocales:['pt','en']` for `pt-BR` → `['pt-BR','pt','en']`
-- [ ] `onMissingVar:'empty'` → `''`; `'throw'` → error with the variable name
-- [ ] `enableNestedPaths:true` resolves `{{user.name}}`; default treats it as a flat key
-- [ ] Escape applies to interpolated values **in the html body only** (subject/text raw; author markup untouched); `text`-only templates supported
-- [ ] Coverage 100%
+- [x] Construction validates every registered template (invalid shape throws on construction)
+- [x] Fallback chain `[locale, ...fallbackLocales]`; `fallbackLocales:['pt','en']` for `pt-BR` → `['pt-BR','pt','en']`
+- [x] `onMissingVar:'empty'` → `''`; `'throw'` → error with the variable name
+- [x] `enableNestedPaths:true` resolves `{{user.name}}`; default treats it as a flat key
+- [x] Escape applies to interpolated values **in the html body only** (subject/text raw; author markup untouched); `text`-only templates supported
+- [x] Coverage 100%
 
 #### Files to create / modify
 
@@ -485,3 +485,5 @@ the plan. 5. Append `- 3.8 ✅ <YYYY-MM-DD> — <summary>`.
 ## Completion log
 
 > Append-only. One line per completed task: `- <task-id> ✅ YYYY-MM-DD — <one-line summary>`.
+
+- 3.1 ✅ 2026-06-20 — Refined `DefaultTemplateRenderer`: fallback-locale chain, opt-in nested paths, `onMissingVar` empty/throw, construction-time validation; html-body-only escaping preserved; 100% coverage.

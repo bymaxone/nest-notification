@@ -100,7 +100,8 @@ export { NoOpNotificationLogRepository } from './providers/no-op-notification-lo
 export {
   DefaultTemplateRenderer,
   type DefaultTemplateRendererOptions,
-  type TemplateSource
+  type TemplateDefinition,
+  type MissingVariableMode
 } from './providers/default-template-renderer'
 export {
   ResendEmailProvider,
