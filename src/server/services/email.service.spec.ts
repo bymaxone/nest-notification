@@ -178,6 +178,38 @@ describe('EmailService.send', () => {
     expect(provider.send).not.toHaveBeenCalled()
   })
 
+  // A multi-byte string is measured by its UTF-8 BYTE length, not its UTF-16 char
+  // length — pins the `typeof content === 'string' ? Buffer.byteLength(...) :
+  // content.length` ternary. '😀' is 2 UTF-16 code units but 4 UTF-8 bytes; a budget
+  // of 3 must reject it. A `.length` mutant (which would see 2 ≤ 3) lets it through.
+  it('should measure a multi-byte string attachment by UTF-8 byte length', async () => {
+    const provider = makeProvider()
+    const service = new EmailService(makeOptions({ maxAttachmentBytes: 3 }), provider, makeRenderer(), makeAudit())
+
+    await expect(
+      service.send({ ...baseInput, attachments: [{ filename: 'emoji', content: '😀' }] })
+    ).rejects.toMatchObject({ code: 'notification.email_attachments_too_large' })
+    expect(provider.send).not.toHaveBeenCalled()
+  })
+
+  // The EMAIL_ATTACHMENTS_TOO_LARGE error carries the offending total and the limit
+  // in its details — pins the `{ totalBytes, limit }` detail object against an
+  // emptied-object mutant. 'abcdefghij' is 10 bytes; the budget is 5.
+  it('should include totalBytes and limit in the EMAIL_ATTACHMENTS_TOO_LARGE details', async () => {
+    const service = new EmailService(makeOptions({ maxAttachmentBytes: 5 }), makeProvider(), makeRenderer(), makeAudit())
+
+    expect.assertions(2)
+    try {
+      await service.send({ ...baseInput, attachments: [{ filename: 'big', content: 'abcdefghij' }] })
+    } catch (error) {
+      const details = (
+        error as { getResponse: () => { error: { details: Record<string, unknown> } } }
+      ).getResponse().error.details
+      expect(details.totalBytes).toBe(10)
+      expect(details.limit).toBe(5)
+    }
+  })
+
   // With no caller and no default name/reply-to, those header keys are omitted.
   it('should omit fromName and replyTo when neither caller nor default supplies them', async () => {
     const provider = makeProvider()
@@ -255,16 +287,25 @@ describe('EmailService.send', () => {
     expect(provider.send).not.toHaveBeenCalled()
   })
 
-  // A provider failure becomes EMAIL_SEND_FAILED and audits "failed".
+  // A provider failure becomes EMAIL_SEND_FAILED and audits "failed". The rethrown
+  // exception carries the provider name in its details — pins the `{ providerName }`
+  // detail object against an emptied-object mutant.
   it('should map a provider failure to EMAIL_SEND_FAILED and audit failed', async () => {
     const provider = makeProvider()
     provider.send.mockRejectedValue(new Error('smtp down'))
     const audit = makeAudit()
     const service = new EmailService(makeOptions(), provider, makeRenderer(), audit)
 
-    await expect(service.send(baseInput)).rejects.toMatchObject({
-      code: 'notification.email_send_failed'
-    })
+    expect.assertions(3)
+    try {
+      await service.send(baseInput)
+    } catch (error) {
+      expect((error as NotificationException).code).toBe('notification.email_send_failed')
+      const details = (
+        error as { getResponse: () => { error: { details: Record<string, unknown> } } }
+      ).getResponse().error.details
+      expect(details.providerName).toBe('resend')
+    }
     expect(audit.create).toHaveBeenCalledWith(
       expect.objectContaining({ verb: 'failed', errorMessage: 'smtp down' })
     )
@@ -448,26 +489,76 @@ describe('EmailService.sendTemplate', () => {
     expect(renderer.render).toHaveBeenCalledWith('welcome', {}, 'en')
   })
 
-  // Neither the requested locale nor en exists → TEMPLATE_NOT_FOUND.
-  it('should throw TEMPLATE_NOT_FOUND when no locale matches', async () => {
+  // When the REQUESTED (non-en) locale has a template, it is used directly without
+  // dropping to the en fallback — pins the `if (await hasTemplate(template, locale))
+  // return locale` first branch. The en template is absent here, so a mutant that
+  // skips the requested-locale check would throw TEMPLATE_NOT_FOUND instead.
+  it('should render in the requested locale when it has a template', async () => {
+    const renderer = makeRenderer()
+    renderer.hasTemplate.mockImplementation(async (_t, locale) => locale === 'pt-BR')
+    const service = new EmailService(makeOptions(), makeProvider(), renderer, makeAudit())
+
+    await service.sendTemplate({ tenantId: 't', to: 'a@x.com', template: 'welcome', data: {}, locale: 'pt-BR' })
+
+    expect(renderer.render).toHaveBeenCalledWith('welcome', {}, 'pt-BR')
+  })
+
+  // Neither the requested locale nor en exists → TEMPLATE_NOT_FOUND, whose details
+  // name the template and the originally-requested locale — pins the `{ template,
+  // locale }` detail object against an emptied-object mutant.
+  it('should throw TEMPLATE_NOT_FOUND with template and locale details when no locale matches', async () => {
     const renderer = makeRenderer()
     renderer.hasTemplate.mockResolvedValue(false)
     const service = new EmailService(makeOptions(), makeProvider(), renderer, makeAudit())
 
-    await expect(
-      service.sendTemplate({ tenantId: 't', to: 'a@x.com', template: 'welcome', data: {} })
-    ).rejects.toMatchObject({ code: 'notification.template_not_found' })
+    expect.assertions(3)
+    try {
+      await service.sendTemplate({ tenantId: 't', to: 'a@x.com', template: 'welcome', data: {}, locale: 'fr' })
+    } catch (error) {
+      expect((error as NotificationException).code).toBe('notification.template_not_found')
+      const details = (
+        error as { getResponse: () => { error: { details: Record<string, unknown> } } }
+      ).getResponse().error.details
+      expect(details.template).toBe('welcome')
+      expect(details.locale).toBe('fr')
+    }
   })
 
-  // A renderer that throws maps to TEMPLATE_RENDER_FAILED.
-  it('should throw TEMPLATE_RENDER_FAILED when the renderer throws', async () => {
+  // A renderer that throws maps to TEMPLATE_RENDER_FAILED, whose details name the
+  // template — pins the `{ template }` detail object against an emptied-object mutant.
+  it('should throw TEMPLATE_RENDER_FAILED with template details when the renderer throws', async () => {
     const renderer = makeRenderer()
     renderer.render.mockRejectedValue(new Error('bad syntax'))
     const service = new EmailService(makeOptions(), makeProvider(), renderer, makeAudit())
 
-    await expect(
-      service.sendTemplate({ tenantId: 't', to: 'a@x.com', template: 'welcome', data: {} })
-    ).rejects.toMatchObject({ code: 'notification.template_render_failed' })
+    expect.assertions(2)
+    try {
+      await service.sendTemplate({ tenantId: 't', to: 'a@x.com', template: 'welcome', data: {} })
+    } catch (error) {
+      expect((error as NotificationException).code).toBe('notification.template_render_failed')
+      const details = (
+        error as { getResponse: () => { error: { details: Record<string, unknown> } } }
+      ).getResponse().error.details
+      expect(details.template).toBe('welcome')
+    }
+  })
+
+  // Absent optional fields must NOT be injected as `undefined` keys into the inner
+  // send() input — pins the omission (`: {}`) side of every conditional spread in
+  // sendTemplate against the always-add (`? { x: undefined }`) mutant. Spying on the
+  // inner send observes the EmailSendInput sendTemplate actually builds.
+  it('should omit absent optional fields from the inner send input', async () => {
+    const renderer = makeRenderer()
+    renderer.render.mockResolvedValue({ subject: 'S', html: '<p>H</p>' })
+    const service = new EmailService(makeOptions(), makeProvider(), renderer, makeAudit())
+    const sendSpy = jest.spyOn(service, 'send').mockResolvedValue({ messageId: 'm' })
+
+    await service.sendTemplate({ tenantId: 't', to: 'a@x.com', template: 'welcome', data: {} })
+
+    const input = sendSpy.mock.calls[0]?.[0]
+    for (const key of ['text', 'from', 'fromName', 'replyTo', 'userId']) {
+      expect(key in input!).toBe(false)
+    }
   })
 })
 

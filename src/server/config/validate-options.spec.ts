@@ -57,6 +57,16 @@ describe('validateOptions', () => {
     ).toThrow('options.email.defaultFrom must be a non-empty string')
   })
 
+  // A non-string defaultFrom is rejected by the type half of the guard — pins
+  // `typeof email.defaultFrom !== 'string'`. A mutant dropping the type check would
+  // reach `defaultFrom.trim()`/`.includes('@')` on a number and throw a different
+  // (TypeError) message, so asserting the exact non-empty-string message kills it.
+  it('should reject a non-string defaultFrom with the non-empty-string message', () => {
+    expect(() =>
+      validateOptions({ email: { provider: emailProvider, defaultFrom: 123 as never } })
+    ).toThrow('options.email.defaultFrom must be a non-empty string')
+  })
+
   // A from address without "@" is almost certainly a misconfiguration.
   it('should reject an email config with a malformed defaultFrom', () => {
     expect(() =>

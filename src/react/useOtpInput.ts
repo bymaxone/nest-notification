@@ -118,6 +118,7 @@ function deferComplete(ref: RefObject<OnComplete | undefined>, next: readonly st
 function applyChange(ctx: HandlerContext, index: number, rawValue: string): void {
   // Mobile Safari fires `onChange` with the whole pasted string; the paste
   // handler owns that path.
+  // Stryker disable next-line BlockStatement: emptying this guard's body is equivalent — the very next check (`!isValidChar(rawValue)`) rejects every multi-character string anyway, since `isValidChar` matches a single character only, so removing the early return changes no observable outcome.
   if (rawValue.length > 1) {
     return
   }
@@ -230,6 +231,7 @@ export function useOtpInput(options: UseOtpInputOptions = {}): UseOtpInputState 
     length = DEFAULT_LENGTH,
     type = 'numeric',
     autoSubmit = true,
+    // Stryker disable next-line BooleanLiteral: flipping this default to `false` is equivalent — `sanitizeOnPaste` only strips `[\s-]` before `filterValid`, and `filterValid` already drops every non-charset character (whitespace and `-` are never in numeric/alpha/alphanumeric), so the sanitized and unsanitized paths yield identical slot values.
     sanitizeOnPaste = true,
     onComplete
   } = options

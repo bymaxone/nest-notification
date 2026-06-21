@@ -155,6 +155,7 @@ export class NotificationService {
     payload: OtpDispatchPayload
   ): Promise<OtpGenerateResult | OtpVerifyResult | void> {
     const otp = this.getOtp()
+    // Stryker disable next-line StringLiteral: 'generate' is the default only; it is never compared with `===` (the code branches on 'verify'/'consume' and falls through otherwise), so any non-'verify'/'consume' default — including the empty-string mutant — routes identically to generate.
     const action = payload.action ?? 'generate'
     const ref = {
       tenantId,

@@ -209,6 +209,24 @@ describe('NotificationAuditInterceptor', () => {
     expect(repo.entries).toHaveLength(0)
   })
 
+  // A function carrying dispatch-shaped properties is rejected by the `typeof value
+  // !== 'object'` half of the guard — pins it specifically: a mutant dropping that
+  // operand would treat the (callable) function as a dispatch input and record an
+  // entry, since its `channel`/`tenantId`/`payload` props otherwise pass every check.
+  it('skips a function argument that carries dispatch-shaped properties', async () => {
+    const repo = new CapturingRepo()
+    const interceptor = new NotificationAuditInterceptor(buildOptions({ swallowErrors: false }), repo)
+    const fnArg = Object.assign(() => undefined, {
+      channel: 'otp',
+      tenantId: 't',
+      payload: { recipient: 'maria@x.com', purpose: 'login' }
+    })
+    const ctx = buildContext([fnArg])
+
+    await expect(firstValueFrom(interceptor.intercept(ctx, handlerOf(of('ok'))))).resolves.toBe('ok')
+    expect(repo.entries).toHaveLength(0)
+  })
+
   // An object whose channel is neither 'email' nor 'otp' is rejected — pins the
   // channel discrimination, then the valid input later in the arg list is recorded.
   it('skips a wrong-channel arg but records a later valid dispatch input', async () => {

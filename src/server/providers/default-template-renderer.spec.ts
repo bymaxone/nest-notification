@@ -39,6 +39,20 @@ describe('DefaultTemplateRenderer', () => {
     expect(rendered.text).toContain('1&2"3\'')
   })
 
+  // A placeholder with surrounding whitespace inside the braces is still matched
+  // and interpolated — pins the trailing `\s*` in the var pattern (a `\S*` mutant
+  // would fail to consume the space before `}}` and leave the placeholder literal).
+  it('should interpolate a placeholder that has whitespace inside the braces', async () => {
+    const renderer = new DefaultTemplateRenderer({
+      templates: { 'x::en': { subject: 'Hi {{ name }}', html: '<p>{{  name  }}</p>' } }
+    })
+
+    const rendered = await renderer.render('x', { name: 'Jane' }, 'en')
+
+    expect(rendered.subject).toBe('Hi Jane')
+    expect(rendered.html).toBe('<p>Jane</p>')
+  })
+
   // A placeholder whose variable is absent from the data renders as an empty
   // string rather than literal "undefined" (default onMissingVar: 'empty').
   it('should render a missing variable as an empty string by default', async () => {
@@ -106,12 +120,38 @@ describe('DefaultTemplateRenderer', () => {
     expect(rendered.subject).toBe('Welcome')
   })
 
+  // With no explicit fallbackLocales the default chain (`['en']`) is used, so a
+  // non-en locale still resolves an en-only template — pins both the default-array
+  // value and its `'en'` string literal (an empty array / empty string would fail to
+  // reach the en template and throw instead).
+  it('should fall back to the default en chain when none is configured', async () => {
+    const renderer = new DefaultTemplateRenderer({
+      templates: { 'welcome::en': { subject: 'Welcome', html: '<p>en</p>' } }
+    })
+
+    const rendered = await renderer.render('welcome', {}, 'fr')
+
+    expect(rendered.subject).toBe('Welcome')
+  })
+
   // A truly missing template throws with the name, locale, and tried chain.
   it('should throw with the template name and tried chain when not found', async () => {
     const renderer = new DefaultTemplateRenderer({ templates, fallbackLocales: ['en'] })
 
     await expect(renderer.render('missing', {}, 'fr')).rejects.toThrow(
       'Template not found: missing (locale=fr, tried=fr,en)'
+    )
+  })
+
+  // When the requested locale also appears in fallbackLocales, the chain must not
+  // duplicate it — pins the `.filter(candidate => candidate !== locale)` dedup: a
+  // mutant dropping the filter (or forcing its predicate true) would report
+  // `tried=en,en` instead of `tried=en`.
+  it('should not duplicate the requested locale in the tried chain', async () => {
+    const renderer = new DefaultTemplateRenderer({ templates, fallbackLocales: ['en'] })
+
+    await expect(renderer.render('missing', {}, 'en')).rejects.toThrow(
+      'Template not found: missing (locale=en, tried=en)'
     )
   })
 
@@ -184,6 +224,20 @@ describe('DefaultTemplateRenderer', () => {
     expect(rendered.subject).toBe('Hi ')
   })
 
+  // A path whose final segment is a valid string INDEX must still resolve empty —
+  // pins the `typeof current !== 'object'` guard: a mutant dropping it would index
+  // the string ('Bob'[0] === 'B') and leak a character instead of stopping.
+  it('should not index into a string when a nested path descends into one', async () => {
+    const renderer = new DefaultTemplateRenderer({
+      templates: { 'greet::en': { subject: 'Hi {{a.0}}', html: '<p>x</p>' } },
+      enableNestedPaths: true
+    })
+
+    const rendered = await renderer.render('greet', { a: 'Bob' }, 'en')
+
+    expect(rendered.subject).toBe('Hi ')
+  })
+
   // Construction validation: a null template value fails fast.
   it('should reject a null template at construction', () => {
     expect(
@@ -195,6 +249,18 @@ describe('DefaultTemplateRenderer', () => {
   it('should reject a non-object template at construction', () => {
     expect(
       () => new DefaultTemplateRenderer({ templates: { 'x::en': 'nope' as never } })
+    ).toThrow('Invalid template "x::en"')
+  })
+
+  // Construction validation: a callable (function) carrying string subject/html is
+  // still rejected — pins the `typeof shape !== 'object'` guard specifically, which a
+  // mutant dropping it would let through (its subject/html strings pass every other
+  // check), constructing a renderer that crashes at render time on a non-plain shape.
+  it('should reject a function template even with string subject and html', () => {
+    const fnTemplate = Object.assign(() => undefined, { subject: 'S', html: '<p>x</p>' })
+
+    expect(
+      () => new DefaultTemplateRenderer({ templates: { 'x::en': fnTemplate as never } })
     ).toThrow('Invalid template "x::en"')
   })
 

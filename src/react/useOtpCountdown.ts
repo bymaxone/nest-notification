@@ -39,7 +39,7 @@ function pad2(value: number): string {
 
 /** Formats `totalSeconds` as `MM:SS`, or `HH:MM:SS` once it reaches one hour. */
 function formatTime(totalSeconds: number): string {
-  // Stryker disable next-line EqualityOperator: `totalSeconds` is the clamped (>= 0) remaining count, so the only live case is exactly 0; the fall-through then pads 0h/0m/0s to '00:00' anyway, making `<= 0` and `< 0` equivalent.
+  // Stryker disable next-line EqualityOperator,BlockStatement: `totalSeconds` is the clamped (>= 0) remaining count, so the only live case is exactly 0; whether via the early return or the emptied-block fall-through, 0h/0m/0s pads to '00:00' — making `<= 0` vs `< 0` and the early return vs the fall-through equivalent.
   if (totalSeconds <= 0) {
     return '00:00'
   }
