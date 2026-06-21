@@ -123,7 +123,7 @@ try {
     for (const f of unexpected) fail(`Unexpected file in tarball: ${f}`)
   }
 } catch (err) {
-  fail(`npm pack --dry-run failed: ${String(err.message)}`)
+  fail(`npm pack --dry-run failed: ${err instanceof Error ? err.message : String(err)}`)
 }
 
 // -- 6. Consumer file: link smoke --------------------------------------------
@@ -173,7 +173,7 @@ try {
       : fail(`Consumer-side import failed (code ${importResult.status}): ${importResult.stderr}`)
   }
 } catch (err) {
-  fail(`Consumer scaffolding failed: ${String(err.message)}`)
+  fail(`Consumer scaffolding failed: ${err instanceof Error ? err.message : String(err)}`)
 } finally {
   if (consumerDir) {
     try {
@@ -216,7 +216,7 @@ try {
       : fail(`Missing or non-callable react export: ${hook}`)
   }
 } catch (err) {
-  fail(`Behavioral smoke threw: ${String(err.message)}`)
+  fail(`Behavioral smoke threw: ${err instanceof Error ? err.message : String(err)}`)
 }
 
 console.log('')
