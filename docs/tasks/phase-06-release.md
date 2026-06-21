@@ -266,7 +266,7 @@ Completion Protocol:
 - **Size**: M
 - **Depends on**: —
 
-> **Note:** The full Stryker suite was driven from **92.82% to 98.17%** by killing **37**
+> **Note:** The full Stryker suite was driven from **92.82% to 98.17%** by killing **42**
 > surviving mutants with new/strengthened assertions and annotating **5** more inline as
 > provable equivalents. `break: 95` now passes (`pnpm mutation` exits 0). All five
 > security-critical paths stay at **100%**. The 16 remaining survivors are all **provably
@@ -443,5 +443,5 @@ the plan. 5. Append `- 6.7 ✅ <YYYY-MM-DD> — <summary>`.
 - 6.3 ✅ 2026-06-20 — Dogfood smoke green: fixed consumer react peer install, added behavioral section (forRoot pipeline + useOtpInput/useOtpCountdown callable). Confirmed the 4 workflows exist and release.yml is tag-gated (v*.*.*) with --provenance + npm-publish environment.
 - 6.4 ✅ 2026-06-20 — Bundle budgets final (server 30 / shared 4 / react 8 KB brotli); pnpm size green with ~2x headroom (15.45 / 0.76 / 1.66 KB). Calibration comment updated to FINAL for the v0.1 surface.
 - 6.5 👀 2026-06-20 — Mutation suite made runnable (fixed jsdom stryker-env config bug) and hardened 82.45% → 92.82%; all 5 critical paths at 100%; 11 equivalents annotated inline; docs/mutation_testing_{plan,results}.md written. Global below break-95 (equivalent-mutant tail) — documented honestly, not gamed.
-- 6.5 ✅ 2026-06-21 — Mutation hardened 92.82% → **98.17%** (`break: 95` exits 0): killed 37 survivors with real assertions (React hook dep-array stale-closure kills, inner-`send()` spy, exact error-`details`, byte-length attachment, log/locale/charset pins) + annotated 5 inline equivalents. All 5 critical paths stay 100%; the 16 remaining survivors are all provably equivalent and documented per-mutant in mutation_testing_results.md. Coverage stays 100% on all metrics.
+- 6.5 ✅ 2026-06-21 — Mutation hardened 92.82% → **98.17%** (`break: 95` exits 0): killed 42 survivors with real assertions (React hook dep-array stale-closure kills, inner-`send()` spy, exact error-`details`, byte-length attachment, log/locale/charset pins) + annotated 5 inline equivalents. All 5 critical paths stay 100%; the 16 remaining survivors are all provably equivalent and documented per-mutant in mutation_testing_results.md. Coverage stays 100% on all metrics.
 - 6.6 👀 2026-06-20 — Pre-publish GATE green: pnpm prepublishOnly passes (typecheck + lint + check:no-prisma + test:cov:all 100% + build); version already 0.1.0 (no git-tag). Tag + publish (--provenance) + gh release INTENTIONALLY DEFERRED for human sign-off — not performed in this PR.

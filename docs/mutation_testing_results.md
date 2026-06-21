@@ -65,8 +65,9 @@ The security-critical paths are at **100%** with no surviving mutant of any kind
 
 The pass took the score from **92.82%** to **98.17%** through real test-strengthening — every
 gain is a new assertion that pins the exact behaviour of a mutation point, never a weakened
-gate, never a lowered threshold. **37 surviving mutants were killed** by new or strengthened
-tests and **5** were annotated inline as provable equivalents. Highlights:
+gate, never a lowered threshold. **42 surviving mutants were killed** by new or strengthened
+tests and **5** were annotated inline as provable equivalents (the surviving 63 from the prior
+run, less the 16 documented equivalents below). Highlights:
 
 - **`useOtpInput` (React)** — alpha-charset rejection of digits; Backspace on a *filled* slot
   at index > 0; the paste-sanitize replacement literal (asserted in alphanumeric mode where an
