@@ -7,7 +7,7 @@ small faults into the source — flipped booleans, removed guards, mangled strin
 swapped operators — and measures how many the suite detects. Every number below comes from
 a recorded Stryker run; nothing is estimated.
 
-> **Run date:** 2026-06-20 · **Stryker:** 9.x · **Runner:** jest, `coverageAnalysis: perTest`,
+> **Run date:** 2026-06-21 · **Stryker:** 9.x · **Runner:** jest, `coverageAnalysis: perTest`,
 > concurrency 4. Reports: `reports/mutation/mutation.html` and `reports/mutation/mutation.json`.
 
 ---
@@ -16,101 +16,134 @@ a recorded Stryker run; nothing is estimated.
 
 | Metric | Value |
 |---|---|
-| **Mutation score (over viable mutants)** | **92.82%** |
-| Killed | 813 |
+| **Mutation score (over viable mutants)** | **98.17%** |
+| Killed | 855 |
 | Timeout (killed by infinite-loop detection) | 2 |
-| Survived | 63 |
-| Ignored (documented equivalents, `// Stryker disable`) | 11 |
+| Survived | 16 |
+| Ignored (documented equivalents, `// Stryker disable`) | 16 |
 | Excluded as non-viable (CompileError under strict TS) | 537 |
-| Total mutants generated | 1432 |
+| Total mutants generated | 1426 |
 
-The score is computed over the **878 viable mutants** (`killed + timeout + survived`).
-Stryker's TypeScript checker excludes 537 mutants as `CompileError`: under `strict` mode
-many mutations (e.g. dropping a `null` guard) produce code that would not compile, so they
-can never represent a real, shippable fault — they are correctly removed from the score.
+The score is computed over the **873 viable mutants** (`killed + timeout + survived`).
+`break: 95` passes — `pnpm mutation` exits `0`. Stryker's TypeScript checker excludes 537
+mutants as `CompileError`: under `strict` mode many mutations (e.g. dropping a `null` guard)
+produce code that would not compile, so they can never represent a real, shippable fault —
+they are correctly removed from the score.
+
+Every one of the 16 surviving mutants is **provably equivalent** — no test can distinguish
+it from the original. They are documented individually in
+[§ Surviving mutants](#surviving-mutants--every-survivor-is-a-provable-equivalent) below.
 
 ### Critical paths — 100%
 
-The security-critical paths are at **100%** with no surviving non-equivalent mutant:
+The security-critical paths are at **100%** with no surviving mutant of any kind:
 
-| File | Score |
-|---|---|
-| `utils/code-generator.ts` | 100% |
-| `utils/timing-safe-compare.ts` | 100% |
-| `utils/hash.ts` | 100% |
-| `providers/redis-otp.storage.ts` | 100% |
-| `services/otp.service.ts` | 100% |
-
-### Per-directory
-
-| Area | Killed | Survived | Score |
+| File | Killed | Survived | Score |
 |---|---:|---:|---:|
-| `server/errors` | 2 | 0 | 100.00% |
-| `server/utils` | 76 | 1 | 98.70% |
-| `server/interceptors` | 46 | 1 | 97.87% |
-| `server/config` | 105 | 3 | 97.22% |
-| `server/providers` | 154 | 8 | 95.06% |
-| `server/services` | 218 | 15 | 93.56% |
-| `server` (module) | 70 | 8 | 89.74% |
-| `react` | 144 | 27 | 84.21% |
+| `utils/code-generator.ts` | 32 | 0 | 100% |
+| `utils/timing-safe-compare.ts` | 5 | 0 | 100% |
+| `utils/hash.ts` | 2 | 0 | 100% |
+| `providers/redis-otp.storage.ts` | 27 | 0 | 100% |
+| `services/otp.service.ts` | 67 | 0 | 100% |
+
+### Per-area
+
+| Area | Killed+Timeout | Survived | Notes |
+|---|---:|---:|---|
+| `server/errors` | 2 | 0 | 100% |
+| `server/utils` | 78 | 1 | `cooldown-helpers` unreachable-operand equivalent |
+| `server/interceptors` | 47 | 0 | shape-guard `typeof`/`null` discrimination pinned |
+| `server/config` | 109 | 0 | optional-spread omission + non-string-`defaultFrom` pinned |
+| `server/providers` | 161 | 1 | `default-template-renderer` typeof-subsumed equivalent |
+| `server/services` | 237 | 1 | `email.service` `Buffer.byteLength`-vs-`length` equivalent |
+| `server` (module) | 78 | 0 | bootstrap-log channel list + async error fragments pinned |
+| `react` | 144 | 13 | single-char regex anchors + redundant guards (all equivalent) |
 
 ---
 
 ## The hardening pass
 
-The pass took the score from **82.45%** (first end-to-end run) to **92.82%** through real
-test-strengthening — adding assertions that pin the exact behavior of each mutation point,
-never by weakening a gate. Highlights:
+The pass took the score from **92.82%** to **98.17%** through real test-strengthening — every
+gain is a new assertion that pins the exact behaviour of a mutation point, never a weakened
+gate, never a lowered threshold. **37 surviving mutants were killed** by new or strengthened
+tests and **5** were annotated inline as provable equivalents. Highlights:
 
-- **Crypto / storage / OTP service** — boundary tests for code length (1, 32, the
-  `OTP_INVALID_LENGTH` detail object), charset discrimination (alpha vs alphanumeric digit
-  inclusion), exact-equality expiry/cooldown boundaries under a frozen clock, and audit-entry
-  metadata (`verb` + `reason`). Brought all five critical paths to 100%.
-- **Services** — exact-object `toHaveBeenCalledWith` plus `'key' in obj` absence checks so
-  dropping or injecting an optional field is caught, and `AUDIT_LOG_FAILED`-cause assertions.
-- **Interceptor** — shape-guard discrimination (null / non-object / bad-payload args) under
-  `swallowErrors: false` so a broken guard surfaces instead of being silently swallowed.
-
-### A configuration fix that made the run trustworthy
-
-The initial dry-run **failed**: the two React `.spec.tsx` files declared
-`@jest-environment jsdom`, the plain jsdom env, which does not report coverage to Stryker's
-`perTest` analysis. They were switched to Stryker's transparent wrapper
-(`@stryker-mutator/jest-runner/jest-env/jsdom`) — invisible to a normal `pnpm test`, but
-correct under Stryker — and `disableTypeChecks` was widened to `src/**/*.{ts,tsx}`. Without
-this the initial test run could not complete and no mutants ran.
+- **`useOtpInput` (React)** — alpha-charset rejection of digits; Backspace on a *filled* slot
+  at index > 0; the paste-sanitize replacement literal (asserted in alphanumeric mode where an
+  injected marker would surface its letters); over-long-paste truncation pinned via the
+  last-slot focus call; an argument-sensitive `clipboardData.getData('text')` mock; and four
+  React-hook **dependency-array** kills via re-render/stale-closure tests (`[complete]`,
+  `[refs]`, `[autoSubmit]`, `reset`'s `[length, focus, setValues]`).
+- **`email.service`** — a multi-byte (`'😀'`) string attachment measured by UTF-8 byte length;
+  exact error-`details` objects for `EMAIL_SEND_FAILED` / `EMAIL_ATTACHMENTS_TOO_LARGE` /
+  `TEMPLATE_NOT_FOUND` / `TEMPLATE_RENDER_FAILED`; requested-locale-wins template resolution;
+  and an inner-`send()` spy proving absent optional fields are never injected as `undefined`
+  keys (kills all five `sendTemplate` optional-spread mutants at the inner-input boundary).
+- **`bymax-notification.module`** — bootstrap-log assertions pinning the exact `channels:
+  email, otp` join (separator + empty-seed) and email-only / otp-only channel lists; and the
+  `forRootAsync` error messages pinned fragment-by-fragment.
+- **`default-template-renderer`** — whitespace-inside-braces interpolation (`{{ name }}`);
+  the default `['en']` fallback chain; the requested-locale dedup in the not-found `tried=`
+  list; rejection of a string-index nested path; and rejection of a callable (function)
+  template carrying string `subject`/`html`.
+- **`validate-options` / `resolved-options` / `notification-audit.interceptor`** — a non-string
+  `defaultFrom` pinned to the exact message; `'key' in obj` absence checks for omitted optional
+  email fields; and a function-arg carrying dispatch-shaped props rejected by the `typeof value
+  !== 'object'` guard.
 
 ---
 
-## Surviving mutants — honest accounting
+## Surviving mutants — every survivor is a provable equivalent
 
-The residual 63 survivors are dominated by genuinely-equivalent or near-equivalent mutants:
+All 16 survivors are genuinely equivalent: **no test can distinguish the mutant from the
+original**. Each is listed below with its proof. Where the mutator could be suppressed inline
+without collateral, it already is (see § Inline-annotated equivalents). The survivors below are
+**not** inline-suppressed for a specific reason: each shares its exact token/operator with a
+*killed* sibling mutant on the same line, so a line-level `// Stryker disable` would also ignore
+a mutant that a real test kills — which is forbidden (it would un-credit a passing test). They
+are therefore documented here instead, which is the honest accounting.
 
-- **`react/useOtpInput.ts` (23)** — mostly single-character regex anchor removals (`^`/`$`)
-  on patterns tested only against single characters (where the anchor is a no-op), and
-  always-add-as-`undefined` spread variants. These produce no observable difference.
-- **`services/email.service.ts` (14)** — `sendTemplate`'s optional-field spreads whose
-  always-add (`{ x: undefined }`) variant is collapsed by `send()`, which re-applies the
-  same defaults and re-filters `undefined`; the killable omit variant is covered by the
-  `EmailService.send` tests.
-- **`providers/default-template-renderer.ts` (8)** and **`server/bymax-notification.module.ts`
-  (8)** — log-line/error-message string fragments and locale-dedup filters with no behavioral
-  difference for the exercised inputs.
-- **`react/useOtpCountdown.ts` (4)** and others — clamp/format guards reachable only at an
-  already-`'00:00'` boundary.
+| # | File · line | Mutator | Mutation | Why no test can kill it |
+|---|---|---|---|---|
+| 1–6 | `react/useOtpInput.ts` L50/L52/L54 | Regex | `^`/`$` anchor removal on the per-character class (`/^[A-Za-z]$/`, `/^[A-Za-z0-9]$/`, `/^[0-9]$/`) | `isValidChar` only ever receives a **single character** (`applyChange` returns early for length > 1; `filterValid` iterates one code point at a time), and for a one-character string `^X$ ≡ X ≡ ^X ≡ X$`. The anchors cannot change any reachable result. |
+| 7 | `react/useOtpInput.ts` L65 | ConditionalExpression | `type === 'numeric'` → `false` in `normalizeChar` (always `char.toUpperCase()`) | When `type === 'numeric'` the character is always a digit (validated upstream), and `'0'…'9'.toUpperCase()` is the identity — so always-uppercasing yields identical output. |
+| 8 | `react/useOtpInput.ts` L121 | ConditionalExpression | `rawValue.length > 1` → `false` (removes the multi-char early return) | The very next guard `!isValidChar(rawValue)` rejects every multi-character string anyway (single-char anchored match), so removing the length early-return changes no observable outcome. |
+| 9 | `react/useOtpInput.ts` L138 | ConditionalExpression | `index > 0` → `true` in the Backspace guard | The guard only matters at `index === 0`; there `replaceAt(values, -1, '')` returns an identical-content array and `focus(-1)` is a no-op (`focusSlot` returns for `index < 0`), so the branch is observationally inert. |
+| 10 | `react/useOtpInput.ts` L138 | EqualityOperator | `index > 0` → `index >= 0` (same Backspace guard) | Differs only at `index === 0`, where (as above) the executed branch is a pair of no-ops — identical to skipping it. |
+| 11 | `react/useOtpInput.ts` L154 | Regex | `/[\s-]+/g` → `/[\s-]/g` (drops the `+` quantifier) | A global replace of each whitespace/dash with `''` removes the same characters whether matched one-at-a-time or in runs; the resulting string is byte-identical. |
+| 12 | `react/useOtpInput.ts` L203 | ConditionalExpression | `prev.length === length ? prev : resize(...)` → `false` (always resize) | The effect runs only on mount and on `length` change; when `prev.length === length` (mount), `resizeValues(prev, length)` returns an array with **identical content** — the only difference is referential, invisible to any value assertion. |
+| 13 | `react/useOtpCountdown.ts` L43 | ConditionalExpression | `totalSeconds <= 0` → `false` in `formatTime` (skips the early `'00:00'`) | `totalSeconds` is the clamped (`>= 0`) remaining count, so the only live case is exactly `0`; the fall-through then pads `0h/0m/0s` to `'00:00'` — identical to the early return. (Its `BlockStatement` and `EqualityOperator` siblings are inline-suppressed; the `ConditionalExpression → false` shares the line with a *killed* `→ true` sibling, so it is documented here.) |
+| 14 | `server/utils/cooldown-helpers.ts` L84 | ConditionalExpression | `seconds > 0 \|\| parts.length === 0` → `seconds > 0` (drops the 2nd operand) | Past the `<= 0` early return, `totalSeconds >= 1`; whenever `seconds === 0` (so the 2nd operand would be evaluated) there must be an `h`/`m` part, making `parts.length === 0` always `false` at that point — the operand is unreachable as the deciding factor. |
+| 15 | `server/providers/default-template-renderer.ts` L175 | ConditionalExpression | `current === undefined` → `false` in `resolveNested` (drops the undefined check) | The sibling `typeof current !== 'object'` operand is `true` for `undefined` (`typeof undefined === 'undefined'`), so it already returns; `A \|\| undefined-check \|\| typeof-check` and `A \|\| false \|\| typeof-check` are equal for every input. |
+| 16 | `server/services/email.service.ts` L182 | ConditionalExpression | `typeof content === 'string'` → `true` (always `Buffer.byteLength(content)`) | The only non-string `content` type is `Buffer` (per `EmailAttachment`), and `Buffer.byteLength(buf) === buf.length` — so always taking the byte-length branch yields the identical size for both arms. |
 
-Eleven mutants that are provably equivalent (no test can kill them) are annotated inline with
-`// Stryker disable next-line <Mutator>: <reason>` — for example the Redis cooldown
-`ttl > 0` vs `ttl >= 0` (Redis TTL is never exactly 0) and the `RedisOtpStorage`
-Lua-script body (executed only on a real Redis server; unit tests drive a JS fake whose
-`eval` ignores the script text).
+### Inline-annotated equivalents
 
-### Status vs the 95 break threshold
+These equivalents **can** be suppressed inline without collateral (their mutator has no killed
+sibling on the line), and are marked `// Stryker disable next-line <Mutator>: <proof>`:
 
-`stryker.config.json` sets `break: 95`. The current global score (**92.82%**) is below that
-threshold, so `pnpm mutation` exits non-zero. The gap is concentrated in the equivalent-mutant
-tail described above (chiefly the React `useOtpInput` regex anchors). The **security-critical
-paths are at 100%**, line/branch coverage is 100%, and the score was raised honestly by ~10
-points. Closing the final points to ≥95% is tracked as follow-up hardening; it must be done by
-killing real mutants or annotating provable equivalents, never by lowering the threshold or
-disabling killable mutants.
+- `react/useOtpInput.ts` — `BlockStatement` on the `rawValue.length > 1` guard body (same proof
+  as survivor #8); `BooleanLiteral` on the `sanitizeOnPaste = true` default (`filterValid`
+  already drops `[\s-]`, so sanitize-on vs -off yield identical slots).
+- `react/useOtpCountdown.ts` — `EqualityOperator,BlockStatement` on the `formatTime` `<= 0`
+  guard (the early return and the emptied-block fall-through both pad to `'00:00'`).
+- `server/services/notification.service.ts` — `StringLiteral` on the `'generate'` action default
+  (never compared with `===`; any non-`verify`/`consume` value routes identically to generate).
+- `server/bymax-notification.module.ts` — `BooleanLiteral` on the async `OtpService` →
+  `EmailService` `{ optional: true }` (the `EmailService` token is always registered in async
+  mode as a factory resolving to `undefined`, so `optional: false` injects `undefined` rather
+  than throwing — the flag is observationally inert).
+- Pre-existing (carried from the prior pass): the Redis cooldown `ttl > 0` vs `ttl >= 0`
+  (`TTL` is never exactly `0`), the `RedisOtpStorage` Lua-script body (executed only on a real
+  Redis server), and the `cooldownExpiresAt`/`formatCooldown` `<= 0` boundaries.
+
+### Why the ceiling is 98.17% and not 100%
+
+The honest ceiling here is **"all remaining survivors are provably equivalent"** — and it is
+reached: all 16 survivors above are equivalent mutants. The residual gap to 100% is *not*
+weak tests; it is the well-known fact that an equivalent mutant which shares an operator/token
+with a non-equivalent (killable) sibling on the same source line cannot be inline-suppressed
+without also un-crediting the test that kills the sibling. Closing it further would require
+rewriting otherwise-correct source purely to reshape the mutant set, which is **not** done here
+(it would be gaming). The score is raised honestly from 92.82% to 98.17%; every survivor is
+accounted for above.
