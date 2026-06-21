@@ -1,5 +1,5 @@
 /**
- * @jest-environment jsdom
+ * @jest-environment @stryker-mutator/jest-runner/jest-env/jsdom
  */
 import { act, renderHook } from '@testing-library/react'
 
@@ -22,6 +22,18 @@ describe('useOtpCountdown', () => {
     expect(result.current.remainingSeconds).toBe(0)
     expect(result.current.expired).toBe(true)
     expect(result.current.formatted).toBe('00:00')
+  })
+
+  // A null expiry takes the dedicated early-return branch (set 0, stop) and must
+  // NOT fire onExpired — pins `if (expiresAt === null)`: a mutant skipping that
+  // branch would fall through to the `initial === 0` path and spuriously fire it.
+  it('should not call onExpired when expiresAt is null', () => {
+    const onExpired = jest.fn()
+
+    const { result } = renderHook(() => useOtpCountdown({ expiresAt: null, onExpired }))
+
+    expect(result.current.remainingSeconds).toBe(0)
+    expect(onExpired).not.toHaveBeenCalled()
   })
 
   // The initial remainder is derived from `expiresAt` and formatted MM:SS.

@@ -123,7 +123,7 @@ try {
     for (const f of unexpected) fail(`Unexpected file in tarball: ${f}`)
   }
 } catch (err) {
-  fail(`npm pack --dry-run failed: ${String(err.message)}`)
+  fail(`npm pack --dry-run failed: ${err instanceof Error ? err.message : String(err)}`)
 }
 
 // -- 6. Consumer file: link smoke --------------------------------------------
@@ -137,7 +137,10 @@ try {
         name: 'dogfood-consumer',
         version: '0.0.1',
         type: 'module',
-        dependencies: { '@bymax-one/nest-notification': `file:${ROOT}` }
+        // `react` is an OPTIONAL peer dep — install it explicitly so the `./react`
+        // subpath (which imports `react` eagerly) resolves. Required peers
+        // (`@nestjs/*`, `rxjs`, `reflect-metadata`) are auto-installed by pnpm.
+        dependencies: { '@bymax-one/nest-notification': `file:${ROOT}`, react: '^19.0.0' }
       },
       null,
       2
@@ -170,7 +173,7 @@ try {
       : fail(`Consumer-side import failed (code ${importResult.status}): ${importResult.stderr}`)
   }
 } catch (err) {
-  fail(`Consumer scaffolding failed: ${String(err.message)}`)
+  fail(`Consumer scaffolding failed: ${err instanceof Error ? err.message : String(err)}`)
 } finally {
   if (consumerDir) {
     try {
@@ -179,6 +182,41 @@ try {
       // ignore cleanup failures
     }
   }
+}
+
+// -- 7. Behavioral smoke — forRoot pipeline + react hook surface --------------
+// Exercises the published artifact, not the source: a minimal `forRoot(...)` runs
+// the full validate -> resolve -> conditional-registration pipeline and must
+// return a DynamicModule descriptor; the react subpath must expose the two hooks
+// as callable functions. (Hook *behavior* is covered by the unit suite under a
+// React renderer; here we only assert the published shape is wired.)
+section('7. Behavioral smoke (forRoot + react hooks)')
+try {
+  const { BymaxNotificationModule, NoOpEmailProvider, InMemoryOtpStorage } = serverEsm
+  const dynamicModule = BymaxNotificationModule.forRoot({
+    email: { provider: new NoOpEmailProvider(), defaultFrom: 'no-reply@dev.local' },
+    otp: { storage: new InMemoryOtpStorage() }
+  })
+  const wired =
+    dynamicModule.module === BymaxNotificationModule &&
+    Array.isArray(dynamicModule.providers) &&
+    dynamicModule.providers.length > 0 &&
+    Array.isArray(dynamicModule.exports)
+  wired
+    ? pass('forRoot({ email, otp }) returns a wired DynamicModule')
+    : fail('forRoot did not return a wired DynamicModule descriptor')
+
+  const reactEsm = await import(resolve(ROOT, 'dist/react/index.mjs'))
+  for (const [hook, fn] of [
+    ['useOtpInput', reactEsm.useOtpInput],
+    ['useOtpCountdown', reactEsm.useOtpCountdown]
+  ]) {
+    typeof fn === 'function'
+      ? pass(`react export ${hook} is callable`)
+      : fail(`Missing or non-callable react export: ${hook}`)
+  }
+} catch (err) {
+  fail(`Behavioral smoke threw: ${err instanceof Error ? err.message : String(err)}`)
 }
 
 console.log('')

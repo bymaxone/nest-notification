@@ -1,5 +1,5 @@
 /**
- * @jest-environment jsdom
+ * @jest-environment @stryker-mutator/jest-runner/jest-env/jsdom
  */
 import { act, renderHook } from '@testing-library/react'
 import type { ChangeEvent, ClipboardEvent, KeyboardEvent, RefObject } from 'react'
@@ -14,10 +14,13 @@ const changeEvent = (value: string): ChangeEvent<HTMLInputElement> =>
 const keyEvent = (key: string): KeyboardEvent<HTMLInputElement> =>
   ({ key }) as unknown as KeyboardEvent<HTMLInputElement>
 
+// `getData` is argument-sensitive — it returns the clipboard text only for the
+// 'text' MIME type — so a mutant that reads `getData('')` instead of `getData('text')`
+// gets an empty string and distributes nothing, failing every paste assertion.
 const pasteEvent = (text: string): ClipboardEvent<HTMLInputElement> =>
   ({
     preventDefault: jest.fn(),
-    clipboardData: { getData: (): string => text }
+    clipboardData: { getData: (type: string): string => (type === 'text' ? text : '') }
   }) as unknown as ClipboardEvent<HTMLInputElement>
 
 // Attach a focus-spy element to every ref so `focus()` calls are observable.
@@ -121,6 +124,18 @@ describe('useOtpInput', () => {
     expect(result.current.values[0]).toBe('A')
   })
 
+  // Alpha mode rejects a digit — pins the `case 'alpha'` charset (`/^[A-Za-z]$/`):
+  // a mutant collapsing it into the alphanumeric case would accept '3'.
+  it('should reject a digit in alpha mode', () => {
+    const { result } = renderHook(() => useOtpInput({ type: 'alpha' }))
+
+    act(() => {
+      result.current.onChange(0)(changeEvent('3'))
+    })
+
+    expect(result.current.values[0]).toBe('')
+  })
+
   // Alphanumeric mode accepts digits and upper-cases letters.
   it('should accept digit and uppercase letter in alphanumeric mode', () => {
     const { result } = renderHook(() => useOtpInput({ type: 'alphanumeric' }))
@@ -166,6 +181,27 @@ describe('useOtpInput', () => {
 
     expect(result.current.values[0]).toBe('1')
     expect(focusSpies.some((spy) => spy.mock.calls.length > 0)).toBe(false)
+  })
+
+  // Backspace on a FILLED slot at index > 0 must not touch the previous slot — pins
+  // the `ctx.values.at(index) === ''` (current-slot-empty) guard: a mutant forcing it
+  // true would clear and focus the previous slot even though this slot is occupied.
+  it('should not clear the previous slot on Backspace in a filled slot at index > 0', () => {
+    const { result } = renderHook(() => useOtpInput({ length: 6 }))
+    act(() => {
+      result.current.setValue(0, '1')
+    })
+    act(() => {
+      result.current.setValue(1, '2')
+    })
+    const focusSpies = wireFocusSpies(result.current.refs)
+
+    act(() => {
+      result.current.onKeyDown(1)(keyEvent('Backspace'))
+    })
+
+    expect(result.current.values[0]).toBe('1')
+    expect(focusSpies[0]).not.toHaveBeenCalled()
   })
 
   // Backspace on the first slot has no previous slot to clear.
@@ -252,6 +288,35 @@ describe('useOtpInput', () => {
 
     expect(result.current.values).toEqual(['1', '2', '3', '4', '5', '6'])
     expect(focusSpies[5]).toHaveBeenCalledTimes(1)
+  })
+
+  // The sanitize step strips separators by replacing them with the EMPTY string —
+  // pins that replacement literal. In alphanumeric mode a mutant replacing it with a
+  // non-empty marker would inject the marker's letters into the slots. 'ab-cd' must
+  // distribute as A,B,C,D, never the letters of an injected marker.
+  it('should strip separators without injecting replacement characters', () => {
+    const { result } = renderHook(() => useOtpInput({ length: 6, type: 'alphanumeric' }))
+
+    act(() => {
+      result.current.onPaste(pasteEvent('ab-cd'))
+    })
+
+    expect(result.current.values).toEqual(['A', 'B', 'C', 'D', '', ''])
+  })
+
+  // A paste longer than the slot count is truncated to `length` — pins the
+  // `.slice(0, ctx.length)`: without it, `focus(filled.length - 1)` targets an
+  // out-of-range slot, so the LAST slot never receives focus.
+  it('should truncate an over-long paste and focus the last slot', () => {
+    const { result } = renderHook(() => useOtpInput({ length: 4 }))
+    const focusSpies = wireFocusSpies(result.current.refs)
+
+    act(() => {
+      result.current.onPaste(pasteEvent('123456'))
+    })
+
+    expect(result.current.values).toEqual(['1', '2', '3', '4'])
+    expect(focusSpies[3]).toHaveBeenCalledTimes(1)
   })
 
   // With sanitize disabled, separators are kept and dropped only by the validator.
@@ -435,6 +500,85 @@ describe('useOtpInput', () => {
     expect(result.current.code).toBe('123')
     expect(result.current.isComplete).toBe(false)
     expect(result.current.refs).toHaveLength(5)
+  })
+
+  // The completion callback is re-derived when `autoSubmit` flips on — pins the
+  // `[autoSubmit]` dependency of `complete`. Starting disabled then enabling it must
+  // make a subsequent fill fire `onComplete`; an empty-deps mutant would stay bound
+  // to the original (disabled) callback and never fire.
+  it('should fire onComplete after autoSubmit is enabled on re-render', async () => {
+    const onComplete = jest.fn()
+    const { result, rerender } = renderHook(
+      (props: { autoSubmit: boolean }) =>
+        useOtpInput({ length: 1, onComplete, autoSubmit: props.autoSubmit }),
+      { initialProps: { autoSubmit: false } }
+    )
+
+    rerender({ autoSubmit: true })
+    act(() => {
+      result.current.onChange(0)(changeEvent('1'))
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(onComplete).toHaveBeenCalledTimes(1)
+  })
+
+  // The imperative setter is re-derived when the completion callback changes — pins
+  // the `[complete]` dependency of `setValue`. After autoSubmit is disabled, a
+  // programmatic fill must NOT fire `onComplete`; an empty-deps mutant would stay
+  // bound to the original (enabled) callback and fire spuriously.
+  it('should not fire onComplete via setValue after autoSubmit is disabled', async () => {
+    const onComplete = jest.fn()
+    const { result, rerender } = renderHook(
+      (props: { autoSubmit: boolean }) =>
+        useOtpInput({ length: 1, onComplete, autoSubmit: props.autoSubmit }),
+      { initialProps: { autoSubmit: true } }
+    )
+
+    rerender({ autoSubmit: false })
+    act(() => {
+      result.current.setValue(0, '1')
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(onComplete).not.toHaveBeenCalled()
+  })
+
+  // `focus` is re-bound to the CURRENT refs when `length` changes — pins the `[refs]`
+  // dependency. After growing, navigation must focus the freshly-created ref nodes; an
+  // empty-deps mutant would keep focusing the original (shorter) ref array.
+  it('should focus the current refs after length grows', () => {
+    const { result, rerender } = renderHook((props: { length: number }) => useOtpInput(props), {
+      initialProps: { length: 2 }
+    })
+
+    rerender({ length: 3 })
+    const focusSpies = wireFocusSpies(result.current.refs)
+    act(() => {
+      result.current.onKeyDown(0)(keyEvent('ArrowRight'))
+    })
+
+    expect(focusSpies[1]).toHaveBeenCalledTimes(1)
+  })
+
+  // `reset` clears to the CURRENT length — pins the `[length, focus, setValues]`
+  // dependency. After growing from 2 to 4, reset must produce four empty slots; an
+  // empty-deps mutant would reset to the original two.
+  it('should reset to the current length after it grows', () => {
+    const { result, rerender } = renderHook((props: { length: number }) => useOtpInput(props), {
+      initialProps: { length: 2 }
+    })
+
+    rerender({ length: 4 })
+    act(() => {
+      result.current.reset()
+    })
+
+    expect(result.current.values).toEqual(['', '', '', ''])
   })
 
   // Shrinking `length` trims the trailing slots and keeps the handlers in range.

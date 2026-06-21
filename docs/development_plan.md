@@ -73,8 +73,8 @@ The phase order respects the dependency graph (Appendix A): interfaces before se
 
 ### 1.4 Progress
 
-- **Overall progress:** 🔄 5 / 6 phases done (83%) — 42 / 49 tasks (86%)
-- **Active phase:** **Phase 6** (Release v0.1.0) — 📋 ToDo
+- **Overall progress:** 🔄 5 / 6 phases done (83%) — 48 / 49 tasks (98%)
+- **Active phase:** **Phase 6** (Release v0.1.0) 🟡 Partial — tag + publish awaiting human sign-off
 - **Blocked:** none
 
 ### 1.5 Phase dashboard
@@ -86,8 +86,8 @@ The phase order respects the dependency graph (Appendix A): interfaces before se
 | 3 | [Templating + Rate Limiting](./tasks/phase-03-templating-rate-limiting.md) | ✅ Done | 8/8 | MEDIUM | 2026-06-20 |
 | 4 | [Multi-tenant + Audit Log](./tasks/phase-04-multitenant-audit.md) | ✅ Done | 8/8 | MEDIUM | 2026-06-20 |
 | 5 | [Frontend (`./react`)](./tasks/phase-05-frontend-react.md) | ✅ Done | 5/5 | MEDIUM | 2026-06-20 |
-| 6 | [Release v0.1.0](./tasks/phase-06-release.md) | 📋 ToDo | 0/7 | MEDIUM | — |
-| | **Total** | 🔄 **5 / 6 phases** | **42 / 49 tasks** | — | — |
+| 6 | [Release v0.1.0](./tasks/phase-06-release.md) | 🟡 Partial | 6/7 | MEDIUM | 2026-06-21 |
+| | **Total** | 🔄 **5 / 6 phases** | **48 / 49 tasks** | — | — |
 
 > Each phase links to its task file in [`docs/tasks/`](./tasks/) (one file per phase). Full per-phase detail is in §2–§7; dependency graph in Appendix A, complexity matrix in Appendix B.
 

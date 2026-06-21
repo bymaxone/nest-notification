@@ -176,6 +176,7 @@ export class BymaxNotificationModule {
           BYMAX_NOTIFICATION_OPTIONS,
           BYMAX_NOTIFICATION_OTP_STORAGE,
           BYMAX_NOTIFICATION_LOG_REPOSITORY,
+          // Stryker disable next-line BooleanLiteral: the EmailService token is ALWAYS registered in async mode (as a factory that resolves to `undefined` when email is absent), so Nest resolves it whether optional is true or false — `optional: false` would still inject `undefined`, never throw, making the flag observationally inert here.
           { token: EmailService, optional: true }
         ]
       },

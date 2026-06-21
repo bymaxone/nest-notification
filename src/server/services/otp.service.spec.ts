@@ -1,5 +1,6 @@
 import { resolveOptions } from '../config/resolved-options'
 import type { ResolvedNotificationOptions } from '../config/resolved-options'
+import { NotificationException } from '../errors/notification-exception'
 import type {
   AuditOptions,
   OtpChannelOptions
@@ -68,7 +69,12 @@ describe('OtpService.generate', () => {
     await expect(service.generate({ ...ref, deliverVia: 'manual' })).rejects.toMatchObject({
       code: 'notification.otp_cooldown_active'
     })
-    expect(audit.create).toHaveBeenCalledWith(expect.objectContaining({ verb: 'cooldown_blocked' }))
+    expect(audit.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        verb: 'cooldown_blocked',
+        metadata: { remainingSeconds: expect.any(Number) }
+      })
+    )
   })
 
   // The cooldown exception must carry retry hints a consumer can turn into a
@@ -130,6 +136,19 @@ describe('OtpService.generate', () => {
     )
     const code = emailSendTemplate.mock.calls[0]?.[0].data.code
     expect(code).toMatch(/^\d{6}$/)
+  })
+
+  // Email delivery without locale/userId must NOT inject those keys into the email
+  // input — pins the omission side of the buildOtpEmail conditional spreads against
+  // the always-add mutant that would set `locale: undefined` / `userId: undefined`.
+  it('should omit locale and userId from the OTP email when not supplied', async () => {
+    const service = new OtpService(makeOptions(), storage, audit, emailServiceStub)
+
+    await service.generate({ ...ref, deliverVia: 'email' })
+
+    const sent = emailSendTemplate.mock.calls[0]?.[0] as Record<string, unknown>
+    expect('locale' in sent).toBe(false)
+    expect('userId' in sent).toBe(false)
   })
 
   // With no email channel, default delivery resolves to manual (no throw, no email).
@@ -224,6 +243,53 @@ describe('OtpService.generate', () => {
     })
   })
 
+  // With swallowErrors:false an audit failure surfaces as AUDIT_LOG_FAILED carrying
+  // the underlying cause — pins the rethrow object and its `cause` field.
+  it('should rethrow AUDIT_LOG_FAILED with the cause when swallowErrors is false', async () => {
+    audit.create.mockRejectedValue(new Error('db down'))
+    const service = new OtpService(makeOptions({}, { swallowErrors: false }), storage, audit)
+
+    expect.assertions(2)
+    try {
+      await service.generate({ ...ref, deliverVia: 'manual' })
+    } catch (error) {
+      expect((error as NotificationException).code).toBe('notification.audit_log_failed')
+      const details = (
+        error as { getResponse: () => { error: { details: Record<string, unknown> } } }
+      ).getResponse().error.details
+      expect(details.cause).toBe('db down')
+    }
+  })
+
+  // userId is forwarded into the audit entry when present — pins the conditional
+  // `userId` spread in the audit-entry builder.
+  it('should include userId in the audit entry when provided', async () => {
+    const service = new OtpService(makeOptions(), storage, audit)
+
+    await service.generate({ ...ref, deliverVia: 'manual', userId: 'user-42' })
+
+    expect(audit.create).toHaveBeenCalledWith(expect.objectContaining({ userId: 'user-42' }))
+  })
+
+  // Without userId the audit entry omits the key entirely (no `userId: undefined`).
+  it('should omit userId from the audit entry when absent', async () => {
+    const service = new OtpService(makeOptions(), storage, audit)
+
+    await service.generate({ ...ref, deliverVia: 'manual' })
+
+    const entry = audit.create.mock.calls[0]?.[0] as NotificationLogEntry
+    expect('userId' in entry).toBe(false)
+  })
+
+  // With no deliverVia and no email service the default resolves to 'manual':
+  // the code persists but no email is attempted (no throw for missing email channel).
+  it('should default deliverVia to manual when no email service is configured', async () => {
+    const service = new OtpService(makeOptions(), storage, audit)
+
+    await expect(service.generate(ref)).resolves.toMatchObject({ cooldownSeconds: 60 })
+    expect(await storage.get(ref.tenantId, ref.recipient, ref.purpose)).not.toBeNull()
+  })
+
   // Per-purpose overrides must drive length, ttl, maxAttempts, and cooldown.
   it('should honour perPurpose overrides', async () => {
     const options = makeOptions({
@@ -278,7 +344,7 @@ describe('OtpService.verify', () => {
     expect(audit.create).toHaveBeenCalledWith(expect.objectContaining({ verb: 'verified' }))
   })
 
-  // A missing entry verifies as not_found.
+  // A missing entry verifies as not_found and audits the reason in metadata.
   it('should return not_found when there is no entry', async () => {
     const service = new OtpService(makeOptions(), storage, audit)
 
@@ -286,9 +352,12 @@ describe('OtpService.verify', () => {
       valid: false,
       reason: 'not_found'
     })
+    expect(audit.create).toHaveBeenCalledWith(
+      expect.objectContaining({ verb: 'failed', metadata: { reason: 'not_found' } })
+    )
   })
 
-  // At the attempt ceiling the storage reports max_attempts.
+  // At the attempt ceiling the storage reports max_attempts and audits the reason.
   it('should return max_attempts at the ceiling', async () => {
     const service = new OtpService(makeOptions(), storage, audit)
     await seed({ attempts: 5, maxAttempts: 5 })
@@ -298,11 +367,14 @@ describe('OtpService.verify', () => {
       reason: 'max_attempts'
     })
     expect(audit.create).toHaveBeenCalledWith(
-      expect.objectContaining({ verb: 'max_attempts_exceeded' })
+      expect.objectContaining({
+        verb: 'max_attempts_exceeded',
+        metadata: { reason: 'max_attempts' }
+      })
     )
   })
 
-  // A wrong code consumes an attempt and reports the remaining count.
+  // A wrong code consumes an attempt, reports the remaining count, and audits the reason.
   it('should return invalid_code with remainingAttempts on a wrong guess', async () => {
     const service = new OtpService(makeOptions(), storage, audit)
     await seed()
@@ -313,6 +385,9 @@ describe('OtpService.verify', () => {
     expect(result).toEqual({ valid: false, reason: 'invalid_code', remainingAttempts: 4 })
     expect(consumeSpy).toHaveBeenCalledTimes(1)
     expect((await storage.get(ref.tenantId, ref.recipient, ref.purpose))?.attempts).toBe(1)
+    expect(audit.create).toHaveBeenCalledWith(
+      expect.objectContaining({ verb: 'failed', metadata: { reason: 'invalid_code' } })
+    )
   })
 
   // With consumeOnVerify the entry and its cooldown are removed on success.

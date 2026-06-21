@@ -57,6 +57,16 @@ describe('validateOptions', () => {
     ).toThrow('options.email.defaultFrom must be a non-empty string')
   })
 
+  // A non-string defaultFrom is rejected by the type half of the guard — pins
+  // `typeof email.defaultFrom !== 'string'`. A mutant dropping the type check would
+  // reach `defaultFrom.trim()`/`.includes('@')` on a number and throw a different
+  // (TypeError) message, so asserting the exact non-empty-string message kills it.
+  it('should reject a non-string defaultFrom with the non-empty-string message', () => {
+    expect(() =>
+      validateOptions({ email: { provider: emailProvider, defaultFrom: 123 as never } })
+    ).toThrow('options.email.defaultFrom must be a non-empty string')
+  })
+
   // A from address without "@" is almost certainly a misconfiguration.
   it('should reject an email config with a malformed defaultFrom', () => {
     expect(() =>
@@ -90,11 +100,34 @@ describe('validateOptions', () => {
     )
   })
 
-  // Only the three documented charsets are valid.
+  // The boundary values 1 and 32 are accepted — pins `< MIN`/`> MAX` so the
+  // `<=`/`>=` mutants (which would reject the exact boundaries) are caught.
+  it('should accept otp defaultLength at the boundaries 1 and 32', () => {
+    expect(() => validateOptions({ otp: { storage: otpStorage, defaultLength: 1 } })).not.toThrow()
+    expect(() => validateOptions({ otp: { storage: otpStorage, defaultLength: 32 } })).not.toThrow()
+  })
+
+  // The invalid-length exception carries the offending value and the allowed range.
+  it('should include provided length and allowed range in the OTP_INVALID_LENGTH details', () => {
+    try {
+      validateOptions({ otp: { storage: otpStorage, defaultLength: 40 } })
+      throw new Error('expected validateOptions to throw')
+    } catch (error) {
+      expect(error).toBeInstanceOf(NotificationException)
+      const details = (
+        error as { getResponse: () => { error: { details: { provided: number; allowed: string } } } }
+      ).getResponse().error.details
+      expect(details.provided).toBe(40)
+      expect(details.allowed).toBe('1-32')
+    }
+  })
+
+  // Only the three documented charsets are valid; the error lists them all so the
+  // joined-charset string literal is pinned (an emptied list would drop the names).
   it('should reject an invalid otp defaultCodeType', () => {
     expect(() =>
       validateOptions({ otp: { storage: otpStorage, defaultCodeType: 'binary' as never } })
-    ).toThrow('options.otp.defaultCodeType must be one of')
+    ).toThrow('options.otp.defaultCodeType must be one of: numeric, alpha, alphanumeric')
   })
 
   // A non-positive TTL would expire instantly.
@@ -109,6 +142,14 @@ describe('validateOptions', () => {
     expect(() => validateOptions({ otp: { storage: otpStorage, defaultMaxAttempts: 0 } })).toThrow(
       'defaultMaxAttempts must be at least 1'
     )
+  })
+
+  // The boundary value 1 is accepted — pins `< 1` so a `<= 1` mutant (which would
+  // reject the minimum legal attempt count) is caught.
+  it('should accept an otp defaultMaxAttempts of exactly 1', () => {
+    expect(() =>
+      validateOptions({ otp: { storage: otpStorage, defaultMaxAttempts: 1 } })
+    ).not.toThrow()
   })
 
   // A negative cooldown is meaningless.

@@ -293,6 +293,7 @@ export class OtpService {
     code: string,
     cfg: OtpPurposeConfig
   ): Promise<void> {
+    // Stryker disable next-line StringLiteral: when no email service is present the default is any non-'email' value; both 'manual' and an emptied string fall into the `!== 'email'` early return, so the literal is equivalent.
     const deliverVia = input.deliverVia ?? (this.emailService ? 'email' : 'manual')
     if (deliverVia !== 'email') {
       return

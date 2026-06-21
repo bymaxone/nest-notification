@@ -143,6 +143,9 @@ export class EmailService {
     const locale = await this.resolveTemplateLocale(input.template, requestedLocale)
     const rendered = await this.renderTemplate(input.template, input.data, locale)
     const tags: EmailTag[] = [...(input.tags ?? []), { name: 'template', value: input.template }]
+    // Each optional field is spread only when present, so an absent field never
+    // becomes an `{ x: undefined }` key in the send input that `send()` would then
+    // carry as an explicit value rather than a genuinely missing one.
     return this.send({
       tenantId: input.tenantId,
       to: input.to,

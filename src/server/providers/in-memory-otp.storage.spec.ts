@@ -160,3 +160,52 @@ describe('InMemoryOtpStorage', () => {
     expect(storage.size()).toEqual({ otps: 0, cooldowns: 0 })
   })
 })
+
+// Time-sensitive boundaries and arithmetic, exercised under a frozen clock so the
+// exact-equality and *-vs-/ mutants on expiry/cooldown math are observable.
+describe('InMemoryOtpStorage — time boundaries', () => {
+  let storage: InMemoryOtpStorage
+
+  beforeEach(() => {
+    jest.useFakeTimers()
+    jest.setSystemTime(1_000_000)
+    storage = new InMemoryOtpStorage()
+  })
+
+  afterEach(() => {
+    jest.useRealTimers()
+  })
+
+  // An entry whose expiry is EXACTLY now is still live — `expiresAt < now` keeps it,
+  // pinning the `< now` -> `<= now` mutant (which would evict it) for get().
+  it('should keep an entry whose expiry equals now on get', async () => {
+    await storage.set(T, R, P, makeEntry({ expiresAt: Date.now() }))
+
+    expect(await storage.get(T, R, P)).not.toBeNull()
+  })
+
+  // Same boundary for consumeAttempt: an entry expiring exactly now is consumable.
+  it('should consume an entry whose expiry equals now', async () => {
+    await storage.set(T, R, P, makeEntry({ expiresAt: Date.now(), attempts: 0, maxAttempts: 5 }))
+
+    expect(await storage.consumeAttempt(T, R, P)).toMatchObject({ status: 'ok' })
+  })
+
+  // A cooldown whose expiry equals now is NOT active — `existing > now` lets the next
+  // acquire succeed, pinning the `> now` -> `>= now` mutant on tryAcquireCooldown.
+  it('should allow re-acquire when an existing cooldown expires exactly now', async () => {
+    await storage.tryAcquireCooldown(T, R, P, 10)
+    jest.setSystemTime(1_000_000 + 10_000) // advance to the exact expiry instant
+
+    expect(await storage.tryAcquireCooldown(T, R, P, 10)).toBe(true)
+  })
+
+  // getCooldown returns the remaining whole seconds — pins the `ttl * 1000` (acquire)
+  // and `(expiry - now) / 1000` (read) arithmetic so a swapped operator (which would
+  // yield a near-zero or huge number) is caught by the exact value.
+  it('should report the remaining cooldown in whole seconds', async () => {
+    await storage.tryAcquireCooldown(T, R, P, 45)
+
+    expect(await storage.getCooldown(T, R, P)).toBe(45)
+  })
+})

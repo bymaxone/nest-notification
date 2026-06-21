@@ -50,7 +50,9 @@ describe('resolveOptions', () => {
   })
 
   // Email defaults: empty tags and the 10 MiB attachment ceiling; optional name
-  // and reply-to stay absent when not supplied.
+  // and reply-to stay absent when not supplied. The `in` checks pin the OMISSION
+  // (`: {}`) side of the optional spreads — `toEqual` ignores `undefined` keys, so
+  // an always-add (`? { x: undefined }`) mutant would slip past it.
   it('should apply email defaults and omit unset optional fields', () => {
     const resolved = resolveOptions({ email: validEmail })
 
@@ -59,6 +61,8 @@ describe('resolveOptions', () => {
       defaultTags: [],
       maxAttachmentBytes: 10_485_760
     })
+    expect('defaultFromName' in resolved.email!).toBe(false)
+    expect('defaultReplyTo' in resolved.email!).toBe(false)
   })
 
   // Email overrides for name, reply-to, tags, and attachment ceiling must pass through.

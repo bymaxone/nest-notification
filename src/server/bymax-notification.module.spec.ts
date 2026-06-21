@@ -170,7 +170,10 @@ describe('BymaxNotificationModule.forRoot', () => {
     expect(() => BymaxNotificationModule.forRoot({})).toThrow('At least one channel must be configured')
   })
 
-  // A successful bootstrap emits the BOOTSTRAP_OK log naming the active channels.
+  // A successful bootstrap emits the BOOTSTRAP_OK log listing the active channels
+  // joined by ", ". Asserting the exact `channels: email, otp` substring pins the
+  // join separator (a `''` mutant would log `emailotp`) and the empty channel-list
+  // seed (a non-empty seed would prepend a bogus channel before `email`).
   it('should emit a bootstrap log naming the active channels', () => {
     const logSpy = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
 
@@ -178,8 +181,31 @@ describe('BymaxNotificationModule.forRoot', () => {
 
     const logged = String(logSpy.mock.calls[0]?.[0])
     expect(logged).toContain('BYMAX_NOTIFICATION_MODULE_BOOTSTRAP_OK')
-    expect(logged).toContain('email')
-    expect(logged).toContain('otp')
+    expect(logged).toContain('channels: email, otp')
+  })
+
+  // An email-only bootstrap lists ONLY 'email' — pins the `if (resolved.otp)` push
+  // guard in activeChannels: a mutant forcing it true would append 'otp'.
+  it('should list only email in the bootstrap log for an email-only module', () => {
+    const logSpy = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
+
+    BymaxNotificationModule.forRoot({ email: validEmail })
+
+    const logged = String(logSpy.mock.calls[0]?.[0])
+    expect(logged).toContain('channels: email')
+    expect(logged).not.toContain('otp')
+  })
+
+  // An OTP-only bootstrap lists ONLY 'otp' — pins the `if (resolved.email)` push
+  // guard in activeChannels: a mutant forcing it true would prepend 'email'.
+  it('should list only otp in the bootstrap log for an otp-only module', () => {
+    const logSpy = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined)
+
+    BymaxNotificationModule.forRoot({ otp: { storage: new FakeOtpStorage() } })
+
+    const logged = String(logSpy.mock.calls[0]?.[0])
+    expect(logged).toContain('channels: otp')
+    expect(logged).not.toContain('email')
   })
 })
 
@@ -322,13 +348,15 @@ describe('BymaxNotificationModule.forRootAsync', () => {
     expect(moduleRef.get(BYMAX_NOTIFICATION_OPTIONS).email?.defaultFrom).toBe('cfg@acme.com')
   })
 
-  // The unsupported async forms fail fast with an explicit message.
+  // The unsupported async forms fail fast with an explicit message. Asserting the
+  // first sentence ('forRootAsync supports only `useFactory`') pins that string
+  // fragment, which the 'not yet implemented' second fragment alone would not cover.
   it('should reject the useClass async form', () => {
     expect(() =>
       BymaxNotificationModule.forRootAsync({
         useClass: class {}
       } as unknown as BymaxNotificationModuleAsyncOptions)
-    ).toThrow('not yet implemented')
+    ).toThrow('forRootAsync supports only `useFactory`')
   })
 
   it('should reject the useExisting async form', () => {
@@ -394,20 +422,31 @@ describe('BymaxNotificationModule.forRootAsync channel-absent invariant', () => 
   })
 
   // A DI-dependent class (required ctor params) must fail fast with a clear message.
+  // Asserting all three concatenated fragments — the leading 'cannot construct' (with
+  // the ctor name), the middle 'Pass a ready instance', and the trailing 'a DI-
+  // dependent class in async mode' — pins every piece against per-fragment emptied
+  // -string mutants.
   it('should fail fast when a class with required ctor params is passed async', async () => {
     class NeedsDiDependency {
       constructor(readonly dependency: unknown) {}
     }
 
-    await expect(
-      Test.createTestingModule({
+    let message = ''
+    try {
+      await Test.createTestingModule({
         imports: [
           BymaxNotificationModule.forRootAsync({
             useFactory: () => ({ otp: { storage: NeedsDiDependency as unknown as IOtpStorage } })
           })
         ]
       }).compile()
-    ).rejects.toThrow('Pass a ready instance')
+    } catch (error) {
+      message = (error as Error).message
+    }
+
+    expect(message).toContain("cannot construct 'NeedsDiDependency'")
+    expect(message).toContain('Pass a ready instance')
+    expect(message).toContain('a DI-dependent class in async mode')
   })
 
   // A zero-argument class is still instantiated through the async path.

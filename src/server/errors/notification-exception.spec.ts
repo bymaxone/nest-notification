@@ -79,10 +79,12 @@ describe('NotificationException', () => {
   // well-formed 500 envelope, never a raw TypeError.
   it('should fall back to a generic 500 for an unknown key', () => {
     const exception = new NotificationException('NOT_A_REAL_KEY' as NotificationErrorKey)
-    const response = exception.getResponse() as { error: { code: string } }
+    const response = exception.getResponse() as { error: { code: string; message: string } }
 
     expect(exception.getStatus()).toBe(HttpStatus.INTERNAL_SERVER_ERROR)
     expect(response.error.code).toBe('notification.unknown_error')
+    // Pin the fallback message string literal too.
+    expect(response.error.message).toBe('Unknown notification error')
   })
 })
 
