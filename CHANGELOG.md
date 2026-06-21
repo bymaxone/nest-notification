@@ -63,5 +63,12 @@ import.
 - **`forRootAsync` `useClass` / `useExisting`** — only `useFactory` is wired in v0.1.
 - **Multi-provider failover** — planned for v0.3.
 
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/bymaxone/nest-notification/releases/tag/v0.1.0
+<!--
+  The v0.1.0 git tag and GitHub release are cut at publish time, so these refs point at
+  the full commit range instead of a not-yet-created tag (which would 404). On publish,
+  swap [0.1.0] to https://github.com/bymaxone/nest-notification/releases/tag/v0.1.0 and
+  [Unreleased] to .../compare/v0.1.0...HEAD.
+-->
+
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/dd61fde...HEAD
+[0.1.0]: https://github.com/bymaxone/nest-notification/compare/dd61fde...HEAD

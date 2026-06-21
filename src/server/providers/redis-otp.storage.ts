@@ -235,7 +235,7 @@ export class RedisOtpStorage implements IOtpStorage {
    */
   async getCooldown(tenantId: string, recipient: string, purpose: string): Promise<number> {
     const ttl = await this.redis.ttl(this.cooldownKey(tenantId, recipient, purpose))
-    // Stryker disable next-line EqualityOperator: Redis TTL returns a positive number, -1, or -2 — never 0 — so `ttl > 0` and `ttl >= 0` are observationally identical (both yield 0 for every non-positive case).
+    // Stryker disable next-line EqualityOperator: Redis TTL returns a positive integer (whole seconds remaining), 0 (a key expiring in under a second), -1 (key with no expiry), or -2 (no such key). The `ttl >= 0` mutant is equivalent: it diverges from `ttl > 0` only at ttl === 0, where the then-branch returns `ttl` (which is 0) and the else-branch returns the literal 0 — the same observable value. Every positive value takes the then-branch (returns `ttl`); -1 and -2 take the else-branch (return 0). So the result is identical for every value in {positive, 0, -1, -2}.
     return ttl > 0 ? ttl : 0
   }
 
