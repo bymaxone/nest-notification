@@ -49,7 +49,7 @@
 
 - Co-located tests (`*.spec.ts`). AAA pattern. Mock external deps — never real Redis/email in unit tests.
 - **100% statements / branches / functions / lines** per file (`pnpm test:cov:all`). Not a target — a pre-publish gate.
-- **Mutation score ≥ 95% (Stryker `break: 95`), driven toward 100%** — the deeper gate against weak tests. Critical paths (`code-generator`, `timing-safe-compare`, `hash`, `redis-otp.storage`, `otp.service`) at 100%. Not in per-PR CI — a manual/release gate.
+- **Mutation score ≥ 95% (Stryker `break: 95`), driven toward 100%** — the deeper gate against weak tests. Critical paths (`code-generator`, `timing-safe-compare`, `hash`, `redis-otp.storage`, `otp.service`) at 100%. Never on PRs — runs automatically post-merge on `main` via the shared reusable (`bymaxone/.github` → node-lib-ci), plus an optional manual `pnpm mutation`.
 
 **8. Build** — tsup builds 3 subpaths → ESM (`.mjs`) + CJS (`.cjs`) + `.d.ts`. `sideEffects: false`. Peer deps always external.
 

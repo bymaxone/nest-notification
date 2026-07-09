@@ -1,8 +1,12 @@
+# CI — thin caller of the org-wide reusable pipeline (bymaxone/.github).
+#
+# The generic library jobs (lint, typecheck, unit + e2e coverage, mutation) run
+# via node-lib-ci.yml so every repo shares one definition. This library's
+# no-Prisma source guard, build-output integrity across its three subpaths, and
+# bundle-size budget stay here. Mutation runs only on a push to main / manual
+# dispatch, never on PRs.
 name: CI
 
-# Runs on every push to `main` and on every PR targeting `main`. The
-# `workflow_dispatch` trigger is kept so the same job can be re-run manually
-# from the Actions tab when needed.
 on:
   workflow_dispatch:
   push:
@@ -10,93 +14,38 @@ on:
   pull_request:
     branches: [main]
 
-# Cancel in-progress runs for the same ref when a new commit is pushed.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-# Least privilege: CI only reads the repository. No write scopes are granted so a
-# compromised dependency in a workflow step cannot mutate the repo or its releases.
 permissions:
   contents: read
 
 jobs:
+  ci:
+    uses: bymaxone/.github/.github/workflows/node-lib-ci.yml@v1
+    with:
+      run-format-check: false # no format:check script; prettier runs via lint/pre-commit
+      run-build: false # build + integrity + size verified in the `verify` job below
+      unit-command: pnpm test:cov:all # aggregated unit + e2e coverage (in-process, 100% gate)
+      run-mutation: true
+      mutation-source-globs: '^(src/)'
+
   verify:
-    name: Verify (typecheck · lint · test · build · size)
+    name: Verify build + size
+    needs: ci
     runs-on: ubuntu-latest
     timeout-minutes: 15
-
-    strategy:
-      fail-fast: false
-      matrix:
-        node-version: [24.x]
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      # Flags PRs that introduce dependencies with known vulnerabilities or
-      # license violations. PR-only — on push to main there is no base ref to
-      # diff against. Requires the repo's Dependency Graph to be enabled; until
-      # it is, the action errors with "not supported on this repository", so this
-      # step is kept non-blocking.
-      - name: Dependency review
-        if: github.event_name == 'pull_request'
-        continue-on-error: true
-        uses: actions/dependency-review-action@v4
-        with:
-          fail-on-severity: high
-          comment-summary-in-pr: on-failure
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v6
-        with:
-          version: 10.8.1
-          run_install: false
-
-      - name: Setup Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v6
-        with:
-          node-version: ${{ matrix.node-version }}
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Typecheck
-        run: pnpm typecheck
-
-      - name: Lint
-        run: pnpm lint
-
+      - uses: actions/checkout@v6
+      - uses: bymaxone/.github/.github/actions/setup-node-pnpm@v1
       - name: Guard against @prisma/client imports
-        # The library never persists through Prisma directly — all storage is
-        # behind IOtpStorage / INotificationLogRepository. This gate fails the
-        # build if any source file imports @prisma/client.
+        # All storage is behind IOtpStorage / INotificationLogRepository; the
+        # library must never import @prisma/client directly.
         run: pnpm check:no-prisma
-
-      - name: Unit tests with coverage (100% enforced)
-        run: pnpm test:cov
-
-      - name: End-to-end tests
-        run: pnpm test:e2e
-
-      - name: Upload coverage artifact
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: coverage-node-${{ matrix.node-version }}
-          path: coverage/
-          retention-days: 14
-
       - name: Build all subpaths
         run: pnpm build
-
       - name: Verify build output integrity
-        # Confirms every declared subpath produced both ESM and CJS bundles plus
-        # type declarations. A missing artifact indicates a tsup misconfiguration
-        # that would ship a broken package to npm. The react subpath ships an
-        # (intentionally minimal) bundle today; it must still emit all artifacts.
         run: |
           for subpath in server shared react; do
             for ext in mjs cjs d.ts; do
@@ -107,7 +56,13 @@ jobs:
             done
           done
           echo "All three subpaths produced ESM + CJS + .d.ts"
-
       - name: Bundle size budget
-        # Zero-dependency brotli-size gate over the built .mjs subpaths.
         run: pnpm size
+
+  security:
+    # Dependency review needs the dependency graph (public repos, or private + GHAS).
+    # Gated on visibility so it starts running automatically once this repo is public.
+    if: github.event_name == 'pull_request' && github.event.repository.visibility == 'public'
+    uses: bymaxone/.github/.github/workflows/security.yml@v1
+    with:
+      fail-on-severity: high
