@@ -183,7 +183,7 @@ external peer in the published bundle.
   `jest.coverage.config.ts` (`pnpm test:cov:all`). A pre-publish gate, not a target.
 - **Mutation testing** (Stryker, `break: 95`) is the deeper gate against weak tests; score
   driven toward 100%, with critical paths (`code-generator`, `timing-safe-compare`, `hash`,
-  `redis-otp.storage`, `otp.service`) at 100%. Manual/release gate — not in per-PR CI.
+  `redis-otp.storage`, `otp.service`) at 100%. Runs automatically post-merge on `main` via the shared reusable (`bymaxone/.github` → node-lib-ci), never on PRs; plus an optional manual `pnpm mutation`.
 - **Mocking** — never real Redis or a real email API in unit tests (`ioredis-mock` and
   in-memory fakes). E2E specs in `test/e2e/` cover tenant isolation and audit behavior.
 - **Security gate test** — the never-log-codes invariant is asserted directly against a
@@ -210,5 +210,5 @@ external peer in the published bundle.
 - ❌ Using the plaintext recipient or tenant in a store key — defeats privacy + isolation.
 - ❌ Trusting `tenantId` from the request body — always resolve it from a trusted source.
 - ❌ Adding a runtime `dependency` — everything is a peer dep or a `node:` builtin.
-- ❌ Adding mutation testing to `prepublishOnly` / per-PR CI — it is a manual/release gate.
+- ❌ Adding mutation testing to `prepublishOnly` / per-PR CI — it runs automatically post-merge on `main` via the shared reusable (`bymaxone/.github` → node-lib-ci), never on PRs.
 - ❌ A function over 50 lines or a file over 800 — split by responsibility.
