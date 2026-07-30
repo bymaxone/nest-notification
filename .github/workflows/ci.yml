@@ -32,7 +32,11 @@ jobs:
       mutation-source-globs: '^(src/)'
 
   verify:
-    name: Verify build + size + type API
+    # The job name is the status-check context required by the repository
+    # ruleset (`nest-notification-pr-and-ci-gates`). Renaming it silently blocks
+    # every PR — the required context stops reporting and merges wait forever.
+    # Add steps here freely; change this string only together with the ruleset.
+    name: Verify build + size
     needs: ci
     runs-on: ubuntu-latest
     timeout-minutes: 15
