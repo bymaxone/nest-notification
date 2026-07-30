@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.0.0] - unreleased
+## [1.0.0] - 2026-07-30
 
 First public release. Email + OTP channels, multi-tenant by design, pluggable
 providers and storage, zero runtime dependencies, and never an `@prisma/client`
@@ -66,12 +66,5 @@ rejected at startup rather than failing on the first send.
 - **`forRootAsync` `useClass` / `useExisting`** — only `useFactory` is wired.
 - **Multi-provider failover and routing.**
 
-<!--
-  The v1.0.0 git tag and GitHub release are cut at publish time, so these refs point at
-  the full commit range instead of a not-yet-created tag (which would 404). On publish,
-  swap [1.0.0] to https://github.com/bymaxone/nest-notification/releases/tag/v1.0.0 and
-  [Unreleased] to .../compare/v1.0.0...HEAD.
--->
-
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/dd61fde...HEAD
-[1.0.0]: https://github.com/bymaxone/nest-notification/compare/dd61fde...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/bymaxone/nest-notification/releases/tag/v1.0.0
