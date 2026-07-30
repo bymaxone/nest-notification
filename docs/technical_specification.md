@@ -830,8 +830,7 @@ export interface BymaxNotificationModuleOptions {
      * REQUIRED if `audit` is present.
      */
     repository:
-      | INotificationLogRepository
-      | (new (...args: unknown[]) => INotificationLogRepository)
+      INotificationLogRepository | (new (...args: unknown[]) => INotificationLogRepository)
 
     /**
      * If true, audit log failures do NOT propagate error to the caller.
@@ -3217,25 +3216,25 @@ Clear limits to avoid feature creep:
 
 Needed only if the consumer uses the corresponding reference provider:
 
-| Package                    | Version                | When required                                            |
-| -------------------------- | ---------------------- | -------------------------------------------------------- |
-| `ioredis`                  | `^5.0.0`               | If using `RedisOtpStorage` (default OTP storage)         |
-| `resend`                   | `^4.0.0`               | If using `ResendEmailProvider`                           |
-| `@sendgrid/mail`           | `^8.0.0`               | If using SendGridProvider (custom adapter)               |
-| `@aws-sdk/client-ses`      | `^3.0.0`               | If using SesProvider                                     |
-| `@aws-sdk/client-sns`      | `^3.0.0`               | If using SnsSmsProvider (once the SMS channel exists)    |
-| `mailgun.js`               | `^11.0.0`              | If using MailgunProvider                                 |
-| `nodemailer`               | `^7.0.0`               | If using NodemailerSmtpProvider                          |
-| `twilio`                   | `^5.0.0`               | If using TwilioSmsProvider (once the SMS channel exists) |
-| `firebase-admin`           | `^13.0.0`              | If using FcmPushProvider (once the push channel exists)  |
-| `@aws-sdk/client-dynamodb` | `^3.0.0`               | If using DynamoDbOtpStorage                              |
-| `handlebars`               | `^4.0.0`               | If using HandlebarsTemplateRenderer                      |
-| `@react-email/render`      | `^1.0.0`               | If using ReactEmailTemplateRenderer                      |
-| `mjml`                     | `^4.0.0`               | If using MjmlTemplateRenderer                            |
-| `class-validator`          | `^0.14.0 \|\| ^0.15.0` | If using distributed DTOs (optional — consumer decides)  |
-| `class-transformer`        | `^0.5.0`               | Idem                                                     |
-| `express`                  | `^5.0.0`               | Only if your own code needs it — see the note below      |
-| `@types/express`           | `^5.0.0`               | Idem                                                     |
+| Package                    | Version                             | When required                                            |
+| -------------------------- | ----------------------------------- | -------------------------------------------------------- |
+| `ioredis`                  | `^5.0.0`                            | If using `RedisOtpStorage` (default OTP storage)         |
+| `resend`                   | `^4.0.0 \|\| ^5.0.0 \|\| ^6.0.0`    | If using `ResendEmailProvider`                           |
+| `@sendgrid/mail`           | `^8.0.0`                            | If using SendGridProvider (custom adapter)               |
+| `@aws-sdk/client-ses`      | `^3.0.0`                            | If using SesProvider                                     |
+| `@aws-sdk/client-sns`      | `^3.0.0`                            | If using SnsSmsProvider (once the SMS channel exists)    |
+| `mailgun.js`               | `^11.0.0 \|\| ^12.0.0 \|\| ^13.0.0` | If using MailgunProvider                                 |
+| `nodemailer`               | `^7.0.0 \|\| ^8.0.0 \|\| ^9.0.0`    | If using NodemailerSmtpProvider                          |
+| `twilio`                   | `^5.0.0 \|\| ^6.0.0`                | If using TwilioSmsProvider (once the SMS channel exists) |
+| `firebase-admin`           | `^13.0.0 \|\| ^14.0.0`              | If using FcmPushProvider (once the push channel exists)  |
+| `@aws-sdk/client-dynamodb` | `^3.0.0`                            | If using DynamoDbOtpStorage                              |
+| `handlebars`               | `^4.0.0`                            | If using HandlebarsTemplateRenderer                      |
+| `@react-email/render`      | `^1.0.0 \|\| ^2.0.0`                | If using ReactEmailTemplateRenderer                      |
+| `mjml`                     | `^4.0.0 \|\| ^5.0.0`                | If using MjmlTemplateRenderer                            |
+| `class-validator`          | `^0.14.0 \|\| ^0.15.0`              | If using distributed DTOs (optional — consumer decides)  |
+| `class-transformer`        | `^0.5.0`                            | Idem                                                     |
+| `express`                  | `^5.0.0`                            | Only if your own code needs it — see the note below      |
+| `@types/express`           | `^5.0.0`                            | Idem                                                     |
 
 > **`tenantIdResolver` does not require express.** It receives `NotificationRequest`, a minimal
 > request shape declared by this package (Express- and Fastify-compatible). A public signature
@@ -3326,18 +3325,18 @@ The lib has **zero direct dependencies** (`"dependencies": {}`). All external fu
     "reflect-metadata": "^0.2.0",
     "rxjs": "^7.8.0",
     "ioredis": "^5.0.0",
-    "resend": "^4.0.0",
+    "resend": "^4.0.0 || ^5.0.0 || ^6.0.0",
     "@sendgrid/mail": "^8.0.0",
     "@aws-sdk/client-ses": "^3.0.0",
     "@aws-sdk/client-sns": "^3.0.0",
-    "mailgun.js": "^11.0.0",
-    "nodemailer": "^7.0.0",
-    "twilio": "^5.0.0",
-    "firebase-admin": "^13.0.0",
+    "mailgun.js": "^11.0.0 || ^12.0.0 || ^13.0.0",
+    "nodemailer": "^7.0.0 || ^8.0.0 || ^9.0.0",
+    "twilio": "^5.0.0 || ^6.0.0",
+    "firebase-admin": "^13.0.0 || ^14.0.0",
     "@aws-sdk/client-dynamodb": "^3.0.0",
     "handlebars": "^4.0.0",
-    "@react-email/render": "^1.0.0",
-    "mjml": "^4.0.0",
+    "@react-email/render": "^1.0.0 || ^2.0.0",
+    "mjml": "^4.0.0 || ^5.0.0",
     "class-validator": "^0.14.0 || ^0.15.0",
     "class-transformer": "^0.5.0",
     "express": "^5.0.0",
@@ -3642,9 +3641,7 @@ export interface NotificationErrorResponse {
 }
 
 // Error codes (same const as backend)
-export const NOTIFICATION_ERROR_CODES = {
-  /* ... */
-} as const
+export const NOTIFICATION_ERROR_CODES = {/* ... */} as const
 
 // Default TTLs (informative — lets a frontend countdown match the backend)
 export const DEFAULT_TTLS = {
