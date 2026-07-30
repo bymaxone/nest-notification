@@ -2,9 +2,9 @@
 #
 # The generic library jobs (lint, typecheck, unit + e2e coverage, mutation) run
 # via node-lib-ci.yml so every repo shares one definition. This library's
-# no-Prisma source guard, build-output integrity across its three subpaths, and
-# bundle-size budget stay here. Mutation runs only on a push to main / manual
-# dispatch, never on PRs.
+# no-Prisma source guard, type-level API tests, build-output integrity across
+# its three subpaths, published type resolution, and bundle-size budget stay
+# here. Mutation runs only on a push to main / manual dispatch, never on PRs.
 name: CI
 
 on:
@@ -32,30 +32,46 @@ jobs:
       mutation-source-globs: '^(src/)'
 
   verify:
-    name: Verify build + size
+    name: Verify build + size + type API
     needs: ci
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: bymaxone/.github/.github/actions/setup-node-pnpm@v1
       - name: Guard against @prisma/client imports
         # All storage is behind IOtpStorage / INotificationLogRepository; the
         # library must never import @prisma/client directly.
         run: pnpm check:no-prisma
+      - name: Type-level API tests
+        # Compiles test/types/ against src/, pinning the published signatures so
+        # a refactor that widens or loosens one fails here rather than silently.
+        run: pnpm test:types
       - name: Build all subpaths
         run: pnpm build
       - name: Verify build output integrity
+        # Confirms every declared subpath produced both ESM and CJS bundles plus
+        # declarations in both formats. A missing artifact indicates a tsup
+        # misconfiguration that would ship a broken package to npm — and the
+        # `.d.cts` files in particular are what the `exports` map hands to a
+        # CommonJS consumer.
         run: |
           for subpath in server shared react; do
-            for ext in mjs cjs d.ts; do
+            for ext in mjs cjs d.ts d.cts; do
               if [ ! -f "dist/$subpath/index.$ext" ]; then
                 echo "Missing dist/$subpath/index.$ext"
                 exit 1
               fi
             done
           done
-          echo "All three subpaths produced ESM + CJS + .d.ts"
+          echo "All three subpaths produced ESM + CJS + .d.ts + .d.cts"
+      - name: Verify published type resolution
+        # The type-level API tests compile `src`, so they cannot catch a broken
+        # `exports` map: a consumer resolving the package through the packed
+        # tarball may still land on declarations for the wrong module format.
+        # `attw` packs the tarball and resolves every entrypoint the way each
+        # module resolution mode would.
+        run: pnpm check:exports
       - name: Bundle size budget
         run: pnpm size
 

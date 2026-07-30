@@ -20,15 +20,16 @@ Architecture deep-dive for agents and contributors. For the quick rules, see
 
 ## 1. Project Overview
 
-A transactional notification library for **NestJS 11**. v0.1 ships **email** and **OTP**
+A transactional notification library for **NestJS 11**. It ships **email** and **OTP**
 channels. The defining constraint is decoupling: every external boundary — email
 transport, OTP store, template renderer, audit sink — is a TypeScript **interface** the
 consumer implements or picks from the bundled reference adapters. The library ships
 `"dependencies": {}`; NestJS, the email SDK, the Redis client, and React are all peer
 dependencies. OTP cryptography uses `node:crypto` exclusively.
 
-`ISmsProvider` and `IPushProvider` are declared for v0.2 but their services are not
-implemented; configuring the `sms` / `push` channels is rejected at startup.
+`ISmsProvider` and `IPushProvider` are declared so consumers can plan dispatch code paths
+against a stable shape, but no service implements them; configuring the `sms` / `push`
+channels is rejected at startup.
 
 ## 2. Architecture
 
@@ -68,7 +69,7 @@ Injection tokens are `Symbol()` (collision-proof, exported for advanced override
 
 `validateOptions` runs first — it rejects an empty config (no channel), a missing required
 field, an out-of-range OTP length, and the `sms` / `push` channels (with an explicit
-"planned for v0.2" message). `resolveOptions` then merges consumer values over defaults,
+"not yet implemented" message). `resolveOptions` then merges consumer values over defaults,
 attaches a `resolveForPurpose(purpose)` helper to the OTP section, and **deep-freezes** the
 result so nothing mutates it after bootstrap.
 
@@ -85,7 +86,13 @@ returns a typed result. Codes never appear in a log line or audit entry.
 `NotificationException extends HttpException`. The body is always:
 
 ```json
-{ "error": { "code": "notification.otp_invalid_code", "message": "Invalid OTP code", "details": null } }
+{
+  "error": {
+    "code": "notification.otp_invalid_code",
+    "message": "Invalid OTP code",
+    "details": null
+  }
+}
 ```
 
 Consumers match on the stable `code`. The catalog (`NOTIFICATION_ERROR_DEFINITIONS`) maps
@@ -158,13 +165,13 @@ Adapter examples (Handlebars, MJML, React Email, Prisma repository) live under
 
 ### Peer-dependency matrix
 
-| Channel / feature | Peer dep(s)                                 |
-| ----------------- | ------------------------------------------- |
+| Channel / feature | Peer dep(s)                                                  |
+| ----------------- | ------------------------------------------------------------ |
 | NestJS module     | `@nestjs/common`, `@nestjs/core`, `reflect-metadata`, `rxjs` |
-| Resend email      | `resend`                                    |
-| Redis OTP store   | `ioredis`                                   |
-| React hooks       | `react ^19`                                 |
-| `./shared`        | none                                        |
+| Resend email      | `resend`                                                     |
+| Redis OTP store   | `ioredis`                                                    |
+| React hooks       | `react ^19`                                                  |
+| `./shared`        | none                                                         |
 
 All optional peers are marked `{ "optional": true }` so a consumer pulls in only what it uses.
 
@@ -191,15 +198,26 @@ external peer in the published bundle.
 
 ## 9. Build and Publish
 
-- **tsup** builds 3 subpaths → ESM (`.mjs`) + CJS (`.cjs`) + `.d.ts`; `sideEffects: false`;
-  peer deps always external. The `.mjs` ships unminified (readable stack traces inside a
-  consumer's `node_modules`).
+- **tsup** builds 3 subpaths → ESM (`.mjs`) + CJS (`.cjs`) + `.d.ts` + `.d.cts`;
+  `sideEffects: false`; peer deps always external. The `.mjs` ships unminified (readable
+  stack traces inside a consumer's `node_modules`).
+- **Exports map** — `types` is declared **inside each condition**: `import` resolves to
+  `.d.ts`, `require` to `.d.cts`. A single shared `types` key would hand ESM declarations
+  to a CommonJS consumer; the runtime keeps working, so only `pnpm check:exports` (attw
+  against the packed tarball) catches it. `main` / `module` / `types` at the top level
+  cover the legacy `node` resolution algorithm, which ignores `exports` entirely, and
+  `typesVersions` covers the subpaths in that same mode.
 - **Bundle budgets** (`pnpm size`, brotli): server < 30 KB, shared < 4 KB, react < 8 KB.
-- **CI** — `ci.yml` runs typecheck · lint · `check:no-prisma` · `test:cov` · `test:e2e` ·
-  build · build-output integrity · `size` on every PR. `codeql.yml` and `scorecard.yml`
-  run on push + weekly. `release.yml` is **tag-driven only** (`v*.*.*`): it runs
-  `prepublishOnly`, the dogfood smoke, then `pnpm publish --provenance` via OIDC.
+- **CI** — `ci.yml` is a thin caller of the org-wide `bymaxone/.github` reusable pipeline
+  (lint · typecheck · `test:cov:all` · mutation on main), plus a local `verify` job for
+  `check:no-prisma` · `test:types` · build · build-output integrity · `check:exports` ·
+  `size`. `codeql.yml` and `scorecard.yml` run on push + weekly. `release.yml` is
+  **tag-driven only** (`v*.*.*`): it runs `prepublishOnly`, the release-shape gates
+  (`size`, `check:exports`, dogfood smoke), then `pnpm publish --provenance` via OIDC.
 - **Provenance** — published with npm provenance so consumers can `npm audit signatures`.
+  npm trusted publishing requires the package to already exist, so the very first release
+  is published from a maintainer's machine without provenance; every release after that
+  is published by CI with a SLSA attestation.
 
 ## 10. Common Pitfalls
 

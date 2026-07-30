@@ -179,9 +179,11 @@ export default [
     }
   },
 
-  // Test files — Jest + Node globals, relaxed rules.
+  // Test files — Jest + Node globals, relaxed rules. The e2e suites end in
+  // `-spec.ts` (not `.spec.ts`) and the type tests in `.test-d.ts`, so both need
+  // their own pattern: a file matched by no config block is skipped silently.
   {
-    files: ['**/*.spec.ts', '**/*.test.ts', '**/*.spec.tsx'],
+    files: ['**/*.spec.ts', '**/*.test.ts', '**/*.spec.tsx', '**/*.e2e-spec.ts', '**/*.test-d.ts'],
     languageOptions: {
       parser: tsParser,
       parserOptions: {

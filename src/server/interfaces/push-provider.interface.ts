@@ -1,10 +1,10 @@
 /**
- * @fileoverview Push provider contract (`IPushProvider`) — v0.2 sketch.
+ * @fileoverview Push provider contract (`IPushProvider`) — declared, not yet served.
  * @layer domain
  *
- * @since v0.2 (planned) — the interface is declared in v0.1 so consumers can plan
- * their dispatch code paths; `PushService` is not implemented yet and
- * `validateOptions` rejects a `push` channel.
+ * The contract is exported so consumers can plan their dispatch code paths against a
+ * stable shape. No `PushService` implements it, and `validateOptions` rejects a `push`
+ * channel at startup rather than letting it fail on the first send.
  */
 
 /** Options for one push notification to send. */
@@ -37,7 +37,7 @@ export interface PushSendResult {
 /**
  * Push notification provider.
  *
- * @since v0.2 (planned) — implementations: FCM (Firebase), APN (Apple), Web Push (VAPID).
+ * Intended implementations: FCM (Firebase), APN (Apple), Web Push (VAPID).
  */
 export interface IPushProvider {
   /** Provider name (e.g. `'fcm'`). */

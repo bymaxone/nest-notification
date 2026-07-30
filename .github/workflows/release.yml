@@ -44,7 +44,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           # Don't leave the contents:write token in .git/config — publish uses
@@ -53,13 +53,13 @@ jobs:
           persist-credentials: false
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
         with:
           version: 10.8.1
           run_install: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24.x
           cache: pnpm
@@ -80,16 +80,20 @@ jobs:
             exit 1
           fi
 
-      - name: Verify (typecheck · lint · check:no-prisma · test · build)
+      - name: Verify (typecheck · test:types · lint · check:no-prisma · test · build)
         run: pnpm prepublishOnly
 
-      - name: Release-shape gates (bundle size + dogfood smoke test)
-        # prepublishOnly runs typecheck/lint/tests/build but NOT these two
+      - name: Release-shape gates (bundle size + type resolution + dogfood smoke test)
+        # prepublishOnly runs typecheck/lint/tests/build but NOT these
         # release-shape gates, and this tag-driven job is the only place the
         # publish happens. Enforce them here so a tag cannot publish artifacts
         # that exceed the size budget or have a broken exports/tarball shape.
+        # `check:exports` cannot live in prepublishOnly: it packs the tarball
+        # itself, and the nested pack inside `pnpm publish` resolves to a path
+        # that does not exist.
         run: |
           pnpm size
+          pnpm check:exports
           node scripts/dogfood-smoke-test.mjs
 
       - name: Publish to npm with provenance
@@ -97,7 +101,16 @@ jobs:
         # the GitHub OIDC token (`id-token: write` above) for a short-lived
         # publish credential. `--no-git-checks` is required because the CI runner
         # checks out a detached HEAD at the tag SHA.
-        run: pnpm publish --provenance --no-git-checks
+        # Skips gracefully when the version is already on npm: npm trusted
+        # publishing requires the package to exist, so the very first release is
+        # published from a maintainer's machine and its tag still runs this job.
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if npm view "@bymax-one/nest-notification@${PKG_VERSION}" version 2>/dev/null | grep -qF "$PKG_VERSION"; then
+            echo "Version ${PKG_VERSION} already published on npm — skipping publish step."
+          else
+            pnpm publish --provenance --no-git-checks
+          fi
 
       - name: Extract release notes from CHANGELOG
         # Pulls the section for the current tag out of CHANGELOG.md so the GitHub

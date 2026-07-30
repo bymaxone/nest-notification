@@ -1,10 +1,10 @@
 /**
- * @fileoverview SMS provider contract (`ISmsProvider`) — v0.2 sketch.
+ * @fileoverview SMS provider contract (`ISmsProvider`) — declared, not yet served.
  * @layer domain
  *
- * @since v0.2 (planned) — the interface is declared in v0.1 so consumers can plan
- * their dispatch code paths; `SmsService` is not implemented yet and
- * `validateOptions` rejects an `sms` channel.
+ * The contract is exported so consumers can plan their dispatch code paths against a
+ * stable shape. No `SmsService` implements it, and `validateOptions` rejects an `sms`
+ * channel at startup rather than letting it fail on the first send.
  */
 
 /** Options for one SMS to send. */
@@ -27,7 +27,7 @@ export interface SmsSendResult {
 /**
  * SMS provider.
  *
- * @since v0.2 (planned) — implementations: Twilio, AWS SNS, MessageBird, Vonage.
+ * Intended implementations: Twilio, AWS SNS, MessageBird, Vonage.
  */
 export interface ISmsProvider {
   /** Provider name (e.g. `'twilio'`, `'sns'`). */

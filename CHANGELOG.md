@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.1.0] - unreleased
+## [1.0.0] - unreleased
 
 First public release. Email + OTP channels, multi-tenant by design, pluggable
 providers and storage, zero runtime dependencies, and never an `@prisma/client`
@@ -54,21 +54,24 @@ import.
 - **Supply chain** — published with npm provenance (OIDC); CodeQL `security-extended`,
   OpenSSF Scorecard, and a `check:no-prisma` CI gate.
 
-### Deferred (v0.2)
+### Not implemented
 
-- **SMS channel** — `ISmsProvider` is declared so you can plan dispatch code paths, but
-  the service is not implemented and configuring the `sms` channel is rejected at startup.
-- **Push channel** — `IPushProvider` is declared on the same terms; the service is not
-  implemented and the `push` channel is rejected at startup.
-- **`forRootAsync` `useClass` / `useExisting`** — only `useFactory` is wired in v0.1.
-- **Multi-provider failover** — planned for v0.3.
+The interfaces below ship so you can plan your dispatch code paths against them,
+but the services behind them do not exist yet and configuring those channels is
+rejected at startup rather than failing on the first send.
+
+- **SMS channel** — `ISmsProvider` is declared; configuring the `sms` channel throws.
+- **Push channel** — `IPushProvider` is declared on the same terms; configuring the
+  `push` channel throws.
+- **`forRootAsync` `useClass` / `useExisting`** — only `useFactory` is wired.
+- **Multi-provider failover and routing.**
 
 <!--
-  The v0.1.0 git tag and GitHub release are cut at publish time, so these refs point at
+  The v1.0.0 git tag and GitHub release are cut at publish time, so these refs point at
   the full commit range instead of a not-yet-created tag (which would 404). On publish,
-  swap [0.1.0] to https://github.com/bymaxone/nest-notification/releases/tag/v0.1.0 and
-  [Unreleased] to .../compare/v0.1.0...HEAD.
+  swap [1.0.0] to https://github.com/bymaxone/nest-notification/releases/tag/v1.0.0 and
+  [Unreleased] to .../compare/v1.0.0...HEAD.
 -->
 
 [Unreleased]: https://github.com/bymaxone/nest-notification/compare/dd61fde...HEAD
-[0.1.0]: https://github.com/bymaxone/nest-notification/compare/dd61fde...HEAD
+[1.0.0]: https://github.com/bymaxone/nest-notification/compare/dd61fde...HEAD

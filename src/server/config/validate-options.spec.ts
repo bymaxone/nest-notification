@@ -115,7 +115,9 @@ describe('validateOptions', () => {
     } catch (error) {
       expect(error).toBeInstanceOf(NotificationException)
       const details = (
-        error as { getResponse: () => { error: { details: { provided: number; allowed: string } } } }
+        error as {
+          getResponse: () => { error: { details: { provided: number; allowed: string } } }
+        }
       ).getResponse().error.details
       expect(details.provided).toBe(40)
       expect(details.allowed).toBe('1-32')
@@ -159,15 +161,15 @@ describe('validateOptions', () => {
     ).toThrow('resendCooldownSeconds must be 0 or greater')
   })
 
-  // SMS is declared but not implemented in v0.1 — running with it would silently fail.
-  it('should reject an sms channel in v0.1', () => {
+  // SMS is declared but not implemented — running with it would silently fail.
+  it('should reject an sms channel', () => {
     expect(() => validateOptions({ sms: { provider: {} as never } })).toThrow(
       'SMS channel is not yet implemented'
     )
   })
 
-  // Push is declared but not implemented in v0.1.
-  it('should reject a push channel in v0.1', () => {
+  // Push is declared but not implemented.
+  it('should reject a push channel', () => {
     expect(() => validateOptions({ push: { provider: {} as never } })).toThrow(
       'Push channel is not yet implemented'
     )

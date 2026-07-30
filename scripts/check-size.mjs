@@ -23,7 +23,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 // bundle), not hard design ceilings — raise them with a note when real growth
 // is legitimate; tighten them when the artifact shrinks.
 //
-// Calibration: FINAL for the v0.1 surface (email + OTP channels, services,
+// Calibration: final for the shipped surface (email + OTP channels, services,
 // reference providers, multi-tenant + audit, React hooks). Current brotli
 // headroom: server ~15.5/30 kB, shared ~0.8/4 kB, react ~1.7/8 kB. The budgets
 // sit roughly 2x over the real artifact so a peer dep leaking into the bundle

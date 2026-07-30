@@ -51,7 +51,11 @@
 - **100% statements / branches / functions / lines** per file (`pnpm test:cov:all`). Not a target — a pre-publish gate.
 - **Mutation score ≥ 95% (Stryker `break: 95`), driven toward 100%** — the deeper gate against weak tests. Critical paths (`code-generator`, `timing-safe-compare`, `hash`, `redis-otp.storage`, `otp.service`) at 100%. Never on PRs — runs automatically post-merge on `main` via the shared reusable (`bymaxone/.github` → node-lib-ci), plus an optional manual `pnpm mutation`.
 
-**8. Build** — tsup builds 3 subpaths → ESM (`.mjs`) + CJS (`.cjs`) + `.d.ts`. `sideEffects: false`. Peer deps always external.
+**8. Build & package shape**
+
+- tsup builds 3 subpaths → ESM (`.mjs`) + CJS (`.cjs`) + `.d.ts` + `.d.cts`. `sideEffects: false`. Peer deps always external.
+- `exports` declares `types` **inside each condition** (`import` → `.d.ts`, `require` → `.d.cts`). A single shared `types` key hands ESM declarations to a CommonJS consumer — the runtime still works, so only `pnpm check:exports` (attw against the packed tarball) catches it.
+- A new subpath must be added to `exports`, `typesVersions`, the build-integrity loop in `ci.yml`, the budgets in `scripts/check-size.mjs`, `scripts/dogfood-smoke-test.mjs`, and `test/types/`.
 
 ---
 
@@ -70,8 +74,11 @@
 ## Verification — Run Before Completing Any Task
 
 ```bash
-pnpm typecheck && pnpm lint && pnpm check:no-prisma && pnpm test:cov && pnpm build && pnpm size
+pnpm typecheck && pnpm test:types && pnpm lint && pnpm check:no-prisma && \
+  pnpm test:cov:all && pnpm build && pnpm size && pnpm check:exports
 ```
+
+`pnpm smoke` (the dogfood smoke test) is the last local gate before cutting a tag.
 
 ### Mutation testing (before tagging a release)
 
@@ -85,20 +92,21 @@ pnpm mutation           # full run; writes reports/mutation/mutation.html
 Equivalent mutants are documented inline with `// Stryker disable next-line <Mutator>: <reason>`
 — acceptable **only** for genuinely equivalent mutants (no test can kill them), each carrying a
 reason. Minimize them, and **never** disable a mutant a test could kill. Do **not** add mutation
-testing to `prepublishOnly` or the per-PR CI — it is a manual/release gate.
+testing to `prepublishOnly` or the per-PR CI — CI runs it automatically post-merge on `main`
+via the shared reusable, and locally it stays a manual pre-release check.
 
 ---
 
 ## Where Things Live
 
-| Concern                     | Path                                            |
-| --------------------------- | ----------------------------------------------- |
-| Dynamic module              | `src/server/bymax-notification.module.ts`       |
-| Services                    | `src/server/services/`                          |
-| Reference providers/storage | `src/server/providers/`                         |
-| Crypto utils                | `src/server/utils/`                             |
-| Interfaces (contracts)      | `src/server/interfaces/`                        |
-| Error catalog + exception   | `src/server/errors/`                            |
-| React hooks                 | `src/react/`                                    |
-| Full architecture deep-dive | [AGENTS.md](./AGENTS.md) (load on demand)       |
+| Concern                     | Path                                                          |
+| --------------------------- | ------------------------------------------------------------- |
+| Dynamic module              | `src/server/bymax-notification.module.ts`                     |
+| Services                    | `src/server/services/`                                        |
+| Reference providers/storage | `src/server/providers/`                                       |
+| Crypto utils                | `src/server/utils/`                                           |
+| Interfaces (contracts)      | `src/server/interfaces/`                                      |
+| Error catalog + exception   | `src/server/errors/`                                          |
+| React hooks                 | `src/react/`                                                  |
+| Full architecture deep-dive | [AGENTS.md](./AGENTS.md) (load on demand)                     |
 | Spec / plan                 | `docs/technical_specification.md`, `docs/development_plan.md` |
