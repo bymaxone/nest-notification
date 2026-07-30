@@ -85,7 +85,7 @@
     "smoke": "node scripts/dogfood-smoke-test.mjs",
     "check:exports": "attw --pack .",
     "clean": "rm -rf dist coverage",
-    "check:no-prisma": "grep -r '@prisma/client' src && exit 1 || exit 0",
+    "check:no-prisma": "grep -rq '@prisma/client' src; s=$?; [ $s -eq 1 ] && exit 0; [ $s -eq 0 ] && { echo check:no-prisma: found @prisma/client import in src/; exit 1; }; echo check:no-prisma: grep failed with exit $s; exit $s",
     "prepublishOnly": "pnpm clean && pnpm typecheck && pnpm test:types && pnpm lint && pnpm check:no-prisma && pnpm test:cov:all && pnpm build",
     "release": "pnpm publish --provenance",
     "prepare": "husky"

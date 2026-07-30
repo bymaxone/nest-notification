@@ -403,7 +403,7 @@ The `./react` subpath is browser-only state and UX — it drives the OTP-input b
 import { useOtpInput, useOtpCountdown } from '@bymax-one/nest-notification/react'
 
 function OtpForm({ expiresAt }: { expiresAt: number }) {
-  const { values, onChange, onKeyDown, onPaste, refs, code, isComplete } = useOtpInput({
+  const { values, onChange, onKeyDown, onPaste, refs, isComplete } = useOtpInput({
     length: 6,
     type: 'numeric',
     onComplete: (full) => void submitToBackend(full)
@@ -425,7 +425,10 @@ function OtpForm({ expiresAt }: { expiresAt: number }) {
         />
       ))}
       <p>{expired ? 'Code expired' : `Expires in ${formatted}`}</p>
-      <button disabled={!isComplete}>Verify {code}</button>
+      {/* Never render the code itself — `onComplete` hands it to your submit path.
+          Echoing it into a label leaks it to screen readers, screenshots and
+          session-replay tools, which is exactly what the server side avoids. */}
+      <button disabled={!isComplete}>Verify</button>
     </form>
   )
 }
