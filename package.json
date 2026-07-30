@@ -182,6 +182,7 @@
     "@stryker-mutator/core": "^9",
     "@stryker-mutator/jest-runner": "^9",
     "@stryker-mutator/typescript-checker": "^9",
+    "@testing-library/dom": "^10.4.1",
     "@testing-library/react": "^16",
     "@types/jest": "^30.0.0",
     "@types/node": "^24",
