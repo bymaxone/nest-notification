@@ -3205,12 +3205,12 @@ Clear limits to avoid feature creep:
 
 ### 13.1 Peer dependencies (server subpath)
 
-| Package            | Version   | Reason                                                                           |
-| ------------------ | --------- | -------------------------------------------------------------------------------- |
-| `@nestjs/common`   | `^11.0.0` | Framework core — decorators, providers, exceptions                               |
-| `@nestjs/core`     | `^11.0.0` | DI container, module system                                                      |
-| `reflect-metadata` | `^0.2.0`  | Metadata for decorators                                                          |
-| `rxjs`             | `^7.8.0`  | Required peer of `@nestjs/common`; the audit interceptor returns an `Observable` |
+| Package            | Version    | Reason                                                                           |
+| ------------------ | ---------- | -------------------------------------------------------------------------------- |
+| `@nestjs/common`   | `^11.0.0`  | Framework core — decorators, providers, exceptions                               |
+| `@nestjs/core`     | `^11.1.18` | DI container, module system                                                      |
+| `reflect-metadata` | `^0.2.0`   | Metadata for decorators                                                          |
+| `rxjs`             | `^7.8.0`   | Required peer of `@nestjs/common`; the audit interceptor returns an `Observable` |
 
 ### 13.2 Optional peer dependencies (server subpath)
 
@@ -3224,13 +3224,13 @@ Needed only if the consumer uses the corresponding reference provider:
 | `@aws-sdk/client-ses`      | `^3.0.0`                            | If using SesProvider                                     |
 | `@aws-sdk/client-sns`      | `^3.0.0`                            | If using SnsSmsProvider (once the SMS channel exists)    |
 | `mailgun.js`               | `^11.0.0 \|\| ^12.0.0 \|\| ^13.0.0` | If using MailgunProvider                                 |
-| `nodemailer`               | `^7.0.0 \|\| ^8.0.0 \|\| ^9.0.0`    | If using NodemailerSmtpProvider                          |
+| `nodemailer`               | `^9.0.1`                            | If using NodemailerSmtpProvider                          |
 | `twilio`                   | `^5.0.0 \|\| ^6.0.0`                | If using TwilioSmsProvider (once the SMS channel exists) |
 | `firebase-admin`           | `^13.0.0 \|\| ^14.0.0`              | If using FcmPushProvider (once the push channel exists)  |
 | `@aws-sdk/client-dynamodb` | `^3.0.0`                            | If using DynamoDbOtpStorage                              |
-| `handlebars`               | `^4.0.0`                            | If using HandlebarsTemplateRenderer                      |
+| `handlebars`               | `^4.7.7`                            | If using HandlebarsTemplateRenderer                      |
 | `@react-email/render`      | `^1.0.0 \|\| ^2.0.0`                | If using ReactEmailTemplateRenderer                      |
-| `mjml`                     | `^4.0.0 \|\| ^5.0.0`                | If using MjmlTemplateRenderer                            |
+| `mjml`                     | `^5.0.0`                            | If using MjmlTemplateRenderer                            |
 | `class-validator`          | `^0.14.0 \|\| ^0.15.0`              | If using distributed DTOs (optional — consumer decides)  |
 | `class-transformer`        | `^0.5.0`                            | Idem                                                     |
 | `express`                  | `^5.0.0`                            | Only if your own code needs it — see the note below      |
@@ -3321,7 +3321,7 @@ The lib has **zero direct dependencies** (`"dependencies": {}`). All external fu
   "dependencies": {},
   "peerDependencies": {
     "@nestjs/common": "^11.0.0",
-    "@nestjs/core": "^11.0.0",
+    "@nestjs/core": "^11.1.18",
     "reflect-metadata": "^0.2.0",
     "rxjs": "^7.8.0",
     "ioredis": "^5.0.0",
@@ -3330,13 +3330,13 @@ The lib has **zero direct dependencies** (`"dependencies": {}`). All external fu
     "@aws-sdk/client-ses": "^3.0.0",
     "@aws-sdk/client-sns": "^3.0.0",
     "mailgun.js": "^11.0.0 || ^12.0.0 || ^13.0.0",
-    "nodemailer": "^7.0.0 || ^8.0.0 || ^9.0.0",
+    "nodemailer": "^9.0.1",
     "twilio": "^5.0.0 || ^6.0.0",
     "firebase-admin": "^13.0.0 || ^14.0.0",
     "@aws-sdk/client-dynamodb": "^3.0.0",
-    "handlebars": "^4.0.0",
+    "handlebars": "^4.7.7",
     "@react-email/render": "^1.0.0 || ^2.0.0",
-    "mjml": "^4.0.0 || ^5.0.0",
+    "mjml": "^5.0.0",
     "class-validator": "^0.14.0 || ^0.15.0",
     "class-transformer": "^0.5.0",
     "express": "^5.0.0",
