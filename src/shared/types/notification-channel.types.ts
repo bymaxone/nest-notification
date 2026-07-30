@@ -2,8 +2,8 @@
  * @fileoverview Public `NotificationChannel` union for the shared subpath.
  * @layer shared
  *
- * Zero-dependency type. `'sms'` and `'push'` are declared in v0.1 so consumers
- * can plan dispatch code paths even though their services ship in v0.2.
+ * Zero-dependency type. `'sms'` and `'push'` are part of the union so consumers can
+ * plan dispatch code paths against a stable shape, even though no service serves them.
  */
 
 /**
@@ -11,7 +11,7 @@
  *
  * - `email` — transactional email.
  * - `otp` — one-time-passcode lifecycle (generate / verify / consume).
- * - `sms` — text message (declared now, implemented in v0.2).
- * - `push` — device push notification (declared now, implemented in v0.2).
+ * - `sms` — text message (declared; no service behind it).
+ * - `push` — device push notification (declared; no service behind it).
  */
 export type NotificationChannel = 'email' | 'otp' | 'sms' | 'push'

@@ -96,7 +96,7 @@ export class BymaxNotificationModule {
   /**
    * Registers the module with options resolved at runtime through DI.
    *
-   * v0.1 supports the `useFactory` + `inject` form only — `useClass`/`useExisting`
+   * Only the `useFactory` + `inject` form is supported — `useClass`/`useExisting`
    * are rejected with an explicit error. The factory runs once (under an internal
    * token); every channel token and all three services derive from its result, so
    * a `ConfigService`-driven async bootstrap wires the same graph as `forRoot`.
@@ -314,8 +314,8 @@ function isType(value: unknown): value is Type<unknown> {
 }
 
 /**
- * Validates the async options form. v0.1 wires `useFactory` only; `useClass` and
- * `useExisting` are reserved for v0.2 and rejected here so a consumer never boots
+ * Validates the async options form. Only `useFactory` is wired; `useClass` and
+ * `useExisting` are reserved and rejected here so a consumer never boots
  * believing an unwired form took effect. The cast reads fields the public type
  * does not declare, catching plain-JS callers that bypass the compiler.
  */
@@ -323,8 +323,8 @@ function assertUseFactory(asyncOptions: BymaxNotificationModuleAsyncOptions): vo
   const candidate = asyncOptions as { useClass?: unknown; useExisting?: unknown }
   if (candidate.useClass !== undefined || candidate.useExisting !== undefined) {
     throw new Error(
-      '[BymaxNotificationModule] forRootAsync supports only `useFactory` in v0.1; ' +
-        '`useClass` / `useExisting` are not yet implemented (planned for v0.2).'
+      '[BymaxNotificationModule] forRootAsync supports only `useFactory`; ' +
+        '`useClass` / `useExisting` are not yet implemented.'
     )
   }
   if (typeof asyncOptions.useFactory !== 'function') {

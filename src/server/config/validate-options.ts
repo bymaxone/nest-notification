@@ -20,7 +20,7 @@ import type {
  *
  * @param options - The consumer-supplied module options.
  * @throws Error When no channel is configured, a channel is malformed, or an
- * unsupported (`sms`/`push`) channel is requested in v0.1.
+ * unsupported (`sms`/`push`) channel is requested.
  * @throws NotificationException With `OTP_INVALID_LENGTH` when `otp.defaultLength` is out of range.
  */
 export function validateOptions(options: BymaxNotificationModuleOptions): void {
@@ -32,13 +32,13 @@ export function validateOptions(options: BymaxNotificationModuleOptions): void {
 
   if (options.sms) {
     throw new Error(
-      "[BymaxNotificationModule] SMS channel is not yet implemented (planned for v0.2). Remove 'sms' from options."
+      "[BymaxNotificationModule] SMS channel is not yet implemented. Remove 'sms' from options."
     )
   }
 
   if (options.push) {
     throw new Error(
-      "[BymaxNotificationModule] Push channel is not yet implemented (planned for v0.2). Remove 'push' from options."
+      "[BymaxNotificationModule] Push channel is not yet implemented. Remove 'push' from options."
     )
   }
 

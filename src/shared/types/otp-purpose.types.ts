@@ -17,7 +17,7 @@
  * - `email_verification` — confirm ownership of an email address.
  * - `password_reset` — authorize a password change.
  * - `mfa_oob` — out-of-band multi-factor challenge.
- * - `phone_verification` — confirm a phone number; SMS-delivered (v0.2 / manual today).
+ * - `phone_verification` — confirm a phone number; delivered manually until an SMS channel exists.
  * - `magic_link` — long, single-use token delivered as a URL rather than typed.
  */
 export type OtpPurpose =

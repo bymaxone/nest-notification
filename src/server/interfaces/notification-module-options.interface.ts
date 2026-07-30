@@ -103,8 +103,8 @@ export interface OtpChannelOptions {
 /**
  * SMS channel configuration.
  *
- * @since v0.2 (planned) — declared so consumers can plan code paths;
- * `validateOptions` rejects this channel in v0.1.
+ * Declared so consumers can plan code paths against a stable shape; no service
+ * implements the channel and `validateOptions` rejects it at startup.
  */
 export interface SmsChannelOptions {
   provider: ISmsProvider | Newable<ISmsProvider>
@@ -115,8 +115,8 @@ export interface SmsChannelOptions {
 /**
  * Push channel configuration.
  *
- * @since v0.2 (planned) — declared so consumers can plan code paths;
- * `validateOptions` rejects this channel in v0.1.
+ * Declared so consumers can plan code paths against a stable shape; no service
+ * implements the channel and `validateOptions` rejects it at startup.
  */
 export interface PushChannelOptions {
   provider: IPushProvider | Newable<IPushProvider>
@@ -146,9 +146,9 @@ export interface BymaxNotificationModuleOptions {
   email?: EmailChannelOptions
   /** OTP channel — registered only when present. */
   otp?: OtpChannelOptions
-  /** SMS channel (v0.2). */
+  /** SMS channel — declared; rejected at startup. */
   sms?: SmsChannelOptions
-  /** Push channel (v0.2). */
+  /** Push channel — declared; rejected at startup. */
   push?: PushChannelOptions
   /** Audit log — defaults to a no-op sink when absent. */
   audit?: AuditOptions
@@ -157,7 +157,7 @@ export interface BymaxNotificationModuleOptions {
 /**
  * Factory interface for the `useClass` / `useExisting` async pattern.
  *
- * @since v0.2 (planned) — reserved; v0.1 wires only `useFactory`.
+ * Reserved — only `useFactory` is wired today.
  */
 export interface BymaxNotificationModuleOptionsFactory {
   createNotificationOptions():
@@ -168,8 +168,8 @@ export interface BymaxNotificationModuleOptionsFactory {
 /**
  * Asynchronous module options passed to `BymaxNotificationModule.forRootAsync`.
  *
- * v0.1 supports the `useFactory` + `inject` form; `useClass`/`useExisting` are
- * reserved for v0.2.
+ * Only the `useFactory` + `inject` form is supported; `useClass`/`useExisting` are
+ * reserved and rejected at registration.
  */
 export interface BymaxNotificationModuleAsyncOptions {
   /** Modules to import so the factory's injected dependencies are available. */

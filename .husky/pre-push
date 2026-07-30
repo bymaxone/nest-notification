@@ -1,0 +1,10 @@
+#!/usr/bin/env sh
+# Intentionally empty — do NOT delete this file.
+#
+# Husky's shim (.husky/_/h) bails with `[ ! -f "$s" ] && exit 0` before it sources
+# ~/.config/husky/init.sh. That init script is what dispatches to the machine-wide
+# ~/.git-hooks/<hook>, so removing this file as "dead code" silently disables every
+# global pre-push guard for this repository.
+#
+# The repo itself has no pre-push work of its own: CI gates the suite, and
+# lint-staged already ran at commit time.

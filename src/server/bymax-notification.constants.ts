@@ -17,10 +17,10 @@ export const BYMAX_NOTIFICATION_EMAIL_PROVIDER = Symbol('BYMAX_NOTIFICATION_EMAI
 /** Token for the registered `IOtpStorage`. */
 export const BYMAX_NOTIFICATION_OTP_STORAGE = Symbol('BYMAX_NOTIFICATION_OTP_STORAGE')
 
-/** Token for the registered `ISmsProvider` (v0.2). */
+/** Token for the registered `ISmsProvider` — reserved; no SMS service is wired. */
 export const BYMAX_NOTIFICATION_SMS_PROVIDER = Symbol('BYMAX_NOTIFICATION_SMS_PROVIDER')
 
-/** Token for the registered `IPushProvider` (v0.2). */
+/** Token for the registered `IPushProvider` — reserved; no push service is wired. */
 export const BYMAX_NOTIFICATION_PUSH_PROVIDER = Symbol('BYMAX_NOTIFICATION_PUSH_PROVIDER')
 
 /** Token for the registered `IEmailTemplateRenderer`. */
