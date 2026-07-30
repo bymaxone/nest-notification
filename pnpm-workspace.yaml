@@ -1,0 +1,21 @@
+# pnpm settings for this repository.
+#
+# These live here rather than in `.npmrc` because `auto-install-peers` is a pnpm
+# key: npm reads `.npmrc` too and warns "Unknown project config" on every
+# invocation, including the `npm pack` that `check:exports` runs.
+#
+# Do not materialise optional peer dependencies into this repo's lockfile.
+# The library declares 18 optional peers so consumers can pick a provider or a
+# store, but it imports none of them: every integration goes through an
+# interface, and even the bundled reference adapters are structurally typed and
+# load their SDK through a dynamic import(). With pnpm's default
+# `autoInstallPeers: true`, all 18 were installed as direct dependencies of the
+# workspace root — dragging in nodemailer, mjml (and its unmaintained
+# html-minifier), twilio, firebase-admin and the AWS SDKs, none of which any
+# source, test or script touches. That surface produced every Dependabot alert
+# on this repository, for code never executed here and never published.
+#
+# The required peers are declared as devDependencies, so they stay installed and
+# the gates keep running. Peers that a devDependency needs must be declared
+# explicitly too — see @testing-library/dom, required by @testing-library/react.
+autoInstallPeers: false
