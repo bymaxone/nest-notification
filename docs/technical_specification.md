@@ -3320,7 +3320,7 @@ The lib has **zero direct dependencies** (`"dependencies": {}`). All external fu
   },
   "dependencies": {},
   "peerDependencies": {
-    "@nestjs/common": "^11.0.0",
+    "@nestjs/common": "^11.0.16",
     "@nestjs/core": "^11.1.18",
     "reflect-metadata": "^0.2.0",
     "rxjs": "^7.8.0",

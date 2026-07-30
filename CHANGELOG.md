@@ -5,6 +5,25 @@ All notable changes to `@bymax-one/nest-notification` will be documented in this
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] — 2026-07-30
+
+### Security
+
+- **`@nestjs/common` peer floor raised to `^11.0.16`.** The declared `^11.0.0`
+  admitted 11.0.0–11.0.15, which carry
+  [GHSA-cj7v-w2c7-cp7c](https://github.com/advisories/GHSA-cj7v-w2c7-cp7c) —
+  remote code execution via the `Content-Type` header, first patched in 11.0.16.
+
+  `@nestjs/core` already sat at `^11.1.18` and needed no change. This gap is worth
+  recording precisely: the ranges here were audited and clean when `1.0.0` was cut,
+  and stopped being clean when the advisory was published, with no commit and no
+  alert in between. Dependabot does not catch it — it looks at what is _installed_
+  in this repository, never at what the package _declares it supports_.
+
+  Shipped as a patch, which is where a security fix belongs.
+
+---
+
 ## [Unreleased]
 
 ## [1.0.0] - 2026-07-30
@@ -67,4 +86,5 @@ rejected at startup rather than failing on the first send.
 - **Multi-provider failover and routing.**
 
 [Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.0.0...HEAD
+[1.0.1]: https://github.com/bymaxone/nest-notification/releases/tag/v1.0.1
 [1.0.0]: https://github.com/bymaxone/nest-notification/releases/tag/v1.0.0
