@@ -22,6 +22,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   alert in between. Dependabot does not catch it — it looks at what is _installed_
   in this repository, never at what the package _declares it supports_.
 
+- **`handlebars` peer floor raised to `^4.7.9`.** The declared `^4.7.7` admitted
+  4.7.7 and 4.7.8, which carry eight advisories, the worst of them **critical**:
+  [GHSA-2w6w-674q-4c4q](https://github.com/advisories/GHSA-2w6w-674q-4c4q)
+  (JavaScript injection via AST type confusion), alongside four further injection
+  and denial-of-service findings, all first patched in 4.7.9.
+
+  `handlebars` is an _optional_ peer — the library never imports it, and the
+  Handlebars renderer is an adapter example under `docs/templates/`. Optional
+  does not make the range harmless: it is still the version this package tells
+  anyone who opts in that it supports, and a consumer wiring that renderer
+  resolves it against exactly this floor.
+
+  Found by the scheduled `peer-advisory-drift` check on its first run, not by
+  the manual sweep that raised the NestJS floor — that sweep went looking for
+  NestJS specifically and never asked the question of the other eleven peers.
+
   Shipped as a patch, which is where a security fix belongs.
 
 ## [1.0.0] - 2026-07-30
