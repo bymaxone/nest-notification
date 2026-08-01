@@ -91,10 +91,15 @@ jobs:
         # `check:exports` cannot live in prepublishOnly: it packs the tarball
         # itself, and the nested pack inside `pnpm publish` resolves to a path
         # that does not exist.
+        #
+        # `check:published` is deliberately absent: `prepublishOnly` already runs
+        # it, and the step above invokes `pnpm prepublishOnly`. Repeating it here
+        # would re-probe every README link and recompile the snippets for no new
+        # information, adding time and one more chance of a network flake to the
+        # one job that must not fail spuriously.
         run: |
           pnpm size
           pnpm check:exports
-          pnpm check:published
           node scripts/dogfood-smoke-test.mjs
 
       - name: Publish to npm with provenance
