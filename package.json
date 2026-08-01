@@ -1,7 +1,7 @@
 {
   "name": "@bymax-one/nest-notification",
-  "version": "1.0.0",
-  "description": "Multi-channel notification library for NestJS \u2014 email, OTP, SMS, push \u2014 with pluggable providers and storage, multi-tenant by design, zero runtime dependencies.",
+  "version": "1.0.1",
+  "description": "Multi-channel notification library for NestJS — email, OTP, SMS, push — with pluggable providers and storage, multi-tenant by design, zero runtime dependencies.",
   "author": "Bymax One <support@bymax.one>",
   "license": "MIT",
   "homepage": "https://github.com/bymaxone/nest-notification#readme",
@@ -93,7 +93,7 @@
   },
   "dependencies": {},
   "peerDependencies": {
-    "@nestjs/common": "^11.0.0",
+    "@nestjs/common": "^11.0.16",
     "@nestjs/core": "^11.1.18",
     "reflect-metadata": "^0.2.0",
     "rxjs": "^7.8.0",
@@ -107,7 +107,7 @@
     "twilio": "^5.0.0 || ^6.0.0",
     "firebase-admin": "^13.0.0 || ^14.0.0",
     "@aws-sdk/client-dynamodb": "^3.0.0",
-    "handlebars": "^4.7.7",
+    "handlebars": "^4.7.9",
     "@react-email/render": "^1.0.0 || ^2.0.0",
     "mjml": "^5.0.0",
     "class-validator": "^0.14.0 || ^0.15.0",

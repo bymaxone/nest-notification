@@ -3320,7 +3320,7 @@ The lib has **zero direct dependencies** (`"dependencies": {}`). All external fu
   },
   "dependencies": {},
   "peerDependencies": {
-    "@nestjs/common": "^11.0.0",
+    "@nestjs/common": "^11.0.16",
     "@nestjs/core": "^11.1.18",
     "reflect-metadata": "^0.2.0",
     "rxjs": "^7.8.0",
@@ -3334,7 +3334,7 @@ The lib has **zero direct dependencies** (`"dependencies": {}`). All external fu
     "twilio": "^5.0.0 || ^6.0.0",
     "firebase-admin": "^13.0.0 || ^14.0.0",
     "@aws-sdk/client-dynamodb": "^3.0.0",
-    "handlebars": "^4.7.7",
+    "handlebars": "^4.7.9",
     "@react-email/render": "^1.0.0 || ^2.0.0",
     "mjml": "^5.0.0",
     "class-validator": "^0.14.0 || ^0.15.0",

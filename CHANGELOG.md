@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-07-30
+
+### Security
+
+- **`@nestjs/common` peer floor raised to `^11.0.16`.** The declared `^11.0.0`
+  admitted 11.0.0–11.0.15, which carry
+  [GHSA-cj7v-w2c7-cp7c](https://github.com/advisories/GHSA-cj7v-w2c7-cp7c) —
+  remote code execution via the `Content-Type` header, first patched in 11.0.16.
+
+  `@nestjs/core` already sat at `^11.1.18` and needed no change. This gap is worth
+  recording precisely: the ranges here were audited and clean when `1.0.0` was cut,
+  and stopped being clean when the advisory was published, with no commit and no
+  alert in between. Dependabot does not catch it — it looks at what is _installed_
+  in this repository, never at what the package _declares it supports_.
+
+- **`handlebars` peer floor raised to `^4.7.9`.** The declared `^4.7.7` admitted
+  4.7.7 and 4.7.8, which carry eight advisories, the worst of them **critical**:
+  [GHSA-2w6w-674q-4c4q](https://github.com/advisories/GHSA-2w6w-674q-4c4q)
+  (JavaScript injection via AST type confusion), alongside four further injection
+  and denial-of-service findings, all first patched in 4.7.9.
+
+  `handlebars` is an _optional_ peer — the library never imports it, and the
+  Handlebars renderer is an adapter example under `docs/templates/`. Optional
+  does not make the range harmless: it is still the version this package tells
+  anyone who opts in that it supports, and a consumer wiring that renderer
+  resolves it against exactly this floor.
+
+  Found by the scheduled `peer-advisory-drift` check on its first run, not by
+  the manual sweep that raised the NestJS floor — that sweep went looking for
+  NestJS specifically and never asked the question of the other eleven peers.
+
+  Shipped as a patch, which is where a security fix belongs.
+
 ## [1.0.0] - 2026-07-30
 
 First public release. Email + OTP channels, multi-tenant by design, pluggable
@@ -66,5 +99,6 @@ rejected at startup rather than failing on the first send.
 - **`forRootAsync` `useClass` / `useExisting`** — only `useFactory` is wired.
 - **Multi-provider failover and routing.**
 
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/bymaxone/nest-notification/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/bymaxone/nest-notification/releases/tag/v1.0.0
