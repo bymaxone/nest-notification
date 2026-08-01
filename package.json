@@ -1,7 +1,7 @@
 {
   "name": "@bymax-one/nest-notification",
   "version": "1.0.0",
-  "description": "Multi-channel notification library for NestJS — email, OTP, SMS, push — with pluggable providers and storage, multi-tenant by design, zero runtime dependencies.",
+  "description": "Multi-channel notification library for NestJS \u2014 email, OTP, SMS, push \u2014 with pluggable providers and storage, multi-tenant by design, zero runtime dependencies.",
   "author": "Bymax One <support@bymax.one>",
   "license": "MIT",
   "homepage": "https://github.com/bymaxone/nest-notification#readme",
@@ -78,7 +78,7 @@
     "mutation:dry-run": "stryker run --dryRunOnly",
     "mutation:incremental": "stryker run --incremental",
     "prepare": "husky",
-    "prepublishOnly": "pnpm clean && pnpm typecheck && pnpm test:types && pnpm lint && pnpm check:no-prisma && pnpm test:cov:all && pnpm build",
+    "prepublishOnly": "pnpm clean && pnpm typecheck && pnpm test:types && pnpm lint && pnpm check:no-prisma && pnpm test:cov:all && pnpm build && pnpm check:published",
     "release": "pnpm publish --provenance",
     "size": "node scripts/check-size.mjs",
     "smoke": "node scripts/dogfood-smoke-test.mjs",
