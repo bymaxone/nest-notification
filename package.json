@@ -79,7 +79,7 @@
     "mutation:incremental": "stryker run --incremental",
     "prepare": "husky",
     "prepublishOnly": "pnpm clean && pnpm typecheck && pnpm test:types && pnpm lint && pnpm check:no-prisma && pnpm test:cov:all && pnpm build && pnpm check:published",
-    "release": "pnpm publish --provenance",
+    "release": "npm publish --provenance --access public",
     "size": "node scripts/check-size.mjs",
     "smoke": "node scripts/dogfood-smoke-test.mjs",
     "test": "jest",
