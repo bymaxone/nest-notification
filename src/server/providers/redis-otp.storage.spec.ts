@@ -1,3 +1,5 @@
+import { inspect } from 'node:util'
+
 import { hashTenantRecipient } from '../utils/hash'
 import type { OtpEntry } from '../interfaces/otp-storage.interface'
 
@@ -333,5 +335,17 @@ describe('RedisOtpStorage', () => {
   // delete never throws for a missing key.
   it('should treat delete as idempotent', async () => {
     await expect(storage.delete(T, R, P)).resolves.toBeUndefined()
+  })
+  it('keeps the Redis client out of every serialization path', () => {
+    // An ioredis instance carries `options.password` as a plain field, so a
+    // storage that exposes its client leads a logger or an error reporter
+    // straight to the Redis credentials.
+    const password = 'r3d1s-canary'
+    const client = { options: { password } } as unknown as RedisLike
+    const storage = new RedisOtpStorage({ redisClient: client })
+
+    expect(JSON.stringify(storage)).not.toContain(password)
+    expect(JSON.stringify({ ...storage })).not.toContain(password)
+    expect(inspect(storage, { depth: null, showHidden: true })).not.toContain(password)
   })
 })

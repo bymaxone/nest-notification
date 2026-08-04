@@ -83,12 +83,26 @@ export class ResendEmailProvider implements IEmailProvider {
    * collapses concurrent first sends onto a single dynamic `import()` + instantiation;
    * a failed init resets this back to `null` so a transient error can be retried.
    */
-  private clientPromise: Promise<ResendLike> | null = null
+  #clientPromise: Promise<ResendLike> | null = null
 
   /**
    * @param options - Adapter options; `apiKey` is required to actually send.
    */
-  constructor(private readonly options: ResendEmailProviderOptions = {}) {}
+  /**
+   * The adapter options, which carry the Resend API key.
+   *
+   * An ECMAScript private field rather than a TypeScript `private` one: the
+   * latter is erased at runtime, leaving an enumerable own property that
+   * `JSON.stringify`, object spread and `util.inspect` all walk into. This
+   * provider is registered in the container, so anything that renders it
+   * incidentally — a structured logger formatting its arguments, an error
+   * reporter capturing the scope of a throw — would emit the key in plaintext.
+   */
+  readonly #options: ResendEmailProviderOptions
+
+  constructor(options: ResendEmailProviderOptions = {}) {
+    this.#options = options
+  }
 
   /**
    * Whether an API key was supplied. Does not load the SDK.
@@ -96,7 +110,7 @@ export class ResendEmailProvider implements IEmailProvider {
    * @returns `true` when an `apiKey` is present.
    */
   isConfigured(): boolean {
-    return Boolean(this.options.apiKey)
+    return Boolean(this.#options.apiKey)
   }
 
   /**
@@ -162,8 +176,8 @@ export class ResendEmailProvider implements IEmailProvider {
    * @throws Error When `apiKey` is missing or the `resend` package is not installed.
    */
   private getClient(): Promise<ResendLike> {
-    this.clientPromise ??= this.createClient()
-    return this.clientPromise
+    this.#clientPromise ??= this.createClient()
+    return this.#clientPromise
   }
 
   /**
@@ -175,14 +189,14 @@ export class ResendEmailProvider implements IEmailProvider {
    */
   private async createClient(): Promise<ResendLike> {
     try {
-      const apiKey = this.options.apiKey
+      const apiKey = this.#options.apiKey
       if (!apiKey) {
         throw new Error('ResendEmailProvider: missing API key — pass { apiKey } to the constructor')
       }
       const ResendCtor = await this.loadResendConstructor()
       return new ResendCtor(apiKey)
     } catch (error) {
-      this.clientPromise = null
+      this.#clientPromise = null
       throw error
     }
   }

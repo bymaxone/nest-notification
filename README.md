@@ -603,6 +603,7 @@ When integrating `@bymax-one/nest-notification` in production, verify each of th
 | Code Lifetime      | TTL-bound in the store; expiry and absence are reported identically so neither leaks the other            |
 | Code Exposure      | Never logged, never audited, never in an error message or stack trace — asserted by a regression test     |
 | Recipient PII      | Absent from keys; optionally masked before it reaches the audit sink                                      |
+| Provider Secrets   | The Resend API key and the Redis client live in private fields; serializing a provider omits them         |
 | Tenant Isolation   | `tenantId` scopes every operation and is resolved from a trusted source, not the payload                  |
 | Template Injection | HTML body escaped on interpolation by the bundled renderer — closes stored XSS through a display name     |
 | Attachment DoS     | Total attachment size rejected against a budget before the provider is called                             |
