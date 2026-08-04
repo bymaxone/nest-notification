@@ -1383,7 +1383,7 @@ export class ResendEmailProvider implements IEmailProvider {
 2. `getClient()`:
    - If cached: return cached
    - If there is no `apiKey`: throw `'Missing API key — pass { apiKey } to the constructor'`
-   - `try { const mod = await import('resend'); ResendCtor = mod.Resend }` → if fails, throw `'`resend`package is not installed. Run`pnpm add resend` in the consumer app.'`
+   - `try { const mod = await import('resend'); ResendCtor = mod.Resend }` → if it fails, throw `resend package is not installed. Run pnpm add resend in the consumer app.`
    - Cache new instance
 
 3. Type forward declaration `ResendLike` lives locally — avoids hard import of `resend` types at compile time. Shape mirrors the subset of `Resend.emails.send` used.
