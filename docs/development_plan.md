@@ -31,6 +31,7 @@
 ### 1.1 Development strategy
 
 The implementation follows the **TDD red-green-refactor** protocol with vertically sliced phases:
+
 - Each phase delivers **usable functionality** — at the end of each phase, the lib can be installed in a NestJS fixture app and the implemented subset exercised
 - **Tests precede implementation** in every file with non-trivial logic (services, providers, utils, interceptors)
 - **Per-phase coverage gate**: **100% line/branch per implemented file** (Bymax testing standard), with extra mutation focus on critical paths (OTP generation, timing-safe comparison, key hashing, code redaction in audit)
@@ -41,35 +42,35 @@ The phase order respects the dependency graph (Appendix A): interfaces before se
 
 ### 1.2 Guiding principles
 
-| Principle | Practical application |
-|---|---|
-| **TS strict, zero `any`** | Compiler in `strict: true`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`. Only punctual casts via `as never` in inherited NestJS error cases — always commented with the reason. |
-| **JSDoc on every exported symbol** | Every `export` of class, function, interface, constant carries JSDoc with `@example` when applicable. |
-| **English in code and comments** | Identifiers, internal messages, comments, JSDoc — all in English. Documentation (`docs/`) in English. |
-| **Zero `dependencies`** | `package.json` ships `"dependencies": {}`. Everything via peer dep. Reduces supply chain. |
-| **Zero Prisma coupling** | The lib NEVER imports `@prisma/client`. All persistence via interfaces (`IOtpStorage`, `INotificationLogRepository`). This is the **central dissolver** of the Prisma coupling a hand-rolled notification module would otherwise impose on its consumer. |
-| **Dependency inversion** | Email providers (`IEmailProvider`), OTP storage (`IOtpStorage`), renderer (`IEmailTemplateRenderer`), audit (`INotificationLogRepository`) are all interfaces. The lib provides **reference adapters** (Resend, Redis, default interpolator, no-op log) without tying the consumer to them. |
-| **Channel abstraction** | Each channel (email, OTP) has its own service + provider/storage. Adding SMS or Push in v0.2 does not touch existing channels. |
-| **Opt-in features** | Only configured channels are registered as providers in the NestJS container. Enabling audit without configuring `INotificationLogRepository` is an initialization error. |
-| **Native multi-tenant** | Every operation accepts `tenantId`. Redis keys use `sha256(tenantId:recipient)` to avoid PII leaking and cross-tenant collision. |
-| **Security by default** | OTP codes generated via `crypto.randomInt` (built digit-by-digit, no `10**length` overflow). Comparison via length-guarded `crypto.timingSafeEqual`. Attempt increment is **atomic** (Redis Lua / single-threaded Map) and the resend cooldown is an **atomic `SET NX EX` lock** — otherwise `maxAttempts`/anti-resend are bypassable under concurrency. Codes NEVER logged in audit/console. |
-| **Audit silent failure never crashes the main flow** | Audit log is fire-and-forget by default (`audit.swallowErrors: true`). Errors are logged (meta-log) but not propagated to the caller. |
-| **`MODULE_ACTION_RESULT` log key pattern** | Even in tests — eases integration with `@bymax-one/nest-logger`. |
-| **Clean Code sizing & SRP** | Functions ≤ 50 lines; files ≤ 800 lines (200–400 typical); one responsibility per file/function. Over the limit = a HIGH finding in `/bymax-quality:code-review` — split by responsibility. |
-| **Official docs first (never from memory)** | Before using any library/framework/SDK/API/CLI, re-verify the current official docs (`mcp__context7__resolve-library-id` → `query-docs`, WebSearch fallback) and follow the Bymax pattern in `03 - Resources/<Stack>/`. Stacks evolve fast. |
-| **Layered architecture & reuse** | Each file carries an `@fileoverview` + `@layer` header; reuse `@bymax-one/*` libs (single source of truth, never reimplement); DRY; barrels only when a symbol is both exported AND imported. |
-| **Conventional Commits** | `feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `test:`. Drives the semver bump on release. |
+| Principle                                            | Practical application                                                                                                                                                                                                                                                                                                                                                                         |
+| ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **TS strict, zero `any`**                            | Compiler in `strict: true`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`. Only punctual casts via `as never` in inherited NestJS error cases — always commented with the reason.                                                                                                                                                                                                  |
+| **JSDoc on every exported symbol**                   | Every `export` of class, function, interface, constant carries JSDoc with `@example` when applicable.                                                                                                                                                                                                                                                                                         |
+| **English in code and comments**                     | Identifiers, internal messages, comments, JSDoc — all in English. Documentation (`docs/`) in English.                                                                                                                                                                                                                                                                                         |
+| **Zero `dependencies`**                              | `package.json` ships `"dependencies": {}`. Everything via peer dep. Reduces supply chain.                                                                                                                                                                                                                                                                                                     |
+| **Zero Prisma coupling**                             | The lib NEVER imports `@prisma/client`. All persistence via interfaces (`IOtpStorage`, `INotificationLogRepository`). This is the **central dissolver** of the Prisma coupling a hand-rolled notification module would otherwise impose on its consumer.                                                                                                                                      |
+| **Dependency inversion**                             | Email providers (`IEmailProvider`), OTP storage (`IOtpStorage`), renderer (`IEmailTemplateRenderer`), audit (`INotificationLogRepository`) are all interfaces. The lib provides **reference adapters** (Resend, Redis, default interpolator, no-op log) without tying the consumer to them.                                                                                                   |
+| **Channel abstraction**                              | Each channel (email, OTP) has its own service + provider/storage. Adding SMS or Push in v0.2 does not touch existing channels.                                                                                                                                                                                                                                                                |
+| **Opt-in features**                                  | Only configured channels are registered as providers in the NestJS container. Enabling audit without configuring `INotificationLogRepository` is an initialization error.                                                                                                                                                                                                                     |
+| **Native multi-tenant**                              | Every operation accepts `tenantId`. Redis keys use `sha256(tenantId:recipient)` to avoid PII leaking and cross-tenant collision.                                                                                                                                                                                                                                                              |
+| **Security by default**                              | OTP codes generated via `crypto.randomInt` (built digit-by-digit, no `10**length` overflow). Comparison via length-guarded `crypto.timingSafeEqual`. Attempt increment is **atomic** (Redis Lua / single-threaded Map) and the resend cooldown is an **atomic `SET NX EX` lock** — otherwise `maxAttempts`/anti-resend are bypassable under concurrency. Codes NEVER logged in audit/console. |
+| **Audit silent failure never crashes the main flow** | Audit log is fire-and-forget by default (`audit.swallowErrors: true`). Errors are logged (meta-log) but not propagated to the caller.                                                                                                                                                                                                                                                         |
+| **`MODULE_ACTION_RESULT` log key pattern**           | Even in tests — eases integration with `@bymax-one/nest-logger`.                                                                                                                                                                                                                                                                                                                              |
+| **Clean Code sizing & SRP**                          | Functions ≤ 50 lines; files ≤ 800 lines (200–400 typical); one responsibility per file/function. Over the limit = a HIGH finding in `/bymax-quality:code-review` — split by responsibility.                                                                                                                                                                                                   |
+| **Official docs first (never from memory)**          | Before using any library/framework/SDK/API/CLI, re-verify the current official docs (`mcp__context7__resolve-library-id` → `query-docs`, WebSearch fallback) and follow the Bymax pattern in `03 - Resources/<Stack>/`. Stacks evolve fast.                                                                                                                                                   |
+| **Layered architecture & reuse**                     | Each file carries an `@fileoverview` + `@layer` header; reuse `@bymax-one/*` libs (single source of truth, never reimplement); DRY; barrels only when a symbol is both exported AND imported.                                                                                                                                                                                                 |
+| **Conventional Commits**                             | `feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `test:`. Drives the semver bump on release.                                                                                                                                                                                                                                                                                                  |
 
 ### 1.3 Status legend
 
-| Symbol | Meaning |
-| --- | --- |
-| 📋 | ToDo |
-| 🔄 | In Progress |
-| 👀 | Review |
-| ✅ | Done |
-| ⛔ | Blocked |
-| 🟡 | Partial |
+| Symbol | Meaning     |
+| ------ | ----------- |
+| 📋     | ToDo        |
+| 🔄     | In Progress |
+| 👀     | Review      |
+| ✅     | Done        |
+| ⛔     | Blocked     |
+| 🟡     | Partial     |
 
 ### 1.4 Progress
 
@@ -79,15 +80,15 @@ The phase order respects the dependency graph (Appendix A): interfaces before se
 
 ### 1.5 Phase dashboard
 
-| ID | Phase | Status | Progress | Complexity | Last updated |
-| --- | --- | --- | --- | --- | --- |
-| 1 | [Foundation + Interfaces](./tasks/phase-01-foundation-interfaces.md) | ✅ Done | 11/11 | MEDIUM | 2026-06-20 |
-| 2 | [EmailService + OtpService (atomic)](./tasks/phase-02-email-otp-services.md) | ✅ Done | 10/10 | HIGH | 2026-06-20 |
-| 3 | [Templating + Rate Limiting](./tasks/phase-03-templating-rate-limiting.md) | ✅ Done | 8/8 | MEDIUM | 2026-06-20 |
-| 4 | [Multi-tenant + Audit Log](./tasks/phase-04-multitenant-audit.md) | ✅ Done | 8/8 | MEDIUM | 2026-06-20 |
-| 5 | [Frontend (`./react`)](./tasks/phase-05-frontend-react.md) | ✅ Done | 5/5 | MEDIUM | 2026-06-20 |
-| 6 | [Release v0.1.0](./tasks/phase-06-release.md) | 🟡 Partial | 6/7 | MEDIUM | 2026-06-21 |
-| | **Total** | 🔄 **5 / 6 phases** | **48 / 49 tasks** | — | — |
+| ID  | Phase                                                                        | Status              | Progress          | Complexity | Last updated |
+| --- | ---------------------------------------------------------------------------- | ------------------- | ----------------- | ---------- | ------------ |
+| 1   | [Foundation + Interfaces](./tasks/phase-01-foundation-interfaces.md)         | ✅ Done             | 11/11             | MEDIUM     | 2026-06-20   |
+| 2   | [EmailService + OtpService (atomic)](./tasks/phase-02-email-otp-services.md) | ✅ Done             | 10/10             | HIGH       | 2026-06-20   |
+| 3   | [Templating + Rate Limiting](./tasks/phase-03-templating-rate-limiting.md)   | ✅ Done             | 8/8               | MEDIUM     | 2026-06-20   |
+| 4   | [Multi-tenant + Audit Log](./tasks/phase-04-multitenant-audit.md)            | ✅ Done             | 8/8               | MEDIUM     | 2026-06-20   |
+| 5   | [Frontend (`./react`)](./tasks/phase-05-frontend-react.md)                   | ✅ Done             | 5/5               | MEDIUM     | 2026-06-20   |
+| 6   | [Release v0.1.0](./tasks/phase-06-release.md)                                | 🟡 Partial          | 6/7               | MEDIUM     | 2026-06-21   |
+|     | **Total**                                                                    | 🔄 **5 / 6 phases** | **48 / 49 tasks** | —          | —            |
 
 > Each phase links to its task file in [`docs/tasks/`](./tasks/) (one file per phase). Full per-phase detail is in §2–§7; dependency graph in Appendix A, complexity matrix in Appendix B.
 
@@ -177,7 +178,7 @@ await otpService.generate({
   tenantId,
   recipient: email,
   purpose: 'email_verification',
-  deliverVia: 'email',
+  deliverVia: 'email'
 })
 ```
 
@@ -348,9 +349,12 @@ src/shared/
 ```typescript
 // types/otp-purpose.types.ts
 export type OtpPurpose =
-  | 'email_verification' | 'password_reset' | 'mfa_oob'
-  | 'phone_verification' | 'magic_link'
-  | (string & {})    // permits custom purposes while keeping autocompletion
+  | 'email_verification'
+  | 'password_reset'
+  | 'mfa_oob'
+  | 'phone_verification'
+  | 'magic_link'
+  | (string & {}) // permits custom purposes while keeping autocompletion
 
 // types/notification-channel.types.ts
 export type NotificationChannel = 'email' | 'otp' | 'sms' | 'push'
@@ -366,9 +370,10 @@ export const NOTIFICATION_ERROR_CODES = {
   EMAIL_PROVIDER_NOT_CONFIGURED: 'notification.email_provider_not_configured',
   EMAIL_SEND_FAILED: 'notification.email_send_failed',
   // ... see full mapping in §2.4 Phase 1
-  CHANNEL_DISABLED: 'notification.channel_disabled',
+  CHANNEL_DISABLED: 'notification.channel_disabled'
 } as const
-export type NotificationErrorCode = (typeof NOTIFICATION_ERROR_CODES)[keyof typeof NOTIFICATION_ERROR_CODES]
+export type NotificationErrorCode =
+  (typeof NOTIFICATION_ERROR_CODES)[keyof typeof NOTIFICATION_ERROR_CODES]
 
 // constants/default-ttls.ts
 export const DEFAULT_TTLS = {
@@ -378,7 +383,7 @@ export const DEFAULT_TTLS = {
   OTP_PHONE_VERIFICATION_SECONDS: 600,
   OTP_MAGIC_LINK_SECONDS: 900,
   RESEND_COOLDOWN_SECONDS: 60,
-  OTP_GENERIC_SECONDS: 600,
+  OTP_GENERIC_SECONDS: 600
 } as const
 
 // index.ts — barrel
@@ -460,6 +465,7 @@ JSDoc must call out: never log body, never leak credentials, throw `Error` on fa
 **JSDoc highlight (Prisma decoupling):** "This interface DISSOLVES the Prisma coupling a hand-rolled email-verification service would otherwise impose. No `@prisma/client` import lives anywhere in this library."
 
 Implementation contract (full text in spec §5.2):
+
 - **`consumeAttempt` MUST be atomic** — lookup + attempt increment in one indivisible step (Redis: Lua script; in-memory: a single synchronous read-modify-write). A plain `get`+`update` races and lets `maxAttempts` be bypassed under concurrency.
 - **`tryAcquireCooldown` MUST be atomic** — check-and-set in one step (Redis: `SET NX EX`), so two concurrent generate/resend calls cannot both pass.
 - Honor TTL — entries past `expiresAt` MUST return `null` / `not_found`
@@ -518,39 +524,20 @@ All `provider`/`storage`/`repository` fields accept either an instance OR a clas
 **Skeleton — `src/server/interfaces/index.ts`:**
 
 ```typescript
-export type {
-  IEmailProvider,
-  EmailSendOptions,
-  EmailSendResult,
-} from './email-provider.interface'
+export type { IEmailProvider, EmailSendOptions, EmailSendResult } from './email-provider.interface'
 
-export type {
-  IOtpStorage,
-  OtpEntry,
-  OtpVerifyResult,
-} from './otp-storage.interface'
+export type { IOtpStorage, OtpEntry, OtpVerifyResult } from './otp-storage.interface'
 
-export type {
-  IEmailTemplateRenderer,
-  RenderedEmail,
-} from './email-template-renderer.interface'
+export type { IEmailTemplateRenderer, RenderedEmail } from './email-template-renderer.interface'
 
 export type {
   INotificationLogRepository,
-  NotificationLogEntry,
+  NotificationLogEntry
 } from './notification-log-repository.interface'
 
-export type {
-  ISmsProvider,
-  SmsSendOptions,
-  SmsSendResult,
-} from './sms-provider.interface'
+export type { ISmsProvider, SmsSendOptions, SmsSendResult } from './sms-provider.interface'
 
-export type {
-  IPushProvider,
-  PushSendOptions,
-  PushSendResult,
-} from './push-provider.interface'
+export type { IPushProvider, PushSendOptions, PushSendResult } from './push-provider.interface'
 
 export type {
   BymaxNotificationModuleOptions,
@@ -563,7 +550,7 @@ export type {
   OtpPurposeConfig,
   SmsChannelOptions,
   PushChannelOptions,
-  AuditOptions,
+  AuditOptions
 } from './notification-module-options.interface'
 ```
 
@@ -630,11 +617,15 @@ Symbols (not strings) to avoid collision with other libraries. Pattern inherited
 
 ```typescript
 export const NOTIFICATION_PURPOSES = {
-  EMAIL_VERIFICATION: 'email_verification', PASSWORD_RESET: 'password_reset',
-  MFA_OOB: 'mfa_oob', PHONE_VERIFICATION: 'phone_verification', MAGIC_LINK: 'magic_link',
+  EMAIL_VERIFICATION: 'email_verification',
+  PASSWORD_RESET: 'password_reset',
+  MFA_OOB: 'mfa_oob',
+  PHONE_VERIFICATION: 'phone_verification',
+  MAGIC_LINK: 'magic_link'
 } as const
 
-export type CanonicalNotificationPurpose = (typeof NOTIFICATION_PURPOSES)[keyof typeof NOTIFICATION_PURPOSES]
+export type CanonicalNotificationPurpose =
+  (typeof NOTIFICATION_PURPOSES)[keyof typeof NOTIFICATION_PURPOSES]
 ```
 
 Canonical OTP purposes — consumer can use these for type-safety or pass arbitrary strings.
@@ -642,12 +633,22 @@ Canonical OTP purposes — consumer can use these for type-safety or pass arbitr
 **Skeleton — `src/server/constants/default-options.constants.ts`:**
 
 ```typescript
-export const DEFAULT_GLOBAL_OPTIONS = { redisNamespace: 'notification', defaultLocale: 'en' } as const
-export const DEFAULT_OTP_OPTIONS = {
-  defaultLength: 6, defaultCodeType: 'numeric', defaultTtlSeconds: 600,
-  defaultMaxAttempts: 5, resendCooldownSeconds: 60, consumeOnVerify: false, perPurpose: {},
+export const DEFAULT_GLOBAL_OPTIONS = {
+  redisNamespace: 'notification',
+  defaultLocale: 'en'
 } as const
-export const DEFAULT_EMAIL_OPTIONS = { defaultTags: [] as ReadonlyArray<{ name: string; value: string }> } as const
+export const DEFAULT_OTP_OPTIONS = {
+  defaultLength: 6,
+  defaultCodeType: 'numeric',
+  defaultTtlSeconds: 600,
+  defaultMaxAttempts: 5,
+  resendCooldownSeconds: 60,
+  consumeOnVerify: false,
+  perPurpose: {}
+} as const
+export const DEFAULT_EMAIL_OPTIONS = {
+  defaultTags: [] as ReadonlyArray<{ name: string; value: string }>
+} as const
 export const DEFAULT_AUDIT_OPTIONS = { swallowErrors: true } as const
 ```
 
@@ -657,7 +658,11 @@ Each `as const satisfies Partial<...>` to preserve literal types while ensuring 
 
 ```typescript
 export const NOTIFICATION_ERROR_DEFINITIONS = {
-  EMAIL_PROVIDER_NOT_CONFIGURED: { code: 'notification.email_provider_not_configured', status: HttpStatus.INTERNAL_SERVER_ERROR, message: 'Email provider not configured' },
+  EMAIL_PROVIDER_NOT_CONFIGURED: {
+    code: 'notification.email_provider_not_configured',
+    status: HttpStatus.INTERNAL_SERVER_ERROR,
+    message: 'Email provider not configured'
+  }
   // ... see full table below
 } as const
 
@@ -667,29 +672,29 @@ export { NOTIFICATION_ERROR_CODES } from '../../shared/constants/error-codes'
 
 **Full mapping (mirrors spec §11.2 — keep byte-identical strings to `shared/constants/error-codes.ts`):**
 
-| Key | Code | HTTP | Message |
-|---|---|---|---|
-| `EMAIL_PROVIDER_NOT_CONFIGURED` | `notification.email_provider_not_configured` | 500 | Email provider not configured |
-| `EMAIL_SEND_FAILED` | `notification.email_send_failed` | 502 | Failed to send email |
-| `EMAIL_ATTACHMENTS_TOO_LARGE` | `notification.email_attachments_too_large` | 413 | Email attachments exceed size limit |
-| `EMAIL_INVALID_RECIPIENT` | `notification.email_invalid_recipient` | 400 | Invalid recipient email |
-| `TEMPLATE_NOT_FOUND` | `notification.template_not_found` | 500 | Email template not found |
-| `TEMPLATE_RENDER_FAILED` | `notification.template_render_failed` | 500 | Failed to render email template |
-| `OTP_STORAGE_NOT_CONFIGURED` | `notification.otp_storage_not_configured` | 500 | OTP storage not configured |
-| `OTP_EMAIL_DELIVERY_NOT_CONFIGURED` | `notification.otp_email_delivery_not_configured` | 500 | OTP email delivery requested but email channel not configured |
-| `OTP_COOLDOWN_ACTIVE` | `notification.otp_cooldown_active` | 429 | Resend cooldown is active |
-| `OTP_NOT_FOUND` | `notification.otp_not_found` | 404 | OTP not found or expired |
-| `OTP_EXPIRED` | `notification.otp_expired` | 410 | OTP code expired |
-| `OTP_MAX_ATTEMPTS_EXCEEDED` | `notification.otp_max_attempts_exceeded` | 429 | Maximum OTP attempts exceeded |
-| `OTP_INVALID_CODE` | `notification.otp_invalid_code` | 401 | Invalid OTP code |
-| `OTP_INVALID_LENGTH` | `notification.otp_invalid_length` | 400 | Invalid OTP length config |
-| `SMS_PROVIDER_NOT_CONFIGURED` | `notification.sms_provider_not_configured` | 500 | SMS provider not configured |
-| `SMS_SEND_FAILED` | `notification.sms_send_failed` | 502 | Failed to send SMS |
-| `SMS_INVALID_RECIPIENT` | `notification.sms_invalid_recipient` | 400 | Invalid phone number |
-| `PUSH_PROVIDER_NOT_CONFIGURED` | `notification.push_provider_not_configured` | 500 | Push provider not configured |
-| `PUSH_SEND_FAILED` | `notification.push_send_failed` | 502 | Failed to send push notification |
-| `AUDIT_LOG_FAILED` | `notification.audit_log_failed` | 500 | Audit log write failed |
-| `CHANNEL_DISABLED` | `notification.channel_disabled` | 501 | Channel not enabled in module config |
+| Key                                 | Code                                             | HTTP | Message                                                       |
+| ----------------------------------- | ------------------------------------------------ | ---- | ------------------------------------------------------------- |
+| `EMAIL_PROVIDER_NOT_CONFIGURED`     | `notification.email_provider_not_configured`     | 500  | Email provider not configured                                 |
+| `EMAIL_SEND_FAILED`                 | `notification.email_send_failed`                 | 502  | Failed to send email                                          |
+| `EMAIL_ATTACHMENTS_TOO_LARGE`       | `notification.email_attachments_too_large`       | 413  | Email attachments exceed size limit                           |
+| `EMAIL_INVALID_RECIPIENT`           | `notification.email_invalid_recipient`           | 400  | Invalid recipient email                                       |
+| `TEMPLATE_NOT_FOUND`                | `notification.template_not_found`                | 500  | Email template not found                                      |
+| `TEMPLATE_RENDER_FAILED`            | `notification.template_render_failed`            | 500  | Failed to render email template                               |
+| `OTP_STORAGE_NOT_CONFIGURED`        | `notification.otp_storage_not_configured`        | 500  | OTP storage not configured                                    |
+| `OTP_EMAIL_DELIVERY_NOT_CONFIGURED` | `notification.otp_email_delivery_not_configured` | 500  | OTP email delivery requested but email channel not configured |
+| `OTP_COOLDOWN_ACTIVE`               | `notification.otp_cooldown_active`               | 429  | Resend cooldown is active                                     |
+| `OTP_NOT_FOUND`                     | `notification.otp_not_found`                     | 404  | OTP not found or expired                                      |
+| `OTP_EXPIRED`                       | `notification.otp_expired`                       | 410  | OTP code expired                                              |
+| `OTP_MAX_ATTEMPTS_EXCEEDED`         | `notification.otp_max_attempts_exceeded`         | 429  | Maximum OTP attempts exceeded                                 |
+| `OTP_INVALID_CODE`                  | `notification.otp_invalid_code`                  | 401  | Invalid OTP code                                              |
+| `OTP_INVALID_LENGTH`                | `notification.otp_invalid_length`                | 400  | Invalid OTP length config                                     |
+| `SMS_PROVIDER_NOT_CONFIGURED`       | `notification.sms_provider_not_configured`       | 500  | SMS provider not configured                                   |
+| `SMS_SEND_FAILED`                   | `notification.sms_send_failed`                   | 502  | Failed to send SMS                                            |
+| `SMS_INVALID_RECIPIENT`             | `notification.sms_invalid_recipient`             | 400  | Invalid phone number                                          |
+| `PUSH_PROVIDER_NOT_CONFIGURED`      | `notification.push_provider_not_configured`      | 500  | Push provider not configured                                  |
+| `PUSH_SEND_FAILED`                  | `notification.push_send_failed`                  | 502  | Failed to send push notification                              |
+| `AUDIT_LOG_FAILED`                  | `notification.audit_log_failed`                  | 500  | Audit log write failed                                        |
+| `CHANNEL_DISABLED`                  | `notification.channel_disabled`                  | 501  | Channel not enabled in module config                          |
 
 **Skeleton — `src/server/errors/notification-exception.ts`:**
 
@@ -701,16 +706,19 @@ export class NotificationException extends HttpException {
     key: NotificationErrorKey,
     details?: Record<string, unknown>,
     overrideStatus?: HttpStatus,
-    overrideMessage?: string,
+    overrideMessage?: string
   ) {
     const definition = NOTIFICATION_ERROR_DEFINITIONS[key]
-    super({
-      error: {
-        code: definition.code,
-        message: overrideMessage ?? definition.message,
-        details: details ?? null,
+    super(
+      {
+        error: {
+          code: definition.code,
+          message: overrideMessage ?? definition.message,
+          details: details ?? null
+        }
       },
-    }, overrideStatus ?? definition.status)
+      overrideStatus ?? definition.status
+    )
     this.code = definition.code
   }
 }
@@ -802,13 +810,15 @@ export interface ResolvedNotificationOptions {
   global: Required<Omit<GlobalOptions, 'tenantIdResolver'>> & {
     tenantIdResolver?: GlobalOptions['tenantIdResolver']
   }
-  email?: ResolvedEmailOptions    // all-required version sans `provider/templateRenderer`, incl. `maxAttachmentBytes` (default 10 MiB)
-  otp?: ResolvedOtpOptions        // all-required version sans `storage`, plus `resolveForPurpose(purpose)` helper
-  audit?: ResolvedAuditOptions    // all-required version sans `repository`, incl. `maskRecipient` (default identity)
+  email?: ResolvedEmailOptions // all-required version sans `provider/templateRenderer`, incl. `maxAttachmentBytes` (default 10 MiB)
+  otp?: ResolvedOtpOptions // all-required version sans `storage`, plus `resolveForPurpose(purpose)` helper
+  audit?: ResolvedAuditOptions // all-required version sans `repository`, incl. `maskRecipient` (default identity)
 }
 
-export function resolveOptions(options: BymaxNotificationModuleOptions): Readonly<ResolvedNotificationOptions>
-function deepFreeze<T>(obj: T): Readonly<T>  // recursive Object.freeze
+export function resolveOptions(
+  options: BymaxNotificationModuleOptions
+): Readonly<ResolvedNotificationOptions>
+function deepFreeze<T>(obj: T): Readonly<T> // recursive Object.freeze
 ```
 
 `ResolvedOtpOptions.resolveForPurpose(purpose)` returns the effective `OtpPurposeConfig` (`perPurpose[purpose]` merged over the otp defaults) so services never recompute the merge. Mirrors spec §4.5.
@@ -866,7 +876,9 @@ src/server/providers/
 export class NoOpEmailProvider implements IEmailProvider {
   readonly name = 'noop'
   private readonly logger = new Logger(NoOpEmailProvider.name)
-  isConfigured(): boolean { return true }
+  isConfigured(): boolean {
+    return true
+  }
   async send(options): Promise<EmailSendResult>
 }
 ```
@@ -879,7 +891,7 @@ Implementation: log only `to` + `subject` via `logger.debug` — **NEVER** log `
 @Injectable()
 export class NoOpNotificationLogRepository implements INotificationLogRepository {
   readonly name = 'noop'
-  async create(_entry): Promise<void> {}  // silent discard
+  async create(_entry): Promise<void> {} // silent discard
 }
 ```
 
@@ -896,6 +908,7 @@ export class DefaultTemplateRenderer implements IEmailTemplateRenderer {
 ```
 
 Phase 1 minimal behavior:
+
 - Resolve template: `templates[`${name}::${locale}`] ?? templates[`${name}::en`]`
 - Throw `Template not found: ${name} (locale=${locale})` if neither exists
 - `fill(str, escape)` replaces `/\{\{\s*(\w+)\s*\}\}/g` with `String(data[varName] ?? '')`, HTML-escaped **only when `escape === true`**
@@ -960,8 +973,8 @@ import { randomInt } from 'node:crypto'
 import { NotificationException } from '../errors/notification-exception'
 
 const NUMERIC = '0123456789'
-const ALPHA = 'ABCDEFGHJKLMNPQRSTUVWXYZ'          // excludes I, O
-const ALPHANUMERIC = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ'  // excludes 0, 1, I, O
+const ALPHA = 'ABCDEFGHJKLMNPQRSTUVWXYZ' // excludes I, O
+const ALPHANUMERIC = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ' // excludes 0, 1, I, O
 
 export function generateOtpCode(length: number, type: 'numeric' | 'alpha' | 'alphanumeric'): string
 ```
@@ -1299,6 +1312,7 @@ pnpm typecheck && pnpm lint && pnpm test:cov && pnpm build && pnpm size && pnpm 
 Plus the **error codes sync gate** (server vs shared) via node script that imports both `dist/server/index.mjs` and `dist/shared/index.mjs`, compares `Object.values(NOTIFICATION_ERROR_DEFINITIONS).map(d => d.code).sort()` against `Object.values(NOTIFICATION_ERROR_CODES).sort()`, exits with code 1 on mismatch.
 
 Plus a **smoke test** that imports `BymaxNotificationModule.forRoot({ email: { provider: new NoOpEmailProvider(), defaultFrom: 'noreply@example.com' } })` and verifies:
+
 - `module.module.name === 'BymaxNotificationModule'`
 - `module.global === true`
 - `module.providers.length` matches expected count (4: options + audit + email + renderer)
@@ -1337,7 +1351,9 @@ src/server/providers/resend-email.provider.ts
 **Skeleton (full implementation pattern in spec §5.1.1):**
 
 ```typescript
-export interface ResendEmailProviderOptions { apiKey?: string }
+export interface ResendEmailProviderOptions {
+  apiKey?: string
+}
 
 @Injectable()
 export class ResendEmailProvider implements IEmailProvider {
@@ -1346,9 +1362,11 @@ export class ResendEmailProvider implements IEmailProvider {
 
   constructor(private readonly options: ResendEmailProviderOptions = {}) {}
 
-  isConfigured(): boolean { return Boolean(this.options.apiKey) }
+  isConfigured(): boolean {
+    return Boolean(this.options.apiKey)
+  }
   async send(options: EmailSendOptions): Promise<EmailSendResult>
-  private async getClient(): Promise<ResendLike>  // lazy import of `resend` peer dep
+  private async getClient(): Promise<ResendLike> // lazy import of `resend` peer dep
 }
 ```
 
@@ -1365,7 +1383,7 @@ export class ResendEmailProvider implements IEmailProvider {
 2. `getClient()`:
    - If cached: return cached
    - If there is no `apiKey`: throw `'Missing API key — pass { apiKey } to the constructor'`
-   - `try { const mod = await import('resend'); ResendCtor = mod.Resend }` → if fails, throw `'`resend` package is not installed. Run `pnpm add resend` in the consumer app.'`
+   - `try { const mod = await import('resend'); ResendCtor = mod.Resend }` → if fails, throw `'`resend`package is not installed. Run`pnpm add resend` in the consumer app.'`
    - Cache new instance
 
 3. Type forward declaration `ResendLike` lives locally — avoids hard import of `resend` types at compile time. Shape mirrors the subset of `Resend.emails.send` used.
@@ -1411,7 +1429,7 @@ src/server/providers/in-memory-otp.storage.ts
 export class InMemoryOtpStorage implements IOtpStorage {
   readonly name = 'memory'
   private readonly store = new Map<string, OtpEntry>()
-  private readonly cooldowns = new Map<string, number>()  // value = epoch-ms expiry
+  private readonly cooldowns = new Map<string, number>() // value = epoch-ms expiry
   // All IOtpStorage methods + test helpers `clear()` / `size()` (not in interface)
 }
 ```
@@ -1479,13 +1497,13 @@ export interface RedisLike {
   setex(key: string, ttlSeconds: number, value: string): Promise<'OK'>
   del(...keys: string[]): Promise<number>
   ttl(key: string): Promise<number>
-  pttl(key: string): Promise<number>            // used by the consumeAttempt Lua script (preserve ms TTL on rewrite)
-  eval(script: string, numKeys: number, ...args: Array<string | number>): Promise<unknown>  // atomic consumeAttempt
+  pttl(key: string): Promise<number> // used by the consumeAttempt Lua script (preserve ms TTL on rewrite)
+  eval(script: string, numKeys: number, ...args: Array<string | number>): Promise<unknown> // atomic consumeAttempt
 }
 
 export interface RedisOtpStorageOptions {
-  redisClient: RedisLike       // ioredis is structurally compatible
-  namespace?: string           // default 'notification'
+  redisClient: RedisLike // ioredis is structurally compatible
+  namespace?: string // default 'notification'
 }
 
 @Injectable()
@@ -1585,13 +1603,15 @@ export class EmailService {
     @Inject(BYMAX_NOTIFICATION_OPTIONS) private readonly options: ResolvedNotificationOptions,
     @Inject(BYMAX_NOTIFICATION_EMAIL_PROVIDER) private readonly provider: IEmailProvider,
     @Inject(BYMAX_NOTIFICATION_TEMPLATE_RENDERER) private readonly renderer: IEmailTemplateRenderer,
-    @Inject(BYMAX_NOTIFICATION_LOG_REPOSITORY) private readonly auditLog: INotificationLogRepository,
+    @Inject(BYMAX_NOTIFICATION_LOG_REPOSITORY) private readonly auditLog: INotificationLogRepository
   ) {}
 
-  async send(input: { /* raw body, see spec §6.1 */ }): Promise<{ messageId: string }>
-  async sendTemplate(input: { /* template name + data, see spec §6.1 */ }): Promise<{ messageId: string }>
+  async send(input: {/* raw body, see spec §6.1 */}): Promise<{ messageId: string }>
+  async sendTemplate(input: {
+    /* template name + data, see spec §6.1 */
+  }): Promise<{ messageId: string }>
   isConfigured(): boolean
-  private async audit(entry: NotificationLogEntry): Promise<void>  // swallows per options.audit.swallowErrors
+  private async audit(entry: NotificationLogEntry): Promise<void> // swallows per options.audit.swallowErrors
   private firstRecipient(to: string | string[]): string
 }
 ```
@@ -1666,19 +1686,22 @@ export class OtpService {
   constructor(
     @Inject(BYMAX_NOTIFICATION_OPTIONS) private readonly options: ResolvedNotificationOptions,
     @Inject(BYMAX_NOTIFICATION_OTP_STORAGE) private readonly storage: IOtpStorage,
-    @Inject(BYMAX_NOTIFICATION_LOG_REPOSITORY) private readonly auditLog: INotificationLogRepository,
-    @Optional() @Inject(EmailService) private readonly emailService?: EmailService,
+    @Inject(BYMAX_NOTIFICATION_LOG_REPOSITORY)
+    private readonly auditLog: INotificationLogRepository,
+    @Optional() @Inject(EmailService) private readonly emailService?: EmailService
   ) {}
 
   async generate(input): Promise<{ expiresAt: number; cooldownSeconds: number }>
   async verify(input): Promise<OtpVerifyResult>
   async consume(input): Promise<void>
-  async resend(input): Promise<{ expiresAt: number; cooldownSeconds: number }>  // alias of generate
-  async getStatus(input): Promise<{ exists, expiresAt?, attempts?, maxAttempts?, cooldownSeconds, validated? }>
+  async resend(input): Promise<{ expiresAt: number; cooldownSeconds: number }> // alias of generate
+  async getStatus(
+    input
+  ): Promise<{ exists; expiresAt?; attempts?; maxAttempts?; cooldownSeconds; validated? }>
   isConfigured(): boolean
 
   // Effective per-purpose config comes from options.otp.resolveForPurpose(purpose) (§4.5) — no local merge needed
-  private auditFireAndForget(entry): Promise<void>             // swallows per options.audit.swallowErrors, applies maskRecipient
+  private auditFireAndForget(entry): Promise<void> // swallows per options.audit.swallowErrors, applies maskRecipient
 }
 ```
 
@@ -1715,7 +1738,7 @@ export class OtpService {
 10. return { expiresAt, cooldownSeconds: cfg.resendCooldownSeconds }
 ```
 
-> Claiming the cooldown atomically *before* generating (step 3) and releasing it on delivery failure (step 8) closes the race where two concurrent calls both reset `attempts`, and avoids locking the user out for 60s when an email bounces. `deliverVia: 'manual'` skips step 8 and the cooldown stays.
+> Claiming the cooldown atomically _before_ generating (step 3) and releasing it on delivery failure (step 8) closes the race where two concurrent calls both reset `attempts`, and avoids locking the user out for 60s when an email bounces. `deliverVia: 'manual'` skips step 8 and the cooldown stays.
 
 #### `verify(input)`
 
@@ -1812,40 +1835,50 @@ src/server/services/notification.service.ts
 export type DispatchInput =
   | { channel: 'email'; tenantId: string; payload: EmailDispatchPayload }
   | { channel: 'otp'; tenantId: string; payload: OtpDispatchPayload }
-  // sms/push channels added in v0.2
+// sms/push channels added in v0.2
 
 export interface EmailDispatchPayload {
   to: string | string[]
-  subject?: string; html?: string; text?: string
-  template?: string; data?: Record<string, unknown>
-  locale?: string; userId?: string
+  subject?: string
+  html?: string
+  text?: string
+  template?: string
+  data?: Record<string, unknown>
+  locale?: string
+  userId?: string
 }
 
 export interface OtpDispatchPayload {
-  recipient: string; purpose: string
-  action?: 'generate' | 'verify' | 'consume'   // default 'generate'; 'verify' requires `code`
+  recipient: string
+  purpose: string
+  action?: 'generate' | 'verify' | 'consume' // default 'generate'; 'verify' requires `code`
   code?: string
   deliverVia?: 'email' | 'manual'
-  emailTemplate?: string; emailData?: Record<string, unknown>
-  locale?: string; userId?: string
+  emailTemplate?: string
+  emailData?: Record<string, unknown>
+  locale?: string
+  userId?: string
 }
 
 // Discriminated by channel (mirrors spec §6.5)
 export type DispatchResult =
   | { channel: 'email'; messageId: string }
-  | { channel: 'otp'; result: { expiresAt: number; cooldownSeconds: number } | OtpVerifyResult | void }
+  | {
+      channel: 'otp'
+      result: { expiresAt: number; cooldownSeconds: number } | OtpVerifyResult | void
+    }
 
 @Injectable()
 export class NotificationService {
   constructor(
     @Optional() private readonly emailService?: EmailService,
-    @Optional() private readonly otpService?: OtpService,
+    @Optional() private readonly otpService?: OtpService
   ) {}
 
   async dispatch(input: DispatchInput): Promise<DispatchResult>
   getEnabledChannels(): NotificationChannel[]
-  getEmail(): EmailService    // throws CHANNEL_DISABLED if not configured
-  getOtp(): OtpService        // throws CHANNEL_DISABLED if not configured
+  getEmail(): EmailService // throws CHANNEL_DISABLED if not configured
+  getOtp(): OtpService // throws CHANNEL_DISABLED if not configured
 }
 ```
 
@@ -1935,8 +1968,8 @@ return {
   exports: [
     ...providers
       .map((p) => ('provide' in p ? p.provide : p))
-      .filter((token) => token !== null && token !== undefined),
-  ],
+      .filter((token) => token !== null && token !== undefined)
+  ]
 }
 ```
 
@@ -1969,19 +2002,19 @@ export {
   type DispatchInput,
   type EmailDispatchPayload,
   type OtpDispatchPayload,
-  type DispatchResult,
+  type DispatchResult
 } from './services/notification.service'
 
 // Providers — reference implementations added in Phase 2
 export {
   ResendEmailProvider,
-  type ResendEmailProviderOptions,
+  type ResendEmailProviderOptions
 } from './providers/resend-email.provider'
 export { InMemoryOtpStorage } from './providers/in-memory-otp.storage'
 export {
   RedisOtpStorage,
   type RedisOtpStorageOptions,
-  type RedisLike,
+  type RedisLike
 } from './providers/redis-otp.storage'
 
 // Utilities — exposed for advanced consumers writing custom storages/providers
@@ -2177,12 +2210,16 @@ src/server/providers/default-template-renderer.ts
 ```typescript
 export interface DefaultTemplateRendererOptions {
   templates?: Record<string, TemplateDefinition>
-  fallbackLocales?: readonly string[]    // default ['en']
-  onMissingVar?: 'empty' | 'throw'        // default 'empty'
-  enableNestedPaths?: boolean             // default false
+  fallbackLocales?: readonly string[] // default ['en']
+  onMissingVar?: 'empty' | 'throw' // default 'empty'
+  enableNestedPaths?: boolean // default false
 }
 
-export interface TemplateDefinition { subject: string; html: string; text?: string }
+export interface TemplateDefinition {
+  subject: string
+  html: string
+  text?: string
+}
 
 @Injectable()
 export class DefaultTemplateRenderer implements IEmailTemplateRenderer {
@@ -2357,14 +2394,19 @@ pnpm test src/server/utils/cooldown-helpers.spec.ts
 Locate the `generate()` block that handles a failed cooldown acquire:
 
 ```typescript
-const acquired = await this.storage.tryAcquireCooldown(tenantId, recipient, purpose, cfg.resendCooldownSeconds)
+const acquired = await this.storage.tryAcquireCooldown(
+  tenantId,
+  recipient,
+  purpose,
+  cfg.resendCooldownSeconds
+)
 if (!acquired) {
   const remaining = await this.storage.getCooldown(tenantId, recipient, purpose)
-  await this.auditFireAndForget({ /* verb: 'cooldown_blocked' */ })
+  await this.auditFireAndForget({/* verb: 'cooldown_blocked' */})
   throw new NotificationException('OTP_COOLDOWN_ACTIVE', {
     remainingSeconds: remaining,
-    retryAfter: toRetryAfterHeader(remaining),  // ← ADD
-    expiresAt: cooldownExpiresAt(remaining),    // ← ADD
+    retryAfter: toRetryAfterHeader(remaining), // ← ADD
+    expiresAt: cooldownExpiresAt(remaining) // ← ADD
   })
 }
 ```
@@ -2401,16 +2443,12 @@ pnpm test src/server/services/otp.service.spec.ts
 
 ```typescript
 // Cooldown utilities — exported for consumers writing custom Retry-After headers
-export {
-  toRetryAfterHeader,
-  cooldownExpiresAt,
-  formatCooldown,
-} from './utils/cooldown-helpers'
+export { toRetryAfterHeader, cooldownExpiresAt, formatCooldown } from './utils/cooldown-helpers'
 
 // Updated renderer type
 export type {
   TemplateDefinition,
-  DefaultTemplateRendererOptions,
+  DefaultTemplateRendererOptions
 } from './providers/default-template-renderer'
 ```
 
@@ -2458,7 +2496,7 @@ export const CANONICAL_EMAIL_TEMPLATES = {
   /** MFA enabled — variables: `name`, `appName` */
   MFA_ENABLED: 'mfa_enabled',
   /** MFA disabled — variables: `name`, `appName` */
-  MFA_DISABLED: 'mfa_disabled',
+  MFA_DISABLED: 'mfa_disabled'
 } as const
 
 export type CanonicalEmailTemplate =
@@ -2470,7 +2508,7 @@ export type CanonicalEmailTemplate =
 ```typescript
 export {
   CANONICAL_EMAIL_TEMPLATES,
-  type CanonicalEmailTemplate,
+  type CanonicalEmailTemplate
 } from './constants/canonical-templates'
 ```
 
@@ -2589,7 +2627,7 @@ import {
   EmailService,
   InMemoryOtpStorage,
   NoOpEmailProvider,
-  RedisOtpStorage,
+  RedisOtpStorage
 } from '../../src/server'
 import RedisMock from 'ioredis-mock'
 
@@ -2604,21 +2642,25 @@ describe('Tenant Isolation — E2E', () => {
         imports: [
           BymaxNotificationModule.forRoot({
             email: { provider: new NoOpEmailProvider(), defaultFrom: 'a@b.com' },
-            otp: { storage },
-          }),
-        ],
+            otp: { storage }
+          })
+        ]
       }).compile()
       otpService = module.get(OtpService)
     })
 
     it('should not collide OTP between tenants with same recipient', async () => {
       const r1 = await otpService.generate({
-        tenantId: 'tenant_a', recipient: 'maria@x.com', purpose: 'email_verification',
-        deliverVia: 'manual',
+        tenantId: 'tenant_a',
+        recipient: 'maria@x.com',
+        purpose: 'email_verification',
+        deliverVia: 'manual'
       })
       const r2 = await otpService.generate({
-        tenantId: 'tenant_b', recipient: 'maria@x.com', purpose: 'email_verification',
-        deliverVia: 'manual',
+        tenantId: 'tenant_b',
+        recipient: 'maria@x.com',
+        purpose: 'email_verification',
+        deliverVia: 'manual'
       })
       // Both should succeed — no cooldown collision across tenants
       expect(r1.expiresAt).toBeGreaterThan(0)
@@ -2632,13 +2674,19 @@ describe('Tenant Isolation — E2E', () => {
 
     it('should not leak verification across tenants', async () => {
       await otpService.generate({
-        tenantId: 'tenant_a', recipient: 'maria@x.com', purpose: 'p', deliverVia: 'manual',
+        tenantId: 'tenant_a',
+        recipient: 'maria@x.com',
+        purpose: 'p',
+        deliverVia: 'manual'
       })
       const e1 = (await storage.get('tenant_a', 'maria@x.com', 'p'))!
 
       // tenant_b tries to verify with tenant_a's code
       const result = await otpService.verify({
-        tenantId: 'tenant_b', recipient: 'maria@x.com', purpose: 'p', code: e1.code,
+        tenantId: 'tenant_b',
+        recipient: 'maria@x.com',
+        purpose: 'p',
+        code: e1.code
       })
       expect(result).toEqual({ valid: false, reason: 'not_found' })
     })
@@ -2649,7 +2697,10 @@ describe('Tenant Isolation — E2E', () => {
       const redis = new RedisMock()
       const storage = new RedisOtpStorage({ redisClient: redis as never })
       await storage.set('tenant_a', 'maria@x.com', 'p', {
-        code: '1', expiresAt: Date.now() + 60_000, attempts: 0, maxAttempts: 5,
+        code: '1',
+        expiresAt: Date.now() + 60_000,
+        attempts: 0,
+        maxAttempts: 5
       })
       const keys = await redis.keys('*')
       // None of the keys should contain the email or tenant ID directly
@@ -2694,12 +2745,12 @@ src/server/interceptors/notification-audit.interceptor.ts
 export class NotificationAuditInterceptor implements NestInterceptor {
   constructor(
     @Inject(BYMAX_NOTIFICATION_OPTIONS) private readonly options: ResolvedNotificationOptions,
-    @Inject(BYMAX_NOTIFICATION_LOG_REPOSITORY) private readonly auditLog: INotificationLogRepository,
+    @Inject(BYMAX_NOTIFICATION_LOG_REPOSITORY) private readonly auditLog: INotificationLogRepository
   ) {}
 
   intercept(ctx: ExecutionContext, next: CallHandler): Observable<unknown>
   private recordMeta(ctx, verb, errorMessage?): Promise<void>
-  private extractDispatchInput(ctx): DispatchInput | null  // shape match on first arg
+  private extractDispatchInput(ctx): DispatchInput | null // shape match on first arg
   private extractRecipient(input): string
 }
 ```
@@ -2847,10 +2898,7 @@ model NotificationLog {
 
 ```typescript
 import { Injectable } from '@nestjs/common'
-import type {
-  INotificationLogRepository,
-  NotificationLogEntry,
-} from '@bymax-one/nest-notification'
+import type { INotificationLogRepository, NotificationLogEntry } from '@bymax-one/nest-notification'
 
 // CONSUMER CODE — your application
 import { PrismaService } from '../prisma/prisma.service'
@@ -2874,8 +2922,8 @@ export class PrismaNotificationLogRepository implements INotificationLogReposito
         messageId: entry.messageId,
         errorMessage: entry.errorMessage,
         userId: entry.userId,
-        metadata: entry.metadata ?? undefined,
-      },
+        metadata: entry.metadata ?? undefined
+      }
     })
   }
 }
@@ -2986,6 +3034,7 @@ pnpm typecheck && pnpm lint && pnpm test:cov && pnpm test:e2e && pnpm build && p
 Spin up a NestJS fixture with `BymaxNotificationModule.forRootAsync({ useFactory: () => ({ global: { tenantIdResolver: (req) => req.headers['x-tenant-id'] as string }, email: { provider: new ResendEmailProvider({ apiKey }), defaultFrom, templateRenderer }, otp: { storage: new RedisOtpStorage({ redisClient }) }, audit: { repository: new MemoryAuditRepo(), swallowErrors: true } }) })`.
 
 Validate:
+
 - `module.module.name === 'BymaxNotificationModule'`
 - Provider count matches the expectation (1 options + 1 audit + 1 email + 1 renderer + 1 storage + 3 services = 8)
 - The audit repo receives entries when services are exercised via supertest (HTTP-level)
@@ -3028,11 +3077,11 @@ src/react/
 export type OtpInputType = 'numeric' | 'alpha' | 'alphanumeric'
 
 export interface UseOtpInputOptions {
-  length?: number              // default 6
-  type?: OtpInputType          // default 'numeric'
+  length?: number // default 6
+  type?: OtpInputType // default 'numeric'
   onComplete?: (code: string) => void | Promise<void>
-  autoSubmit?: boolean         // default true
-  sanitizeOnPaste?: boolean    // default true (strip spaces/dashes)
+  autoSubmit?: boolean // default true
+  sanitizeOnPaste?: boolean // default true (strip spaces/dashes)
 }
 
 export interface UseOtpInputState {
@@ -3040,23 +3089,23 @@ export interface UseOtpInputState {
   setValue: (index, value) => void
   onChange: (index) => (e: ChangeEvent<HTMLInputElement>) => void
   onKeyDown: (index) => (e: KeyboardEvent<HTMLInputElement>) => void
-  onPaste: (e: ClipboardEvent<HTMLInputElement>) => void  // attach to FIRST input only
+  onPaste: (e: ClipboardEvent<HTMLInputElement>) => void // attach to FIRST input only
   refs: ReadonlyArray<RefObject<HTMLInputElement>>
   reset: () => void
-  code: string                  // joined values
-  isComplete: boolean           // all slots filled
+  code: string // joined values
+  isComplete: boolean // all slots filled
 }
 
 export interface UseOtpCountdownOptions {
-  expiresAt: number | null      // null disables countdown
-  tickIntervalMs?: number       // default 1000
+  expiresAt: number | null // null disables countdown
+  tickIntervalMs?: number // default 1000
   onExpired?: () => void
 }
 
 export interface UseOtpCountdownState {
-  remainingSeconds: number      // >= 0
-  expired: boolean              // remaining <= 0
-  formatted: string             // 'MM:SS' or 'HH:MM:SS'
+  remainingSeconds: number // >= 0
+  expired: boolean // remaining <= 0
+  formatted: string // 'MM:SS' or 'HH:MM:SS'
 }
 ```
 
@@ -3066,7 +3115,7 @@ export interface UseOtpCountdownState {
 const VALIDATORS = {
   numeric: /^[0-9]$/,
   alpha: /^[A-Za-z]$/,
-  alphanumeric: /^[A-Za-z0-9]$/,
+  alphanumeric: /^[A-Za-z0-9]$/
 }
 
 export function useOtpInput(options: UseOtpInputOptions = {}): UseOtpInputState {
@@ -3226,7 +3275,7 @@ export type {
   UseOtpInputOptions,
   UseOtpInputState,
   UseOtpCountdownOptions,
-  UseOtpCountdownState,
+  UseOtpCountdownState
 } from './types'
 ```
 
@@ -3374,7 +3423,7 @@ LICENSE
 
 - **`CHANGELOG.md`** — Keep a Changelog format. `[0.1.0]` entry lists all `Added` items (module, services, providers, interfaces, hooks, multi-tenant, audit, adapter examples) and `Deferred (v0.2)` items (SMS, Push, `forRootAsync` `useClass`/`useExisting`).
 
-- **`SECURITY.md`** — Supported versions table; reporting via `security@bymax.one`; scope in/out (in: OTP gen, timing-safe compare, multi-tenant isolation, audit leakage, tenant spoofing | out: provider issues, consumer misuse).
+- **`SECURITY.md`** — Supported versions table; reporting via `support@bymax.one`; scope in/out (in: OTP gen, timing-safe compare, multi-tenant isolation, audit leakage, tenant spoofing | out: provider issues, consumer misuse).
 
 - **`CLAUDE.md`** — Mirror nest-auth's CLAUDE.md structure (under 110 lines). Critical rules section enumerates: (1) npm library not app + NEVER `@prisma/client`, (2) English only, (3) Zero `any`, (4) Security (`node:crypto.randomInt`, `timingSafeEqual`, never log codes, sha256 hashing), (5) NestJS patterns (conditional provider registration, `Symbol()` tokens, `@Optional()`), (6) Code style, (7) TDD 80%+/95%, (8) tsup 3 subpaths. Plus subpaths table + verification command.
 
@@ -3422,18 +3471,18 @@ const BUDGETS = [
   {
     name: 'server (NestJS module + services + providers)',
     path: 'dist/server/index.mjs',
-    brotli: 30_000,  // ~30 KB brotli
+    brotli: 30_000 // ~30 KB brotli
   },
   {
     name: 'shared (types + constants)',
     path: 'dist/shared/index.mjs',
-    brotli: 4_000,   // ~4 KB brotli
+    brotli: 4_000 // ~4 KB brotli
   },
   {
     name: 'react (hooks)',
     path: 'dist/react/index.mjs',
-    brotli: 8_000,   // ~8 KB brotli
-  },
+    brotli: 8_000 // ~8 KB brotli
+  }
 ]
 ```
 
@@ -3488,6 +3537,7 @@ npm view @bymax-one/nest-notification@0.1.0
 > **Released:** [date]
 >
 > **Highlights:**
+>
 > - Multi-channel notification library for NestJS
 > - Email + OTP channels GA
 > - Multi-tenant ready
@@ -3496,6 +3546,7 @@ npm view @bymax-one/nest-notification@0.1.0
 > - 100% Prisma-free (interface-based persistence)
 >
 > **Deferred to v0.2:**
+>
 > - SMS channel (interfaces ready, services not implemented)
 > - Push channel (interfaces ready, services not implemented)
 > - `forRootAsync` `useClass` / `useExisting`
@@ -3583,51 +3634,51 @@ npm view @bymax-one/nest-notification@0.1.0
 
 ## Appendix B — Complexity Matrix
 
-| Phase | Sub-step | Est. LoC | Complexity | Main risk |
-|---|---|---|---|---|
-| 1 | 2.1 Scaffold + complete CI (4 workflows, incremental-safe) | ~30 LoC + configs + ~300 LoC YAML | MEDIUM | CI must pass at every phase (passWithNoTests, coverage on implemented files, empty-react integrity) |
-| 1 | 2.2 Shared types | ~70 LoC | LOW | — |
-| 1 | 2.3 Interfaces (7 files) | ~250 LoC | MEDIUM | Document Prisma decoupling in IOtpStorage |
-| 1 | 2.4 Constants + tokens + error codes + exception | ~280 LoC | MEDIUM | Sync between server and shared error codes |
-| 1 | 2.5 validateOptions + resolveOptions | ~200 LoC | MEDIUM | Validation edge cases; deep freeze |
-| 1 | 2.6 No-op providers + default renderer (minimum) | ~150 LoC | LOW | Correct HTML escape |
-| 1 | 2.7 hash + code-generator + timing-safe-compare | ~80 LoC | MEDIUM | 100% required coverage; safe crypto |
-| 1 | 2.8 BymaxNotificationModule.forRoot | ~200 LoC | MEDIUM | Conditional registration without leaking tokens |
-| 1 | 2.9 Barrel exports | ~50 LoC | LOW | — |
-| 1 | 2.10 Tests Phase 1 | ~900 LoC | MEDIUM | Mock chains de NestJS testing |
-| 2 | 3.1 ResendEmailProvider | ~120 LoC | MEDIUM | Lazy import de `resend` |
-| 2 | 3.2 InMemoryOtpStorage | ~90 LoC | LOW | Self-eviction in get |
-| 2 | 3.3 RedisOtpStorage | ~150 LoC | HIGH | `SET XX EX` correct; hashing applied |
-| 2 | 3.4 EmailService | ~200 LoC | HIGH | Fire-and-forget audit; optional rendering |
-| 2 | 3.5 OtpService | ~300 LoC | HIGH | Atomic increment attempts; timing-safe verification |
-| 2 | 3.6 NotificationService | ~140 LoC | MEDIUM | Discriminated dispatch input |
-| 2 | 3.7 Wiring in the module | ~30 LoC modification | LOW | — |
-| 2 | 3.8 Barrel updated | ~30 LoC | LOW | — |
-| 2 | 3.9 Tests Phase 2 | ~1400 LoC | HIGH | Cover all branches of the services |
-| 3 | 4.1 DefaultTemplateRenderer refinement | ~180 LoC | MEDIUM | Nested paths; fallback chain |
-| 3 | 4.2 Docs templates (3 adapters) | doc-only | LOW | — |
-| 3 | 4.3 cooldown-helpers | ~50 LoC | LOW | — |
-| 3 | 4.4 OtpService cooldown details | ~10 LoC modification | LOW | — |
-| 3 | 4.5 Exports atualizados | ~10 LoC | LOW | — |
-| 3 | 4.6 CANONICAL_EMAIL_TEMPLATES | ~30 LoC | LOW | — |
-| 3 | 4.7 Tests Phase 3 | ~400 LoC | MEDIUM | — |
-| 4 | 5.1 Tenant isolation e2e | ~150 LoC | MEDIUM | Mock Redis with ioredis-mock |
-| 4 | 5.2 NotificationAuditInterceptor | ~150 LoC | MEDIUM | ExecutionContext mock |
-| 4 | 5.3 forRootAsync complete | ~150 LoC modification | HIGH | Async wiring without losing lazy resolution |
-| 4 | 5.4 Prisma fragment + example | doc-only | LOW | — |
-| 4 | 5.5 README security section | doc-only | LOW | — |
-| 4 | 5.6 Tests Phase 4 | ~400 LoC | MEDIUM | — |
-| 4 | 5.7 Exports atualizados | ~5 LoC | LOW | — |
-| 5 | 6.1 useOtpInput | ~200 LoC | MEDIUM | Refs identity, paste edge cases |
-| 5 | 6.2 useOtpCountdown | ~80 LoC | LOW | jest fake timers |
-| 5 | 6.3 Barrel ./react | ~10 LoC | LOW | — |
-| 5 | 6.4 Tests React | ~500 LoC | MEDIUM | renderHook + act setup |
-| 6 | 7.1 README | doc | LOW | — |
-| 6 | 7.2 CHANGELOG + SECURITY + CLAUDE + AGENTS | doc | LOW | — |
-| 6 | 7.3 CI/release finalization (dogfood smoke; workflows from §2.1) | ~40 LoC | LOW | — |
-| 6 | 7.4 Bundle budgets | ~30 LoC | LOW | — |
-| 6 | 7.5 Mutation testing | manual | MEDIUM | Equivalent mutants; break 95 |
-| 6 | 7.6 Tag + publish | manual | LOW | Provenance OIDC works |
+| Phase | Sub-step                                                         | Est. LoC                          | Complexity | Main risk                                                                                           |
+| ----- | ---------------------------------------------------------------- | --------------------------------- | ---------- | --------------------------------------------------------------------------------------------------- |
+| 1     | 2.1 Scaffold + complete CI (4 workflows, incremental-safe)       | ~30 LoC + configs + ~300 LoC YAML | MEDIUM     | CI must pass at every phase (passWithNoTests, coverage on implemented files, empty-react integrity) |
+| 1     | 2.2 Shared types                                                 | ~70 LoC                           | LOW        | —                                                                                                   |
+| 1     | 2.3 Interfaces (7 files)                                         | ~250 LoC                          | MEDIUM     | Document Prisma decoupling in IOtpStorage                                                           |
+| 1     | 2.4 Constants + tokens + error codes + exception                 | ~280 LoC                          | MEDIUM     | Sync between server and shared error codes                                                          |
+| 1     | 2.5 validateOptions + resolveOptions                             | ~200 LoC                          | MEDIUM     | Validation edge cases; deep freeze                                                                  |
+| 1     | 2.6 No-op providers + default renderer (minimum)                 | ~150 LoC                          | LOW        | Correct HTML escape                                                                                 |
+| 1     | 2.7 hash + code-generator + timing-safe-compare                  | ~80 LoC                           | MEDIUM     | 100% required coverage; safe crypto                                                                 |
+| 1     | 2.8 BymaxNotificationModule.forRoot                              | ~200 LoC                          | MEDIUM     | Conditional registration without leaking tokens                                                     |
+| 1     | 2.9 Barrel exports                                               | ~50 LoC                           | LOW        | —                                                                                                   |
+| 1     | 2.10 Tests Phase 1                                               | ~900 LoC                          | MEDIUM     | Mock chains de NestJS testing                                                                       |
+| 2     | 3.1 ResendEmailProvider                                          | ~120 LoC                          | MEDIUM     | Lazy import de `resend`                                                                             |
+| 2     | 3.2 InMemoryOtpStorage                                           | ~90 LoC                           | LOW        | Self-eviction in get                                                                                |
+| 2     | 3.3 RedisOtpStorage                                              | ~150 LoC                          | HIGH       | `SET XX EX` correct; hashing applied                                                                |
+| 2     | 3.4 EmailService                                                 | ~200 LoC                          | HIGH       | Fire-and-forget audit; optional rendering                                                           |
+| 2     | 3.5 OtpService                                                   | ~300 LoC                          | HIGH       | Atomic increment attempts; timing-safe verification                                                 |
+| 2     | 3.6 NotificationService                                          | ~140 LoC                          | MEDIUM     | Discriminated dispatch input                                                                        |
+| 2     | 3.7 Wiring in the module                                         | ~30 LoC modification              | LOW        | —                                                                                                   |
+| 2     | 3.8 Barrel updated                                               | ~30 LoC                           | LOW        | —                                                                                                   |
+| 2     | 3.9 Tests Phase 2                                                | ~1400 LoC                         | HIGH       | Cover all branches of the services                                                                  |
+| 3     | 4.1 DefaultTemplateRenderer refinement                           | ~180 LoC                          | MEDIUM     | Nested paths; fallback chain                                                                        |
+| 3     | 4.2 Docs templates (3 adapters)                                  | doc-only                          | LOW        | —                                                                                                   |
+| 3     | 4.3 cooldown-helpers                                             | ~50 LoC                           | LOW        | —                                                                                                   |
+| 3     | 4.4 OtpService cooldown details                                  | ~10 LoC modification              | LOW        | —                                                                                                   |
+| 3     | 4.5 Exports atualizados                                          | ~10 LoC                           | LOW        | —                                                                                                   |
+| 3     | 4.6 CANONICAL_EMAIL_TEMPLATES                                    | ~30 LoC                           | LOW        | —                                                                                                   |
+| 3     | 4.7 Tests Phase 3                                                | ~400 LoC                          | MEDIUM     | —                                                                                                   |
+| 4     | 5.1 Tenant isolation e2e                                         | ~150 LoC                          | MEDIUM     | Mock Redis with ioredis-mock                                                                        |
+| 4     | 5.2 NotificationAuditInterceptor                                 | ~150 LoC                          | MEDIUM     | ExecutionContext mock                                                                               |
+| 4     | 5.3 forRootAsync complete                                        | ~150 LoC modification             | HIGH       | Async wiring without losing lazy resolution                                                         |
+| 4     | 5.4 Prisma fragment + example                                    | doc-only                          | LOW        | —                                                                                                   |
+| 4     | 5.5 README security section                                      | doc-only                          | LOW        | —                                                                                                   |
+| 4     | 5.6 Tests Phase 4                                                | ~400 LoC                          | MEDIUM     | —                                                                                                   |
+| 4     | 5.7 Exports atualizados                                          | ~5 LoC                            | LOW        | —                                                                                                   |
+| 5     | 6.1 useOtpInput                                                  | ~200 LoC                          | MEDIUM     | Refs identity, paste edge cases                                                                     |
+| 5     | 6.2 useOtpCountdown                                              | ~80 LoC                           | LOW        | jest fake timers                                                                                    |
+| 5     | 6.3 Barrel ./react                                               | ~10 LoC                           | LOW        | —                                                                                                   |
+| 5     | 6.4 Tests React                                                  | ~500 LoC                          | MEDIUM     | renderHook + act setup                                                                              |
+| 6     | 7.1 README                                                       | doc                               | LOW        | —                                                                                                   |
+| 6     | 7.2 CHANGELOG + SECURITY + CLAUDE + AGENTS                       | doc                               | LOW        | —                                                                                                   |
+| 6     | 7.3 CI/release finalization (dogfood smoke; workflows from §2.1) | ~40 LoC                           | LOW        | —                                                                                                   |
+| 6     | 7.4 Bundle budgets                                               | ~30 LoC                           | LOW        | —                                                                                                   |
+| 6     | 7.5 Mutation testing                                             | manual                            | MEDIUM     | Equivalent mutants; break 95                                                                        |
+| 6     | 7.6 Tag + publish                                                | manual                            | LOW        | Provenance OIDC works                                                                               |
 
 **Total estimated LoC (source + tests):** ~7,000 LoC (lib).
 
@@ -3637,53 +3688,53 @@ npm view @bymax-one/nest-notification@0.1.0
 
 > Source repo: `~/Documents/MyApps/bymax-one/nest-auth` (the canonical TS lib template). Paths below are relative to it.
 
-| File | Source to copy (and adapt) |
-|---|---|
-| `tsconfig.json` | `bymax-one/nest-auth/tsconfig.json` — switch path aliases to the 3 subpaths |
-| `tsconfig.build.json` | `bymax-one/nest-auth/tsconfig.build.json` (identical) |
-| `tsconfig.server.json` | `bymax-one/nest-auth/tsconfig.server.json` |
-| `tsconfig.e2e.json` | `bymax-one/nest-auth/tsconfig.e2e.json` |
-| `tsconfig.jest.json` | `bymax-one/nest-auth/tsconfig.jest.json` |
-| `jest.config.ts` | `bymax-one/nest-auth/jest.config.ts` — adapt `moduleNameMapper` for 3 subpaths; add `jest-environment-jsdom` for `react/*` |
-| `jest.coverage.config.ts` | `bymax-one/nest-auth/jest.coverage.config.ts` |
-| `jest.e2e.config.ts` | `bymax-one/nest-auth/jest.e2e.config.ts` |
-| `jest.stryker.config.ts` | `bymax-one/nest-auth/jest.stryker.config.ts` |
-| `stryker.config.json` | `bymax-one/nest-auth/stryker.config.json` — thresholds (high 100, low 95, break 95) |
-| `eslint.config.mjs` | `bymax-one/nest-auth/eslint.config.mjs` — remove crypto/oauth rules; keep the security plugin |
-| `.prettierrc` | `bymax-one/nest-auth/.prettierrc` |
-| `.gitignore` | `bymax-one/nest-auth/.gitignore` |
-| `scripts/check-size.mjs` | `bymax-one/nest-auth/scripts/check-size.mjs` — adapt BUDGETS for 3 entries |
-| `.github/workflows/*.yml` | `bymax-one/nest-auth/.github/workflows/*.yml` — add a `pnpm check:no-prisma` step in `ci.yml` |
-| `tsup.config.ts` | **Custom — 3 entries** (do not copy nest-auth's, which has 5) |
+| File                      | Source to copy (and adapt)                                                                                                 |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `tsconfig.json`           | `bymax-one/nest-auth/tsconfig.json` — switch path aliases to the 3 subpaths                                                |
+| `tsconfig.build.json`     | `bymax-one/nest-auth/tsconfig.build.json` (identical)                                                                      |
+| `tsconfig.server.json`    | `bymax-one/nest-auth/tsconfig.server.json`                                                                                 |
+| `tsconfig.e2e.json`       | `bymax-one/nest-auth/tsconfig.e2e.json`                                                                                    |
+| `tsconfig.jest.json`      | `bymax-one/nest-auth/tsconfig.jest.json`                                                                                   |
+| `jest.config.ts`          | `bymax-one/nest-auth/jest.config.ts` — adapt `moduleNameMapper` for 3 subpaths; add `jest-environment-jsdom` for `react/*` |
+| `jest.coverage.config.ts` | `bymax-one/nest-auth/jest.coverage.config.ts`                                                                              |
+| `jest.e2e.config.ts`      | `bymax-one/nest-auth/jest.e2e.config.ts`                                                                                   |
+| `jest.stryker.config.ts`  | `bymax-one/nest-auth/jest.stryker.config.ts`                                                                               |
+| `stryker.config.json`     | `bymax-one/nest-auth/stryker.config.json` — thresholds (high 100, low 95, break 95)                                        |
+| `eslint.config.mjs`       | `bymax-one/nest-auth/eslint.config.mjs` — remove crypto/oauth rules; keep the security plugin                              |
+| `.prettierrc`             | `bymax-one/nest-auth/.prettierrc`                                                                                          |
+| `.gitignore`              | `bymax-one/nest-auth/.gitignore`                                                                                           |
+| `scripts/check-size.mjs`  | `bymax-one/nest-auth/scripts/check-size.mjs` — adapt BUDGETS for 3 entries                                                 |
+| `.github/workflows/*.yml` | `bymax-one/nest-auth/.github/workflows/*.yml` — add a `pnpm check:no-prisma` step in `ci.yml`                              |
+| `tsup.config.ts`          | **Custom — 3 entries** (do not copy nest-auth's, which has 5)                                                              |
 
 ---
 
 ## Appendix D — Glossary
 
-| Term | Meaning in this plan |
-|---|---|
-| **Phase** | A cohesive block of functionality delivering a vertical slice of the lib |
-| **Sub-step** | §N.M within a phase — atomic enough to become 1+ tasks in `docs/tasks/phase-NN-<slug>.md` |
-| **Acceptance criteria** | Binary (yes/no) checklist for closing a sub-step |
-| **Validation command** | Exact command to run to validate acceptance |
-| **Done criteria** | Aggregated set of gates to close an entire phase |
-| **AAA pattern** | Arrange/Act/Assert — test convention |
-| **TDD red-green-refactor** | Write failing test → implement minimal → refactor |
-| **Mutation score** | % of mutations detected by tests (Stryker); release gate ≥ 95%, driven to 100% (break 95) |
-| **Coverage gate** | Coverage floor per file / global — 100% on this lib |
-| **`consumeAttempt`** | Atomic `IOtpStorage` verify primitive (Redis Lua / single Map op) — lookup + attempt increment in one step |
-| **`tryAcquireCooldown`** | Atomic cooldown acquire (`SET NX EX`) used as a short-lived lock around generate/resend |
-| **Discriminated union** | TS pattern (e.g., `OtpVerifyResult`) where the `valid: true/false` field narrows the type |
-| **Prisma decoupling** | Central principle: the lib NEVER imports `@prisma/client`. Persistence via `IOtpStorage` and `INotificationLogRepository` |
-| **Tenant scoping** | Isolation between tenants via `(tenantId, recipient, purpose)` in all keys |
-| **sha256 hashing** | `sha256(tenantId:recipient)` applied to Redis keys for privacy + multi-tenancy |
-| **Cooldown** | Minimum time between OTP resends — anti-brute-force |
-| **Audit fire-and-forget** | Audit log is recorded but failures do not propagate to the caller (controlled by `swallowErrors`) |
-| **`OTP_INVALID_LENGTH` on generation** | Preventive validation in `code-generator` when length is outside [1, 32] |
-| **Timing-safe compare** | Length-guarded `crypto.timingSafeEqual` (`safeCompare`) — guards against timing-oracle attacks |
-| **Channel opt-in** | A channel is registered in the DI container only if configured in `forRoot()` |
-| **`OtpVerifyResult.reason`** | Discriminator in the `valid: false` branch — `'not_found' \| 'max_attempts' \| 'invalid_code'` (expired is reported as `not_found`) |
-| **MVP scoping** | Decision of which features enter v0.1 vs v0.2 (SMS/Push deferred) |
+| Term                                   | Meaning in this plan                                                                                                                |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| **Phase**                              | A cohesive block of functionality delivering a vertical slice of the lib                                                            |
+| **Sub-step**                           | §N.M within a phase — atomic enough to become 1+ tasks in `docs/tasks/phase-NN-<slug>.md`                                           |
+| **Acceptance criteria**                | Binary (yes/no) checklist for closing a sub-step                                                                                    |
+| **Validation command**                 | Exact command to run to validate acceptance                                                                                         |
+| **Done criteria**                      | Aggregated set of gates to close an entire phase                                                                                    |
+| **AAA pattern**                        | Arrange/Act/Assert — test convention                                                                                                |
+| **TDD red-green-refactor**             | Write failing test → implement minimal → refactor                                                                                   |
+| **Mutation score**                     | % of mutations detected by tests (Stryker); release gate ≥ 95%, driven to 100% (break 95)                                           |
+| **Coverage gate**                      | Coverage floor per file / global — 100% on this lib                                                                                 |
+| **`consumeAttempt`**                   | Atomic `IOtpStorage` verify primitive (Redis Lua / single Map op) — lookup + attempt increment in one step                          |
+| **`tryAcquireCooldown`**               | Atomic cooldown acquire (`SET NX EX`) used as a short-lived lock around generate/resend                                             |
+| **Discriminated union**                | TS pattern (e.g., `OtpVerifyResult`) where the `valid: true/false` field narrows the type                                           |
+| **Prisma decoupling**                  | Central principle: the lib NEVER imports `@prisma/client`. Persistence via `IOtpStorage` and `INotificationLogRepository`           |
+| **Tenant scoping**                     | Isolation between tenants via `(tenantId, recipient, purpose)` in all keys                                                          |
+| **sha256 hashing**                     | `sha256(tenantId:recipient)` applied to Redis keys for privacy + multi-tenancy                                                      |
+| **Cooldown**                           | Minimum time between OTP resends — anti-brute-force                                                                                 |
+| **Audit fire-and-forget**              | Audit log is recorded but failures do not propagate to the caller (controlled by `swallowErrors`)                                   |
+| **`OTP_INVALID_LENGTH` on generation** | Preventive validation in `code-generator` when length is outside [1, 32]                                                            |
+| **Timing-safe compare**                | Length-guarded `crypto.timingSafeEqual` (`safeCompare`) — guards against timing-oracle attacks                                      |
+| **Channel opt-in**                     | A channel is registered in the DI container only if configured in `forRoot()`                                                       |
+| **`OtpVerifyResult.reason`**           | Discriminator in the `valid: false` branch — `'not_found' \| 'max_attempts' \| 'invalid_code'` (expired is reported as `not_found`) |
+| **MVP scoping**                        | Decision of which features enter v0.1 vs v0.2 (SMS/Push deferred)                                                                   |
 
 ---
 
@@ -3695,19 +3746,19 @@ npm view @bymax-one/nest-notification@0.1.0
 
 All keys follow the format: `{namespace}:{prefix}:{purpose}:{identifier}`
 
-| Component | Meaning | Default |
-|---|---|---|
-| `namespace` | Prefix configurable via `global.redisNamespace` | `'notification'` |
-| `prefix` | Key type — `'otp'` or `'otp_cd'` | hardcoded |
-| `purpose` | OTP purpose (`email_verification`, `password_reset`, etc.) | consumer string |
-| `identifier` | `sha256(tenantId:recipient)` hex-encoded (64 chars) | calculated |
+| Component    | Meaning                                                    | Default          |
+| ------------ | ---------------------------------------------------------- | ---------------- |
+| `namespace`  | Prefix configurable via `global.redisNamespace`            | `'notification'` |
+| `prefix`     | Key type — `'otp'` or `'otp_cd'`                           | hardcoded        |
+| `purpose`    | OTP purpose (`email_verification`, `password_reset`, etc.) | consumer string  |
+| `identifier` | `sha256(tenantId:recipient)` hex-encoded (64 chars)        | calculated       |
 
 ### E.2 Complete keys table
 
-| Prefix | Full key pattern | Stored value | TTL | Operations | Purpose |
-|---|---|---|---|---|---|
-| `otp` | `notification:otp:{purpose}:{sha256(tid+':'+rcpt)}` | JSON: `{ code: string, expiresAt: number, attempts: number, maxAttempts: number, validated?: boolean, metadata?: object }` | `ttlSeconds` per purpose (default 600s) | `SETEX` on set; `EVAL` (Lua `consumeAttempt`) on verify; `SET ... KEEPTTL XX` on update; `GET` on get; `DEL` on delete | OTP entry. Stores code in plaintext (compared in constant time), attempt counter, validation flag. We hash `(tenantId, recipient)` for privacy. |
-| `otp_cd` | `notification:otp_cd:{purpose}:{sha256(tid+':'+rcpt)}` | `'1'` (sentinel) | `resendCooldownSeconds` (default 60s) | `SET ... NX EX` in tryAcquireCooldown; `TTL` in getCooldown; `DEL` in clearCooldown | Cooldown lock between resends. Acquired atomically with `NX`; key existence indicates active cooldown; the TTL is the relevant data. |
+| Prefix   | Full key pattern                                       | Stored value                                                                                                               | TTL                                     | Operations                                                                                                             | Purpose                                                                                                                                         |
+| -------- | ------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `otp`    | `notification:otp:{purpose}:{sha256(tid+':'+rcpt)}`    | JSON: `{ code: string, expiresAt: number, attempts: number, maxAttempts: number, validated?: boolean, metadata?: object }` | `ttlSeconds` per purpose (default 600s) | `SETEX` on set; `EVAL` (Lua `consumeAttempt`) on verify; `SET ... KEEPTTL XX` on update; `GET` on get; `DEL` on delete | OTP entry. Stores code in plaintext (compared in constant time), attempt counter, validation flag. We hash `(tenantId, recipient)` for privacy. |
+| `otp_cd` | `notification:otp_cd:{purpose}:{sha256(tid+':'+rcpt)}` | `'1'` (sentinel)                                                                                                           | `resendCooldownSeconds` (default 60s)   | `SET ... NX EX` in tryAcquireCooldown; `TTL` in getCooldown; `DEL` in clearCooldown                                    | Cooldown lock between resends. Acquired atomically with `NX`; key existence indicates active cooldown; the TTL is the relevant data.            |
 
 ### E.3 Exemplo concrete
 
@@ -3717,7 +3768,7 @@ Consumer call:
 await otpService.generate({
   tenantId: 'tenant_acme',
   recipient: 'maria@example.com',
-  purpose: 'email_verification',
+  purpose: 'email_verification'
 })
 ```
 
@@ -3799,16 +3850,17 @@ Without hashing, if `tenantId` allows `:` in values (e.g., `tenant_a:b`), the fo
 
 ### E.6 Performance trade-offs
 
-| Operation | Cost | Comment |
-|---|---|---|
-| `sha256(string)` on CPU | < 1 µs for strings < 1 KB | Local, synchronous hashing — negligible |
-| `SETEX` | O(1) | fast |
-| `GET` | O(1) | fast |
-| `EVAL` (consumeAttempt Lua) | O(1) | single-key script; runs atomically server-side |
-| `SET ... KEEPTTL XX` / `SET ... NX EX` | O(1) | fast; the XX/NX check is local |
-| `DEL` / `TTL` / `PTTL` | O(1) | fast |
+| Operation                              | Cost                      | Comment                                        |
+| -------------------------------------- | ------------------------- | ---------------------------------------------- |
+| `sha256(string)` on CPU                | < 1 µs for strings < 1 KB | Local, synchronous hashing — negligible        |
+| `SETEX`                                | O(1)                      | fast                                           |
+| `GET`                                  | O(1)                      | fast                                           |
+| `EVAL` (consumeAttempt Lua)            | O(1)                      | single-key script; runs atomically server-side |
+| `SET ... KEEPTTL XX` / `SET ... NX EX` | O(1)                      | fast; the XX/NX check is local                 |
+| `DEL` / `TTL` / `PTTL`                 | O(1)                      | fast                                           |
 
 **Expected throughput:** > 50k ops/s per Redis instance. At larger volumes (e.g., 100k concurrent OTPs per second), the consumer can:
+
 - Partition by tenantId across multiple Redis instances
 - Implement `IOtpStorage` with additional Lua scripts for batch operations
 - Migrate to DynamoDB with native TTL
@@ -3817,10 +3869,10 @@ Without hashing, if `tenantId` allows `:` in values (e.g., `tenant_a:b`), the fo
 
 `@bymax-one/nest-auth` uses a similar key hashing strategy for sessions, brute-force counters, and refresh tokens. Naming conventions are consistent:
 
-| Lib | Prefix | Strategy |
-|---|---|---|
-| nest-auth | `auth:session:`, `auth:bf:`, `auth:refresh:` | sha256(token) or sha256(userId+ip) in keys |
-| nest-notification | `notification:otp:`, `notification:otp_cd:` | sha256(tenantId+recipient) in keys |
+| Lib               | Prefix                                       | Strategy                                   |
+| ----------------- | -------------------------------------------- | ------------------------------------------ |
+| nest-auth         | `auth:session:`, `auth:bf:`, `auth:refresh:` | sha256(token) or sha256(userId+ip) in keys |
+| nest-notification | `notification:otp:`, `notification:otp_cd:`  | sha256(tenantId+recipient) in keys         |
 
 A consumer using BOTH libs can share the same Redis instance without collision thanks to the distinct namespaces.
 

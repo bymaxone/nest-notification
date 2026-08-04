@@ -28,7 +28,7 @@ Use GitHub **Private Vulnerability Reporting**, which is enabled on this reposit
 ➡️ [Open a private security advisory](https://github.com/bymaxone/nest-notification/security/advisories/new)
 
 If you cannot use the GitHub form (e.g., you do not have an account), email
-**security@bymax.one** with `[security] @bymax-one/nest-notification` in the subject line.
+**support@bymax.one** with `[security] @bymax-one/nest-notification` in the subject line.
 
 ### What to include
 
@@ -44,12 +44,12 @@ A useful report contains:
 
 ### Response timeline
 
-| Phase                                       | Target                                |
-| ------------------------------------------- | ------------------------------------- |
-| Acknowledgement of receipt                  | within **72 hours**                   |
-| Initial assessment and severity rating      | within **7 days**                     |
-| Coordinated fix for **Critical / High**     | within **90 days** of acknowledgement |
-| Coordinated fix for **Medium / Low**        | best effort, tracked in advisory      |
+| Phase                                   | Target                                |
+| --------------------------------------- | ------------------------------------- |
+| Acknowledgement of receipt              | within **72 hours**                   |
+| Initial assessment and severity rating  | within **7 days**                     |
+| Coordinated fix for **Critical / High** | within **90 days** of acknowledgement |
+| Coordinated fix for **Medium / Low**    | best effort, tracked in advisory      |
 
 We follow [coordinated vulnerability disclosure](https://en.wikipedia.org/wiki/Coordinated_vulnerability_disclosure)
 and publish the advisory only after a fixed version is on npm, unless active exploitation
