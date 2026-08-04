@@ -55,14 +55,23 @@ const MS_PER_SECOND = 1000
 @Injectable()
 export class RedisOtpStorage implements IOtpStorage {
   readonly name = 'redis'
-  private readonly redis: RedisLike
+  /**
+   * The Redis client.
+   *
+   * An ECMAScript private field rather than a TypeScript `private` one, which
+   * is erased at runtime: an ioredis instance carries `options.password` as a
+   * plain field, so leaving this enumerable would let anything that serializes
+   * this storage — a structured logger, an error reporter walking the scope of
+   * a throw — reach the Redis credentials.
+   */
+  readonly #redis: RedisLike
   private readonly namespace: string
 
   /**
    * @param options - The Redis client and optional namespace.
    */
   constructor(options: RedisOtpStorageOptions) {
-    this.redis = options.redisClient
+    this.#redis = options.redisClient
     this.namespace = options.namespace ?? 'notification'
   }
 
@@ -99,7 +108,7 @@ export class RedisOtpStorage implements IOtpStorage {
    * @returns `true` when a client is present.
    */
   isConfigured(): boolean {
-    return Boolean(this.redis)
+    return Boolean(this.#redis)
   }
 
   /**
@@ -112,7 +121,7 @@ export class RedisOtpStorage implements IOtpStorage {
    */
   async set(tenantId: string, recipient: string, purpose: string, entry: OtpEntry): Promise<void> {
     const ttlSeconds = Math.max(1, Math.ceil((entry.expiresAt - Date.now()) / MS_PER_SECOND))
-    await this.redis.setex(
+    await this.#redis.setex(
       this.otpKey(tenantId, recipient, purpose),
       ttlSeconds,
       JSON.stringify(entry)
@@ -128,7 +137,7 @@ export class RedisOtpStorage implements IOtpStorage {
    * @returns The parsed entry, or `null` when absent/corrupted.
    */
   async get(tenantId: string, recipient: string, purpose: string): Promise<OtpEntry | null> {
-    const raw = await this.redis.get(this.otpKey(tenantId, recipient, purpose))
+    const raw = await this.#redis.get(this.otpKey(tenantId, recipient, purpose))
     if (!raw) {
       return null
     }
@@ -153,7 +162,7 @@ export class RedisOtpStorage implements IOtpStorage {
     recipient: string,
     purpose: string
   ): Promise<ConsumeAttemptResult> {
-    const raw = (await this.redis.eval(
+    const raw = (await this.#redis.eval(
       RedisOtpStorage.CONSUME_ATTEMPT_LUA,
       1,
       this.otpKey(tenantId, recipient, purpose),
@@ -177,7 +186,7 @@ export class RedisOtpStorage implements IOtpStorage {
     purpose: string,
     entry: OtpEntry
   ): Promise<void> {
-    await this.redis.set(
+    await this.#redis.set(
       this.otpKey(tenantId, recipient, purpose),
       JSON.stringify(entry),
       'KEEPTTL',
@@ -193,7 +202,7 @@ export class RedisOtpStorage implements IOtpStorage {
    * @param purpose - OTP purpose.
    */
   async delete(tenantId: string, recipient: string, purpose: string): Promise<void> {
-    await this.redis.del(this.otpKey(tenantId, recipient, purpose))
+    await this.#redis.del(this.otpKey(tenantId, recipient, purpose))
   }
 
   /**
@@ -218,10 +227,10 @@ export class RedisOtpStorage implements IOtpStorage {
   ): Promise<boolean> {
     const key = this.cooldownKey(tenantId, recipient, purpose)
     if (ttlSeconds <= 0) {
-      await this.redis.del(key)
+      await this.#redis.del(key)
       return true
     }
-    const result = await this.redis.set(key, '1', 'EX', ttlSeconds, 'NX')
+    const result = await this.#redis.set(key, '1', 'EX', ttlSeconds, 'NX')
     return result === 'OK'
   }
 
@@ -234,7 +243,7 @@ export class RedisOtpStorage implements IOtpStorage {
    * @returns Remaining seconds, or `0` when there is no active cooldown.
    */
   async getCooldown(tenantId: string, recipient: string, purpose: string): Promise<number> {
-    const ttl = await this.redis.ttl(this.cooldownKey(tenantId, recipient, purpose))
+    const ttl = await this.#redis.ttl(this.cooldownKey(tenantId, recipient, purpose))
     // Stryker disable next-line EqualityOperator: Redis TTL returns a positive integer (whole seconds remaining), 0 (a key expiring in under a second), -1 (key with no expiry), or -2 (no such key). The `ttl >= 0` mutant is equivalent: it diverges from `ttl > 0` only at ttl === 0, where the then-branch returns `ttl` (which is 0) and the else-branch returns the literal 0 — the same observable value. Every positive value takes the then-branch (returns `ttl`); -1 and -2 take the else-branch (return 0). So the result is identical for every value in {positive, 0, -1, -2}.
     return ttl > 0 ? ttl : 0
   }
@@ -247,7 +256,7 @@ export class RedisOtpStorage implements IOtpStorage {
    * @param purpose - OTP purpose.
    */
   async clearCooldown(tenantId: string, recipient: string, purpose: string): Promise<void> {
-    await this.redis.del(this.cooldownKey(tenantId, recipient, purpose))
+    await this.#redis.del(this.cooldownKey(tenantId, recipient, purpose))
   }
 
   /** Builds the OTP entry key: `{namespace}:otp:{purpose}:{sha256(tenantId:recipient)}`. */

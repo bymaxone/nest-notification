@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-08-04
+
+### Security
+
+- The Resend API key and the Redis client are no longer disclosed when the provider or
+  the OTP storage that holds them is serialized. `ResendEmailProvider` kept its adapter
+  options — which carry `apiKey` — and `RedisOtpStorage` kept its client in TypeScript
+  `private` properties, which are erased at runtime and leave enumerable own properties.
+  `JSON.stringify`, object spread and `util.inspect` therefore emitted the API key in
+  plaintext, and reached `options.password` on the ioredis instance. Both move to
+  ECMAScript private fields. That matters because these are registered providers: a
+  structured logger rendering its arguments, or an error reporter capturing the scope of
+  a throw, walks them without being asked to.
+
+Reading on purpose is unchanged and no public type or export moved.
+
 ## [1.0.1] - 2026-08-01
 
 ### Security
@@ -99,6 +115,7 @@ rejected at startup rather than failing on the first send.
 - **`forRootAsync` `useClass` / `useExisting`** — only `useFactory` is wired.
 - **Multi-provider failover and routing.**
 
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...HEAD
+[1.0.2]: https://github.com/bymaxone/nest-notification/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/bymaxone/nest-notification/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/bymaxone/nest-notification/releases/tag/v1.0.0

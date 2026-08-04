@@ -1,3 +1,5 @@
+import { inspect } from 'node:util'
+
 import { Logger } from '@nestjs/common'
 
 import type { EmailSendOptions } from '../interfaces/email-provider.interface'
@@ -161,5 +163,20 @@ describe('ResendEmailProvider', () => {
     } finally {
       mockResendMissing = false
     }
+  })
+  it('keeps the API key out of every serialization path', () => {
+    // The provider is registered in the container, so anything that renders it
+    // incidentally reaches its options: a structured logger formatting its
+    // arguments, an error reporter capturing the scope of a throw, an object
+    // spread. `showHidden` is asserted because it is what defeats a merely
+    // non-enumerable property.
+    const apiKey = 're_LEAKCANARY_secret'
+    const provider = new ResendEmailProvider({ apiKey })
+
+    expect(JSON.stringify(provider)).not.toContain(apiKey)
+    expect(JSON.stringify({ ...provider })).not.toContain(apiKey)
+    expect(inspect(provider, { depth: null, showHidden: true })).not.toContain(apiKey)
+    // Reads on purpose are unaffected: the key still configures the provider.
+    expect(provider.isConfigured()).toBe(true)
   })
 })
