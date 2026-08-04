@@ -31,15 +31,15 @@ Finalize documentation (README, CHANGELOG, SECURITY, CLAUDE, AGENTS, LICENSE), c
 
 ## Task index
 
-| ID | Task | Status | Priority | Size | Depends on |
-|---|---|---|---|---|---|
-| 6.1 | README (badges, quick start, 3 scenarios, multi-tenant security) | ✅ | P0 | M | — |
-| 6.2 | CHANGELOG + SECURITY + CLAUDE + AGENTS + LICENSE | ✅ | P0 | M | — |
-| 6.3 | CI/release finalization (workflows exist since Phase 1 — verify, badges, dogfood smoke, scorecard ≥ 7) | ✅ | P0 | S | — |
-| 6.4 | Bundle size budgets (final) | ✅ | P1 | S | — |
-| 6.5 | Mutation testing end (≥ 95%, → 100%) | ✅ | P0 | M | — |
-| 6.6 | Final pre-publish gate + tag + publish (`--provenance`) | 👀 | P0 | S | 6.1–6.5 |
-| 6.7 | Release notes v0.1.0 | ⬜ | P1 | S | 6.6 |
+| ID  | Task                                                                                                   | Status | Priority | Size | Depends on |
+| --- | ------------------------------------------------------------------------------------------------------ | ------ | -------- | ---- | ---------- |
+| 6.1 | README (badges, quick start, 3 scenarios, multi-tenant security)                                       | ✅     | P0       | M    | —          |
+| 6.2 | CHANGELOG + SECURITY + CLAUDE + AGENTS + LICENSE                                                       | ✅     | P0       | M    | —          |
+| 6.3 | CI/release finalization (workflows exist since Phase 1 — verify, badges, dogfood smoke, scorecard ≥ 7) | ✅     | P0       | S    | —          |
+| 6.4 | Bundle size budgets (final)                                                                            | ✅     | P1       | S    | —          |
+| 6.5 | Mutation testing end (≥ 95%, → 100%)                                                                   | ✅     | P0       | M    | —          |
+| 6.6 | Final pre-publish gate + tag + publish (`--provenance`)                                                | 👀     | P0       | S    | 6.1–6.5    |
+| 6.7 | Release notes v0.1.0                                                                                   | ⬜     | P1       | S    | 6.6        |
 
 ---
 
@@ -67,7 +67,7 @@ Write the README mirroring `bymax-one/nest-auth`: badges, overview, features, su
 
 #### Agent prompt
 
-````
+```
 You are a senior NestJS engineer/technical writer working on the nest-notification project.
 
 PROJECT: @bymax-one/nest-notification — public NestJS notification lib, releasing v0.1.0.
@@ -94,7 +94,7 @@ Verification:
 Completion Protocol:
 1. Status ✅ (block + index). 2. Tick AC. 3. Index row + progress `1/7`. 4. Update the Phase 6 row in the plan.
 5. Append `- 6.1 ✅ <YYYY-MM-DD> — <summary>`.
-````
+```
 
 ---
 
@@ -111,7 +111,7 @@ Author the supporting docs mirroring `nest-auth`.
 
 #### Acceptance criteria
 
-- [x] `CHANGELOG.md` (Keep a Changelog; `[0.1.0]` Added + Deferred-v0.2); `SECURITY.md` (supported versions, `security@bymax.one`, in/out scope); `CLAUDE.md` + `AGENTS.md` (critical rules incl. never-import-Prisma, atomic OTP, never-log-codes, 100%/mutation 95); `LICENSE` (MIT)
+- [x] `CHANGELOG.md` (Keep a Changelog; `[0.1.0]` Added + Deferred-v0.2); `SECURITY.md` (supported versions, `support@bymax.one`, in/out scope); `CLAUDE.md` + `AGENTS.md` (critical rules incl. never-import-Prisma, atomic OTP, never-log-codes, 100%/mutation 95); `LICENSE` (MIT)
 
 #### Files to create / modify
 
@@ -119,7 +119,7 @@ Author the supporting docs mirroring `nest-auth`.
 
 #### Agent prompt
 
-````
+```
 You are a senior NestJS engineer/technical writer working on the nest-notification project.
 
 PROJECT: @bymax-one/nest-notification — public NestJS notification lib, releasing v0.1.0.
@@ -148,7 +148,7 @@ Verification:
 Completion Protocol:
 1. Status ✅ (block + index). 2. Tick AC. 3. Index row + progress `2/7`. 4. Update the Phase 6 row.
 5. Append `- 6.2 ✅ <YYYY-MM-DD> — <summary>`.
-````
+```
 
 ---
 
@@ -175,7 +175,7 @@ The 4 workflows (`ci`/`codeql`/`scorecard`/`release`) already exist since **Task
 
 #### Agent prompt
 
-````
+```
 You are a senior DevOps/NestJS engineer working on the nest-notification project.
 
 PROJECT: @bymax-one/nest-notification — public NestJS notification lib, releasing v0.1.0 with provenance.
@@ -207,7 +207,7 @@ Verification:
 Completion Protocol:
 1. Status ✅ (block + index). 2. Tick AC. 3. Index row + progress `3/7`. 4. Update the Phase 6 row.
 5. Append `- 6.3 ✅ <YYYY-MM-DD> — <summary>`.
-````
+```
 
 ---
 
@@ -232,7 +232,7 @@ Finalize `scripts/check-size.mjs` budgets: server 30 KB, shared 4 KB, react 8 KB
 
 #### Agent prompt
 
-````
+```
 You are a senior build engineer working on the nest-notification project.
 
 PROJECT: @bymax-one/nest-notification — public NestJS notification lib.
@@ -255,7 +255,7 @@ Verification:
 Completion Protocol:
 1. Status ✅ (block + index). 2. Tick AC. 3. Index row + progress `4/7`. 4. Update the Phase 6 row.
 5. Append `- 6.4 ✅ <YYYY-MM-DD> — <summary>`.
-````
+```
 
 ---
 
@@ -273,7 +273,7 @@ Completion Protocol:
 > equivalent** (single-char regex anchors in `useOtpInput`, redundant defensive guards whose
 > next check subsumes them, a `Buffer.byteLength`-vs-`length` arm that is identical for the
 > only two content types) — each documented individually in `docs/mutation_testing_results.md`.
-> They are not inline-suppressed only because each shares its operator/token with a *killed*
+> They are not inline-suppressed only because each shares its operator/token with a _killed_
 > sibling on the same line, where a line-level `// Stryker disable` would wrongly un-credit a
 > passing test. The honest ceiling ("all survivors are provable equivalents") is reached.
 
@@ -293,7 +293,7 @@ Run the full Stryker mutation suite; drive the score as close to 100% as achieva
 
 #### Agent prompt
 
-````
+```
 You are a senior NestJS test/quality engineer working on the nest-notification project.
 
 PROJECT: @bymax-one/nest-notification — public NestJS notification lib. Release gate: mutation ≥ 95%
@@ -321,7 +321,7 @@ Verification:
 Completion Protocol:
 1. Status ✅ (block + index). 2. Tick AC. 3. Index row + progress `5/7`. 4. Update the Phase 6 row.
 5. Append `- 6.5 ✅ <YYYY-MM-DD> — <summary>`.
-````
+```
 
 ---
 
@@ -348,7 +348,7 @@ Run `prepublishOnly`, confirm the version, then tag `v0.1.0` and publish with pr
 
 #### Agent prompt
 
-````
+```
 You are a senior release engineer working on the nest-notification project.
 
 PROJECT: @bymax-one/nest-notification — public NestJS notification lib, v0.1.0.
@@ -377,7 +377,7 @@ Verification:
 Completion Protocol:
 1. Status ✅ (block + index). 2. Tick AC. 3. Index row + progress `6/7`. 4. Update the Phase 6 row.
 5. Append `- 6.6 ✅ <YYYY-MM-DD> — <summary>`.
-````
+```
 
 ---
 
@@ -402,7 +402,7 @@ Publish the GitHub release notes for v0.1.0.
 
 #### Agent prompt
 
-````
+```
 You are a senior release engineer working on the nest-notification project.
 
 PROJECT: @bymax-one/nest-notification — public NestJS notification lib, v0.1.0.
@@ -430,7 +430,7 @@ Verification:
 Completion Protocol:
 1. Status ✅ (block + index). 2. Tick AC. 3. Index row + progress `7/7`. 4. Mark the Phase 6 row ✅ in
 the plan. 5. Append `- 6.7 ✅ <YYYY-MM-DD> — <summary>`.
-````
+```
 
 ---
 
@@ -439,8 +439,8 @@ the plan. 5. Append `- 6.7 ✅ <YYYY-MM-DD> — <summary>`.
 > Append-only. One line per completed task: `- <task-id> ✅ YYYY-MM-DD — <one-line summary>`.
 
 - 6.1 ✅ 2026-06-20 — Full README: badges, overview, subpath table, 3 copy-pasteable scenarios (dev NoOp+InMemory, prod Resend+Redis, Prisma audit), configuration table, BYO-provider, multi-tenant security, templates + React hooks, testing, roadmap (v0.2 SMS/Push).
-- 6.2 ✅ 2026-06-20 — CHANGELOG (Keep a Changelog; [0.1.0] unreleased — Added + Deferred-v0.2), SECURITY.md (0.1.x supported, security@bymax.one, in/out scope), CLAUDE.md + AGENTS.md (critical rules: never-import-Prisma, atomic OTP, never-log-codes, sha256 keys, 100% cov + mutation 95→100), LICENSE (MIT). English-only, timeless.
-- 6.3 ✅ 2026-06-20 — Dogfood smoke green: fixed consumer react peer install, added behavioral section (forRoot pipeline + useOtpInput/useOtpCountdown callable). Confirmed the 4 workflows exist and release.yml is tag-gated (v*.*.*) with --provenance + npm-publish environment.
+- 6.2 ✅ 2026-06-20 — CHANGELOG (Keep a Changelog; [0.1.0] unreleased — Added + Deferred-v0.2), SECURITY.md (0.1.x supported, support@bymax.one, in/out scope), CLAUDE.md + AGENTS.md (critical rules: never-import-Prisma, atomic OTP, never-log-codes, sha256 keys, 100% cov + mutation 95→100), LICENSE (MIT). English-only, timeless.
+- 6.3 ✅ 2026-06-20 — Dogfood smoke green: fixed consumer react peer install, added behavioral section (forRoot pipeline + useOtpInput/useOtpCountdown callable). Confirmed the 4 workflows exist and release.yml is tag-gated (v*._._) with --provenance + npm-publish environment.
 - 6.4 ✅ 2026-06-20 — Bundle budgets final (server 30 / shared 4 / react 8 KB brotli); pnpm size green with ~2x headroom (15.45 / 0.76 / 1.66 KB). Calibration comment updated to FINAL for the v0.1 surface.
 - 6.5 👀 2026-06-20 — Mutation suite made runnable (fixed jsdom stryker-env config bug) and hardened 82.45% → 92.82%; all 5 critical paths at 100%; 11 equivalents annotated inline; docs/mutation_testing_{plan,results}.md written. Global below break-95 (equivalent-mutant tail) — documented honestly, not gamed.
 - 6.5 ✅ 2026-06-21 — Mutation hardened 92.82% → **98.17%** (`break: 95` exits 0): killed 42 survivors with real assertions (React hook dep-array stale-closure kills, inner-`send()` spy, exact error-`details`, byte-length attachment, log/locale/charset pins) + annotated 5 inline equivalents. All 5 critical paths stay 100%; the 16 remaining survivors are all provably equivalent and documented per-mutant in mutation_testing_results.md. Coverage stays 100% on all metrics.
