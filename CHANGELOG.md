@@ -29,9 +29,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `emitDecoratorMetadata` is `false` in `tsconfig.json`. It was `true`, which was never
-  true of the artifact: tsup printed `You have emitDecoratorMetadata enabled but
-@swc/core was not installed, skipping swc plugin` on every build of this package. The
-  source now compiles the way the bundle is built, so a parameter that depends on
+  true of the artifact — tsup printed this on every build of this package:
+
+  ```
+  You have emitDecoratorMetadata enabled but @swc/core was not installed, skipping swc plugin
+  ```
+
+  The source now compiles the way the bundle is built, so a parameter that depends on
   reflected types fails where it is cheap to see rather than in a consumer's process.
 
 ## [1.0.2] - 2026-08-04
