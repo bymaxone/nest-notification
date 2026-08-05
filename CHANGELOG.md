@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.3] - 2026-08-05
+
+### Fixed
+
+- **`NotificationService` never received its channel services, and said the channels were
+  disabled.** Both constructor parameters carried `@Optional()` and no `@Inject`. Nest
+  reads three separate metadata keys here — `self:paramtypes` from `@Inject()`,
+  `design:paramtypes` from TypeScript, and `optional:paramtypes` from `@Optional()` — and
+  the third only says a dependency may be missing; it carries no token. The published
+  bundle is built by tsup/esbuild, which documents that it cannot emit `design:paramtypes`,
+  so neither key that names a dependency was present and both parameters resolved to
+  `undefined`.
+
+  With both channels configured, the module logged `Initialized with channels: email, otp`
+  while `getEnabledChannels()` returned `[]` and `dispatch()` threw `CHANNEL_DISABLED` —
+  an error that blamed a configuration that was correct. Both parameters now carry
+  `@Inject`, keeping `@Optional()`, which is the shape `@nestjs/jwt` uses for the same
+  situation.
+
+### Changed
+
+- `emitDecoratorMetadata` is `false` in `tsconfig.json`. It was `true`, which was never
+  true of the artifact: tsup printed `You have emitDecoratorMetadata enabled but
+@swc/core was not installed, skipping swc plugin` on every build of this package. The
+  source now compiles the way the bundle is built, so a parameter that depends on
+  reflected types fails where it is cheap to see rather than in a consumer's process.
+
 ## [1.0.2] - 2026-08-04
 
 ### Security
@@ -115,7 +142,8 @@ rejected at startup rather than failing on the first send.
 - **`forRootAsync` `useClass` / `useExisting`** — only `useFactory` is wired.
 - **Multi-provider failover and routing.**
 
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...HEAD
+[1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...HEAD
 [1.0.2]: https://github.com/bymaxone/nest-notification/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/bymaxone/nest-notification/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/bymaxone/nest-notification/releases/tag/v1.0.0
