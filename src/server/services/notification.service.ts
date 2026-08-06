@@ -8,7 +8,7 @@
  * not configured is simply absent, and dispatching to it throws `CHANNEL_DISABLED`.
  */
 
-import { Injectable, Optional } from '@nestjs/common'
+import { Inject, Injectable, Optional } from '@nestjs/common'
 
 import { EmailService } from './email.service'
 import type { EmailSendInput, EmailSendTemplateInput } from './email.service'
@@ -69,8 +69,8 @@ export class NotificationService {
    * @param otpService - The OTP service, present only when the OTP channel is configured.
    */
   constructor(
-    @Optional() private readonly emailService?: EmailService,
-    @Optional() private readonly otpService?: OtpService
+    @Optional() @Inject(EmailService) private readonly emailService?: EmailService,
+    @Optional() @Inject(OtpService) private readonly otpService?: OtpService
   ) {}
 
   /**
