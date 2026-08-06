@@ -57,6 +57,8 @@ jobs:
         # Compiles test/types/ against src/, pinning the published signatures so
         # a refactor that widens or loosens one fails here rather than silently.
         run: pnpm test:types
+      - name: Mutation directives parse and carry their reason
+        run: pnpm check:mutants
       - name: Build all subpaths
         run: pnpm build
       - name: Verify build output integrity
