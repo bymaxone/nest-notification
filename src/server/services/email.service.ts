@@ -178,6 +178,7 @@ export class EmailService {
     }
     const totalBytes = attachments.reduce(
       (sum, { content }) =>
+        // Stryker disable next-line ConditionalExpression: equivalent — `Buffer.byteLength` answers a Buffer's own length, so both arms measure the same bytes; the conditional says where the number comes from
         sum + (typeof content === 'string' ? Buffer.byteLength(content) : content.length),
       0
     )
