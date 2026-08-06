@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.3] — 2026-08-06
+
+**Runtime change.** `dist/` differs from `1.0.2`: the source carries new mutation-suppression
+comments, and this package's bundler preserves comments.
+
+### Documentation
+
+- The mutation badge said **98%**; the measured score is **100.00%**.
+
+### Tests
+
+- OTP expiry is `now + ttlSeconds * 1000` and only its order of magnitude was checked. Dividing
+  instead of multiplying would expire a 300-second code 0.3 milliseconds after minting it, and
+  every failure would read as a delivery problem rather than an arithmetic one.
+- A dotted template path stops at the first non-object. Without that guard `{{ name.0 }}` renders
+  the first letter of the string, and the same slip against `{{ token.0 }}` would put the first
+  character of a secret in an email.
+
 ## [1.0.2] - 2026-08-04
 
 ### Security
