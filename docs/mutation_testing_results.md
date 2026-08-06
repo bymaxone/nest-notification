@@ -12,7 +12,7 @@ a recorded Stryker run; nothing is estimated.
 
 ---
 
-## Headline
+## Headline (historical — superseded by the dated re-run at the end)
 
 | Metric                                                 | Value      |
 | ------------------------------------------------------ | ---------- |

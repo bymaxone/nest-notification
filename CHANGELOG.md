@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.0.4] — 2026-08-06
+## [1.0.4] - 2026-08-06
 
 **Runtime change.** `dist/` differs from `1.0.3`: the source carries new mutation-suppression
 comments, and this package's bundler preserves comments.

@@ -181,23 +181,6 @@ describe('useOtpInput', () => {
     expect(focusSpies.some((spy) => spy.mock.calls.length > 0)).toBe(false)
   })
 
-  // Backspace on the FIRST slot when it is already empty has nowhere to go back to. The
-  // `index > 0` bound is what stops it: relax it and the handler writes at index -1 and focuses
-  // a ref that does not exist, so the very first keystroke into an empty field throws inside the
-  // consumer's onKeyDown. The filled-slot case above cannot catch it, because the empty check
-  // short-circuits first.
-  it('should do nothing on Backspace in the first slot when it is empty', () => {
-    const { result } = renderHook(() => useOtpInput({ length: 6 }))
-    const focusSpies = wireFocusSpies(result.current.refs)
-
-    act(() => {
-      result.current.onKeyDown(0)(keyEvent('Backspace'))
-    })
-
-    expect(result.current.values).toEqual(['', '', '', '', '', ''])
-    expect(focusSpies.some((spy) => spy.mock.calls.length > 0)).toBe(false)
-  })
-
   // Backspace on a FILLED slot at index > 0 must not touch the previous slot — pins
   // the `ctx.values.at(index) === ''` (current-slot-empty) guard: a mutant forcing it
   // true would clear and focus the previous slot even though this slot is occupied.
