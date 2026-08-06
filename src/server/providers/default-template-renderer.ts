@@ -172,6 +172,7 @@ export class DefaultTemplateRenderer implements IEmailTemplateRenderer {
   private resolveNested(data: Record<string, unknown>, path: string): unknown {
     let current: unknown = data
     for (const key of path.split('.')) {
+      // Stryker disable next-line ConditionalExpression: equivalent — `typeof undefined` is 'undefined', so the third operand already rejects what the second one names; the second states the case rather than deciding it
       if (current === null || current === undefined || typeof current !== 'object') {
         return undefined
       }

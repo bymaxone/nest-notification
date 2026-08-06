@@ -81,6 +81,7 @@ export function formatCooldown(remainingSeconds: number): string {
   if (minutes > 0) {
     parts.push(`${minutes}m`)
   }
+  // Stryker disable next-line ConditionalExpression: unreachable — a total of zero returns '0s' at the top of this function, so anything arriving here is at least one second and, when `seconds` is 0, has already pushed an hours or minutes part; the empty-parts arm cannot fire
   if (seconds > 0 || parts.length === 0) {
     parts.push(`${seconds}s`)
   }

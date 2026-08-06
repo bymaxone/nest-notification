@@ -15,7 +15,10 @@ import { toRetryAfterHeader } from '../utils/cooldown-helpers'
 import type { EmailService } from './email.service'
 import { OtpService } from './otp.service'
 
-const dummyRepo = { name: 'x', create: async (): Promise<void> => undefined } as INotificationLogRepository
+const dummyRepo = {
+  name: 'x',
+  create: async (): Promise<void> => undefined
+} as INotificationLogRepository
 
 const makeOptions = (
   otp: Partial<OtpChannelOptions> | null = {},
@@ -59,6 +62,35 @@ describe('OtpService.generate', () => {
     )
     expect(result.cooldownSeconds).toBe(60)
     expect((await storage.get(ref.tenantId, ref.recipient, ref.purpose))?.attempts).toBe(0)
+  })
+
+  // `expiresAt` is `now + ttlSeconds * 1000`, and only the ORDER of magnitude was ever checked
+  // (that it lies in the future). Divide instead of multiply and a 300-second code expires
+  // 0.3 milliseconds after it is minted — every verification fails, every retry mints another,
+  // and the flow looks like a delivery problem rather than an arithmetic one. The window is
+  // asserted against the configured TTL, with a second of slack for the clock.
+  it('should set the expiry a full TTL ahead, in milliseconds', async () => {
+    const service = new OtpService(
+      makeOptions({
+        perPurpose: {
+          [ref.purpose]: {
+            length: 6,
+            codeType: 'numeric',
+            ttlSeconds: 300,
+            maxAttempts: 5,
+            resendCooldownSeconds: 60
+          }
+        }
+      }),
+      storage,
+      audit
+    )
+    const before = Date.now()
+
+    const result = await service.generate({ ...ref, deliverVia: 'manual' })
+
+    expect(result.expiresAt).toBeGreaterThanOrEqual(before + 300_000)
+    expect(result.expiresAt).toBeLessThanOrEqual(Date.now() + 300_000 + 1_000)
   })
 
   // A second generate inside the cooldown window is rejected with retry hints.
@@ -124,14 +156,24 @@ describe('OtpService.generate', () => {
   it('should deliver via email with auto-injected code/expiresInMinutes/purpose', async () => {
     const service = new OtpService(makeOptions(), storage, audit, emailServiceStub)
 
-    await service.generate({ ...ref, deliverVia: 'email', emailData: { name: 'Jane' }, locale: 'en', userId: 'u1' })
+    await service.generate({
+      ...ref,
+      deliverVia: 'email',
+      emailData: { name: 'Jane' },
+      locale: 'en',
+      userId: 'u1'
+    })
 
     expect(emailSendTemplate).toHaveBeenCalledWith(
       expect.objectContaining({
         template: 'otp_code',
         locale: 'en',
         userId: 'u1',
-        data: expect.objectContaining({ name: 'Jane', expiresInMinutes: 10, purpose: 'email_verification' })
+        data: expect.objectContaining({
+          name: 'Jane',
+          expiresInMinutes: 10,
+          purpose: 'email_verification'
+        })
       })
     )
     const code = emailSendTemplate.mock.calls[0]?.[0].data.code
@@ -305,7 +347,11 @@ describe('OtpService.generate', () => {
     })
     const service = new OtpService(options, storage, audit)
 
-    const result = await service.generate({ ...ref, purpose: 'password_reset', deliverVia: 'manual' })
+    const result = await service.generate({
+      ...ref,
+      purpose: 'password_reset',
+      deliverVia: 'manual'
+    })
     const entry = await storage.get(ref.tenantId, ref.recipient, 'password_reset')
 
     expect(result.cooldownSeconds).toBe(30)

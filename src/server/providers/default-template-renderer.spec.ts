@@ -53,6 +53,22 @@ describe('DefaultTemplateRenderer', () => {
     expect(rendered.html).toBe('<p>Jane</p>')
   })
 
+  // A dotted path stops at the first non-object, and a STRING is the case that proves it stops
+  // rather than merely misses. Without the type guard, `Object.entries('Jane')` yields index
+  // keys, so `{{ name.0 }}` renders the letter 'J' — a template author walking a path that does
+  // not exist gets a plausible-looking character instead of nothing, and the same slip against
+  // `{{ token.0 }}` would leak the first character of a secret into an email.
+  it('should render nothing for a path that walks into a string', async () => {
+    const renderer = new DefaultTemplateRenderer({
+      templates: { 'x::en': { subject: 'Hi {{ name.0 }}', html: '<p>{{ name.length }}</p>' } }
+    })
+
+    const rendered = await renderer.render('x', { name: 'Jane' }, 'en')
+
+    expect(rendered.subject).toBe('Hi ')
+    expect(rendered.html).toBe('<p></p>')
+  })
+
   // A placeholder whose variable is absent from the data renders as an empty
   // string rather than literal "undefined" (default onMissingVar: 'empty').
   it('should render a missing variable as an empty string by default', async () => {
@@ -240,16 +256,16 @@ describe('DefaultTemplateRenderer', () => {
 
   // Construction validation: a null template value fails fast.
   it('should reject a null template at construction', () => {
-    expect(
-      () => new DefaultTemplateRenderer({ templates: { 'x::en': null as never } })
-    ).toThrow('Invalid template "x::en" — must have { subject: string, html: string }')
+    expect(() => new DefaultTemplateRenderer({ templates: { 'x::en': null as never } })).toThrow(
+      'Invalid template "x::en" — must have { subject: string, html: string }'
+    )
   })
 
   // Construction validation: a non-object template value fails fast.
   it('should reject a non-object template at construction', () => {
-    expect(
-      () => new DefaultTemplateRenderer({ templates: { 'x::en': 'nope' as never } })
-    ).toThrow('Invalid template "x::en"')
+    expect(() => new DefaultTemplateRenderer({ templates: { 'x::en': 'nope' as never } })).toThrow(
+      'Invalid template "x::en"'
+    )
   })
 
   // Construction validation: a callable (function) carrying string subject/html is

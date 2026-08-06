@@ -24,9 +24,7 @@ const pasteEvent = (text: string): ClipboardEvent<HTMLInputElement> =>
   }) as unknown as ClipboardEvent<HTMLInputElement>
 
 // Attach a focus-spy element to every ref so `focus()` calls are observable.
-const wireFocusSpies = (
-  refs: ReadonlyArray<RefObject<HTMLInputElement | null>>
-): jest.Mock[] =>
+const wireFocusSpies = (refs: ReadonlyArray<RefObject<HTMLInputElement | null>>): jest.Mock[] =>
   refs.map((ref) => {
     const focus = jest.fn()
     ref.current = { focus } as unknown as HTMLInputElement
@@ -321,9 +319,7 @@ describe('useOtpInput', () => {
 
   // With sanitize disabled, separators are kept and dropped only by the validator.
   it('should keep separators out of distribution only via the validator when sanitize is off', () => {
-    const { result } = renderHook(() =>
-      useOtpInput({ length: 6, sanitizeOnPaste: false })
-    )
+    const { result } = renderHook(() => useOtpInput({ length: 6, sanitizeOnPaste: false }))
 
     act(() => {
       result.current.onPaste(pasteEvent('a1b2c3'))
@@ -368,9 +364,7 @@ describe('useOtpInput', () => {
   // autoSubmit:false suppresses the completion callback.
   it('should not fire onComplete when autoSubmit is false', async () => {
     const onComplete = jest.fn()
-    const { result } = renderHook(() =>
-      useOtpInput({ length: 6, onComplete, autoSubmit: false })
-    )
+    const { result } = renderHook(() => useOtpInput({ length: 6, onComplete, autoSubmit: false }))
 
     act(() => {
       result.current.onPaste(pasteEvent('123456'))
@@ -452,9 +446,7 @@ describe('useOtpInput', () => {
   // autoSubmit:false suppresses the completion callback on a programmatic fill.
   it('should not fire onComplete via setValue when autoSubmit is false', async () => {
     const onComplete = jest.fn()
-    const { result } = renderHook(() =>
-      useOtpInput({ length: 1, onComplete, autoSubmit: false })
-    )
+    const { result } = renderHook(() => useOtpInput({ length: 1, onComplete, autoSubmit: false }))
 
     act(() => {
       result.current.setValue(0, '9')
@@ -485,10 +477,9 @@ describe('useOtpInput', () => {
 
   // Growing `length` pads the slot state and keeps the existing characters.
   it('should grow slot state when length increases on re-render', () => {
-    const { result, rerender } = renderHook(
-      (props: { length: number }) => useOtpInput(props),
-      { initialProps: { length: 3 } }
-    )
+    const { result, rerender } = renderHook((props: { length: number }) => useOtpInput(props), {
+      initialProps: { length: 3 }
+    })
     act(() => {
       result.current.onPaste(pasteEvent('123'))
     })
@@ -583,10 +574,9 @@ describe('useOtpInput', () => {
 
   // Shrinking `length` trims the trailing slots and keeps the handlers in range.
   it('should trim slot state when length decreases on re-render', () => {
-    const { result, rerender } = renderHook(
-      (props: { length: number }) => useOtpInput(props),
-      { initialProps: { length: 6 } }
-    )
+    const { result, rerender } = renderHook((props: { length: number }) => useOtpInput(props), {
+      initialProps: { length: 6 }
+    })
     act(() => {
       result.current.onPaste(pasteEvent('123456'))
     })
