@@ -69,6 +69,7 @@
   "scripts": {
     "build": "pnpm clean && tsup",
     "check:exports": "attw --pack .",
+    "check:mutants": "node scripts/check-mutation-directives.mjs",
     "check:no-prisma": "grep -rq '@prisma/client' src; s=$?; [ $s -eq 1 ] && exit 0; [ $s -eq 0 ] && { echo check:no-prisma: found @prisma/client import in src/; exit 1; }; echo check:no-prisma: grep failed with exit $s; exit $s",
     "check:published": "node scripts/check-published-surface.mjs",
     "clean": "rm -rf dist coverage",
@@ -78,7 +79,7 @@
     "mutation:dry-run": "stryker run --dryRunOnly",
     "mutation:incremental": "stryker run --incremental",
     "prepare": "husky",
-    "prepublishOnly": "pnpm clean && pnpm typecheck && pnpm test:types && pnpm lint && pnpm check:no-prisma && pnpm test:cov:all && pnpm build && pnpm check:published",
+    "prepublishOnly": "pnpm clean && pnpm typecheck && pnpm test:types && pnpm lint && pnpm check:mutants && pnpm check:no-prisma && pnpm test:cov:all && pnpm build && pnpm check:published",
     "release": "npm publish --provenance --access public",
     "size": "node scripts/check-size.mjs",
     "smoke": "node scripts/dogfood-smoke-test.mjs",
