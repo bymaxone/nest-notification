@@ -138,7 +138,13 @@ sibling on the line), and are marked `// Stryker disable next-line <Mutator>: <p
   (`TTL` is never exactly `0`), the `RedisOtpStorage` Lua-script body (executed only on a real
   Redis server), and the `cooldownExpiresAt`/`formatCooldown` `<= 0` boundaries.
 
-### Why the ceiling is 98.17% and not 100%
+### Why the ceiling is 98.17% and not 100% (historical — the re-run reached 100%)
+
+> Superseded by the dated re-run at the end of this file, which measures **100.00%** with zero
+> survivors. The reasoning below was sound for the mutant set it described; what changed is the
+> set, not the argument. Two of the survivors it counted as accounting turned out to be real
+> defects, and closing those removed the shared-line collisions this section describes. Kept as a
+> record of what was believed at the time, not as a live claim about the ceiling.
 
 The honest ceiling here is **"all remaining survivors are provably equivalent"** — and it is
 reached: all 16 survivors above are equivalent mutants. The residual gap to 100% is _not_
