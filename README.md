@@ -644,7 +644,7 @@ A one-time password is a credential, so the suite is held to a bar beyond "it ru
 | -------------- | ---------------------------------------------------------------------- |
 | Type safety    | TypeScript `strict`, zero `any`                                        |
 | Coverage       | **100%** line/branch/function/statement per file (`pnpm test:cov:all`) |
-| Mutation       | Stryker score **≥ 95%** (`break: 95`), currently **98.17%**            |
+| Mutation       | Stryker score **≥ 95%** (`break: 95`), currently **100%**              |
 | Lint           | ESLint flat config + `eslint-plugin-security`, zero warnings           |
 | Bundle budgets | server < 30 KB · shared < 4 KB · react < 8 KB brotli (`pnpm size`)     |
 | Prisma-free    | `pnpm check:no-prisma` — the library never imports `@prisma/client`    |
