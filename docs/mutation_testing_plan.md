@@ -34,7 +34,7 @@ the gate, and the iteration workflow. The latest recorded results live in
 
 ```bash
 pnpm mutation:dry-run   # validate config + the initial test run (no mutants tested)
-pnpm mutation           # full run (~3 min on this codebase); writes reports/mutation/*
+pnpm mutation           # incremental — re-tests only what changed (~3 min on this codebase); writes reports/mutation/*
 ```
 
 The HTML report (`reports/mutation/mutation.html`) lists every surviving mutant with its

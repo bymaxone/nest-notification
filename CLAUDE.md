@@ -86,7 +86,7 @@ Line coverage is 100%, but mutation testing is the real gate against weak tests.
 
 ```bash
 pnpm mutation:dry-run   # validate config
-pnpm mutation           # full run; writes reports/mutation/mutation.html
+pnpm mutation           # incremental — re-tests only what changed; writes reports/mutation/mutation.html
 ```
 
 Equivalent mutants are documented inline with `// Stryker disable next-line <Mutator>: <reason>`
