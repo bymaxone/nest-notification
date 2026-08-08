@@ -634,7 +634,7 @@ When integrating `@bymax-one/nest-notification` in production, verify each of th
 A one-time password is a credential, so the suite is held to a bar beyond "it runs" — every behavior is pinned so that a regression **fails a test**.
 
 - ✅ **100% line coverage** — statements, branches, functions, and lines, enforced per file as a release gate across unit + e2e
-- ✅ **98.17% mutation score** — verified with [Stryker](https://stryker-mutator.io/): 857 of 873 viable seeded faults killed, against a `break` threshold of 95 and driven toward 100
+- ✅ **100% mutation score** — verified with [Stryker](https://stryker-mutator.io/): every viable seeded fault killed, with **no survivors**, against a `break` threshold of 95. The equivalents that no test can kill carry their reason on the line they apply to, so the number is an accounting rather than a target
 - ✅ **384 tests** — unit and end-to-end, spanning all three subpaths
 - ✅ **Invariants asserted, not assumed** — the never-log-codes rule is a test (`JSON.stringify(entry).includes(code) === false`), not a review convention
 - ✅ **Published shape verified** — `attw` resolves every entrypoint against the packed tarball, and a dogfood smoke test installs the package into a scratch consumer before any tag is cut

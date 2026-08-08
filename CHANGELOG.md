@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.5] - 2026-08-08
+
+**Documentation only.** `dist/` is byte-identical to `1.0.4`; no source file changed.
+
+### Fixed
+
+- **The README understated the mutation score.** The badge and
+  `docs/mutation_testing_results.md` both record **100%** with no survivors, measured in the
+  2026-08-06 re-run — but the prose bullet beside them still said **98.17%**, and cited "857
+  of 873 viable seeded faults killed" from the pass before it. The badge and the report were
+  updated and the sentence between them was not, so the npm page has been claiming less than
+  the package delivers.
+- The `[Unreleased]` compare link still pointed at `v1.0.3` after `1.0.4` shipped.
+
 ## [1.0.4] - 2026-08-06
 
 **Published-artifact change, not a behavioural one.** `dist/` differs from `1.0.3` — this
@@ -167,7 +181,8 @@ rejected at startup rather than failing on the first send.
 
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.0.5...HEAD
+[1.0.5]: https://github.com/bymaxone/nest-notification/compare/v1.0.4...v1.0.5
 [1.0.2]: https://github.com/bymaxone/nest-notification/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/bymaxone/nest-notification/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/bymaxone/nest-notification/releases/tag/v1.0.0
