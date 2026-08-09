@@ -27,19 +27,20 @@ describe('NoOpEmailProvider', () => {
     expect(result.messageId).toMatch(/^noop-/)
   })
 
-  // Security: the provider must never log the html or text body, and must log the
-  // recipient MASKED — the full address is personal data that would otherwise sit in
-  // every developer's log. It logs only the subject and a first-initial mask.
-  it('should log the masked recipient and subject, never the full address or body', async () => {
+  // Security: the provider logs only a first-initial mask of the recipient — never
+  // the full address, the subject, or the body. The subject is excluded too because a
+  // consumer template can interpolate an OTP code into it, and the invariant is that a
+  // code never reaches a log.
+  it('should log the masked recipient, never the full address, subject or body', async () => {
     const debugSpy = jest.spyOn(Logger.prototype, 'debug').mockImplementation(() => undefined)
 
-    await new NoOpEmailProvider().send(baseOptions)
+    await new NoOpEmailProvider().send({ ...baseOptions, subject: 'Your code 123456' })
 
     expect(debugSpy).toHaveBeenCalledTimes(1)
     const logged = String(debugSpy.mock.calls[0]?.[0])
     expect(logged).toContain('j***@acme.com')
     expect(logged).not.toContain('jane@acme.com')
-    expect(logged).toContain('Your code')
+    expect(logged).not.toContain('Your code 123456')
     expect(logged).not.toContain('Secret 123456')
   })
 

@@ -2,9 +2,9 @@
  * @fileoverview Development email provider that logs instead of sending.
  * @layer infrastructure
  *
- * Useful for local development without SMTP credentials. It logs only the
- * subject and a MASKED recipient — never the full address, and never the body,
- * which may carry OTP codes or PII.
+ * Useful for local development without SMTP credentials. It logs only a MASKED
+ * recipient — never the full address, and never the subject or the body, either
+ * of which a consumer template can interpolate an OTP code or other PII into.
  *
  * DO NOT USE IN PRODUCTION.
  */
@@ -51,15 +51,17 @@ export class NoOpEmailProvider implements IEmailProvider {
   }
 
   /**
-   * Pretends to send: logs the recipient and subject and returns a synthetic id.
+   * Pretends to send: logs a masked recipient and returns a synthetic id.
    *
-   * @param options - The message to "send". Only `to` and `subject` are logged.
+   * @param options - The message to "send". Only a masked `to` is logged — never
+   *   the subject or the body, since a consumer template can interpolate an OTP
+   *   code into either.
    * @returns A synthetic `messageId` prefixed with `noop-`.
    */
   async send(options: EmailSendOptions): Promise<EmailSendResult> {
     const recipients = Array.isArray(options.to) ? options.to : [options.to]
     const masked = recipients.map(maskEmail).join(',')
-    this.logger.debug(`[NoOpEmail] to=${masked} subject="${options.subject}"`)
+    this.logger.debug(`[NoOpEmail] to=${masked}`)
     return { messageId: `noop-${randomUUID()}` }
   }
 }
