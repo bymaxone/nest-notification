@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.6] - 2026-08-10
+
+Remediation of a local audit's development-log privacy finding (merged in #55). No API changed.
+
+### Fixed
+
+- **The no-op email provider no longer logs the recipient in clear, the subject, or the body.** The
+  development provider now logs only a first-initial mask of each recipient (`m***@example.com`).
+  The subject is dropped entirely: it is rendered from a consumer template that can interpolate an
+  OTP code, so logging it could persist a real code in a developer's log, violating the
+  never-log-codes invariant.
+
 ## [1.0.5] - 2026-08-08
 
 **Documentation only.** `dist/` is byte-identical to `1.0.4`; no source file changed.
@@ -181,7 +193,8 @@ rejected at startup rather than failing on the first send.
 
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.0.5...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.0.6...HEAD
+[1.0.6]: https://github.com/bymaxone/nest-notification/compare/v1.0.5...v1.0.6
 [1.0.5]: https://github.com/bymaxone/nest-notification/compare/v1.0.4...v1.0.5
 [1.0.2]: https://github.com/bymaxone/nest-notification/compare/v1.0.1...v1.0.2
 [1.0.1]: https://github.com/bymaxone/nest-notification/compare/v1.0.0...v1.0.1
