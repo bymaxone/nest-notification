@@ -3218,7 +3218,7 @@ Needed only if the consumer uses the corresponding reference provider:
 
 | Package                    | Version                             | When required                                            |
 | -------------------------- | ----------------------------------- | -------------------------------------------------------- |
-| `ioredis`                  | `^5.0.0`                            | If using `RedisOtpStorage` (default OTP storage)         |
+| `ioredis`                  | `^6.0.0`                            | If using `RedisOtpStorage` (default OTP storage)         |
 | `resend`                   | `^4.0.0 \|\| ^5.0.0 \|\| ^6.0.0`    | If using `ResendEmailProvider`                           |
 | `@sendgrid/mail`           | `^8.0.0`                            | If using SendGridProvider (custom adapter)               |
 | `@aws-sdk/client-ses`      | `^3.0.0`                            | If using SesProvider                                     |
@@ -3324,7 +3324,7 @@ The lib has **zero direct dependencies** (`"dependencies": {}`). All external fu
     "@nestjs/core": "^11.1.18",
     "reflect-metadata": "^0.2.0",
     "rxjs": "^7.8.0",
-    "ioredis": "^5.0.0",
+    "ioredis": "^6.0.0",
     "resend": "^4.0.0 || ^5.0.0 || ^6.0.0",
     "@sendgrid/mail": "^8.0.0",
     "@aws-sdk/client-ses": "^3.0.0",
