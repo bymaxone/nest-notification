@@ -2,8 +2,9 @@
  * @fileoverview Development email provider that logs instead of sending.
  * @layer infrastructure
  *
- * Useful for local development without SMTP credentials. It logs only the
- * recipient and subject — NEVER the body, which may carry OTP codes or PII.
+ * Useful for local development without SMTP credentials. It logs only a MASKED
+ * recipient — never the full address, and never the subject or the body, either
+ * of which a consumer template can interpolate an OTP code or other PII into.
  *
  * DO NOT USE IN PRODUCTION.
  */
@@ -18,6 +19,26 @@ import type {
   IEmailProvider
 } from '../interfaces/email-provider.interface'
 
+/**
+ * Reduce an email address to a first-initial mask (`m***@example.com`).
+ *
+ * A recipient is personal data: logging it in clear, even at `debug`, leaves an
+ * address in every developer's log for the life of the process. The mask keeps the
+ * line useful for correlating a send while dropping the identifying part. An address
+ * with no local part before its `@` is masked whole, so a malformed value cannot leak
+ * through the branch meant to preserve a first initial.
+ *
+ * @param address - The recipient address to mask.
+ * @returns The masked address.
+ */
+function maskEmail(address: string): string {
+  const at = address.lastIndexOf('@')
+  if (at <= 0) {
+    return '***'
+  }
+  return `${address[0]}***${address.slice(at)}`
+}
+
 /** No-op `IEmailProvider` for development and tests. */
 @Injectable()
 export class NoOpEmailProvider implements IEmailProvider {
@@ -30,14 +51,17 @@ export class NoOpEmailProvider implements IEmailProvider {
   }
 
   /**
-   * Pretends to send: logs the recipient and subject and returns a synthetic id.
+   * Pretends to send: logs a masked recipient and returns a synthetic id.
    *
-   * @param options - The message to "send". Only `to` and `subject` are logged.
+   * @param options - The message to "send". Only a masked `to` is logged — never
+   *   the subject or the body, since a consumer template can interpolate an OTP
+   *   code into either.
    * @returns A synthetic `messageId` prefixed with `noop-`.
    */
   async send(options: EmailSendOptions): Promise<EmailSendResult> {
-    const to = Array.isArray(options.to) ? options.to.join(',') : options.to
-    this.logger.debug(`[NoOpEmail] to=${to} subject="${options.subject}"`)
+    const recipients = Array.isArray(options.to) ? options.to : [options.to]
+    const masked = recipients.map(maskEmail).join(',')
+    this.logger.debug(`[NoOpEmail] to=${masked}`)
     return { messageId: `noop-${randomUUID()}` }
   }
 }
