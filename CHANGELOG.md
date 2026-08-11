@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **BREAKING: `ioredis` peer dependency moved to `^6.0.0`** (was `^5.0.0`; the ranges are
+  disjoint, so an ioredis 5 consumer no longer satisfies the contract). This lets a consumer that
+  also installs `@bymax-one/nest-queue@1.2.0` (which peers `ioredis ^6.0.0`) resolve a single
+  ioredis version instead of two. `RedisOtpStorage` never imports `ioredis`: it depends on the
+  locally declared structural `RedisLike` surface, so no runtime path changed. ioredis 6 keeps
+  `replyMapping: "legacy"` by default, so the reply shapes the Lua/TTL paths rely on are
+  unchanged. **Apply to a derived backend:** none — this is a library peer range; a consumer on
+  ioredis 5 must move to ioredis 6 to satisfy the new peer.
+- **Stryker mutation gate raised to 100%.** `thresholds.break`, `thresholds.high`, and
+  `thresholds.low` in `stryker.config.json` are now all `100`, so any surviving (non-equivalent)
+  mutant fails the run rather than being tolerated above 95%. The score was already 100% with no
+  survivors; this makes the standard the gate.
+
 ## [1.0.6] - 2026-08-10
 
 Remediation of a local audit's development-log privacy finding (merged in #55). No API changed.
