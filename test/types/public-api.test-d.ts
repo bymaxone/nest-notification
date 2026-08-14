@@ -22,10 +22,12 @@ import type {
   OtpService,
   EmailService,
   NotificationLogEntry,
-  BymaxNotificationModuleOptions
+  BymaxNotificationModuleOptions,
+  SmtpEmailProviderOptions
 } from '@bymax-one/nest-notification'
 import {
   BymaxNotificationModule,
+  SmtpEmailProvider,
   hashTenantRecipient,
   safeCompare,
   toRetryAfterHeader
@@ -132,6 +134,17 @@ type _LogKeys = Expect<Equal<keyof typeof logRepository, 'create' | 'name'>>
 // The startup readiness check is synchronous — it runs during module init, before
 // anything can be awaited on the request path.
 type _IsConfigured = Expect<Equal<ReturnType<typeof emailProvider.isConfigured>, boolean>>
+
+// The bundled SMTP adapter satisfies the same closed contract a consumer implements.
+const _smtpIsAProvider: IEmailProvider = new SmtpEmailProvider({ host: 'localhost', port: 1025 })
+// Credentials read straight from `process.env` are `string | undefined`. They must
+// type-check as supplied — `isConfigured()` is what reports a variable that failed to
+// load, so a consumer never needs a non-null assertion to wire the provider up.
+declare const envValue: string | undefined
+const _smtpAcceptsEnvCredentials: SmtpEmailProviderOptions = {
+  host: envValue,
+  credentials: { user: envValue, pass: envValue }
+}
 // The audit sink receives entries, never raw OTP material.
 type _LogCreate = Expect<Equal<Parameters<typeof logRepository.create>[0], NotificationLogEntry>>
 type _LogEntryHasNoCode = Expect<

@@ -5,6 +5,79 @@ All notable changes to `@bymax-one/nest-notification` will be documented in this
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2026-08-14
+
+### Added
+
+- **`SmtpEmailProvider` — a bundled `IEmailProvider` speaking SMTP through Nodemailer.** Until now
+  the library shipped an adapter for one vendor's HTTP API (Resend) but none for the protocol every
+  relay, Postfix, corporate gateway and SES SMTP endpoint understands — and none for the mail-capture
+  servers (Mailpit, MailHog) that are the only way a consumer can exercise its email flows end to
+  end. Every consumer was therefore hand-writing the same adapter. `nodemailer` was already declared
+  as an optional peer dependency and marked external in the build; only the implementation was
+  missing.
+
+  ```typescript
+  import { SmtpEmailProvider } from '@bymax-one/nest-notification'
+
+  // Local capture server — open relay, plaintext.
+  new SmtpEmailProvider({ host: 'localhost', port: 1025, secure: false })
+
+  // Authenticated production relay — STARTTLS already mandatory by default.
+  new SmtpEmailProvider({
+    host: process.env.SMTP_HOST,
+    port: 587,
+    credentials: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+  })
+  ```
+
+  Behaviour worth knowing before adopting:
+
+  - **STARTTLS is mandatory by default for any non-loopback host.** On a connection that does not
+    start out encrypted, whether TLS happens at all is decided by the _plaintext_ EHLO banner: an
+    attacker with network position strips the `250-STARTTLS` line, the transport never upgrades,
+    and the credentials plus the OTP-bearing body cross the network in the clear. `requireTls`
+    therefore defaults to `true` unless the host is `localhost` / `127.0.0.1` / `::1`, or `secure`
+    is already on. **A capture server reached by a compose service name rather than over loopback
+    needs an explicit `requireTls: false`** — it will fail closed otherwise, which is the intended
+    direction.
+  - **A line break in `from`, `replyTo`, a recipient, or a custom header name/value is rejected
+    before the send.** Nodemailer already neutralizes these, so this is defence in depth. The
+    subject is exempt: a stray trailing newline from a template is plausible there.
+  - **`isConfigured()` answers on real configuration.** A host is required; credentials are required
+    only when a `credentials` object was supplied at all, which is how a deployment declares that it
+    logs in. An open capture server is configured; a relay whose `SMTP_PASS` failed to load is not,
+    and the send fails closed rather than silently going out anonymously.
+  - **The option is `credentials`, not `auth`** — this is a notification library, not an
+    authentication one. Nodemailer's own wire key stays `auth` inside the adapter.
+  - **Nodemailer is loaded lazily** on the first `send()`, so a consumer on another transport never
+    installs it. Concurrent first sends share one initialization; a failed init is retried.
+  - **No startup `verify()`** — a briefly unreachable relay must not stop the application booting.
+  - **Timeouts are bounded** at `10s` connection / `10s` greeting / `20s` socket, because
+    Nodemailer's own defaults run into minutes and would pin a request path.
+  - **The `messageId` is the RFC-5322 `Message-ID`**, angle brackets included, so an audit entry
+    correlates with the header the recipient received.
+  - **A base64 string attachment is tagged `encoding: 'base64'`.** `EmailAttachment.content` is
+    documented as a `Buffer` **or** a base64 string; untagged, Nodemailer would deliver the base64
+    text as the literal file contents.
+  - **`tags` are not forwarded** — SMTP has no tag facility. They still reach the audit log.
+  - **Neither credential is ever exposed**: both live in an ECMAScript private field (so
+    `JSON.stringify`, object spread and `util.inspect` cannot reach them) and both are scrubbed out
+    of any transport error before it is logged or re-thrown into the audit entry. The **user** is
+    scrubbed too, because it is not always a public login — an SES SMTP username is itself generated
+    secret material. Matching is literal, so a very short credential over-redacts the message; that
+    is the deliberate direction, since the other failure mode is persisting a secret.
+
+  **Apply to a derived backend:** none required — this is additive. To adopt, `pnpm add nodemailer`
+  and swap the hand-written adapter for `SmtpEmailProvider`.
+
+### Changed
+
+- `docs/technical_specification.md` §5.1.5 is no longer an "example adapter" sketch: it documents the
+  shipped provider, its options, and the reasoning behind each design decision that had a plausible
+  alternative. The sketch's `isConfigured(): return Boolean(this.transporter)` was always `true` and
+  is explicitly not what the implementation does.
+
 ## [1.1.0] - 2026-08-11
 
 ### Changed
@@ -209,6 +282,7 @@ rejected at startup rather than failing on the first send.
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
 [Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.0.6...HEAD
+[1.1.1]: https://github.com/bymaxone/nest-notification/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/bymaxone/nest-notification/compare/v1.0.6...v1.1.0
 [1.0.6]: https://github.com/bymaxone/nest-notification/compare/v1.0.5...v1.0.6
 [1.0.5]: https://github.com/bymaxone/nest-notification/compare/v1.0.4...v1.0.5

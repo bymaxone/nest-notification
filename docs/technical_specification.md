@@ -1364,53 +1364,82 @@ export class MailgunEmailProvider implements IEmailProvider {
 }
 ```
 
-#### 5.1.5 Example adapter: NodeMailer SMTP
+#### 5.1.5 Reference implementation: `SmtpEmailProvider`
+
+Bundled and exported from the server subpath. SMTP is a protocol rather than a vendor,
+so one adapter covers every relay, Postfix, corporate gateway, the SES SMTP endpoint,
+and the mail-capture servers (Mailpit, MailHog) that make a consumer's email flows
+testable end to end. `nodemailer` is an optional peer dependency, loaded lazily on the
+first `send()` so a consumer on a different transport never installs it.
 
 ```typescript
-import nodemailer from 'nodemailer'
-import type {
-  IEmailProvider,
-  EmailSendOptions,
-  EmailSendResult
-} from '@bymax-one/nest-notification'
+import { SmtpEmailProvider } from '@bymax-one/nest-notification'
 
-export interface NodemailerSmtpOptions {
-  host: string
-  port: number
-  secure?: boolean
-  auth?: { user: string; pass: string }
-}
+// Local capture server — open relay, plaintext.
+new SmtpEmailProvider({ host: 'localhost', port: 1025, secure: false })
 
-export class NodemailerSmtpProvider implements IEmailProvider {
-  readonly name = 'smtp'
-  private readonly transporter: nodemailer.Transporter
-
-  constructor(options: NodemailerSmtpOptions) {
-    this.transporter = nodemailer.createTransport(options)
-  }
-
-  isConfigured(): boolean {
-    return Boolean(this.transporter)
-  }
-
-  async send(options: EmailSendOptions): Promise<EmailSendResult> {
-    const info = await this.transporter.sendMail({
-      from: options.fromName ? `${options.fromName} <${options.from}>` : options.from,
-      to: options.to,
-      subject: options.subject,
-      html: options.html,
-      text: options.text,
-      replyTo: options.replyTo,
-      cc: options.cc,
-      bcc: options.bcc,
-      headers: options.headers,
-      attachments: options.attachments
-    })
-
-    return { messageId: info.messageId }
-  }
-}
+// Authenticated production relay — STARTTLS already mandatory by default.
+new SmtpEmailProvider({
+  host: process.env.SMTP_HOST,
+  port: 587,
+  credentials: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+})
 ```
+
+| Option                                                    | Default               | Notes                                                            |
+| --------------------------------------------------------- | --------------------- | ---------------------------------------------------------------- |
+| `host`                                                    | —                     | Required.                                                        |
+| `port`                                                    | `587`                 | Submission port.                                                 |
+| `secure`                                                  | `true` iff port `465` | Implicit TLS.                                                    |
+| `requireTls`                                              | `true` off-loopback   | Makes the STARTTLS upgrade mandatory.                            |
+| `credentials`                                             | — (open relay)        | `{ user, pass }`; both halves required once supplied.            |
+| `tls`                                                     | —                     | `rejectUnauthorized` / `servername` / `ca`.                      |
+| `connectionTimeout` / `greetingTimeout` / `socketTimeout` | `10s` / `10s` / `20s` | Bounded on purpose — Nodemailer's own defaults run into minutes. |
+
+Design decisions worth recording, since each one has a plausible alternative:
+
+- **`isConfigured()` answers on configuration, not on object existence.** `Boolean(this.transporter)`
+  is always `true` and therefore tells `EmailService` nothing. The real rule is: a host must be
+  present, and credentials must be complete _when the consumer supplied a `credentials` object at
+  all_ — which is how a deployment declares that it logs in. An open capture server is configured;
+  a relay whose `SMTP_PASS` failed to load is not, and fails closed rather than attempting an
+  anonymous delivery a permissive relay might accept.
+- **The option is `credentials`, not `auth`.** This is a notification library, not an
+  authentication one; `auth` would collide with the ecosystem's auth domain. The rename stops at
+  the boundary — Nodemailer's own wire key stays `auth` inside the adapter.
+- **Initialization is lazy, with no startup `verify()`.** A relay that is briefly unreachable must
+  not prevent the application from booting. Concurrent first sends share one in-flight
+  initialization, and a failed init is dropped from the cache so a later send retries.
+- **A string attachment is tagged `encoding: 'base64'`.** `EmailAttachment.content` is documented
+  as a `Buffer` **or a base64 string**; left untagged, Nodemailer treats the base64 text as the
+  literal body and delivers a corrupt file.
+- **An absent sender address throws.** SMTP needs an envelope sender, so a missing `from` _and_
+  `defaultFrom` is a configuration bug, reported plainly instead of as a cryptic relay rejection.
+- **`tags` are not forwarded.** SMTP has no tag facility. They still reach the audit log through
+  `EmailService`, rather than being smuggled onto the wire as invented headers.
+- **STARTTLS is mandatory by default off-loopback.** On a session that does not start out
+  encrypted, whether TLS happens at all is decided by the _plaintext_ EHLO banner — Nodemailer
+  issues `STARTTLS` only when the banner advertises it or `requireTLS` is set. An attacker with
+  network position strips the `250-STARTTLS` line and the credentials plus the OTP-bearing body go
+  out in cleartext. `requireTls` therefore defaults to `true` unless the host is loopback or
+  `secure` is already on: the local capture-server case keeps working, and every remote default
+  fails closed instead of downgrading silently. A relay that genuinely cannot upgrade is still
+  reachable with an explicit `requireTls: false`.
+- **Both credentials are scrubbed from failures, over-redacting rather than missing.** A relay can
+  echo the failing command back and a socket error can carry the connection options; both `user`
+  and `pass` are removed from the message before it is logged or re-thrown, since `EmailService`
+  writes that message into the audit entry. The **user** is included because it is not always a
+  public login — an SES SMTP username is generated secret material. Matching is literal and
+  unconditional, so a one-character credential garbles the message; that is the deliberate
+  direction, because the other failure mode is persisting a secret. Redaction is applied only at
+  the two calls that cross into foreign code (`createTransport` and `sendMail`) — this adapter's
+  own messages never contain a credential, and scrubbing them would corrupt them.
+- **Line breaks in addresses and custom headers are rejected before the send.** Nodemailer's MIME
+  layer already strips `CR`/`LF` from header names and values and derives the envelope from parsed
+  address objects, so this is defence in depth — but header injection is the one place where
+  trusting a peer dependency's _current_ behaviour would be the entire security boundary. The
+  subject is exempt on purpose: a stray trailing newline out of a template is plausible, and
+  Nodemailer folds it away without a hard failure.
 
 #### 5.1.6 Development provider: `NoOpEmailProvider`
 

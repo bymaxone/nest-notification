@@ -40,7 +40,7 @@ src/
 ├── server/                         layer: api / domain / infra
 │   ├── bymax-notification.module.ts   dynamic module — conditional registration
 │   ├── services/                      EmailService · OtpService · NotificationService
-│   ├── providers/                     Resend · Redis · InMemory · NoOp · DefaultRenderer
+│   ├── providers/                     Resend · SMTP · Redis · InMemory · NoOp · DefaultRenderer
 │   ├── interfaces/                    IEmailProvider · IOtpStorage · IEmailTemplateRenderer · INotificationLogRepository (+ SMS/Push sketches)
 │   ├── interceptors/                  NotificationAuditInterceptor
 │   ├── config/                        validate-options · resolve-options (deep-frozen)
@@ -169,6 +169,7 @@ Adapter examples (Handlebars, MJML, React Email, Prisma repository) live under
 | ----------------- | ------------------------------------------------------------ |
 | NestJS module     | `@nestjs/common`, `@nestjs/core`, `reflect-metadata`, `rxjs` |
 | Resend email      | `resend`                                                     |
+| SMTP email        | `nodemailer`                                                 |
 | Redis OTP store   | `ioredis`                                                    |
 | React hooks       | `react ^19`                                                  |
 | `./shared`        | none                                                         |
