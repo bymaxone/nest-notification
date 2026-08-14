@@ -151,9 +151,24 @@ interface SmtpAttachment {
   encoding: string | undefined
 }
 
+/**
+ * A sender in Nodemailer's structured address form.
+ *
+ * Structured rather than a `"Name <address>"` string on purpose: handed a string,
+ * Nodemailer *parses* it, so a display name containing its own angle-addr — say
+ * `Mallory <mallory@evil.example>` — would supply the `From` address and the
+ * envelope sender instead of the configured one. Given the object, the name is
+ * never parsed; Nodemailer quotes it (and RFC-2047-encodes it when non-ASCII) while
+ * the address stays exactly what this adapter chose.
+ */
+interface SmtpSender {
+  name: string
+  address: string
+}
+
 /** The exact payload subset {@link SmtpEmailProvider} forwards to the transport. */
 interface SmtpSendPayload {
-  from: string
+  from: SmtpSender
   to: string | string[]
   subject: string
   html: string
@@ -293,7 +308,7 @@ export class SmtpEmailProvider implements IEmailProvider {
    */
   async send(options: EmailSendOptions): Promise<EmailSendResult> {
     this.guardHeaderInjection(options)
-    const from = this.formatFrom(options.from, options.fromName)
+    const from = this.buildSender(options.from, options.fromName)
     const transport = await this.getTransport()
     const info = await this.dispatch(transport, {
       from,
@@ -380,8 +395,9 @@ export class SmtpEmailProvider implements IEmailProvider {
    */
   private guardHeaderInjection(options: EmailSendOptions): void {
     this.rejectLineBreak('from', options.from)
-    // The display name is folded into the same `From` header by `formatFrom`, so it
-    // is as much a part of that header as the address is.
+    // The display name lands in the same `From` header as the address, so it is as
+    // much a part of that header. Its non-CR/LF metacharacters are handled by
+    // passing the sender structured rather than concatenated — see {@link SmtpSender}.
     this.rejectLineBreak('fromName', options.fromName)
     this.rejectLineBreak('replyTo', options.replyTo)
     for (const recipient of [options.to, options.cc, options.bcc].flat()) {
@@ -409,22 +425,26 @@ export class SmtpEmailProvider implements IEmailProvider {
   }
 
   /**
-   * Formats the RFC-5322 `from` header.
+   * Builds the sender in Nodemailer's structured address form.
+   *
+   * Never concatenates the display name into `"Name <address>"` — see
+   * {@link SmtpSender} for why that hands the sender away to whoever controls the
+   * name.
    *
    * @param from - The sender address, if any.
    * @param fromName - The sender display name, if any.
-   * @returns `"Name <address>"` or the bare address.
+   * @returns The sender; `name` is `''` when no display name was supplied.
    * @throws Error When no sender address is available — SMTP needs an envelope
    * sender, so an absent `from` and `defaultFrom` is a configuration bug worth
    * reporting plainly rather than a cryptic transport rejection.
    */
-  private formatFrom(from: string | undefined, fromName: string | undefined): string {
+  private buildSender(from: string | undefined, fromName: string | undefined): SmtpSender {
     if (!from) {
       throw new Error(
         'SmtpEmailProvider: no sender address — set `email.defaultFrom` or pass `from`'
       )
     }
-    return fromName ? `${fromName} <${from}>` : from
+    return { name: fromName ?? '', address: from }
   }
 
   /**

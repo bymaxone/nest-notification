@@ -280,7 +280,7 @@ describe('SmtpEmailProvider', () => {
       })
 
       expect(lastSendPayload()).toEqual({
-        from: 'noreply@acme.com',
+        from: { name: '', address: 'noreply@acme.com' },
         to: 'jane@acme.com',
         subject: 'Your code',
         html: '<p>Secret 123456</p>',
@@ -297,14 +297,33 @@ describe('SmtpEmailProvider', () => {
     it('should build the from header as "Name <email>" when fromName is provided', async () => {
       await new SmtpEmailProvider({ host: 'h' }).send({ ...baseOptions, fromName: 'Acme' })
 
-      expect(lastSendPayload()).toMatchObject({ from: 'Acme <noreply@acme.com>' })
+      expect(lastSendPayload()).toMatchObject({
+        from: { name: 'Acme', address: 'noreply@acme.com' }
+      })
     })
 
     // Without a display name the bare address is used.
     it('should use the bare from address when fromName is absent', async () => {
       await new SmtpEmailProvider({ host: 'h' }).send(baseOptions)
 
-      expect(lastSendPayload()).toMatchObject({ from: 'noreply@acme.com' })
+      expect(lastSendPayload()).toMatchObject({
+        from: { name: '', address: 'noreply@acme.com' }
+      })
+    })
+
+    // A display name is not a place to hand the sender away: concatenated into
+    // `"Name <address>"`, a name carrying its own angle-addr would be PARSED by
+    // Nodemailer and would supply both the From address and the envelope sender.
+    // Passing the sender structured means the name is never parsed.
+    it('should not let a display name carrying an angle-addr rewrite the sender', async () => {
+      await new SmtpEmailProvider({ host: 'h' }).send({
+        ...baseOptions,
+        fromName: 'Mallory <mallory@evil.example>'
+      })
+
+      expect(lastSendPayload()).toMatchObject({
+        from: { name: 'Mallory <mallory@evil.example>', address: 'noreply@acme.com' }
+      })
     })
 
     // SMTP needs an envelope sender; an absent `from` AND `defaultFrom` is a config
