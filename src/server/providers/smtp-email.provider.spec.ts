@@ -11,6 +11,9 @@ const mockSendMail = jest.fn()
 const mockCreateTransport = jest.fn()
 // Toggled on (with a registry reset) to simulate the optional peer dep being absent.
 let mockNodemailerMissing = false
+// A failure to raise from the import that is NOT a missing module — the loader must
+// report it as itself rather than as an absent package.
+let mockNodemailerFailure: (Error & { code?: string }) | null = null
 // Which export shape the specifier resolves to, since `nodemailer` is CommonJS and
 // reaches a dynamic `import()` either as a named export or under `default`.
 let mockNodemailerShape: 'named' | 'default' | 'broken' = 'named'
@@ -21,8 +24,14 @@ let mockNodemailerShape: 'named' | 'default' | 'broken' = 'named'
 jest.mock(
   'nodemailer',
   () => {
+    if (mockNodemailerFailure) {
+      throw mockNodemailerFailure
+    }
     if (mockNodemailerMissing) {
-      throw new Error('Cannot find module')
+      // A real absent module carries this code; the loader keys off it.
+      const error: Error & { code?: string } = new Error('Cannot find module')
+      error.code = 'ERR_MODULE_NOT_FOUND'
+      throw error
     }
     if (mockNodemailerShape === 'default') {
       return { __esModule: true, default: { createTransport: mockCreateTransport } }
@@ -58,6 +67,7 @@ describe('SmtpEmailProvider', () => {
     jest.clearAllMocks()
     jest.resetModules()
     mockNodemailerMissing = false
+    mockNodemailerFailure = null
     mockNodemailerShape = 'named'
     mockCreateTransport.mockImplementation(() => ({ sendMail: mockSendMail }))
     mockSendMail.mockResolvedValue({ messageId: '<abc@mailpit>' })
@@ -495,6 +505,28 @@ describe('SmtpEmailProvider', () => {
 
       await expect(new SmtpEmailProvider({ host: 'h' }).send(baseOptions)).rejects.toThrow(
         '`nodemailer` package is not installed. Run `pnpm add nodemailer` in the consumer app.'
+      )
+    })
+
+    // The failure a consumer actually hits: a Jest suite without
+    // `--experimental-vm-modules` cannot service a dynamic import at all, while
+    // nodemailer sits in node_modules. Reporting that as "not installed" sends them
+    // to reinstall a package they already have.
+    it('should not blame a missing package when the import fails for another reason', async () => {
+      const failure: Error & { code?: string } = new Error(
+        'A dynamic import callback was invoked without --experimental-vm-modules'
+      )
+      failure.code = 'ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING_FLAG'
+      mockNodemailerFailure = failure
+      jest.resetModules()
+
+      const thrown = (await new SmtpEmailProvider({ host: 'h' })
+        .send(baseOptions)
+        .catch((error: unknown) => error)) as Error
+
+      // Exact, not substring: the whole point is that it must NOT read "not installed".
+      expect(thrown.message).toBe(
+        'Failed to load `nodemailer`: A dynamic import callback was invoked without --experimental-vm-modules'
       )
     })
 

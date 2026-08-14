@@ -27,6 +27,7 @@ import type {
   EmailSendResult,
   IEmailProvider
 } from '../interfaces/email-provider.interface'
+import { loadOptionalPeer } from '../utils/load-optional-peer'
 
 /** Submission port, used when no `port` is supplied. */
 const DEFAULT_PORT = 587
@@ -610,17 +611,13 @@ export class SmtpEmailProvider implements IEmailProvider {
    * a named export, and one where the CommonJS module lands under `default`.
    *
    * @returns The module's callable surface.
-   * @throws Error When the package is not installed in the consumer app.
+   * @throws Error When the package is not installed, or — reported as itself rather
+   * than as a missing package — when the import fails for any other reason.
    */
   private async loadNodemailer(): Promise<NodemailerLike> {
-    let mod: Partial<NodemailerLike> & { default?: Partial<NodemailerLike> }
-    try {
-      mod = (await import(NODEMAILER_MODULE)) as typeof mod
-    } catch {
-      throw new Error(
-        '`nodemailer` package is not installed. Run `pnpm add nodemailer` in the consumer app.'
-      )
-    }
+    const mod = await loadOptionalPeer<
+      Partial<NodemailerLike> & { default?: Partial<NodemailerLike> }
+    >(NODEMAILER_MODULE)
     const candidate = mod.createTransport ? mod : mod.default
     if (!candidate?.createTransport) {
       throw new Error('`nodemailer` package exposes no createTransport export')

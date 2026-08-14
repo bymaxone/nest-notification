@@ -5,6 +5,31 @@ All notable changes to `@bymax-one/nest-notification` will be documented in this
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.2] - 2026-08-14
+
+### Fixed
+
+- **A failed optional-peer import no longer always blames a missing package.** `SmtpEmailProvider`
+  and `ResendEmailProvider` both wrapped their lazy `import()` in a bare `catch` that mapped _every_
+  failure to `` `<pkg>` package is not installed. Run `pnpm add <pkg>` ``. That is worse than no
+  message: it names a fix that cannot work, so a consumer reinstalls a package that is already in
+  `node_modules` and starts doubting their dependency tree.
+
+  The case that actually bites, reported by a consumer and reproduced against the published 1.1.1
+  tarball: a Jest suite running **without `--experimental-vm-modules`** cannot service a dynamic
+  `import()` at all and fails with `ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING_FLAG` while the package
+  is installed. Every consumer unit test reaching `send()` hit the wrong diagnosis.
+
+  Now only a genuinely unresolvable module — `ERR_MODULE_NOT_FOUND` (dynamic import) or
+  `MODULE_NOT_FOUND` (the CommonJS `require` form) — earns the install instruction. Anything else is
+  surfaced as ``Failed to load `<pkg>`: <the real message>`` with the original error kept as
+  `cause`. The loading logic now lives once in an internal `loadOptionalPeer` helper, so the two
+  adapters cannot drift.
+
+  **Apply to a derived backend:** none. If a unit suite needs to exercise a code path that reaches
+  `send()`, run Jest with `--experimental-vm-modules` — that is the supported way to service a
+  dynamic `import()` under Jest, and the error now says so instead of misdirecting.
+
 ## [1.1.1] - 2026-08-14
 
 ### Added
@@ -282,6 +307,7 @@ rejected at startup rather than failing on the first send.
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
 [Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.0.6...HEAD
+[1.1.2]: https://github.com/bymaxone/nest-notification/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/bymaxone/nest-notification/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/bymaxone/nest-notification/compare/v1.0.6...v1.1.0
 [1.0.6]: https://github.com/bymaxone/nest-notification/compare/v1.0.5...v1.0.6

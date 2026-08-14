@@ -11,6 +11,9 @@ const mockSend = jest.fn()
 const mockResendCtor = jest.fn()
 // Toggled on (with a registry reset) to simulate the optional peer dep being absent.
 let mockResendMissing = false
+// A failure to raise from the import that is NOT a missing module — the loader must
+// report it as itself rather than as an absent package.
+let mockResendFailure: (Error & { code?: string }) | null = null
 
 // `resend` is an optional peer dep that is NOT installed; the virtual flag lets
 // jest register a mock module for the lazy `import('resend')`. After a
@@ -18,8 +21,14 @@ let mockResendMissing = false
 jest.mock(
   'resend',
   () => {
+    if (mockResendFailure) {
+      throw mockResendFailure
+    }
     if (mockResendMissing) {
-      throw new Error('Cannot find module')
+      // A real absent module carries this code; the loader keys off it.
+      const error: Error & { code?: string } = new Error('Cannot find module')
+      error.code = 'ERR_MODULE_NOT_FOUND'
+      throw error
     }
     return { __esModule: true, Resend: mockResendCtor }
   },
@@ -36,8 +45,30 @@ const baseOptions: EmailSendOptions = {
 
 describe('ResendEmailProvider', () => {
   beforeEach(() => {
+    mockResendFailure = null
     mockResendCtor.mockImplementation(() => ({ emails: { send: mockSend } }))
     mockSend.mockResolvedValue({ data: { id: 'msg_123' }, error: null })
+  })
+
+  // A Jest suite without `--experimental-vm-modules` cannot service a dynamic import
+  // at all, while the package sits in node_modules. Reporting that as "not installed"
+  // sends the consumer to reinstall a package they already have.
+  it('should not blame a missing package when the import fails for another reason', async () => {
+    const failure: Error & { code?: string } = new Error(
+      'A dynamic import callback was invoked without --experimental-vm-modules'
+    )
+    failure.code = 'ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING_FLAG'
+    mockResendFailure = failure
+    jest.resetModules()
+
+    const thrown = (await new ResendEmailProvider({ apiKey: 'k' })
+      .send(baseOptions)
+      .catch((error: unknown) => error)) as Error
+
+    // Exact, not substring: the whole point is that it must NOT read "not installed".
+    expect(thrown.message).toBe(
+      'Failed to load `resend`: A dynamic import callback was invoked without --experimental-vm-modules'
+    )
   })
 
   // Identity + configured-state derive purely from the presence of an API key.
