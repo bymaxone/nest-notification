@@ -628,6 +628,40 @@ describe('SmtpEmailProvider', () => {
       warnSpy.mockRestore()
     })
 
+    // The two credentials can overlap — a password built from the username. Replacing
+    // the shorter one first would consume the prefix and leave `[redacted]-secret`,
+    // so the half that actually distinguishes the password would survive into the log
+    // and the audit entry. Longest is replaced first.
+    it('should redact the longer credential first when the two overlap', async () => {
+      const user = 'relay'
+      const pass = 'relay-secret'
+      mockSendMail.mockRejectedValue(new Error(`535 rejected ${pass}`))
+      const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+      const provider = new SmtpEmailProvider({ host: 'h', credentials: { user, pass } })
+
+      // An exact match, not a substring one: `[redacted]-secret` also *contains*
+      // `535 rejected [redacted]`, so a loose assertion would pass on the bug.
+      await expect(provider.send(baseOptions)).rejects.toThrow(
+        new Error('SMTP send failed: 535 rejected [redacted]')
+      )
+      expect(String(warnSpy.mock.calls[0]?.[0])).not.toContain('secret')
+      warnSpy.mockRestore()
+    })
+
+    // The same hazard with the lengths the other way round: the password is the
+    // shorter credential and a prefix of the username.
+    it('should redact the longer credential first when the password is the shorter one', async () => {
+      const user = 'relay-account'
+      const pass = 'relay'
+      mockSendMail.mockRejectedValue(new Error(`535 rejected ${user}`))
+      jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+      const provider = new SmtpEmailProvider({ host: 'h', credentials: { user, pass } })
+
+      await expect(provider.send(baseOptions)).rejects.toThrow(
+        new Error('SMTP send failed: 535 rejected [redacted]')
+      )
+    })
+
     // Matching is literal and unconditional, so a one-character credential rewrites
     // every occurrence of that character. That is the deliberate direction: this
     // control's other failure mode is persisting a secret in the audit log, and

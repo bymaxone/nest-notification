@@ -370,11 +370,16 @@ export class SmtpEmailProvider implements IEmailProvider {
    */
   private redact(message: string): string {
     const credentials = this.#options.credentials
+    const secrets = [credentials?.user, credentials?.pass]
+      .filter((secret): secret is string => Boolean(secret))
+      // Longest first. The two credentials can overlap — a password built from the
+      // username, say `relay` / `relay-secret` — and replacing the shorter one first
+      // consumes the prefix, leaving `[redacted]-secret`: the part that actually
+      // distinguishes the password survives into the log and the audit entry.
+      .sort((a, b) => b.length - a.length)
     let redacted = message
-    for (const secret of [credentials?.user, credentials?.pass]) {
-      if (secret) {
-        redacted = redacted.split(secret).join(REDACTED)
-      }
+    for (const secret of secrets) {
+      redacted = redacted.split(secret).join(REDACTED)
     }
     return redacted
   }
