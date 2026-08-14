@@ -380,6 +380,9 @@ export class SmtpEmailProvider implements IEmailProvider {
    */
   private guardHeaderInjection(options: EmailSendOptions): void {
     this.rejectLineBreak('from', options.from)
+    // The display name is folded into the same `From` header by `formatFrom`, so it
+    // is as much a part of that header as the address is.
+    this.rejectLineBreak('fromName', options.fromName)
     this.rejectLineBreak('replyTo', options.replyTo)
     for (const recipient of [options.to, options.cc, options.bcc].flat()) {
       this.rejectLineBreak('recipient', recipient)

@@ -354,6 +354,7 @@ describe('SmtpEmailProvider', () => {
       ['from', { from: 'a@acme.com\r\nBcc: attacker@evil.com' }],
       ['from', { from: 'a@acme.com\nBcc: attacker@evil.com' }],
       ['from', { from: 'a@acme.com\rBcc: attacker@evil.com' }],
+      ['fromName', { fromName: 'Acme\r\nBcc: attacker@evil.com' }],
       ['replyTo', { replyTo: 'a@acme.com\r\nBcc: attacker@evil.com' }],
       ['recipient', { to: 'jane@acme.com\r\nRcpt To: attacker@evil.com' }],
       ['recipient', { cc: ['ok@acme.com', 'bad@acme.com\nBcc: attacker@evil.com'] }],
