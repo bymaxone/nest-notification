@@ -595,6 +595,21 @@ describe('SmtpEmailProvider', () => {
       await expect(provider.send(baseOptions)).rejects.toThrow('boom [redacted]')
     })
 
+    // `IEmailProvider.send` documents that it throws an `Error`, so a transport that
+    // rejects with a bare string must not be handed on raw just because it happened
+    // to need no scrubbing — a direct caller is entitled to rely on the contract.
+    it('should wrap a non-Error initialization failure that needed no scrubbing', async () => {
+      mockCreateTransport.mockImplementation(() => {
+        throw 'ECONNREFUSED'
+      })
+      const provider = new SmtpEmailProvider({ host: 'h' })
+
+      const thrown: unknown = await provider.send(baseOptions).catch((error: unknown) => error)
+
+      expect(thrown).toBeInstanceOf(Error)
+      expect((thrown as Error).message).toBe('ECONNREFUSED')
+    })
+
     // An init failure with nothing to scrub must reach the caller as the very same
     // object — rewrapping it would throw away its type and its stack for no gain.
     it('should rethrow an untouched initialization failure by identity', async () => {

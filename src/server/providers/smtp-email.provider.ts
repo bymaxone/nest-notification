@@ -538,16 +538,21 @@ export class SmtpEmailProvider implements IEmailProvider {
    * only thing between that and the audit entry. An error whose message needs no
    * change is returned untouched, so its type and stack survive.
    *
+   * Always an `Error`, because `IEmailProvider.send` documents that it throws one
+   * and a direct caller is entitled to rely on that. Identity is preserved only for
+   * an `Error` whose message needed no change — there its type and stack are worth
+   * keeping; anything else is wrapped.
+   *
    * @param error - The raw failure.
-   * @returns The original failure, or a plain `Error` carrying the scrubbed message.
+   * @returns The original `Error` when nothing needed scrubbing, otherwise a plain
+   *   `Error` carrying the scrubbed message.
    */
-  private redactError(error: unknown): unknown {
-    const original = error instanceof Error ? error.message : String(error)
-    const message = this.redact(original)
-    if (message === original) {
-      return error
+  private redactError(error: unknown): Error {
+    if (error instanceof Error) {
+      const message = this.redact(error.message)
+      return message === error.message ? error : new Error(message)
     }
-    return new Error(message)
+    return new Error(this.redact(String(error)))
   }
 
   /**
