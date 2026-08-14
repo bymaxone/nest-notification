@@ -25,8 +25,12 @@ jest.mock(
       throw mockResendFailure
     }
     if (mockResendMissing) {
-      // A real absent module carries this code; the loader keys off it.
-      const error: Error & { code?: string } = new Error('Cannot find module')
+      // The shape Node 24 produces for an absent top-level package: the code, plus a
+      // message naming THIS specifier. The loader needs both — an installed package
+      // with a missing transitive dependency carries the same code.
+      const error: Error & { code?: string } = new Error(
+        "Cannot find package 'resend' imported from /app/index.mjs"
+      )
       error.code = 'ERR_MODULE_NOT_FOUND'
       throw error
     }

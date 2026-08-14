@@ -25,14 +25,33 @@ const MODULE_NOT_FOUND_CODES: ReadonlySet<string> = new Set([
 ])
 
 /**
- * Whether a thrown value says the module could not be resolved at all.
+ * Whether a thrown value says that **this** module could not be resolved.
+ *
+ * The code alone is not enough. An installed peer whose own evaluation fails
+ * because one of ITS dependencies is missing rejects with the very same codes —
+ * verified on Node 24: an installed CommonJS package doing
+ * `require('missing-transitive')` yields `MODULE_NOT_FOUND`, and an installed ESM
+ * package importing a missing dependency yields `ERR_MODULE_NOT_FOUND`. Keying off
+ * the code alone would tell the consumer to install a top-level package that is
+ * already there — a narrower version of the very bug this helper exists to fix.
+ *
+ * So the unresolved specifier has to be ours. Node quotes it consistently
+ * (`Cannot find module 'x'`, `Cannot find package 'x' imported from …`), and the
+ * check is deliberately built to degrade safely: when it cannot confirm the
+ * specifier is ours, the caller falls through to the message that reports what
+ * actually happened. The worst case is losing an install hint, never making a
+ * confident wrong claim.
  *
  * @param error - The thrown value; anything, since a rejection is untyped.
- * @returns `true` only for a string `code` naming a module-resolution failure.
+ * @param moduleName - The specifier that was being imported.
+ * @returns `true` only when this exact module is what failed to resolve.
  */
-function isModuleNotFound(error: unknown): boolean {
-  const code = (error as { code?: unknown } | null | undefined)?.code
-  return typeof code === 'string' && MODULE_NOT_FOUND_CODES.has(code)
+function isModuleNotFound(error: unknown, moduleName: string): boolean {
+  const candidate = error as { code?: unknown; message?: unknown } | null | undefined
+  if (typeof candidate?.code !== 'string' || !MODULE_NOT_FOUND_CODES.has(candidate.code)) {
+    return false
+  }
+  return typeof candidate.message === 'string' && candidate.message.includes(`'${moduleName}'`)
 }
 
 /**
@@ -51,7 +70,7 @@ export async function loadOptionalPeer<T>(moduleName: string): Promise<T> {
   try {
     return (await import(moduleName)) as T
   } catch (error) {
-    if (isModuleNotFound(error)) {
+    if (isModuleNotFound(error, moduleName)) {
       throw new Error(
         `\`${moduleName}\` package is not installed. Run \`pnpm add ${moduleName}\` in the consumer app.`
       )

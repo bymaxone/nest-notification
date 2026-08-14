@@ -20,11 +20,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `import()` at all and fails with `ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING_FLAG` while the package
   is installed. Every consumer unit test reaching `send()` hit the wrong diagnosis.
 
-  Now only a genuinely unresolvable module — `ERR_MODULE_NOT_FOUND` (dynamic import) or
-  `MODULE_NOT_FOUND` (the CommonJS `require` form) — earns the install instruction. Anything else is
-  surfaced as ``Failed to load `<pkg>`: <the real message>`` with the original error kept as
-  `cause`. The loading logic now lives once in an internal `loadOptionalPeer` helper, so the two
-  adapters cannot drift.
+  Now the install instruction requires two things: a module-resolution code —
+  `ERR_MODULE_NOT_FOUND` (dynamic import) or `MODULE_NOT_FOUND` (the CommonJS `require` form) — **and**
+  a message naming that exact specifier. The code alone is not enough: an _installed_ peer whose own
+  evaluation fails because one of **its** dependencies is missing rejects with the very same codes,
+  verified on Node 24 with a fixture package, and blaming the top-level peer there would be the same
+  bug one level down. The specifier check degrades safely — when it cannot confirm the name, the
+  honest message is used, so the worst case is a lost hint rather than a confident wrong claim.
+
+  Anything else is surfaced as ``Failed to load `<pkg>`: <the real message>`` with the original error
+  kept as `cause`. The loading logic now lives once in an internal `loadOptionalPeer` helper, so the
+  two adapters cannot drift.
 
   **Apply to a derived backend:** none. If a unit suite needs to exercise a code path that reaches
   `send()`, run Jest with `--experimental-vm-modules` — that is the supported way to service a

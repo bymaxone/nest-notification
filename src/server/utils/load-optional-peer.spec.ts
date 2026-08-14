@@ -41,18 +41,65 @@ describe('loadOptionalPeer', () => {
 
   // Only a genuinely unresolvable module earns the install instruction, and both
   // codes mean that: ERR_MODULE_NOT_FOUND from a dynamic import, MODULE_NOT_FOUND
-  // from the CommonJS require form a bundler's interop can still surface.
-  it.each(['ERR_MODULE_NOT_FOUND', 'MODULE_NOT_FOUND'])(
-    'should report a missing package for %s',
-    async (code) => {
-      mockFailure = failWith('Cannot find module', code)
+  // from the CommonJS require form a bundler's interop can still surface. The
+  // messages are the shapes Node 24 actually produces.
+  it.each([
+    ['ERR_MODULE_NOT_FOUND', `Cannot find package '${MODULE}' imported from /app/index.mjs`],
+    ['MODULE_NOT_FOUND', `Cannot find module '${MODULE}'`]
+  ])('should report a missing package for %s naming this module', async (code, message) => {
+    mockFailure = failWith(message, code)
+    jest.resetModules()
+
+    await expect(loadOptionalPeer(MODULE)).rejects.toThrow(
+      '`virtual-optional-peer` package is not installed. Run `pnpm add virtual-optional-peer` in the consumer app.'
+    )
+  })
+
+  // The trap the code alone walks into. An INSTALLED peer whose own evaluation
+  // fails because one of ITS dependencies is missing rejects with the very same
+  // codes — verified on Node 24 with a real fixture package. Blaming the top-level
+  // peer there is the same bug this helper exists to fix, one level down.
+  it.each([
+    [
+      'ERR_MODULE_NOT_FOUND',
+      "Cannot find package 'missing-transitive' imported from /app/node_modules/virtual-optional-peer/index.mjs"
+    ],
+    ['MODULE_NOT_FOUND', "Cannot find module 'missing-transitive'"]
+  ])(
+    'should not blame this module when %s names a transitive dependency',
+    async (code, message) => {
+      mockFailure = failWith(message, code)
       jest.resetModules()
 
-      await expect(loadOptionalPeer(MODULE)).rejects.toThrow(
-        '`virtual-optional-peer` package is not installed. Run `pnpm add virtual-optional-peer` in the consumer app.'
-      )
+      const error = (await loadOptionalPeer(MODULE).catch((thrown: unknown) => thrown)) as Error
+
+      expect(error.message).toBe(`Failed to load \`${MODULE}\`: ${message}`)
+      expect(error.message).not.toContain('not installed')
     }
   )
+
+  // The specifier check must not be reached for an unrelated code, even when the
+  // message happens to name this module.
+  it('should not report a missing package for an unrelated code naming this module', async () => {
+    mockFailure = failWith(`Cannot access '${MODULE}'`, 'EACCES')
+    jest.resetModules()
+
+    await expect(loadOptionalPeer(MODULE)).rejects.toThrow(
+      `Failed to load \`${MODULE}\`: Cannot access '${MODULE}'`
+    )
+  })
+
+  // A resolution code with no usable message cannot confirm the specifier is ours,
+  // so it degrades to the honest report rather than guessing.
+  it('should not report a missing package when the message is not a string', async () => {
+    const error = new Error('placeholder') as Error & { code?: string; message: unknown }
+    error.code = 'ERR_MODULE_NOT_FOUND'
+    error.message = 42 as unknown as string
+    mockFailure = error as Error & { code?: string }
+    jest.resetModules()
+
+    await expect(loadOptionalPeer(MODULE)).rejects.toThrow('Failed to load `virtual-optional-peer`')
+  })
 
   // The failure that made this helper necessary. A consumer's Jest suite without
   // `--experimental-vm-modules` cannot service a dynamic import at all, while the
