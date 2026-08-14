@@ -20,6 +20,7 @@ import type {
   EmailSendResult,
   IEmailProvider
 } from '../interfaces/email-provider.interface'
+import { loadOptionalPeer } from '../utils/load-optional-peer'
 
 /** Construction options for {@link ResendEmailProvider}. */
 export interface ResendEmailProviderOptions {
@@ -205,16 +206,11 @@ export class ResendEmailProvider implements IEmailProvider {
    * Dynamically imports the optional `resend` peer dependency.
    *
    * @returns The SDK's `Resend` constructor.
-   * @throws Error When the package is not installed in the consumer app.
+   * @throws Error When the package is not installed, or — reported as itself rather
+   * than as a missing package — when the import fails for any other reason.
    */
   private async loadResendConstructor(): Promise<ResendConstructor> {
-    try {
-      const mod = (await import(RESEND_MODULE)) as { Resend: ResendConstructor }
-      return mod.Resend
-    } catch {
-      throw new Error(
-        '`resend` package is not installed. Run `pnpm add resend` in the consumer app.'
-      )
-    }
+    const mod = await loadOptionalPeer<{ Resend: ResendConstructor }>(RESEND_MODULE)
+    return mod.Resend
   }
 }
