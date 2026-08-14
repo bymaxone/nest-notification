@@ -114,6 +114,12 @@ export {
   ResendEmailProvider,
   type ResendEmailProviderOptions
 } from './providers/resend-email.provider'
+export {
+  SmtpEmailProvider,
+  type SmtpEmailProviderOptions,
+  type SmtpCredentials,
+  type SmtpTlsOptions
+} from './providers/smtp-email.provider'
 export { InMemoryOtpStorage, type InMemoryStorageSize } from './providers/in-memory-otp.storage'
 export {
   RedisOtpStorage,

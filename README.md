@@ -55,7 +55,7 @@ pnpm add @bymax-one/nest-notification
 
 ### 📧 Email
 
-- ✅ **Pluggable transport** — `IEmailProvider` with a bundled `ResendEmailProvider` and a `NoOpEmailProvider` for dev/test that logs subject and recipient only, never the body
+- ✅ **Pluggable transport** — `IEmailProvider` with a bundled `ResendEmailProvider`, an `SmtpEmailProvider` that speaks the protocol every relay and mail-capture server understands, and a `NoOpEmailProvider` for dev/test that logs subject and recipient only, never the body
 - ✅ **Template rendering** — `IEmailTemplateRenderer` with a bundled `{{var}}` renderer that **HTML-escapes** interpolated values in the HTML body
 - ✅ **Canonical template names** — `CANONICAL_EMAIL_TEMPLATES` so providers and templates agree on the wire
 - ✅ **Attachment guard** — a configurable total size ceiling (10 MiB by default) rejected before the provider is called
@@ -132,6 +132,9 @@ pnpm add @nestjs/common @nestjs/core reflect-metadata rxjs
 
 # Production email + OTP over Redis (optional — pick your own provider/store)
 pnpm add resend ioredis
+
+# …or SMTP instead of Resend (any relay, plus Mailpit/MailHog in tests)
+pnpm add nodemailer ioredis
 
 # React subpath (optional)
 pnpm add react
@@ -292,7 +295,54 @@ BymaxNotificationModule.forRootAsync({
 > [!IMPORTANT]
 > `forRootAsync` supports the `useFactory` pattern. `useClass` / `useExisting` are not implemented and are rejected at startup.
 
-### 4. Bring Your Own Provider
+### 4. SMTP — any relay, and end-to-end tests
+
+`SmtpEmailProvider` speaks the protocol rather than one vendor's HTTP API, so the same adapter drives a corporate relay, Postfix, SES-via-SMTP, and the mail-capture servers (Mailpit, MailHog) that make email flows testable end to end. Requires the optional `nodemailer` peer dependency.
+
+```typescript
+import { BymaxNotificationModule, SmtpEmailProvider } from '@bymax-one/nest-notification'
+
+// Local capture server — no credentials, no TLS. Read the captured mail at :8025.
+const mailpit = new SmtpEmailProvider({ host: 'localhost', port: 1025, secure: false })
+
+// Authenticated production relay. STARTTLS is already mandatory by default here.
+const relay = new SmtpEmailProvider({
+  host: process.env.SMTP_HOST,
+  port: 587,
+  credentials: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+})
+
+BymaxNotificationModule.forRoot({
+  email: {
+    provider: process.env.NODE_ENV === 'production' ? relay : mailpit,
+    defaultFrom: 'no-reply@acme.com'
+  }
+})
+```
+
+| Option                                                    | Default               | Notes                                                                        |
+| --------------------------------------------------------- | --------------------- | ---------------------------------------------------------------------------- |
+| `host`                                                    | —                     | Required. Without it `isConfigured()` is `false` and `send()` throws.        |
+| `port`                                                    | `587`                 | Submission port.                                                             |
+| `secure`                                                  | `true` iff port 465   | Implicit TLS from the first byte.                                            |
+| `requireTls`                                              | `true` off-loopback   | Makes the STARTTLS upgrade mandatory. See the TLS note below.                |
+| `credentials`                                             | — (open relay)        | `{ user, pass }`. Supplying it declares the deployment logs in.              |
+| `tls`                                                     | —                     | `rejectUnauthorized` / `servername` / `ca`, for a relay behind a private CA. |
+| `connectionTimeout` / `greetingTimeout` / `socketTimeout` | `10s` / `10s` / `20s` | Bounded on purpose — Nodemailer's own defaults run into minutes.             |
+
+> [!IMPORTANT]
+> `isConfigured()` answers on the real configuration, not on "a transport object exists". Omitting `credentials` marks the relay as open and is fine; supplying them half-loaded — an `SMTP_PASS` that never made it into the environment — reports **not configured** and fails the send closed, rather than silently attempting an anonymous delivery a permissive relay might accept.
+
+> [!WARNING]
+> **STARTTLS is mandatory by default for any non-loopback host.** On a connection that does not start out encrypted, whether TLS happens at all is decided by the _plaintext_ EHLO banner: an attacker with network position strips the `250-STARTTLS` line, the transport never upgrades, and the credentials and the message body — which carries the OTP code — cross the network in the clear. So `requireTls` defaults to `true` unless the host is `localhost` / `127.0.0.1` / `::1` or `secure` is already on. If your relay genuinely cannot upgrade, opt out explicitly with `requireTls: false`; a Mailpit or MailHog container reached by its compose service name rather than over loopback is the common case.
+
+Three further behaviours worth knowing:
+
+- The returned `messageId` is the RFC-5322 `Message-ID` with its angle brackets, so an audit entry correlates with the header the recipient received.
+- `tags` are not forwarded, because SMTP has no tag facility — they still reach the audit log through `EmailService`.
+- A line break in `from`, `replyTo`, a recipient, or a custom header name/value is **rejected before the send**. Nodemailer already neutralizes those, so this is defence in depth — but header injection is the one place where trusting a peer dependency's current behaviour would be the whole security boundary. The subject is deliberately exempt: a stray trailing newline from a template is plausible there, and Nodemailer folds it away.
+
+### 5. Bring Your Own Provider
 
 Every external boundary is an interface — implement it and pass the instance (or class) to `forRoot`. The bundled `ResendEmailProvider` and `RedisOtpStorage` are reference implementations, not requirements.
 
@@ -328,12 +378,15 @@ import type { IOtpStorage } from '@bymax-one/nest-notification'
 
 Adapter examples for several providers and stores live under [`docs/templates/`](./docs/templates/) and [`docs/schemas/`](./docs/schemas/):
 
-| Email provider | Adapter                                   |
-| -------------- | ----------------------------------------- |
-| Resend         | bundled — `ResendEmailProvider`           |
-| SendGrid       | implement `IEmailProvider` (sketch above) |
-| AWS SES        | implement `IEmailProvider`                |
-| Mailgun        | implement `IEmailProvider`                |
+| Email provider          | Adapter                                   |
+| ----------------------- | ----------------------------------------- |
+| Resend                  | bundled — `ResendEmailProvider`           |
+| SMTP (any relay)        | bundled — `SmtpEmailProvider`             |
+| Mailpit / MailHog       | bundled — `SmtpEmailProvider`             |
+| AWS SES (SMTP endpoint) | bundled — `SmtpEmailProvider`             |
+| SendGrid                | implement `IEmailProvider` (sketch above) |
+| AWS SES (HTTP API)      | implement `IEmailProvider`                |
+| Mailgun                 | implement `IEmailProvider`                |
 
 | Template engine | Adapter                                                                                              |
 | --------------- | ---------------------------------------------------------------------------------------------------- |
@@ -342,7 +395,7 @@ Adapter examples for several providers and stores live under [`docs/templates/`]
 | MJML            | [`docs/templates/mjml-renderer.example.md`](./docs/templates/mjml-renderer.example.md)               |
 | React Email     | [`docs/templates/react-email-renderer.example.md`](./docs/templates/react-email-renderer.example.md) |
 
-### 5. Audit Log
+### 6. Audit Log
 
 The library never imports Prisma. You implement `INotificationLogRepository` against your own client; the module calls it fire-and-forget, so the audit sink can never crash the notification flow. A copy-pasteable Prisma schema fragment lives in [`docs/schemas/notification-log.prisma`](./docs/schemas/notification-log.prisma) and a full repository in [`docs/schemas/prisma-repository.example.md`](./docs/schemas/prisma-repository.example.md).
 
@@ -395,7 +448,7 @@ import { NotificationAuditInterceptor } from '@bymax-one/nest-notification'
 // @UseInterceptors(NotificationAuditInterceptor) on a controller/handler, or wire it globally.
 ```
 
-### 6. Frontend Integration (React)
+### 7. Frontend Integration (React)
 
 The `./react` subpath is browser-only state and UX — it drives the OTP-input box and a countdown. **Verifying the code is your app's job**: the hooks carry no HTTP client and no Node builtins, so nothing about your API shape is assumed.
 
@@ -593,22 +646,22 @@ When integrating `@bymax-one/nest-notification` in production, verify each of th
 
 ## 🛡️ Security Table
 
-| Layer              | Implementation                                                                                            |
-| ------------------ | --------------------------------------------------------------------------------------------------------- |
-| Code Generation    | `crypto.randomInt` per character over the configured alphabet — uniform at every position, no modulo bias |
-| Code Comparison    | `crypto.timingSafeEqual` (constant-time), never `===`                                                     |
-| Storage Keys       | `sha256(tenantId:recipient)` — no recipient PII, no cross-tenant collision                                |
-| Attempt Ceiling    | Counter spent atomically inside the storage (Redis Lua) — never a service-side read-then-write            |
-| Resend Cooldown    | `SET NX EX` acquire, released only on delivery failure — two concurrent resends cannot both win           |
-| Code Lifetime      | TTL-bound in the store; expiry and absence are reported identically so neither leaks the other            |
-| Code Exposure      | Never logged, never audited, never in an error message or stack trace — asserted by a regression test     |
-| Recipient PII      | Absent from keys; optionally masked before it reaches the audit sink                                      |
-| Provider Secrets   | The Resend API key and the Redis client live in private fields; serializing a provider omits them         |
-| Tenant Isolation   | `tenantId` scopes every operation and is resolved from a trusted source, not the payload                  |
-| Template Injection | HTML body escaped on interpolation by the bundled renderer — closes stored XSS through a display name     |
-| Attachment DoS     | Total attachment size rejected against a budget before the provider is called                             |
-| Audit Failures     | Fire-and-forget with `swallowErrors` — an audit outage never becomes a delivery outage                    |
-| Supply Chain       | `"dependencies": {}`; published with npm provenance (OIDC), CodeQL and OpenSSF Scorecard on every push    |
+| Layer              | Implementation                                                                                                                                                                            |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Code Generation    | `crypto.randomInt` per character over the configured alphabet — uniform at every position, no modulo bias                                                                                 |
+| Code Comparison    | `crypto.timingSafeEqual` (constant-time), never `===`                                                                                                                                     |
+| Storage Keys       | `sha256(tenantId:recipient)` — no recipient PII, no cross-tenant collision                                                                                                                |
+| Attempt Ceiling    | Counter spent atomically inside the storage (Redis Lua) — never a service-side read-then-write                                                                                            |
+| Resend Cooldown    | `SET NX EX` acquire, released only on delivery failure — two concurrent resends cannot both win                                                                                           |
+| Code Lifetime      | TTL-bound in the store; expiry and absence are reported identically so neither leaks the other                                                                                            |
+| Code Exposure      | Never logged, never audited, never in an error message or stack trace — asserted by a regression test                                                                                     |
+| Recipient PII      | Absent from keys; optionally masked before it reaches the audit sink                                                                                                                      |
+| Provider Secrets   | The Resend API key, the SMTP password and the Redis client live in private fields; serializing a provider omits them, and a failing SMTP session has its password scrubbed from the error |
+| Tenant Isolation   | `tenantId` scopes every operation and is resolved from a trusted source, not the payload                                                                                                  |
+| Template Injection | HTML body escaped on interpolation by the bundled renderer — closes stored XSS through a display name                                                                                     |
+| Attachment DoS     | Total attachment size rejected against a budget before the provider is called                                                                                                             |
+| Audit Failures     | Fire-and-forget with `swallowErrors` — an audit outage never becomes a delivery outage                                                                                                    |
+| Supply Chain       | `"dependencies": {}`; published with npm provenance (OIDC), CodeQL and OpenSSF Scorecard on every push                                                                                    |
 
 > [!IMPORTANT]
 > This package uses **zero external cryptographic dependencies**. All operations use Node.js native `node:crypto`, eliminating supply chain attack vectors for critical security code.
@@ -707,6 +760,7 @@ Error codes are namespaced (`notification.otp_invalid_code`, `notification.otp_c
 | Export                          | Implements                   | Use for                                      |
 | ------------------------------- | ---------------------------- | -------------------------------------------- |
 | `ResendEmailProvider`           | `IEmailProvider`             | Production email via Resend                  |
+| `SmtpEmailProvider`             | `IEmailProvider`             | Any SMTP relay, and Mailpit/MailHog in tests |
 | `NoOpEmailProvider`             | `IEmailProvider`             | Dev/test — logs subject and recipient only   |
 | `RedisOtpStorage`               | `IOtpStorage`                | Production OTP state (atomic via Lua)        |
 | `InMemoryOtpStorage`            | `IOtpStorage`                | Dev/test — single-process only               |

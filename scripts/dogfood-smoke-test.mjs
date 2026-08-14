@@ -49,6 +49,7 @@ const EXPECTED_SERVER_EXPORTS = [
   'NOTIFICATION_ERROR_CODES',
   'NOTIFICATION_PURPOSES',
   'NoOpEmailProvider',
+  'SmtpEmailProvider',
   'NoOpNotificationLogRepository',
   'DefaultTemplateRenderer'
 ]
