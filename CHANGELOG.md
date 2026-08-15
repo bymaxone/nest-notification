@@ -44,6 +44,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   extended to match: tests serialize thrown exceptions recursively — message, stack, response body,
   and every nested cause — and assert the plaintext OTP code appears at no depth.
 
+- **A delivery error that echoes the plaintext code is scrubbed before it leaves `OtpService`.**
+  The renderer receives the code inside its template `data` and the provider receives it inside
+  the rendered body, so either may echo it in a thrown error's message or stack. On a failed OTP
+  delivery the service now replaces every occurrence of the code with `[redacted]` — in the audit
+  entry's `errorMessage` and across the rethrown error chain (message and stack at every link,
+  depth-bounded) — at the one layer that knows the secret. A string rejection is rethrown as a
+  scrubbed copy, since a primitive cannot be mutated in place.
+
 ## [1.1.2] - 2026-08-14
 
 ### Fixed

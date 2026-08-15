@@ -46,6 +46,35 @@ const MS_PER_SECOND = 1000
 const SECONDS_PER_MINUTE = 60
 /** Default template name used when the caller does not name one. */
 const DEFAULT_OTP_TEMPLATE = 'otp_code'
+/** Marker substituted for the plaintext code wherever it is scrubbed from an error. */
+const REDACTED_CODE = '[redacted]'
+/**
+ * How many links of an error chain the code scrub walks. Covers the exception
+ * plus the depth-bounded sanitized cause chain, and terminates a cyclic chain
+ * on a foreign error.
+ */
+const MAX_SCRUB_NODES = 9
+
+/**
+ * Removes the plaintext code from an outgoing error chain — `message` and
+ * `stack` at every link, depth-bounded. The renderer receives the code inside
+ * its template `data` and a provider receives it inside the rendered body, so
+ * either may echo it in a thrown error; scrubbing at the layer that KNOWS the
+ * secret keeps it out of the audit `errorMessage` and out of any cause chain a
+ * cause-walking log serializer will print.
+ */
+function scrubCodeFromErrorChain(error: unknown, code: string): void {
+  let cursor: unknown = error
+  let depth = 0
+  while (cursor instanceof Error && depth < MAX_SCRUB_NODES) {
+    cursor.message = cursor.message.split(code).join(REDACTED_CODE)
+    if (cursor.stack !== undefined) {
+      cursor.stack = cursor.stack.split(code).join(REDACTED_CODE)
+    }
+    cursor = 'cause' in cursor ? cursor.cause : undefined
+    depth += 1
+  }
+}
 
 /** Common `(tenant, recipient, purpose)` reference shared by every OTP operation. */
 interface OtpRecipientRef {
@@ -278,12 +307,21 @@ export class OtpService {
       await this.deliverOtp(input, code, cfg)
     } catch (error) {
       await this.releaseOtp(input)
+      // Scrub BEFORE the audit write and the rethrow, so neither the entry's
+      // `errorMessage` nor the outgoing chain can carry the plaintext code. A
+      // string rejection cannot be mutated in place, so a scrubbed copy is
+      // rethrown instead.
+      const outgoing = typeof error === 'string' ? error.split(code).join(REDACTED_CODE) : error
+      scrubCodeFromErrorChain(outgoing, code)
       await this.audit(
         this.otpAuditEntry('failed', input, {
-          errorMessage: error instanceof Error ? error.message : String(error)
+          errorMessage:
+            outgoing instanceof Error
+              ? outgoing.message
+              : String(outgoing).split(code).join(REDACTED_CODE)
         })
       )
-      throw error
+      throw outgoing
     }
   }
 

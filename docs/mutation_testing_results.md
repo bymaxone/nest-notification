@@ -196,8 +196,8 @@ ineffective.
 | Metric             | Value         |
 | ------------------ | ------------- |
 | **Mutation score** | **100.00 %**  |
-| Viable mutants     | 942           |
-| Killed / timeout   | 936 / 6       |
+| Viable mutants     | 951           |
+| Killed / timeout   | 944 / 7       |
 | Surviving mutants  | 0             |
 | Break threshold    | 100 % -> PASS |
 
@@ -222,3 +222,10 @@ dropped). All new mutants die without a single new suppression:
   and the plaintext OTP code is asserted absent at every depth — including a regression whose
   provider error retains the rendered OTP body in an axios-style `config.data` property and in a
   nested cause, which is exactly the shape sanitization exists to strip.
+- The `OtpService` code scrub (messages/stacks of a failed delivery's error chain) surfaced a V8
+  subtlety worth recording: the `stack` header line is formatted lazily on FIRST read, so an error
+  whose stack was never touched before the message scrub yields a clean stack for free — and a
+  mutant deleting the stack scrub survives against such errors. The killing test materializes the
+  stack (`void error.stack`) while the message still carries the code, which is the realistic
+  shape (libraries that read/normalize stacks freeze the leaky header). The scrub's depth bound is
+  pinned from both sides: link 8 scrubbed, link 9 documented untouched.

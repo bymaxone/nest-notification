@@ -282,6 +282,86 @@ describe('OtpService.generate', () => {
     )
   })
 
+  // SECURITY (regression): a renderer/provider that echoes its template data —
+  // which carries the plaintext code — in a thrown error must have the code
+  // scrubbed from the audit errorMessage AND from every level of the rethrown
+  // chain (message + stack) before anything leaves the service.
+  it('should scrub the code from a delivery error chain and the audit entry', async () => {
+    let leakedCode = ''
+    emailSendTemplate.mockImplementation((input: { data: { code: string } }) => {
+      leakedCode = input.data.code
+      const inner = new Error(`socket wrote body code=${input.data.code}`)
+      const outer = new Error(`render failed for ${input.data.code}`, { cause: inner })
+      // Materialize the lazy V8 stacks NOW, while the message still carries the
+      // code — the header line freezes on first read, so a pre-read stack is
+      // exactly what the stack scrub exists to clean.
+      void inner.stack
+      void outer.stack
+      return Promise.reject(outer)
+    })
+    const service = new OtpService(makeOptions(), storage, audit, emailServiceStub)
+
+    const caught: unknown = await service
+      .generate({ ...ref, deliverVia: 'email' })
+      .catch((error: unknown) => error)
+
+    expect(leakedCode).not.toBe('')
+    const chain = serializeErrorChain(caught)
+    expect(chain.includes(leakedCode)).toBe(false)
+    expect(chain).toContain('[redacted]')
+    for (const call of audit.create.mock.calls) {
+      expect(JSON.stringify(call[0]).includes(leakedCode)).toBe(false)
+    }
+  })
+
+  // The scrub walk is depth-bounded — it cleans MAX_SCRUB_NODES links and leaves
+  // a deeper link untouched, which is also what terminates a cyclic chain on a
+  // foreign error. Pins the boundary exactly: node 8 scrubbed, node 9 not.
+  it('should bound the delivery-error scrub depth', async () => {
+    let leakedCode = ''
+    const nodes: Error[] = []
+    emailSendTemplate.mockImplementation((input: { data: { code: string } }) => {
+      leakedCode = input.data.code
+      for (let level = 0; level < 10; level += 1) {
+        const node = new Error(`level ${level} code=${input.data.code}`)
+        delete node.stack
+        nodes.push(node)
+      }
+      nodes.reduce((parent, node) => {
+        parent.cause = node
+        return node
+      })
+      return Promise.reject(nodes[0])
+    })
+    const service = new OtpService(makeOptions(), storage, audit, emailServiceStub)
+
+    await service.generate({ ...ref, deliverVia: 'email' }).catch(() => undefined)
+
+    expect(nodes.at(8)?.message).not.toContain(leakedCode)
+    expect(nodes.at(9)?.message).toContain(leakedCode)
+  })
+
+  // A STRING rejection cannot be mutated in place, so a scrubbed copy must be
+  // rethrown and the audit errorMessage must carry the scrubbed form.
+  it('should rethrow a scrubbed copy of a string rejection', async () => {
+    let leakedCode = ''
+    emailSendTemplate.mockImplementation((input: { data: { code: string } }) => {
+      leakedCode = input.data.code
+      return Promise.reject(`string failure code=${input.data.code}`)
+    })
+    const service = new OtpService(makeOptions(), storage, audit, emailServiceStub)
+
+    const caught: unknown = await service
+      .generate({ ...ref, deliverVia: 'email' })
+      .catch((error: unknown) => error)
+
+    expect(caught).toBe(`string failure code=[redacted]`)
+    expect(audit.create).toHaveBeenCalledWith(
+      expect.objectContaining({ metadata: { errorMessage: 'string failure code=[redacted]' } })
+    )
+    expect(JSON.stringify(audit.create.mock.calls).includes(leakedCode)).toBe(false)
+  })
+
   // SECURITY: the plaintext code must never appear in any audit entry.
   it('should never place the code in audit metadata', async () => {
     const service = new OtpService(makeOptions(), storage, audit)
