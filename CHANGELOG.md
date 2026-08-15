@@ -5,6 +5,71 @@ All notable changes to `@bymax-one/nest-notification` will be documented in this
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2026-08-15
+
+### Fixed
+
+- **A provider error that echoes the message body no longer carries the body's secrets into the
+  attached `cause`.** Measured by a consumer on published 1.2.0 with a server-side control: a
+  policy relay quoting the rejected content in its `550` put a live OTP into the ERROR-level log
+  entry, in `err.cause.message` and `err.cause.stack` — a path 1.2.0 created by attaching the
+  cause, upgrading a pre-existing `warn`-level leak. The 1.2.0 scrub only ran where THIS library
+  issues the code (`OtpService`); a consumer-issued code sent through `EmailService.send` (e.g.
+  `@bymax-one/nest-auth`'s OTP flows) was outside it.
+
+  Three layers now close the delivery path:
+  - `EmailService` scrubs the outgoing `cause` (not just the audit `errorMessage`) with the
+    caller's declared `auditRedactValues`, on `EMAIL_SEND_FAILED` and `TEMPLATE_RENDER_FAILED`.
+  - **Echo detection** (`collectEchoedExcerpts`): any run of 16+ characters of the rendered
+    body found inside the provider error is treated as an echo and redacted — this is what makes
+    the UNDECLARED case fail safe for the measured scenario, since the library knows the body it
+    just handed to the provider even when it does not know which part is secret. Limits, stated
+    plainly: matching is raw and literal (a re-encoded echo is missed) and a bare secret quoted
+    without surrounding content is shorter than the window and is not caught. Declared values
+    remain the precise control.
+  - Declared values travel to the provider as `EmailSendOptions.redactValues`, and
+    `SmtpEmailProvider` scrubs them plus detected body echoes from its `warn` line and thrown
+    message — closing the pre-existing `warn`-level half of the same leak.
+
+  **Boundary that this release does NOT close, so the note cannot read as "done":** a
+  consumer-issued secret is fully covered only when the caller declares it. `@bymax-one/nest-auth`
+  never calls `EmailService` itself — it defines an email-provider port that the consumer's own
+  adapter implements — so the declaration belongs to that adapter: whoever calls
+  `EmailService.send`/`sendTemplate` with a secret should pass it in `auditRedactValues`. Until
+  then, a bare code echoed WITHOUT surrounding body content remains exposed on that path — the
+  echo guard needs 16+ contiguous characters of body context to trigger.
+
+- **Overlapping secrets can no longer leave a fragment behind after redaction.** `redactValues`
+  used to replace value-by-value over its own output, so `['123', '1234']` over `1234` emitted
+  `[redacted]4` — one digit of a live secret surviving — and two values overlapping without
+  nesting (`['1234', '2345']` over `12345`) leaked a fragment under EVERY replacement order.
+  Occurrences are now located against the original text and overlapping or nested matches merge
+  into a single marker before anything is replaced; a value can also no longer match inside a
+  marker inserted for an earlier one. Every scrub path (audit `errorMessage`, outgoing `cause`,
+  SMTP credential/echo redaction) inherits the fix. Credit: the defect class was measured by a
+  consuming team's review of their own scrub of the same shape.
+
+- **Echo discovery reads the whole error chain, both bundled providers scrub, and matching is
+  no longer quadratic.** Review findings on the patch itself: discovery previously read only the
+  top-level `error.message`, so a wrapper with a generic outer message and the echoed body in a
+  nested `cause` (or a stack) chose the raw-cause path — it now feeds on message and stack at
+  every link (`collectErrorChainText`, guarded reads, cycle-safe). `ResendEmailProvider` applies
+  the same declared-value/body-echo scrub (plus its API key) to its warn line and thrown message,
+  matching `SmtpEmailProvider` — on BOTH failure shapes the SDK can produce, the resolved
+  `{ error }` result and a rejected promise (a transport/fetch failure quoting the request body
+  previously bypassed the scrub entirely and threw raw). Echo matching extends anchored occurrences character-by-character
+  instead of re-searching a growing substring per character, so a relay echoing a large body can
+  no longer stall the event loop. And `SmtpEmailProvider` no longer redacts its credentials
+  BEFORE detecting echoes: a quoted body containing the password split the echoed run into halves
+  below the detection window, so everything after the password — the OTP included — reached the
+  log line; detection now runs on the raw message with every value replaced in one pass.
+
+- **`NotificationException` no longer exposes the constructor's `options` argument to
+  serializers.** NestJS's `HttpException` keeps `options` as an enumerable own property, so
+  structured log output showed `"options":{"cause":{}}` beside the real `cause` — a duplicate
+  reference to the same sanitized copy (no additional secret exposure, but a second surface to
+  audit). The property is now non-enumerable; deliberate reads still work.
+
 ## [1.2.0] - 2026-08-14
 
 ### Added
@@ -377,7 +442,8 @@ rejected at startup rather than failing on the first send.
 
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.0.6...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/bymaxone/nest-notification/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/bymaxone/nest-notification/compare/v1.1.2...v1.2.0
 [1.1.2]: https://github.com/bymaxone/nest-notification/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/bymaxone/nest-notification/compare/v1.1.0...v1.1.1

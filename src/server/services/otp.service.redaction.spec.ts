@@ -116,6 +116,50 @@ describe('OtpService.generate — delivery-error redaction', () => {
   // the rendered OTP body must leave the code out of BOTH audit entries — the
   // EmailService 'failed' entry (redacted via `auditRedactValues`) and the
   // OtpService 'failed' entry (scrubbed) — and out of the rethrown chain.
+  // SECURITY (regression): when the provider quotes ONLY the code — too short
+  // for the 16-char echo window — the DECLARED `auditRedactValues: [code]`
+  // from buildOtpEmail is the control that scrubs it. Pins the declaration
+  // against an emptied-array mutant that the echo guard would mask.
+  it('should scrub a short code-only echo through the declared values', async () => {
+    let realCode = ''
+    const shortEchoProvider: IEmailProvider = {
+      name: 'short-echo',
+      isConfigured: (): boolean => true,
+      send: async (sendOptions: EmailSendOptions): Promise<EmailSendResult> => {
+        const digits = /\d{6}/.exec(sendOptions.html)
+        throw new Error(`550 rejected: ${digits?.[0] ?? 'none'}`)
+      }
+    }
+    const capturingRenderer: IEmailTemplateRenderer = {
+      name: 'capturing',
+      hasTemplate: async (): Promise<boolean> => true,
+      render: async (
+        _template: string,
+        data: Record<string, unknown>,
+        _locale: string
+      ): Promise<RenderedEmail> => {
+        realCode = String(data.code)
+        return { subject: 'Your code', html: `<p>${realCode}</p>` }
+      }
+    }
+    const resolved: ResolvedNotificationOptions = {
+      ...makeOptions(),
+      email: { defaultFrom: 'noreply@acme.com', defaultTags: [], maxAttachmentBytes: 1_000_000 }
+    }
+    const emailService = new EmailService(resolved, shortEchoProvider, capturingRenderer, audit)
+    const service = new OtpService(resolved, storage, audit, emailService)
+
+    const caught: unknown = await service
+      .generate({ ...ref, deliverVia: 'email' })
+      .catch((error: unknown) => error)
+
+    expect(realCode.length).toBeGreaterThan(0)
+    expect(serializeErrorChain(caught).includes(realCode)).toBe(false)
+    for (const call of audit.create.mock.calls) {
+      expect(JSON.stringify(call[0]).includes(realCode)).toBe(false)
+    }
+  })
+
   it('should keep the code out of both audit entries on a real email delivery failure', async () => {
     let realCode = ''
     const echoingProvider: IEmailProvider = {

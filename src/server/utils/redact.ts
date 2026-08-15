@@ -11,17 +11,43 @@ export const REDACTED_VALUE = '[redacted]'
 
 /**
  * Replaces every occurrence of each value with {@link REDACTED_VALUE}.
- * Empty values are skipped — splitting on `''` would explode the text.
+ *
+ * Occurrences are located against the original text and overlapping or nested
+ * matches are merged into a single marker before anything is replaced. A
+ * sequential value-by-value replacement would let a fragment of one secret
+ * survive the replacement of another — `['1234', '2345']` over `'12345'`
+ * leaves `5` of a live secret — and would let a later value match inside a
+ * marker inserted for an earlier one. Neither can happen against the original
+ * text. Empty values are skipped — every position would match one.
  *
  * @param text - The text to clean.
- * @param values - The secret values to remove.
+ * @param values - The secret values to remove, in any order.
  * @returns The cleaned text.
  */
 export function redactValues(text: string, values: readonly string[]): string {
-  return values.reduce(
-    (cleaned, value) => (value === '' ? cleaned : cleaned.split(value).join(REDACTED_VALUE)),
-    text
-  )
+  const spans: Array<{ start: number; end: number }> = []
+  for (const value of values) {
+    if (value === '') {
+      continue
+    }
+    for (let start = text.indexOf(value); start !== -1; start = text.indexOf(value, start + 1)) {
+      spans.push({ start, end: start + value.length })
+    }
+  }
+  spans.sort((a, b) => a.start - b.start)
+  let cleaned = ''
+  let cursor = 0
+  for (const { start, end } of spans) {
+    if (start < cursor) {
+      // Overlaps or nests inside the span already replaced: widen it instead
+      // of writing a second marker over the same characters.
+      cursor = Math.max(cursor, end)
+      continue
+    }
+    cleaned += text.slice(cursor, start) + REDACTED_VALUE
+    cursor = end
+  }
+  return cleaned + text.slice(cursor)
 }
 
 /**
@@ -57,6 +83,99 @@ export function readRedactedMessage(error: unknown, values?: readonly string[]):
   } catch {
     return REDACTED_VALUE
   }
+}
+
+/**
+ * Concatenates the readable text of an error and its whole `cause` chain —
+ * message and stack at every link — for echo DISCOVERY. A provider failure can
+ * carry a generic outer message while the echoed body content sits only in a
+ * nested `cause`'s message or stack, and discovery that reads the top-level
+ * message alone would choose the raw-cause path with that plaintext aboard.
+ * Every read is guarded — a hostile getter contributes nothing instead of
+ * escaping — and traversal is identity-based, so cycles terminate.
+ *
+ * @param error - The failure whose chain to read.
+ * @returns The chain's message and stack text, newline-joined.
+ */
+export function collectErrorChainText(error: unknown): string {
+  const parts: string[] = []
+  const seen = new Set<unknown>()
+  let current: unknown = error
+  while (current !== null && current !== undefined && !seen.has(current)) {
+    seen.add(current)
+    parts.push(readRedactedMessage(current))
+    if (!isSafeError(current)) {
+      break
+    }
+    try {
+      if (typeof current.stack === 'string') {
+        parts.push(current.stack)
+      }
+    } catch {
+      // A hostile `stack` getter contributes nothing.
+    }
+    try {
+      current = 'cause' in current ? current.cause : undefined
+    } catch {
+      // A hostile `cause` getter or proxy trap ends the walk: `current` keeps
+      // the value already recorded in `seen`, so the loop guard stops on the
+      // next check. Nothing to do here.
+    }
+  }
+  return parts.join('\n')
+}
+
+/**
+ * Shortest run of characters that counts as an ECHO of reference content.
+ * Below this, coincidental overlap between an error message and a message body
+ * is likely; at or above it, the error is quoting content.
+ */
+export const MIN_ECHO_LENGTH = 16
+
+/**
+ * Collects the substrings of `text` (each at least {@link MIN_ECHO_LENGTH}
+ * characters) that literally appear inside `reference` — the shape of a
+ * provider or relay echoing message content back inside an error. Each match
+ * is grown to the longest run still present in the reference, so an echo
+ * comes back as one excerpt instead of overlapping windows.
+ *
+ * Matching is raw and literal: a re-encoded or line-wrapped echo is missed,
+ * which is why DECLARED redaction values remain the precise control and this
+ * detector is defense-in-depth for the undeclared case. A bare secret quoted
+ * without surrounding content is shorter than the window and is not caught.
+ *
+ * @param text - The error text to inspect.
+ * @param reference - The content the error may be echoing (e.g. a message body).
+ * @returns The echoed excerpts, in order of appearance.
+ */
+export function collectEchoedExcerpts(text: string, reference: string): string[] {
+  const excerpts: string[] = []
+  let index = 0
+  while (index + MIN_ECHO_LENGTH <= text.length) {
+    const window = text.slice(index, index + MIN_ECHO_LENGTH)
+    // Each occurrence of the window anchors a direct character-by-character
+    // extension — never a substring re-search per added character, whose cost
+    // grows quadratically with the echo and lets a relay quoting a large body
+    // stall the event loop.
+    let longest = 0
+    for (let at = reference.indexOf(window); at !== -1; at = reference.indexOf(window, at + 1)) {
+      let length = MIN_ECHO_LENGTH
+      while (
+        text[index + length] !== undefined &&
+        text[index + length] === reference[at + length]
+      ) {
+        length += 1
+      }
+      longest = Math.max(longest, length)
+    }
+    if (longest === 0) {
+      index += 1
+      continue
+    }
+    excerpts.push(text.slice(index, index + longest))
+    index += longest
+  }
+  return excerpts
 }
 
 /**

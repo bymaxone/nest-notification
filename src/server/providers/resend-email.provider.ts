@@ -21,6 +21,7 @@ import type {
   IEmailProvider
 } from '../interfaces/email-provider.interface'
 import { loadOptionalPeer } from '../utils/load-optional-peer'
+import { collectEchoedExcerpts, redactValues } from '../utils/redact'
 
 /** Construction options for {@link ResendEmailProvider}. */
 export interface ResendEmailProviderOptions {
@@ -126,28 +127,73 @@ export class ResendEmailProvider implements IEmailProvider {
   async send(options: EmailSendOptions): Promise<EmailSendResult> {
     const client = await this.getClient()
     const from = this.formatFrom(options.from, options.fromName)
-    const result = await client.emails.send({
-      from,
-      to: options.to,
-      subject: options.subject,
-      html: options.html,
-      text: options.text,
-      replyTo: options.replyTo,
-      cc: options.cc,
-      bcc: options.bcc,
-      tags: options.tags,
-      headers: options.headers,
-      attachments: options.attachments
-    })
+    let result: ResendSendOutcome
+    try {
+      result = await client.emails.send({
+        from,
+        to: options.to,
+        subject: options.subject,
+        html: options.html,
+        text: options.text,
+        replyTo: options.replyTo,
+        cc: options.cc,
+        bcc: options.bcc,
+        tags: options.tags,
+        headers: options.headers,
+        attachments: options.attachments
+      })
+    } catch (error) {
+      // The SDK can REJECT instead of resolving `{ error }` — a transport or
+      // fetch failure whose message quotes the request body carries the same
+      // secrets a quoted rejection does, so it takes the identical exit.
+      throw this.sendFailure(error instanceof Error ? error.message : String(error), options)
+    }
     if (result.error) {
-      // Surface only the provider's message — never the email body.
-      this.logger.warn(`[RESEND_SEND_FAILED] ${result.error.message}`)
-      throw new Error(`Resend send failed: ${result.error.message}`)
+      throw this.sendFailure(result.error.message, options)
     }
     if (!result.data?.id) {
       throw new Error('Resend returned no message ID')
     }
     return { messageId: result.data.id }
+  }
+
+  /**
+   * Builds the failure for a rejected send, logging the scrubbed reason on the
+   * way out — the single exit shared by the rejected-promise and `{ error }`
+   * result shapes, so neither can surface an unscrubbed message.
+   *
+   * @param rawMessage - The provider's own error text, unscrubbed.
+   * @param options - The send input whose body and declared values to scrub.
+   * @returns The `Error` for the caller to throw.
+   */
+  private sendFailure(rawMessage: string, options: EmailSendOptions): Error {
+    // Surface only the provider's message — never the email body.
+    const reason = this.scrubSendError(rawMessage, options)
+    this.logger.warn(`[RESEND_SEND_FAILED] ${reason}`)
+    return new Error(`Resend send failed: ${reason}`)
+  }
+
+  /**
+   * Removes the API key, the caller's declared secrets, and any echoed body
+   * excerpt from an SDK error message — the provider cannot know which part of
+   * the body is secret, so a detected echo is scrubbed wholesale.
+   *
+   * @param message - The raw SDK error message.
+   * @param options - The send input whose body and declared values to scrub.
+   * @returns The message with every known-secret value replaced.
+   */
+  private scrubSendError(message: string, options: EmailSendOptions): string {
+    const values = collectEchoedExcerpts(message, options.html)
+    if (options.text !== undefined) {
+      values.push(...collectEchoedExcerpts(message, options.text))
+    }
+    if (options.redactValues) {
+      values.push(...options.redactValues)
+    }
+    // The error path only exists after a successful client init, which requires
+    // the key — the filter narrows the type without a dead undefined branch.
+    values.push(...[this.#options.apiKey].filter((secret): secret is string => Boolean(secret)))
+    return redactValues(message, values)
   }
 
   /**

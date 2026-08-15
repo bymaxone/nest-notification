@@ -28,6 +28,7 @@ import type {
   IEmailProvider
 } from '../interfaces/email-provider.interface'
 import { loadOptionalPeer } from '../utils/load-optional-peer'
+import { collectEchoedExcerpts, redactValues } from '../utils/redact'
 
 /** Submission port, used when no `port` is supplied. */
 const DEFAULT_PORT = 587
@@ -43,9 +44,6 @@ const DEFAULT_GREETING_TIMEOUT_MS = 10_000
 
 /** Default idle-socket timeout during the SMTP conversation, in milliseconds. */
 const DEFAULT_SOCKET_TIMEOUT_MS = 20_000
-
-/** Placeholder substituted for a credential inside surfaced error messages. */
-const REDACTED = '[redacted]'
 
 /**
  * Hosts that cannot be reached across a network, and for which an unencrypted
@@ -311,18 +309,22 @@ export class SmtpEmailProvider implements IEmailProvider {
     this.guardHeaderInjection(options)
     const from = this.buildSender(options.from, options.fromName)
     const transport = await this.getTransport()
-    const info = await this.dispatch(transport, {
-      from,
-      to: options.to,
-      subject: options.subject,
-      html: options.html,
-      text: options.text,
-      replyTo: options.replyTo,
-      cc: options.cc,
-      bcc: options.bcc,
-      headers: options.headers,
-      attachments: this.mapAttachments(options.attachments)
-    })
+    const info = await this.dispatch(
+      transport,
+      {
+        from,
+        to: options.to,
+        subject: options.subject,
+        html: options.html,
+        text: options.text,
+        replyTo: options.replyTo,
+        cc: options.cc,
+        bcc: options.bcc,
+        headers: options.headers,
+        attachments: this.mapAttachments(options.attachments)
+      },
+      options.redactValues
+    )
     if (!info.messageId) {
       throw new Error('SMTP transport returned no message ID')
     }
@@ -341,15 +343,64 @@ export class SmtpEmailProvider implements IEmailProvider {
    */
   private async dispatch(
     transport: SmtpTransportLike,
-    payload: SmtpSendPayload
+    payload: SmtpSendPayload,
+    redactValues?: readonly string[]
   ): Promise<{ messageId?: string }> {
     try {
       return await transport.sendMail(payload)
     } catch (error) {
-      const reason = this.redact(error instanceof Error ? error.message : String(error))
+      // Credentials, declared secrets and echoed body excerpts are removed in
+      // ONE pass over the raw message — a policy/DLP relay that quotes the
+      // rejected content puts the body (and any secret inside it) into the
+      // error text this line is about to log.
+      const reason = this.scrubTransportError(
+        error instanceof Error ? error.message : String(error),
+        payload,
+        redactValues
+      )
       this.logger.warn(`[SMTP_SEND_FAILED] ${reason}`)
       throw new Error(`SMTP send failed: ${reason}`)
     }
+  }
+
+  /**
+   * Removes the credentials, the caller's declared secrets and any echoed body
+   * excerpt from a transport error's text — the credential scrub alone cannot
+   * cover content the provider does not know is secret.
+   *
+   * Echo detection runs against the RAW message and every value is replaced in
+   * a single pass. Redacting credentials first would break a contiguous body
+   * run that happens to quote one, dropping the surviving halves below the
+   * detection window and leaving the rest of that body — and any secret inside
+   * it — in the log line.
+   *
+   * @param message - The raw transport error message.
+   * @param payload - The message that was sent, whose body is the echo reference.
+   * @param declaredValues - The caller's declared secrets, if any.
+   * @returns The message with every known-secret value replaced.
+   */
+  private scrubTransportError(
+    message: string,
+    payload: SmtpSendPayload,
+    declaredValues: readonly string[] | undefined
+  ): string {
+    const values = collectEchoedExcerpts(message, payload.html)
+    if (payload.text !== undefined) {
+      values.push(...collectEchoedExcerpts(message, payload.text))
+    }
+    if (declaredValues) {
+      values.push(...declaredValues)
+    }
+    values.push(...this.credentialValues())
+    return redactValues(message, values)
+  }
+
+  /** The configured credentials that qualify as secret material, if any. */
+  private credentialValues(): string[] {
+    const credentials = this.#options.credentials
+    return [credentials?.user, credentials?.pass].filter((secret): secret is string =>
+      Boolean(secret)
+    )
   }
 
   /**
@@ -364,25 +415,16 @@ export class SmtpEmailProvider implements IEmailProvider {
    * public login: an SES SMTP username, for one, is itself generated secret
    * material. Matching is literal and unconditional, so a short credential
    * over-redacts a message rather than risking a miss — the safe direction for a
-   * control whose other failure mode is persisting a secret.
+   * control whose other failure mode is persisting a secret. The two credentials
+   * can overlap — a password built from the username, say `relay` /
+   * `relay-secret` — which {@link redactValues} handles by merging overlapping
+   * matches into a single marker.
    *
    * @param message - The raw error message.
    * @returns The message with both credentials removed, unchanged when none is set.
    */
   private redact(message: string): string {
-    const credentials = this.#options.credentials
-    const secrets = [credentials?.user, credentials?.pass]
-      .filter((secret): secret is string => Boolean(secret))
-      // Longest first. The two credentials can overlap — a password built from the
-      // username, say `relay` / `relay-secret` — and replacing the shorter one first
-      // consumes the prefix, leaving `[redacted]-secret`: the part that actually
-      // distinguishes the password survives into the log and the audit entry.
-      .sort((a, b) => b.length - a.length)
-    let redacted = message
-    for (const secret of secrets) {
-      redacted = redacted.split(secret).join(REDACTED)
-    }
-    return redacted
+    return redactValues(message, this.credentialValues())
   }
 
   /**

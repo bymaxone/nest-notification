@@ -69,6 +69,12 @@ export interface EmailSendOptions {
   headers?: Record<string, string>
   /** Attachments. */
   attachments?: ReadonlyArray<EmailAttachment>
+  /**
+   * Secret values a provider must scrub from any error text it logs or throws
+   * — a relay that echoes the rejected content puts the body (and any secret
+   * inside it, e.g. an OTP code) into the transport error.
+   */
+  redactValues?: readonly string[]
 }
 
 /** Result of a successful send. `messageId` is provider-specific; useful for audit correlation. */
