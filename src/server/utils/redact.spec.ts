@@ -1,3 +1,5 @@
+import { NotificationException } from '../errors/notification-exception'
+
 import { REDACTED_VALUE, redactValues, scrubValuesFromErrorChain } from './redact'
 
 describe('redactValues', () => {
@@ -219,6 +221,56 @@ describe('scrubValuesFromErrorChain', () => {
   // cause-link rule — nothing that enters the scrub leaves carrying a secret.
   it('should flatten a non-Error head to a redacted string', () => {
     expect(scrubValuesFromErrorChain('raw 555', ['555'])).toBe(`raw ${REDACTED_VALUE}`)
+  })
+
+  // SECURITY (regression): a storage may reject with
+  // `Object.assign(new Error(...), { entry })` where the entry carries the
+  // code — payload-bearing own enumerable properties are deleted, since a
+  // serializer that includes enumerable fields would emit them.
+  it('should strip payload-bearing enumerable properties from a writable error', () => {
+    const error = Object.assign(new Error('write failed'), { entry: { code: '555' } })
+
+    const returned = scrubValuesFromErrorChain(error, ['555'])
+
+    expect(returned).toBe(error)
+    expect(Object.keys(error)).toEqual([])
+    expect(JSON.stringify({ ...error })).not.toContain('555')
+  })
+
+  // A non-configurable payload property resists deletion, so the node is
+  // represented by a copy — which carries no extra properties at all.
+  it('should copy an error whose payload property resists deletion', () => {
+    const error = new Error('write failed 555')
+    Object.defineProperty(error, 'entry', {
+      value: { code: '555' },
+      enumerable: true
+    })
+
+    const returned = scrubValuesFromErrorChain(error, ['555']) as Error
+
+    expect(returned).not.toBe(error)
+    expect(returned.message).toBe(`write failed ${REDACTED_VALUE}`)
+    expect(Object.keys(returned)).toEqual([])
+    expect(JSON.stringify({ ...returned })).not.toContain('555')
+  })
+
+  // A NotificationException is exempt from stripping: its own properties
+  // (code, response, status) are the HTTP contract and safe by construction.
+  it('should keep the NotificationException contract properties intact', () => {
+    const exception = new NotificationException(
+      'EMAIL_SEND_FAILED',
+      { providerName: 'smtp' },
+      { cause: new Error('boom 555') }
+    )
+
+    const returned = scrubValuesFromErrorChain(exception, ['555'])
+
+    expect(returned).toBe(exception)
+    expect(exception.code).toBe('notification.email_send_failed')
+    expect(exception.getResponse()).toMatchObject({
+      error: { details: { providerName: 'smtp' } }
+    })
+    expect((exception.cause as Error).message).toBe(`boom ${REDACTED_VALUE}`)
   })
 
   // `name` is emitted by error serializers just like `message` — a secret

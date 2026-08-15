@@ -4,6 +4,8 @@
  * @layer domain
  */
 
+import { NotificationException } from '../errors/notification-exception'
+
 /** Marker substituted for a secret value wherever it is redacted. */
 export const REDACTED_VALUE = '[redacted]'
 
@@ -42,6 +44,25 @@ export function redactValues(text: string, values: readonly string[]): string {
  */
 export function scrubValuesFromErrorChain(error: unknown, values: readonly string[]): unknown {
   return scrubNode(error, values, new WeakMap<Error, unknown>())
+}
+
+/**
+ * Deletes payload-bearing own enumerable properties from an arbitrary error —
+ * a storage may reject with `Object.assign(new Error(...), { entry })`, and
+ * `entry` carries the code. `cause` is kept (it is the chain being walked);
+ * `name`/`message`/`stack` are rewritten right after, so deleting an
+ * enumerable variant of them is harmless. A `NotificationException` is
+ * exempt: its own properties are required by the HTTP contract and safe by
+ * construction (catalog body, sanitized cause).
+ *
+ * @returns `false` when a property resists deletion — the caller must fall
+ * back to a copy, which drops extras inherently.
+ */
+function stripExtraProperties(node: Error): boolean {
+  if (node instanceof NotificationException) {
+    return true
+  }
+  return Object.keys(node).every((key) => key === 'cause' || Reflect.deleteProperty(node, key))
 }
 
 /**
@@ -88,8 +109,11 @@ function scrubNode(
   // writability PROBE (a same-value write): it proves upfront that the later
   // child-representative write cannot fail, so the in-place decision never has
   // to be revisited after the children are walked.
+  // The `name` write is skipped when the value is unchanged, so a default-named
+  // error does not gain an own enumerable `name` the strip just removed.
   const inPlace =
-    Reflect.set(node, 'name', name) &&
+    stripExtraProperties(node) &&
+    (node.name === name || Reflect.set(node, 'name', name)) &&
     Reflect.set(node, 'message', message) &&
     (stack === undefined || Reflect.set(node, 'stack', stack)) &&
     (!hasCause || Reflect.set(node, 'cause', node.cause))

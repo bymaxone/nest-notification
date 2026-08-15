@@ -50,8 +50,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   delivery the service now replaces every occurrence of the code with `[redacted]` — in the audit
   entry's `errorMessage` and across the rethrown error chain (message and stack at every link) —
   at the one layer that knows the secret. The scrub also covers `name` (serializers emit it like
-  `message`) and flattens a non-`Error` `cause` link — a primitive string tail carries the secret
-  verbatim and an object tail can carry it in a property, and neither can be walked as an Error.
+  `message`), deletes payload-bearing own enumerable properties from arbitrary errors (a storage
+  may reject with `Object.assign(new Error(...), { entry })` — and the entry carries the code —
+  while a `NotificationException` keeps its contract properties, safe by construction), and
+  flattens a non-`Error` `cause` link — a primitive string tail carries the secret verbatim and
+  an object tail can carry it in a property, and neither can be walked as an Error.
   Traversal is identity-based (`WeakSet`), so a cyclic chain terminates and no depth limit leaves
   an unscrubbed tail; writes go through `Reflect.set`, so a frozen foreign error degrades to
   best-effort instead of throwing. Any non-`Error` rejection — a string, or an object a custom

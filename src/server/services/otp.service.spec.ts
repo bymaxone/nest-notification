@@ -507,6 +507,32 @@ describe('OtpService.generate', () => {
     expect(caught).toBe('cleanup dump [redacted]')
   })
 
+  // SECURITY (regression): a custom storage may reject `set()` with the entry
+  // attached as an enumerable property — the code inside it must not survive
+  // into the rethrown error or any audit entry.
+  it('should strip a storage rejection that retains the entry', async () => {
+    let leakedCode = ''
+    jest
+      .spyOn(storage, 'set')
+      .mockImplementation(async (_tenantId, _recipient, _purpose, entry) => {
+        leakedCode = entry.code
+        throw Object.assign(new Error('write failed'), { entry })
+      })
+    const service = new OtpService(makeOptions(), storage, audit, emailServiceStub)
+
+    const caught: unknown = await service
+      .generate({ ...ref, deliverVia: 'manual' })
+      .catch((error: unknown) => error)
+
+    expect(leakedCode).not.toBe('')
+    expect(caught).toBeInstanceOf(Error)
+    expect(Object.keys(caught as Error)).toEqual([])
+    expect(serializeErrorChain(caught).includes(leakedCode)).toBe(false)
+    for (const call of audit.create.mock.calls) {
+      expect(JSON.stringify(call[0]).includes(leakedCode)).toBe(false)
+    }
+  })
+
   // SECURITY: the plaintext code must never appear in any audit entry.
   it('should never place the code in audit metadata', async () => {
     const service = new OtpService(makeOptions(), storage, audit)
