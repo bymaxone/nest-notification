@@ -5,6 +5,75 @@ All notable changes to `@bymax-one/nest-notification` will be documented in this
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.2] - 2026-08-15
+
+### Documentation
+
+Code is unchanged: the built `dist/` is byte-identical to 1.2.1, verified by unpacking the
+published tarball and diffing it against a fresh build. This release exists because the 1.2.1
+security note ships inside the package, and two of its statements were wrong in the direction that
+makes a reader feel safer than they are.
+
+- **Corrected: where the declaration belongs.** The 1.2.1 note said `@bymax-one/nest-auth` never
+  calls `EmailService` itself, so the declaration belonged to "the consumer's own adapter". That
+  is false for the shipped wiring. Measured in the published `@bymax-one/nest-auth@1.4.3` bundle:
+  `DefaultAuthEmailProvider` is exported, sends through an `AuthEmailSink` whose own typings name
+  `EmailService.send` as the intended implementation, and `auditRedactValues` appears **zero**
+  times in the bundle. So wherever that bundled provider is the one bound — the wiring `nest-auth`
+  intends and the template uses — the call site is inside `nest-auth` rather than in consumer code,
+  and a derived backend that then binds a real SMTP or Resend provider inherits the exposed path
+  with **no call site of its own to declare at**. The remedy for that population sits in
+  `DefaultAuthEmailProvider`, which is the only place that knows both the code it rendered and the
+  call it is about to make. A consumer that implements `nest-auth`'s email port itself does own its
+  call site, and for that one the original advice held. Credit: the `bymax-one` template seat measured it from the
+  consumer's vantage point; `nest-auth` confirmed it against their own bundle.
+
+- **Corrected: declared values are not a sufficient control.** The note called declaration "the
+  precise control" and the README called it "the only precise control". Both overstate it. A relay
+  quotes what it _transmitted_, not what it was handed, and a MIME body travels raw,
+  quoted-printable or base64. Measured through `EmailService.send` on this exact build: with the
+  code declared in `auditRedactValues`, an error quoting the **base64** of the body is returned
+  completely unredacted, and decoding the surviving text yields the OTP in cleartext. The declared
+  value cannot match (`123456` does not occur in `MTIzNDU2`) and echo detection cannot match
+  either, because it compares the error against the _rendered_ body it holds, not against the
+  encoding the relay chose. This is the ceiling of value-list redaction, not a defect in either
+  guard: **no list of values closes an encoding gap.**
+
+  What the guards are, accurately: defence in depth that removes the shapes they can predict.
+  Treat provider error text reaching a log as the thing to control, and declared values as
+  precision on top of that — not as the barrier.
+
+- **Corrected: the README asserted and refuted the same guarantee.** The feature list said "Codes
+  are never logged … not into an error message" and the security section promised "every
+  occurrence of the code is scrubbed", while the paragraph added by this same patch documents an
+  encoded echo surviving both guards. The unconditional claims came first, which is the half a
+  skimming reader takes away. They now say what they actually cover: text **this library authors**,
+  and every **literal** occurrence — with a pointer to the ceiling for text a provider authors.
+  Found by applying a rule a consuming team derived after finding the identical drift in their own
+  changelog: a claim written to explain and a claim written to instruct drift apart inside one
+  author's head, because the explanation optimises for the point and the instruction for the cases.
+  Grep the narrative against the instructions whenever one document carries both. A second sweep
+  caught two more of the same shape — the security table's "Code Exposure" row and the
+  code-lifetime paragraph — which is the argument for sweeping by claim rather than by the wording
+  that happened to appear in the first one found.
+
+- The residual risk this leaves is tracked for a behaviour change rather than another note, and
+  the shape of that change is open. What the measurements above establish is the direction: value
+  redaction is a **blacklist** — it must predict the form the secret takes, and it loses to any
+  form it did not predict. Publishing only what a fixed grammar can express — the SMTP basic
+  status and, when present, the RFC 3463 enhanced code — is a **whitelist**, and the property that
+  makes it safe is that its output is **independent of the secret**, not that its alphabet differs
+  from the secret's. The distinction is testable in three lines: the same relay reply publishes
+  `550 5.7.1` whether the code was `550571`, `123456` or absent entirely, so an observer learns
+  nothing about it. Punctuation-stripping `550 5.7.1` does yield `550571`, the shape of a live
+  six-digit code — a coincidence rather than a disclosure, but one with a real operational cost,
+  because a log rule alerting on digit runs fires on every such reply. Publishing the codes as
+  structured fields rather than interpolated into a message string keeps that cost from arising.
+  What stays genuinely open is how much diagnosis a general channel needs: for auth mail the
+  provider's prose is never diagnostic, which is why `@bymax-one/nest-auth` publishes none of it,
+  while for the same installation's receipts and marketing a `550` content rejection and a `550`
+  blocklisted sender call for opposite actions. Nothing here is decided.
+
 ## [1.2.1] - 2026-08-15
 
 ### Fixed
@@ -25,19 +94,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     the UNDECLARED case fail safe for the measured scenario, since the library knows the body it
     just handed to the provider even when it does not know which part is secret. Limits, stated
     plainly: matching is raw and literal (a re-encoded echo is missed) and a bare secret quoted
-    without surrounding content is shorter than the window and is not caught. Declared values
-    remain the precise control.
+    without surrounding content is shorter than the window and is not caught. Declared values add
+    precision where the shape is predictable — but they are NOT a sufficient control either; see
+    the 1.2.2 entry for the measurement that shows an encoded echo defeating both.
   - Declared values travel to the provider as `EmailSendOptions.redactValues`, and
     `SmtpEmailProvider` scrubs them plus detected body echoes from its `warn` line and thrown
     message — closing the pre-existing `warn`-level half of the same leak.
 
-  **Boundary that this release does NOT close, so the note cannot read as "done":** a
-  consumer-issued secret is fully covered only when the caller declares it. `@bymax-one/nest-auth`
-  never calls `EmailService` itself — it defines an email-provider port that the consumer's own
-  adapter implements — so the declaration belongs to that adapter: whoever calls
-  `EmailService.send`/`sendTemplate` with a secret should pass it in `auditRedactValues`. Until
-  then, a bare code echoed WITHOUT surrounding body content remains exposed on that path — the
-  echo guard needs 16+ contiguous characters of body context to trigger.
+  **Boundary that this release does NOT close, so the note cannot read as "done":** declaring a
+  consumer-issued secret in `auditRedactValues` removes it only where it appears in the raw,
+  literal shape it was declared in — it is not coverage of the secret as such — and a bare code
+  echoed WITHOUT surrounding body content is below the echo guard's 16-character window.
+  <!-- The two claims this paragraph originally made about WHERE that declaration belongs, and
+  about declaration being a sufficient control, were both wrong. See 1.2.2 for the correction and
+  the measurements. -->
+
+  **See the 1.2.2 entry above before relying on this paragraph.**
 
 - **Overlapping secrets can no longer leave a fragment behind after redaction.** `redactValues`
   used to replace value-by-value over its own output, so `['123', '1234']` over `1234` emitted
@@ -442,7 +514,8 @@ rejected at startup rather than failing on the first send.
 
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.2.1...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.2.2...HEAD
+[1.2.2]: https://github.com/bymaxone/nest-notification/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/bymaxone/nest-notification/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/bymaxone/nest-notification/compare/v1.1.2...v1.2.0
 [1.1.2]: https://github.com/bymaxone/nest-notification/compare/v1.1.1...v1.1.2

@@ -74,7 +74,7 @@ pnpm add @bymax-one/nest-notification
 - ✅ **SHA-256 storage keys** — `sha256(tenantId:recipient)`: no recipient PII in a key, no cross-tenant collision
 - ✅ **`tenantIdResolver`** — the audited tenant comes from a trusted source (a JWT claim, a subdomain, a gateway-checked header), not the payload
 - ✅ **Opt-in audit log** — a fire-and-forget `INotificationLogRepository` plus a `NotificationAuditInterceptor`; audit failures never break delivery
-- ✅ **Codes are never logged** — not to a logger, not to an audit entry, not into an error message, enforced by a regression test
+- ✅ **This library never logs a code** — not to a logger, not to an audit entry, not into an error message it authors, enforced by a regression test. Text a **provider** authors is a separate problem with a documented ceiling: an error quoting the body in another encoding survives every guard, so control whether provider error text reaches your logs at all
 
 ### 🧩 Developer Experience
 
@@ -617,16 +617,20 @@ const tenantIdResolver = (req: NotificationRequest): string =>
 > [!NOTE]
 > The resolver governs what the audit interceptor trusts. Service methods still take an explicit `tenantId`: resolve the tenant in your controller and pass it down — there is no hidden override of a method argument.
 
-### Codes are never written anywhere readable
+### The library never writes a code anywhere readable
+
+Everything below is about text **this library authors**. Text a provider authors is a separate
+problem with a documented ceiling — see [Errors](#errors) — and
+the two must not be read as one guarantee.
 
 The library **never** writes a code to a sink that can be read back:
 
 - Not to the audit log — an entry is `{ verb, tenantId, recipient, purpose, providerName, … }`, never `code`.
 - Not to a console or logger line.
 - Not inside an `errorMessage`, which carries the message only — never a stack trace.
-- Not inside a rethrown delivery error: the renderer and the provider both receive the code (template `data`, rendered body), so on a failed delivery every occurrence of the code is scrubbed to `[redacted]` across the outgoing error chain — message **and** stack at every link, cycle-safe with no depth limit — before the audit write and the rethrow, and a non-`Error` rejection is flattened to a redacted string. The email channel's own `failed` audit entry is covered too: OTP delivery declares the code via `auditRedactValues`, and `EmailService` redacts it from the entry's `errorMessage`. Default V8 stack frames carry only function names and source locations, never argument values; the header line (`Error: <message>`) is where a code could ride a stack, and the scrub covers it.
+- Not inside a rethrown delivery error: the renderer and the provider both receive the code (template `data`, rendered body), so on a failed delivery every **literal** occurrence of the code — the form it was issued in, which is the form this library's own text carries — is scrubbed to `[redacted]` across the outgoing error chain — message **and** stack at every link, cycle-safe with no depth limit — before the audit write and the rethrow, and a non-`Error` rejection is flattened to a redacted string. The email channel's own `failed` audit entry is covered too: OTP delivery declares the code via `auditRedactValues`, and `EmailService` redacts it from the entry's `errorMessage`. Default V8 stack frames carry only function names and source locations, never argument values; the header line (`Error: <message>`) is where a code could ride a stack, and the scrub covers it.
 
-Codes exist only inside the OTP store, under a TTL, and in process memory for the duration of the request. `audit.maskRecipient` minimizes the recipient before it is persisted (`jane@acme.com` → `j***@acme.com`). A regression test asserts the invariant directly rather than trusting review: `JSON.stringify(auditEntry).includes(code) === false`.
+Within this library, codes exist only inside the OTP store, under a TTL, and in process memory for the duration of the request — a provider that quotes the body back is outside that boundary, and its ceiling is documented under [Errors](#errors). `audit.maskRecipient` minimizes the recipient before it is persisted (`jane@acme.com` → `j***@acme.com`). A regression test asserts the invariant directly rather than trusting review: `JSON.stringify(auditEntry).includes(code) === false`.
 
 ### Attempt ceilings and cooldowns are atomic
 
@@ -647,22 +651,22 @@ When integrating `@bymax-one/nest-notification` in production, verify each of th
 
 ## 🛡️ Security Table
 
-| Layer              | Implementation                                                                                                                                                                            |
-| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Code Generation    | `crypto.randomInt` per character over the configured alphabet — uniform at every position, no modulo bias                                                                                 |
-| Code Comparison    | `crypto.timingSafeEqual` (constant-time), never `===`                                                                                                                                     |
-| Storage Keys       | `sha256(tenantId:recipient)` — no recipient PII, no cross-tenant collision                                                                                                                |
-| Attempt Ceiling    | Counter spent atomically inside the storage (Redis Lua) — never a service-side read-then-write                                                                                            |
-| Resend Cooldown    | `SET NX EX` acquire, released only on delivery failure — two concurrent resends cannot both win                                                                                           |
-| Code Lifetime      | TTL-bound in the store; expiry and absence are reported identically so neither leaks the other                                                                                            |
-| Code Exposure      | Never logged, never audited, never in an error message or stack trace — asserted by a regression test                                                                                     |
-| Recipient PII      | Absent from keys; optionally masked before it reaches the audit sink                                                                                                                      |
-| Provider Secrets   | The Resend API key, the SMTP password and the Redis client live in private fields; serializing a provider omits them, and a failing SMTP session has its password scrubbed from the error |
-| Tenant Isolation   | `tenantId` scopes every operation and is resolved from a trusted source, not the payload                                                                                                  |
-| Template Injection | HTML body escaped on interpolation by the bundled renderer — closes stored XSS through a display name                                                                                     |
-| Attachment DoS     | Total attachment size rejected against a budget before the provider is called                                                                                                             |
-| Audit Failures     | Fire-and-forget with `swallowErrors` — an audit outage never becomes a delivery outage                                                                                                    |
-| Supply Chain       | `"dependencies": {}`; published with npm provenance (OIDC), CodeQL and OpenSSF Scorecard on every push                                                                                    |
+| Layer              | Implementation                                                                                                                                                                                  |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Code Generation    | `crypto.randomInt` per character over the configured alphabet — uniform at every position, no modulo bias                                                                                       |
+| Code Comparison    | `crypto.timingSafeEqual` (constant-time), never `===`                                                                                                                                           |
+| Storage Keys       | `sha256(tenantId:recipient)` — no recipient PII, no cross-tenant collision                                                                                                                      |
+| Attempt Ceiling    | Counter spent atomically inside the storage (Redis Lua) — never a service-side read-then-write                                                                                                  |
+| Resend Cooldown    | `SET NX EX` acquire, released only on delivery failure — two concurrent resends cannot both win                                                                                                 |
+| Code Lifetime      | TTL-bound in the store; expiry and absence are reported identically so neither leaks the other                                                                                                  |
+| Code Exposure      | Never logged, audited, or placed in an error message or stack trace **by this library** — asserted by a regression test. Provider-authored text has a documented ceiling: see [Errors](#errors) |
+| Recipient PII      | Absent from keys; optionally masked before it reaches the audit sink                                                                                                                            |
+| Provider Secrets   | The Resend API key, the SMTP password and the Redis client live in private fields; serializing a provider omits them, and a failing SMTP session has its password scrubbed from the error       |
+| Tenant Isolation   | `tenantId` scopes every operation and is resolved from a trusted source, not the payload                                                                                                        |
+| Template Injection | HTML body escaped on interpolation by the bundled renderer — closes stored XSS through a display name                                                                                           |
+| Attachment DoS     | Total attachment size rejected against a budget before the provider is called                                                                                                                   |
+| Audit Failures     | Fire-and-forget with `swallowErrors` — an audit outage never becomes a delivery outage                                                                                                          |
+| Supply Chain       | `"dependencies": {}`; published with npm provenance (OIDC), CodeQL and OpenSSF Scorecard on every push                                                                                          |
 
 > [!IMPORTANT]
 > This package uses **zero external cryptographic dependencies**. All operations use Node.js native `node:crypto`, eliminating supply chain attack vectors for critical security code.
@@ -759,7 +763,9 @@ Error codes are namespaced (`notification.otp_invalid_code`, `notification.otp_c
 
 Failures raised by the library carry the underlying error as the native `Error.cause` — a provider's `connect ECONNREFUSED` sits on `exception.cause`, where cause-walking log serializers (e.g. pino's `err`) print it alongside the stable code. The cause is stored as a **log-safe copy**: `name`, `message`, `stack`, and the nested `cause` chain survive (depth-bounded); every other property is dropped, because SDK errors routinely retain the request payload (an axios-style `config.data`) and for an OTP email that payload contains the code. The cause never enters the HTTP response body either: `details` stays reserved for the structured, client-safe context shown above. To attach a cause in your own code, pass the options bag as the third constructor argument — `new NotificationException('EMAIL_SEND_FAILED', { providerName }, { cause: error })`; the positional `(key, details, status, message)` form keeps working.
 
-**If you send a secret through `EmailService` yourself — declare it.** A relay or DLP filter that quotes the rejected content puts the rendered body (and any secret inside it) into the provider error, which rides the `cause` into your logs. Pass `auditRedactValues: [code]` on the send input: the value is scrubbed from the attached `cause`, from the failed-audit `errorMessage`, and — forwarded as `EmailSendOptions.redactValues` — from the provider's own error logging. As defense-in-depth for the undeclared case, any run of 16+ characters of the rendered body detected inside a provider error is redacted automatically; a bare secret echoed without surrounding content is below that window, so declaration remains the only precise control.
+**If you send a secret through `EmailService` yourself — declare it, and treat the provider's error text as untrusted anyway.** A relay or DLP filter that quotes the rejected content puts the rendered body (and any secret inside it) into the provider error, which rides the `cause` into your logs. Pass `auditRedactValues: [code]` on the send input: the value is scrubbed from the attached `cause`, from the failed-audit `errorMessage`, and — forwarded as `EmailSendOptions.redactValues` — from the provider's own error logging. As defense-in-depth for the undeclared case, any run of 16+ characters of the rendered body detected inside a provider error is redacted automatically.
+
+**Know the ceiling of both guards.** They remove the shapes they can predict, and a relay quotes what it _transmitted_, not what you handed it — a MIME body travels raw, quoted-printable or base64. A declared `123456` cannot match `MTIzNDU2`, and echo detection compares the error against the rendered body it holds, not against the encoding the relay chose; measured, an error quoting the base64 of the body survives both. No list of values closes an encoding gap. So control whether provider error text reaches your logs at all for secret-bearing sends, and use declared values as precision on top of that rather than as the barrier. If you consume `@bymax-one/nest-auth` and bind its bundled `DefaultAuthEmailProvider`, that provider is the call site, so the declaration belongs there rather than in your application code; if you implement `nest-auth`'s email port yourself, your adapter is the call site and the declaration is yours to make.
 
 ### Reference adapters
 
