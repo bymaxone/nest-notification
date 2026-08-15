@@ -290,7 +290,7 @@ describe('NotificationAuditInterceptor', () => {
       firstValueFrom(interceptor.intercept(ctx, handlerOf(of('ok'))))
     ).rejects.toMatchObject({
       code: 'notification.audit_log_failed',
-      cause: auditError,
+      cause: { message: 'db down' },
       response: { error: { details: null } }
     })
   })

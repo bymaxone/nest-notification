@@ -30,6 +30,38 @@ const FALLBACK_DEFINITION: NotificationErrorDefinition = {
 }
 
 /**
+ * How deep the sanitized `cause` chain may nest. Matches the depth bounds of
+ * cause-walking log serializers and terminates self-referential chains.
+ */
+const MAX_CAUSE_DEPTH = 5
+
+/**
+ * Copies an error into a log-safe shape: `name`, `message`, `stack`, and the
+ * nested `cause` chain survive; every other property is dropped. Provider/SDK
+ * errors routinely retain the request payload in extra properties (e.g. an
+ * axios-style `config.data`), and for an OTP email that payload contains the
+ * code — so the raw object must never reach a cause-walking log serializer.
+ * Non-Error objects are flattened to their `String()` form for the same
+ * reason; primitives pass through (they are already message-equivalent).
+ */
+function toLogSafeCause(cause: unknown, depth = 0): unknown {
+  if (cause instanceof Error) {
+    const safe = new Error(cause.message)
+    // `defineProperty` keeps the copy shaped like a native Error: `name` and
+    // `cause` stay non-enumerable, so `Object.keys`/spread expose nothing.
+    Object.defineProperty(safe, 'name', { value: cause.name })
+    if (cause.stack !== undefined) {
+      safe.stack = cause.stack
+    }
+    if (depth < MAX_CAUSE_DEPTH && 'cause' in cause) {
+      Object.defineProperty(safe, 'cause', { value: toLogSafeCause(cause.cause, depth + 1) })
+    }
+    return safe
+  }
+  return typeof cause === 'object' && cause !== null ? String(cause) : cause
+}
+
+/**
  * Optional construction knobs, mirroring how `HttpException` itself moved its
  * positional arguments into an options object.
  */
@@ -40,8 +72,11 @@ export interface NotificationExceptionOptions {
   message?: string
   /**
    * The underlying error, exposed as the native `Error.cause` so log serializers
-   * can walk the chain. Never serialized into the HTTP response body. A falsy
-   * value is ignored — `HttpException` only installs a truthy cause.
+   * can walk the chain. Stored as a log-safe copy — `name`, `message`, `stack`,
+   * and the nested `cause` chain are preserved (depth-bounded); every other
+   * property is dropped so an SDK error that retains the request payload cannot
+   * leak an OTP-bearing body into logs. Never serialized into the HTTP response
+   * body. A falsy value is ignored — `HttpException` only installs a truthy cause.
    */
   cause?: unknown
 }
@@ -86,7 +121,7 @@ export class NotificationException extends HttpException {
       }
     }
     // `HttpException` only installs a truthy cause, so forwarding `undefined` is a no-op.
-    super(body, options.status ?? definition.status, { cause: options.cause })
+    super(body, options.status ?? definition.status, { cause: toLogSafeCause(options.cause) })
     this.code = definition.code
   }
 }

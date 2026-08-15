@@ -23,9 +23,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `HttpException` itself evolved; the positional `(key, details, status, message)` form keeps
   working unchanged. All five sites that previously discarded the underlying error now attach it:
   `EMAIL_SEND_FAILED`, `TEMPLATE_RENDER_FAILED`, and the three `AUDIT_LOG_FAILED` throw sites.
-  `NotificationExceptionOptions` is exported from the server subpath. One nuance, inherited from
-  Nest and documented on the option: `HttpException` installs only a _truthy_ cause, so a falsy
-  cause is silently ignored.
+  `NotificationExceptionOptions` is exported from the server subpath.
+
+  The cause is stored as a **log-safe copy**, not the raw object: `name`, `message`, `stack`, and
+  the nested `cause` chain survive (depth-bounded); every other property is dropped. Provider/SDK
+  errors routinely retain the request payload in extra properties (an axios-style `config.data`),
+  and for an OTP email that payload contains the code — attaching the raw object would have handed
+  a cause-walking serializer exactly what the never-log-codes rule exists to keep out of logs.
+  Non-Error object causes are flattened to their `String()` form for the same reason; primitives
+  pass through. One nuance, inherited from Nest and documented on the option: `HttpException`
+  installs only a _truthy_ cause, so a falsy cause is silently ignored.
 
 ### Fixed
 

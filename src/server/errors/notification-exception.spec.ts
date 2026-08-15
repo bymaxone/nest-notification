@@ -99,16 +99,119 @@ describe('NotificationException', () => {
   })
 
   // The underlying error must surface as the native `Error.cause` so cause-walking
-  // log serializers can report WHY a notification failed, not only WHAT failed.
-  it('should expose options.cause as Error.cause', () => {
+  // log serializers can report WHY a notification failed — but as a log-safe COPY
+  // (name/message/stack), never the raw object.
+  it('should expose options.cause as a log-safe Error.cause copy', () => {
     const cause = new Error('connect ECONNREFUSED 127.0.0.1:1099')
     const exception = new NotificationException(
       'EMAIL_SEND_FAILED',
       { providerName: 'smtp' },
       { cause }
     )
+    const stored = exception.cause as Error
 
-    expect(exception.cause).toBe(cause)
+    expect(stored).not.toBe(cause)
+    expect(stored).toBeInstanceOf(Error)
+    expect(stored.name).toBe(cause.name)
+    expect(stored.message).toBe(cause.message)
+    expect(stored.stack).toBe(cause.stack)
+  })
+
+  // SECURITY: provider/SDK errors routinely retain the request payload in extra
+  // properties (axios-style `config.data`) — for an OTP email that payload holds
+  // the code. Sanitization must drop every property beyond name/message/stack.
+  it('should drop extra properties from the cause so retained payloads cannot leak', () => {
+    const cause = Object.assign(new Error('request failed'), {
+      config: { data: '<p>Your code is 998877</p>' },
+      response: { body: 'code=998877' }
+    })
+    const exception = new NotificationException('EMAIL_SEND_FAILED', undefined, { cause })
+    const stored = exception.cause as Error
+
+    expect(JSON.stringify({ ...stored })).not.toContain('998877')
+    expect(Object.keys(stored)).toEqual([])
+    expect(stored.message).toBe('request failed')
+  })
+
+  // The nested cause chain survives sanitization level by level — each link keeps
+  // name/message and loses its extra properties.
+  it('should sanitize the nested cause chain recursively', () => {
+    const inner = Object.assign(new Error('inner detail'), { payload: 'code=998877' })
+    const outer = new Error('outer failure', { cause: inner })
+    const exception = new NotificationException('EMAIL_SEND_FAILED', undefined, { cause: outer })
+    const storedInner = (exception.cause as Error).cause as Error
+
+    expect(storedInner).not.toBe(inner)
+    expect(storedInner.message).toBe('inner detail')
+    expect(Object.keys(storedInner)).toEqual([])
+  })
+
+  // A self-referential cause chain must terminate at the depth bound instead of
+  // recursing forever — pins the MAX_CAUSE_DEPTH boundary exactly.
+  it('should bound the sanitized cause chain depth', () => {
+    const cyclic = new Error('loops')
+    cyclic.cause = cyclic
+    const exception = new NotificationException('EMAIL_SEND_FAILED', undefined, { cause: cyclic })
+
+    let depth = 0
+    let cursor: unknown = exception.cause
+    while (cursor instanceof Error && 'cause' in cursor) {
+      depth += 1
+      cursor = cursor.cause
+    }
+    // Levels 0..4 carry a `cause` link; the level-5 copy is the bounded leaf.
+    expect(depth).toBe(5)
+    expect(cursor instanceof Error && 'cause' in cursor).toBe(false)
+  })
+
+  // An Error whose stack was stripped must not poison the copy with an
+  // `undefined` stack — the copy keeps its own defined stack string.
+  it('should keep a defined stack when the original error has none', () => {
+    const bare = new Error('no stack')
+    delete bare.stack
+    const exception = new NotificationException('EMAIL_SEND_FAILED', undefined, { cause: bare })
+    const stored = exception.cause as Error
+
+    expect(stored.message).toBe('no stack')
+    expect(typeof stored.stack).toBe('string')
+  })
+
+  // An Error without a cause of its own must produce a copy with NO `cause` key
+  // at all — never a phantom `cause: undefined`.
+  it('should not install a cause key on a sanitized error that has none', () => {
+    const exception = new NotificationException('EMAIL_SEND_FAILED', undefined, {
+      cause: new Error('flat')
+    })
+
+    expect('cause' in (exception.cause as Error)).toBe(false)
+  })
+
+  // A non-Error OBJECT cause is flattened to its String() form — an arbitrary
+  // object can retain payloads just like an SDK error, so it never passes raw.
+  it('should flatten a non-Error object cause to its string form', () => {
+    const exception = new NotificationException('EMAIL_SEND_FAILED', undefined, {
+      cause: { data: 'code=998877' }
+    })
+
+    expect(exception.cause).toBe('[object Object]')
+  })
+
+  // A CUSTOM error name must survive the copy — pins the `name` transfer against
+  // the prototype default masking it (every `new Error` is already named 'Error').
+  it('should preserve a custom error name on the sanitized cause', () => {
+    const cause = new Error('refused')
+    cause.name = 'SmtpConnectionError'
+    const exception = new NotificationException('EMAIL_SEND_FAILED', undefined, { cause })
+
+    expect((exception.cause as Error).name).toBe('SmtpConnectionError')
+  })
+
+  // A `null` cause must pass through verbatim (falsy → never installed), NOT be
+  // flattened to the truthy string 'null' — pins the `!== null` guard.
+  it('should not install a null cause', () => {
+    const exception = new NotificationException('EMAIL_SEND_FAILED', undefined, { cause: null })
+
+    expect('cause' in exception).toBe(false)
   })
 
   // SECURITY: the cause carries internal error text and must never leak into the

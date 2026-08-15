@@ -41,7 +41,8 @@ const ref = { tenantId: 'tenant_a', recipient: 'jane@acme.com', purpose: 'email_
 
 /**
  * Serializes an error the way a cause-walking log serializer would: message,
- * stack, HTTP response body, and every nested `cause`, recursively.
+ * stack, enumerable own properties, HTTP response body, and every nested
+ * `cause`, recursively.
  */
 const serializeErrorChain = (error: unknown): string => {
   if (error === null || typeof error !== 'object') {
@@ -51,6 +52,7 @@ const serializeErrorChain = (error: unknown): string => {
   return [
     chained.message,
     chained.stack ?? '',
+    JSON.stringify({ ...chained }),
     typeof chained.getResponse === 'function' ? JSON.stringify(chained.getResponse()) : '',
     'cause' in chained ? serializeErrorChain(chained.cause) : ''
   ].join('\n')
@@ -316,7 +318,7 @@ describe('OtpService.generate', () => {
       await service.generate({ ...ref, deliverVia: 'manual' })
     } catch (error) {
       expect((error as NotificationException).code).toBe('notification.audit_log_failed')
-      expect((error as NotificationException).cause).toBe(auditError)
+      expect((error as NotificationException).cause).toMatchObject({ message: 'db down' })
       const response = (
         error as { getResponse: () => { error: { details: unknown } } }
       ).getResponse()

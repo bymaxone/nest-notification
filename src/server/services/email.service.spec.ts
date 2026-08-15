@@ -353,7 +353,7 @@ describe('EmailService.send', () => {
       await service.send(baseInput)
     } catch (error) {
       expect((error as NotificationException).code).toBe('notification.email_send_failed')
-      expect((error as NotificationException).cause).toBe(providerError)
+      expect((error as NotificationException).cause).toMatchObject({ message: 'smtp down' })
       const details = (
         error as { getResponse: () => { error: { details: Record<string, unknown> } } }
       ).getResponse().error.details
@@ -362,6 +362,34 @@ describe('EmailService.send', () => {
     expect(audit.create).toHaveBeenCalledWith(
       expect.objectContaining({ verb: 'failed', errorMessage: 'smtp down' })
     )
+  })
+
+  // SECURITY (regression): an SDK error that retains the request payload — the
+  // rendered OTP-bearing body — in its own properties or a nested cause must
+  // reach the thrown exception stripped to name/message/stack, so a
+  // cause-walking log serializer cannot leak the code.
+  it('should strip a payload-retaining provider error before it becomes the cause', async () => {
+    const provider = makeProvider()
+    const providerError = Object.assign(new Error('request failed'), {
+      config: { data: '<p>Your code is 998877</p>' },
+      cause: Object.assign(new Error('socket closed'), { buffer: 'code=998877' })
+    })
+    provider.send.mockRejectedValue(providerError)
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), makeAudit())
+
+    const error: unknown = await service
+      .send({ ...baseInput, html: '<p>Your code is 998877</p>' })
+      .catch((thrown: unknown) => thrown)
+
+    const chain: string[] = []
+    let cursor: unknown = error
+    while (cursor instanceof Error) {
+      chain.push(cursor.message, cursor.stack ?? '', JSON.stringify({ ...cursor }))
+      cursor = 'cause' in cursor ? cursor.cause : undefined
+    }
+    expect(error).toBeInstanceOf(NotificationException)
+    expect(chain.join('\n')).not.toContain('998877')
+    expect(chain.join('\n')).toContain('socket closed')
   })
 
   // A non-Error provider rejection is stringified for the audit message.
@@ -406,7 +434,7 @@ describe('EmailService.send', () => {
       await service.send(baseInput)
     } catch (error) {
       expect((error as NotificationException).code).toBe('notification.audit_log_failed')
-      expect((error as NotificationException).cause).toBe(auditError)
+      expect((error as NotificationException).cause).toMatchObject({ message: 'db down' })
       const response = (
         error as { getResponse: () => { error: { details: unknown } } }
       ).getResponse()
@@ -631,7 +659,7 @@ describe('EmailService.sendTemplate', () => {
       await service.sendTemplate({ tenantId: 't', to: 'a@x.com', template: 'welcome', data: {} })
     } catch (error) {
       expect((error as NotificationException).code).toBe('notification.template_render_failed')
-      expect((error as NotificationException).cause).toBe(rendererError)
+      expect((error as NotificationException).cause).toMatchObject({ message: 'bad syntax' })
       const details = (
         error as { getResponse: () => { error: { details: Record<string, unknown> } } }
       ).getResponse().error.details
