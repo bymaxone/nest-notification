@@ -223,6 +223,23 @@ describe('NotificationException', () => {
     expect(JSON.stringify(exception.getResponse())).not.toContain('internal storage detail')
   })
 
+  // A hostile cause whose fields THROW when read must not break construction —
+  // the sanitizer falls back to a minimal, non-sensitive cause instead of
+  // letting the getter's (potentially secret-bearing) error escape.
+  it('should fall back to a minimal cause when inspecting the original throws', () => {
+    const hostile = new Error('shell')
+    Object.defineProperty(hostile, 'message', {
+      get: (): never => {
+        throw new Error('getter leaked 998877')
+      }
+    })
+
+    const exception = new NotificationException('EMAIL_SEND_FAILED', undefined, { cause: hostile })
+
+    expect((exception.cause as Error).message).toBe('Cause unavailable: inspecting it threw')
+    expect(JSON.stringify(exception.getResponse())).not.toContain('998877')
+  })
+
   // The sanitized copies stay writable so a downstream secret scrub can still
   // redact them — pins the `writable` descriptors on `name` and `cause`.
   it('should keep sanitized cause copies writable for downstream scrubs', () => {

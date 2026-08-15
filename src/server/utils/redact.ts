@@ -63,11 +63,10 @@ export function scrubValuesFromErrorChain(error: unknown, values: readonly strin
     if (cursor === error) {
       headRepresentative = link.representative
     }
-    const next: unknown = cursor.cause
-    if (!link.hasCause || !(next instanceof Error)) {
+    if (!link.hasCause || !(link.rawCause instanceof Error)) {
       break
     }
-    cursor = next
+    cursor = link.rawCause
   }
   wireCauses(chain, values, seen)
   return headRepresentative
@@ -89,7 +88,7 @@ function wireCauses(
     if (!link.hasCause) {
       continue
     }
-    const raw: unknown = link.node.cause
+    const raw: unknown = link.rawCause
     let childRepresentative: unknown
     if (raw instanceof Error) {
       childRepresentative = seen.get(raw)
@@ -98,7 +97,7 @@ function wireCauses(
     } else {
       childRepresentative = redactValues(String(raw), values)
     }
-    if (link.inPlace) {
+    if (link.representative === link.node) {
       Reflect.set(link.node, 'cause', childRepresentative)
     } else {
       Object.defineProperty(link.representative, 'cause', {
@@ -113,37 +112,51 @@ function wireCauses(
 interface ChainLink {
   node: Error
   representative: Error
-  inPlace: boolean
   hasCause: boolean
+  /** The cause value captured ONCE in pass 1 — pass 2 never re-reads the node. */
+  rawCause: unknown
 }
 
 /**
  * Scrubs one link's own fields and registers its representative in `seen` —
  * the node itself when it accepted every write, a redacted copy otherwise.
+ * Every read and write on the node sits inside the guard: a hostile getter or
+ * proxy trap that throws yields a MINIMAL redacted copy instead of letting a
+ * secret-bearing error escape the scrub.
  */
 function registerLink(
   node: Error,
   values: readonly string[],
   seen: WeakMap<Error, Error>
 ): ChainLink {
-  const name = redactValues(node.name, values)
-  const message = redactValues(node.message, values)
-  const stack = node.stack === undefined ? undefined : redactValues(node.stack, values)
-  const hasCause = 'cause' in node
-  // `Reflect.set` reports failure instead of throwing. The final clause is a
-  // writability PROBE (a same-value write): it proves upfront that the later
-  // child-representative write cannot fail. The `name` write is skipped when
-  // the value is unchanged, so a default-named error does not gain an own
-  // enumerable `name` the strip just removed.
-  const inPlace =
-    stripExtraProperties(node, values) &&
-    (node.name === name || Reflect.set(node, 'name', name)) &&
-    Reflect.set(node, 'message', message) &&
-    (stack === undefined || Reflect.set(node, 'stack', stack)) &&
-    (!hasCause || Reflect.set(node, 'cause', node.cause))
-  const representative = inPlace ? node : buildRedactedCopy(name, message, stack)
-  seen.set(node, representative)
-  return { node, representative, inPlace, hasCause }
+  try {
+    const name = redactValues(node.name, values)
+    const message = redactValues(node.message, values)
+    const stack = node.stack === undefined ? undefined : redactValues(node.stack, values)
+    const hasCause = 'cause' in node
+    const rawCause: unknown = hasCause ? node.cause : undefined
+    // `Reflect.set` reports failure instead of throwing on ordinary objects.
+    // The final clause both PROBES the `cause` slot and CLEARS it: after a
+    // successful write of `undefined`, the pass-2 rewire lands on an ordinary
+    // writable property, and if pass 2 could not run the node ends truncated
+    // rather than pointing at an unredacted original. The `name` write is
+    // skipped when the value is unchanged, so a default-named error does not
+    // gain an own enumerable `name` the strip just removed.
+    const inPlace =
+      stripExtraProperties(node, values) &&
+      (node.name === name || Reflect.set(node, 'name', name)) &&
+      Reflect.set(node, 'message', message) &&
+      (stack === undefined || Reflect.set(node, 'stack', stack)) &&
+      (!hasCause || Reflect.set(node, 'cause', undefined))
+    const representative = inPlace ? node : buildRedactedCopy(name, message, stack)
+    seen.set(node, representative)
+    return { node, representative, hasCause, rawCause }
+  } catch {
+    // Introspection or mutation threw: nothing readable, nothing leaked.
+    const representative = buildRedactedCopy('Error', REDACTED_VALUE, undefined)
+    seen.set(node, representative)
+    return { node, representative, hasCause: false, rawCause: undefined }
+  }
 }
 
 /**
@@ -230,14 +243,33 @@ function collectOwnEntries(source: object): Array<[string, PropertyDescriptor]> 
  * @returns `false` when a property resists deletion or the response slot
  * resists replacement — the caller must fall back to a copy.
  */
+/**
+ * Own properties a `NotificationException` needs to keep working — the HTTP
+ * body, the status, the Nest options bag, and the stable code. `name`,
+ * `message`, and `cause` need no entry: the register step rewrites them right
+ * after the strip. Anything else on the instance is consumer-added and gets
+ * deleted like on any other error.
+ */
+const EXCEPTION_CONTRACT_KEYS = new Set(['response', 'status', 'options', 'code'])
+
 function stripExtraProperties(node: Error, values: readonly string[]): boolean {
-  if (node instanceof NotificationException) {
-    return Reflect.set(node, 'response', cloneRedacted(node.getResponse(), values))
-  }
   try {
-    return Object.keys(node).every((key) => key === 'cause' || Reflect.deleteProperty(node, key))
+    if (node instanceof NotificationException) {
+      // The contract fields stay; the response is swapped for a redacted
+      // clone; consumer-added extras (`Object.assign(exception, { entry })`)
+      // are deleted — they can carry the secret like on any raw error.
+      return (
+        Reflect.set(node, 'response', cloneRedacted(node.getResponse(), values)) &&
+        Object.keys(node).every(
+          (key) => EXCEPTION_CONTRACT_KEYS.has(key) || Reflect.deleteProperty(node, key)
+        )
+      )
+    }
+    // Deleting `cause` too is fine: it was captured before the strip, the
+    // probe recreates the slot, and pass 2 rewires it.
+    return Object.keys(node).every((key) => Reflect.deleteProperty(node, key))
   } catch {
-    // Property discovery itself threw (a Proxy trap): fail closed to the copy.
+    // Property discovery or a trap threw: fail closed to the copy path.
     return false
   }
 }

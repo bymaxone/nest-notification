@@ -36,6 +36,13 @@ const FALLBACK_DEFINITION: NotificationErrorDefinition = {
 const MAX_CAUSE_DEPTH = 5
 
 /**
+ * Message of the fallback cause installed when INSPECTING the original cause
+ * threw — a hostile getter or proxy trap must never replace the exception
+ * being constructed.
+ */
+const UNREADABLE_CAUSE_MESSAGE = 'Cause unavailable: inspecting it threw'
+
+/**
  * Copies an error into a log-safe shape: `name`, `message`, `stack`, and the
  * nested `cause` chain survive; every other property is dropped. Provider/SDK
  * errors routinely retain the request payload in extra properties (e.g. an
@@ -45,6 +52,18 @@ const MAX_CAUSE_DEPTH = 5
  * reason; primitives pass through (they are already message-equivalent).
  */
 function toLogSafeCause(cause: unknown, depth = 0): unknown {
+  try {
+    return copyLogSafeCause(cause, depth)
+  } catch {
+    // A hostile getter or proxy trap threw while the cause was being read;
+    // fall back to a minimal, non-sensitive cause instead of letting that
+    // error escape the constructor.
+    return new Error(UNREADABLE_CAUSE_MESSAGE)
+  }
+}
+
+/** Unguarded worker for {@link toLogSafeCause} — may throw on hostile causes. */
+function copyLogSafeCause(cause: unknown, depth: number): unknown {
   if (cause instanceof Error) {
     const safe = new Error(cause.message)
     // `defineProperty` keeps the copy shaped like a native Error: `name` and

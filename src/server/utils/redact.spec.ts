@@ -348,6 +348,60 @@ describe('scrubValuesFromErrorChain', () => {
     expect(JSON.stringify(exception.getResponse())).not.toContain('555')
   })
 
+  // SECURITY (regression): an error whose OWN field getters throw must yield a
+  // minimal redacted copy — the hostile getter's (potentially secret-bearing)
+  // error must never escape the scrub.
+  it('should represent an error with throwing field getters by a minimal copy', () => {
+    const hostile = new Error('shell')
+    Object.defineProperty(hostile, 'message', {
+      get: (): never => {
+        throw new Error('getter leaked 555')
+      }
+    })
+
+    const returned = scrubValuesFromErrorChain(hostile, ['555']) as Error
+
+    expect(returned).not.toBe(hostile)
+    expect(returned.message).toBe(REDACTED_VALUE)
+    expect(returned.name).toBe('Error')
+    expect('cause' in returned).toBe(false)
+  })
+
+  // SECURITY (regression): consumer-added enumerable extras on a
+  // NotificationException (`Object.assign(exception, { entry })`) are deleted —
+  // they can carry the secret just like on a raw error — while the contract
+  // fields all survive the strip-and-rewrite.
+  it('should strip consumer-added extras from a NotificationException', () => {
+    const exception = Object.assign(
+      new NotificationException('EMAIL_SEND_FAILED', { providerName: 'smtp' }),
+      { entry: { code: '555' } }
+    )
+
+    const returned = scrubValuesFromErrorChain(exception, ['555'])
+
+    expect(returned).toBe(exception)
+    expect('entry' in exception).toBe(false)
+    expect(exception.code).toBe('notification.email_send_failed')
+    expect(exception.getStatus()).toBe(502)
+    expect('options' in exception).toBe(true)
+    expect(exception.message).toBe('Notification Exception')
+    expect(exception.name).toBe('NotificationException')
+    expect(JSON.stringify({ ...exception })).not.toContain('555')
+  })
+
+  // A NON-DELETABLE consumer extra forces the whole exception down the copy
+  // path — losing the class beats leaking the payload.
+  it('should copy a NotificationException with a non-deletable extra', () => {
+    const exception = new NotificationException('EMAIL_SEND_FAILED')
+    Object.defineProperty(exception, 'entry', { value: { code: '555' }, enumerable: true })
+
+    const returned = scrubValuesFromErrorChain(exception, ['555']) as Error
+
+    expect(returned).not.toBe(exception)
+    expect(returned).toBeInstanceOf(Error)
+    expect(JSON.stringify({ ...returned })).not.toContain('555')
+  })
+
   // SECURITY (regression): a hostile enumerable GETTER in consumer details
   // must never be invoked — a getter that throws a secret-bearing error would
   // otherwise escape mid-clone and replace the failure being scrubbed. The

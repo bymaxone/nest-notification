@@ -196,8 +196,8 @@ ineffective.
 | Metric             | Value         |
 | ------------------ | ------------- |
 | **Mutation score** | **100.00 %**  |
-| Viable mutants     | 1061          |
-| Killed / timeout   | 1052 / 9      |
+| Viable mutants     | 1060          |
+| Killed / timeout   | 1051 / 9      |
 | Surviving mutants  | 0             |
 | Break threshold    | 100 % -> PASS |
 
