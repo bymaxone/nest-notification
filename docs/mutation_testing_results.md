@@ -188,3 +188,31 @@ Where a `// Stryker disable next-line` directive was found not to apply — abov
 builder chain — it was replaced with the block `disable`/`restore` form, or, where that does not
 work either, with a plain comment at the line so the reasoning is visible rather than silently
 ineffective.
+
+---
+
+## Re-run — 2026-08-14 (after the `Error.cause` change, 1.2.0)
+
+| Metric             | Value         |
+| ------------------ | ------------- |
+| **Mutation score** | **100.00 %**  |
+| Viable mutants     | 921           |
+| Killed / timeout   | 919 / 2       |
+| Surviving mutants  | 0             |
+| Break threshold    | 100 % -> PASS |
+
+The 1.2.0 change added a discriminated branch to `NotificationException` (the third constructor
+parameter accepts `HttpStatus | NotificationExceptionOptions`, split on `typeof === 'number'`) and
+rewired five throw sites to forward the underlying error as `Error.cause`. All new mutants die
+without a single new suppression:
+
+- The `typeof` discriminator is pinned from both sides — a mutant forcing the number path breaks
+  the options-object tests (status/message/cause), and one forcing the object path breaks the
+  legacy positional-status test.
+- The `{ cause: options.cause }` forwarding is pinned by the cause-exposure test; the emptied-object
+  mutant fails it. No conditional guards the forwarding — `HttpException` installs only a truthy
+  cause, so unconditionally passing `undefined` is a no-op and leaves no equivalent-mutant surface.
+- The never-log-codes gate deepened to match the new chain: the thrown exception is serialized
+  recursively (message, stack, response body, every nested `cause`) and the plaintext OTP code is
+  asserted absent at every depth, so a mutant that leaks the code into any level of the chain fails
+  the gate rather than hiding below the top-level message.
