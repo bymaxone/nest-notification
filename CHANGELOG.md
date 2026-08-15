@@ -5,7 +5,7 @@ All notable changes to `@bymax-one/nest-notification` will be documented in this
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.2.2] - 2026-08-16
+## [1.2.2] - 2026-08-15
 
 ### Documentation
 
@@ -44,15 +44,19 @@ makes a reader feel safer than they are.
 - The residual risk this leaves is tracked for a behaviour change rather than another note, and
   the shape of that change is open. What the measurements above establish is the direction: value
   redaction is a **blacklist** — it must predict the form the secret takes, and it loses to any
-  form it did not predict. A grammar-bounded extraction is a **whitelist**: publish only the SMTP
-  basic status and, when present, the RFC 3463 enhanced code, so the output alphabet is digits and
-  dots and cannot carry body content whatever the input held. The open questions are whether the
-  status codes alone carry enough diagnosis for non-OTP mail (a `550` content rejection and a
-  `550` blocklisted sender call for opposite actions, which the enhanced code distinguishes but
-  the basic one does not), and whether publishing the enhanced code is itself acceptable — with
-  punctuation stripped, `550 5.7.1` reads as `550571`, the shape of a live six-digit code, which
-  is why `@bymax-one/nest-auth` chose to drop it on their own line. Both positions come from teams
-  that measured. Nothing here is decided.
+  form it did not predict. Publishing only what a fixed grammar can express — the SMTP basic
+  status and, when present, the RFC 3463 enhanced code — is a **whitelist**, and the property that
+  makes it safe is that its output is **independent of the secret**, not that its alphabet differs
+  from the secret's. The distinction is testable in three lines: the same relay reply publishes
+  `550 5.7.1` whether the code was `550571`, `123456` or absent entirely, so an observer learns
+  nothing about it. Punctuation-stripping `550 5.7.1` does yield `550571`, the shape of a live
+  six-digit code — a coincidence rather than a disclosure, but one with a real operational cost,
+  because a log rule alerting on digit runs fires on every such reply. Publishing the codes as
+  structured fields rather than interpolated into a message string keeps that cost from arising.
+  What stays genuinely open is how much diagnosis a general channel needs: for auth mail the
+  provider's prose is never diagnostic, which is why `@bymax-one/nest-auth` publishes none of it,
+  while for the same installation's receipts and marketing a `550` content rejection and a `550`
+  blocklisted sender call for opposite actions. Nothing here is decided.
 
 ## [1.2.1] - 2026-08-15
 
