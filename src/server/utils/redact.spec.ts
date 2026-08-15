@@ -254,8 +254,9 @@ describe('scrubValuesFromErrorChain', () => {
     expect(JSON.stringify({ ...returned })).not.toContain('555')
   })
 
-  // A NotificationException is exempt from stripping: its own properties
-  // (code, response, status) are the HTTP contract and safe by construction.
+  // A NotificationException keeps its contract properties (code, response,
+  // status) — never stripped, since consumers and the Nest filter rely on the
+  // shape — while benign detail values pass through unchanged.
   it('should keep the NotificationException contract properties intact', () => {
     const exception = new NotificationException(
       'EMAIL_SEND_FAILED',
@@ -271,6 +272,47 @@ describe('scrubValuesFromErrorChain', () => {
       error: { details: { providerName: 'smtp' } }
     })
     expect((exception.cause as Error).message).toBe(`boom ${REDACTED_VALUE}`)
+  })
+
+  // SECURITY (regression): a CONSUMER-constructed NotificationException may
+  // carry the secret in caller-supplied details — the response body is
+  // deep-redacted (nested objects, arrays, and numeric forms included), not
+  // trusted by class.
+  it('should deep-redact secrets inside a NotificationException response', () => {
+    const exception = new NotificationException('OTP_STORAGE_NOT_CONFIGURED', {
+      code: '555',
+      nested: { dump: 'entry code=555' },
+      list: ['x', '555'],
+      numeric: 555,
+      big: 555n,
+      benign: 42
+    })
+
+    scrubValuesFromErrorChain(exception, ['555'])
+
+    const details = (exception.getResponse() as { error: { details: Record<string, unknown> } })
+      .error.details
+    expect(details.code).toBe(REDACTED_VALUE)
+    expect(details.nested).toEqual({ dump: `entry code=${REDACTED_VALUE}` })
+    expect(details.list).toEqual(['x', REDACTED_VALUE])
+    expect(details.numeric).toBe(REDACTED_VALUE)
+    expect(details.big).toBe(REDACTED_VALUE)
+    // A number that does not carry the secret keeps its type and value.
+    expect(details.benign).toBe(42)
+    expect(JSON.stringify(exception.getResponse())).not.toContain('555')
+  })
+
+  // Cyclic caller-supplied details must not hang the deep redaction.
+  it('should terminate on cyclic NotificationException details', () => {
+    const details: Record<string, unknown> = { code: '555' }
+    details.self = details
+    const exception = new NotificationException('OTP_STORAGE_NOT_CONFIGURED', details)
+
+    expect(() => scrubValuesFromErrorChain(exception, ['555'])).not.toThrow()
+    expect(
+      (exception.getResponse() as { error: { details: Record<string, unknown> } }).error.details
+        .code
+    ).toBe(REDACTED_VALUE)
   })
 
   // `name` is emitted by error serializers just like `message` — a secret

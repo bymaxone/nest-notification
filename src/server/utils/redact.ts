@@ -47,19 +47,51 @@ export function scrubValuesFromErrorChain(error: unknown, values: readonly strin
 }
 
 /**
+ * Redacts every string reachable inside a plain data object, in place —
+ * nested objects and arrays included. A numeric value whose string form
+ * carries a secret is replaced by the redaction marker outright. Cycles are
+ * tolerated via the `visited` set; writes go through `Reflect.set`, so a
+ * read-only slot degrades to best-effort.
+ */
+function redactStringsDeep(
+  target: unknown,
+  values: readonly string[],
+  visited: WeakSet<object>
+): void {
+  if (typeof target !== 'object' || target === null || visited.has(target)) {
+    return
+  }
+  visited.add(target)
+  for (const [key, value] of Object.entries(target)) {
+    if (typeof value === 'string') {
+      Reflect.set(target, key, redactValues(value, values))
+    } else if (typeof value === 'number' || typeof value === 'bigint') {
+      if (redactValues(String(value), values) !== String(value)) {
+        Reflect.set(target, key, REDACTED_VALUE)
+      }
+    } else {
+      redactStringsDeep(value, values, visited)
+    }
+  }
+}
+
+/**
  * Deletes payload-bearing own enumerable properties from an arbitrary error —
  * a storage may reject with `Object.assign(new Error(...), { entry })`, and
  * `entry` carries the code. `cause` is kept (it is the chain being walked);
  * `name`/`message`/`stack` are rewritten right after, so deleting an
- * enumerable variant of them is harmless. A `NotificationException` is
- * exempt: its own properties are required by the HTTP contract and safe by
- * construction (catalog body, sanitized cause).
+ * enumerable variant of them is harmless. A `NotificationException` keeps its
+ * contract properties (code, response, status — the HTTP shape consumers and
+ * the Nest exception filter rely on), but its response body is deep-redacted
+ * instead of trusted: a CONSUMER-constructed instance may carry the secret in
+ * caller-supplied `details`.
  *
  * @returns `false` when a property resists deletion — the caller must fall
  * back to a copy, which drops extras inherently.
  */
-function stripExtraProperties(node: Error): boolean {
+function stripExtraProperties(node: Error, values: readonly string[]): boolean {
   if (node instanceof NotificationException) {
+    redactStringsDeep(node.getResponse(), values, new WeakSet<object>())
     return true
   }
   return Object.keys(node).every((key) => key === 'cause' || Reflect.deleteProperty(node, key))
@@ -112,7 +144,7 @@ function scrubNode(
   // The `name` write is skipped when the value is unchanged, so a default-named
   // error does not gain an own enumerable `name` the strip just removed.
   const inPlace =
-    stripExtraProperties(node) &&
+    stripExtraProperties(node, values) &&
     (node.name === name || Reflect.set(node, 'name', name)) &&
     Reflect.set(node, 'message', message) &&
     (stack === undefined || Reflect.set(node, 'stack', stack)) &&

@@ -533,6 +533,31 @@ describe('OtpService.generate', () => {
     }
   })
 
+  // SECURITY (regression): a custom storage may reject with its OWN
+  // NotificationException carrying the code in caller-supplied details — the
+  // instance is preserved (consumers branch on it) but its response body is
+  // deep-redacted before the rethrow.
+  it('should redact a consumer NotificationException rejection from storage', async () => {
+    let leakedCode = ''
+    jest
+      .spyOn(storage, 'set')
+      .mockImplementation(async (_tenantId, _recipient, _purpose, entry) => {
+        leakedCode = entry.code
+        throw new NotificationException('OTP_STORAGE_NOT_CONFIGURED', { code: entry.code })
+      })
+    const service = new OtpService(makeOptions(), storage, audit, emailServiceStub)
+
+    const caught: unknown = await service
+      .generate({ ...ref, deliverVia: 'manual' })
+      .catch((error: unknown) => error)
+
+    expect(caught).toBeInstanceOf(NotificationException)
+    expect(serializeErrorChain(caught).includes(leakedCode)).toBe(false)
+    for (const call of audit.create.mock.calls) {
+      expect(JSON.stringify(call[0]).includes(leakedCode)).toBe(false)
+    }
+  })
+
   // SECURITY: the plaintext code must never appear in any audit entry.
   it('should never place the code in audit metadata', async () => {
     const service = new OtpService(makeOptions(), storage, audit)
