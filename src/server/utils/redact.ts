@@ -43,41 +43,141 @@ export function redactValues(text: string, values: readonly string[]): string {
  * redacted copy when it did not.
  */
 export function scrubValuesFromErrorChain(error: unknown, values: readonly string[]): unknown {
-  return scrubNode(error, values, new WeakMap<Error, unknown>())
+  if (!(error instanceof Error)) {
+    if (error === undefined || error === null) {
+      return error
+    }
+    return redactValues(String(error), values)
+  }
+  const seen = new WeakMap<Error, Error>()
+  const chain: ChainLink[] = []
+  let headRepresentative: Error = error
+  let cursor: Error = error
+  // Pass 1 — register a representative for every link. The walk is iterative,
+  // so an adversarially deep chain is bounded by heap, never by the call
+  // stack (a RangeError here would REPLACE the failure being scrubbed). It
+  // ends on a non-Error tail or a back-edge to an already-registered node.
+  while (!seen.has(cursor)) {
+    const link = registerLink(cursor, values, seen)
+    chain.push(link)
+    if (cursor === error) {
+      headRepresentative = link.representative
+    }
+    const next: unknown = cursor.cause
+    if (!link.hasCause || !(next instanceof Error)) {
+      break
+    }
+    cursor = next
+  }
+  // Pass 2 — wire each link's cause to its child's representative (or the
+  // flattened form of a non-Error tail). Every representative is registered
+  // already, so a cyclic back-edge resolves without recursion.
+  for (const link of chain) {
+    if (!link.hasCause) {
+      continue
+    }
+    const raw: unknown = link.node.cause
+    let childRepresentative: unknown
+    if (raw instanceof Error) {
+      childRepresentative = seen.get(raw)
+    } else if (raw === undefined || raw === null) {
+      childRepresentative = raw
+    } else {
+      childRepresentative = redactValues(String(raw), values)
+    }
+    if (link.inPlace) {
+      Reflect.set(link.node, 'cause', childRepresentative)
+    } else {
+      Object.defineProperty(link.representative, 'cause', {
+        value: childRepresentative,
+        writable: true
+      })
+    }
+  }
+  return headRepresentative
+}
+
+/** One walked link — the original node paired with its scrubbed representative. */
+interface ChainLink {
+  node: Error
+  representative: Error
+  inPlace: boolean
+  hasCause: boolean
+}
+
+/**
+ * Scrubs one link's own fields and registers its representative in `seen` —
+ * the node itself when it accepted every write, a redacted copy otherwise.
+ */
+function registerLink(
+  node: Error,
+  values: readonly string[],
+  seen: WeakMap<Error, Error>
+): ChainLink {
+  const name = redactValues(node.name, values)
+  const message = redactValues(node.message, values)
+  const stack = node.stack === undefined ? undefined : redactValues(node.stack, values)
+  const hasCause = 'cause' in node
+  // `Reflect.set` reports failure instead of throwing. The final clause is a
+  // writability PROBE (a same-value write): it proves upfront that the later
+  // child-representative write cannot fail. The `name` write is skipped when
+  // the value is unchanged, so a default-named error does not gain an own
+  // enumerable `name` the strip just removed.
+  const inPlace =
+    stripExtraProperties(node, values) &&
+    (node.name === name || Reflect.set(node, 'name', name)) &&
+    Reflect.set(node, 'message', message) &&
+    (stack === undefined || Reflect.set(node, 'stack', stack)) &&
+    (!hasCause || Reflect.set(node, 'cause', node.cause))
+  const representative = inPlace ? node : buildRedactedCopy(name, message, stack)
+  seen.set(node, representative)
+  return { node, representative, inPlace, hasCause }
 }
 
 /**
  * Builds a redacted CLONE of a plain data tree — fresh objects and arrays all
  * the way down, so a frozen or read-only original can never defeat the
- * redaction (cloning only READS the source). Strings are redacted; a numeric
- * or bigint value whose string form carries a secret becomes the redaction
- * marker; other primitives pass through. Cycles clone into cycles via the
- * `seen` map.
+ * redaction (cloning only READS the source). Keys are redacted like values —
+ * a secret can ride a property NAME — and defined via `defineProperty`, so a
+ * `__proto__` key becomes a harmless own property instead of a prototype
+ * write. Strings are redacted; a numeric or bigint value whose string form
+ * carries a secret becomes the redaction marker; other primitives pass
+ * through. Cycles clone into cycles via the `seen` map, and the traversal is
+ * iterative (an explicit work list), so depth is bounded by heap, not by the
+ * call stack.
  */
-function cloneRedacted(
-  target: unknown,
-  values: readonly string[],
-  seen: WeakMap<object, unknown>
-): unknown {
-  if (typeof target === 'string') {
-    return redactValues(target, values)
-  }
-  if (typeof target === 'number' || typeof target === 'bigint') {
-    return redactValues(String(target), values) === String(target) ? target : REDACTED_VALUE
-  }
-  if (typeof target !== 'object' || target === null) {
+function cloneRedacted(root: unknown, values: readonly string[]): unknown {
+  const seen = new WeakMap<object, object>()
+  const pending: Array<{ source: object; target: object }> = []
+  const cloneValue = (value: unknown): unknown => {
+    if (typeof value === 'string') {
+      return redactValues(value, values)
+    }
+    if (typeof value === 'number' || typeof value === 'bigint') {
+      return redactValues(String(value), values) === String(value) ? value : REDACTED_VALUE
+    }
+    if (typeof value !== 'object' || value === null) {
+      return value
+    }
+    const existing = seen.get(value)
+    if (existing !== undefined) {
+      return existing
+    }
+    const target: object = Array.isArray(value) ? [] : {}
+    seen.set(value, target)
+    pending.push({ source: value, target })
     return target
   }
-  const existing = seen.get(target)
-  if (existing !== undefined) {
-    return existing
+  const result = cloneValue(root)
+  for (let entry = pending.pop(); entry !== undefined; entry = pending.pop()) {
+    for (const [key, value] of Object.entries(entry.source)) {
+      Object.defineProperty(entry.target, redactValues(key, values), {
+        value: cloneValue(value),
+        enumerable: true
+      })
+    }
   }
-  const clone: object = Array.isArray(target) ? [] : {}
-  seen.set(target, clone)
-  for (const [key, value] of Object.entries(target)) {
-    Reflect.set(clone, key, cloneRedacted(value, values, seen))
-  }
-  return clone
+  return result
 }
 
 /**
@@ -97,12 +197,7 @@ function cloneRedacted(
  */
 function stripExtraProperties(node: Error, values: readonly string[]): boolean {
   if (node instanceof NotificationException) {
-    const redactedResponse = cloneRedacted(
-      node.getResponse(),
-      values,
-      new WeakMap<object, unknown>()
-    )
-    return Reflect.set(node, 'response', redactedResponse)
+    return Reflect.set(node, 'response', cloneRedacted(node.getResponse(), values))
   }
   return Object.keys(node).every((key) => key === 'cause' || Reflect.deleteProperty(node, key))
 }
@@ -119,58 +214,4 @@ function buildRedactedCopy(name: string, message: string, stack: string | undefi
     copy.stack = stack
   }
   return copy
-}
-
-/**
- * Recursive worker for {@link scrubValuesFromErrorChain} — one node per call.
- * Each original maps to its scrubbed REPRESENTATIVE (itself when it accepted
- * writes, a redacted copy when it did not), registered BEFORE the child is
- * walked so a cyclic back-edge resolves to the representative — never to an
- * unredacted original.
- */
-function scrubNode(
-  node: unknown,
-  values: readonly string[],
-  seen: WeakMap<Error, unknown>
-): unknown {
-  if (!(node instanceof Error)) {
-    if (node === undefined || node === null) {
-      return node
-    }
-    return redactValues(String(node), values)
-  }
-  const known = seen.get(node)
-  if (known !== undefined) {
-    return known
-  }
-  const name = redactValues(node.name, values)
-  const message = redactValues(node.message, values)
-  const stack = node.stack === undefined ? undefined : redactValues(node.stack, values)
-  const hasCause = 'cause' in node
-  // `Reflect.set` reports failure instead of throwing. The final clause is a
-  // writability PROBE (a same-value write): it proves upfront that the later
-  // child-representative write cannot fail, so the in-place decision never has
-  // to be revisited after the children are walked.
-  // The `name` write is skipped when the value is unchanged, so a default-named
-  // error does not gain an own enumerable `name` the strip just removed.
-  const inPlace =
-    stripExtraProperties(node, values) &&
-    (node.name === name || Reflect.set(node, 'name', name)) &&
-    Reflect.set(node, 'message', message) &&
-    (stack === undefined || Reflect.set(node, 'stack', stack)) &&
-    (!hasCause || Reflect.set(node, 'cause', node.cause))
-  const representative = inPlace ? node : buildRedactedCopy(name, message, stack)
-  seen.set(node, representative)
-  if (hasCause) {
-    const childRepresentative = scrubNode(node.cause, values, seen)
-    if (inPlace) {
-      Reflect.set(node, 'cause', childRepresentative)
-    } else {
-      Object.defineProperty(representative, 'cause', {
-        value: childRepresentative,
-        writable: true
-      })
-    }
-  }
-  return representative
 }

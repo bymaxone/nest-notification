@@ -163,6 +163,27 @@ describe('scrubValuesFromErrorChain', () => {
     expect(parent.cause).toBe(child)
   })
 
+  // An in-place node's cause is rewired through its SETTER (Reflect.set) —
+  // never redefined: a non-configurable accessor slot makes defineProperty
+  // throw where plain assignment succeeds.
+  it('should rewire through a non-configurable cause accessor', () => {
+    const frozenChild = Object.freeze(new Error('accessor child 555'))
+    const parent = new Error('parent 555')
+    let stored: unknown = frozenChild
+    Object.defineProperty(parent, 'cause', {
+      get: () => stored,
+      set: (value: unknown) => {
+        stored = value
+      }
+    })
+
+    const returned = scrubValuesFromErrorChain(parent, ['555'])
+
+    expect(returned).toBe(parent)
+    expect(parent.cause).not.toBe(frozenChild)
+    expect((parent.cause as Error).message).toBe(`accessor child ${REDACTED_VALUE}`)
+  })
+
   // SECURITY (regression): a cycle THROUGH a frozen node must not retain an
   // unredacted back-edge. With frozen `a` → `b` → `a`, the returned graph must
   // wire `b.cause` to a's redacted REPRESENTATIVE — never to the original
@@ -221,6 +242,13 @@ describe('scrubValuesFromErrorChain', () => {
   // cause-link rule — nothing that enters the scrub leaves carrying a secret.
   it('should flatten a non-Error head to a redacted string', () => {
     expect(scrubValuesFromErrorChain('raw 555', ['555'])).toBe(`raw ${REDACTED_VALUE}`)
+  })
+
+  // `undefined` and `null` heads are legitimate empties — passed through, never
+  // turned into the strings 'undefined'/'null'.
+  it('should pass an undefined or null head through untouched', () => {
+    expect(scrubValuesFromErrorChain(undefined, ['555'])).toBeUndefined()
+    expect(scrubValuesFromErrorChain(null, ['555'])).toBeNull()
   })
 
   // SECURITY (regression): a storage may reject with
@@ -303,6 +331,79 @@ describe('scrubValuesFromErrorChain', () => {
     // An empty array clones to an empty array — nothing invented.
     expect(details.emptyList).toEqual([])
     expect(JSON.stringify(exception.getResponse())).not.toContain('555')
+  })
+
+  // SECURITY (regression): a secret can ride a property NAME — detail keys are
+  // redacted like values.
+  it('should redact secrets inside detail keys', () => {
+    const exception = new NotificationException('OTP_STORAGE_NOT_CONFIGURED', {
+      ['otp_555']: true
+    })
+
+    scrubValuesFromErrorChain(exception, ['555'])
+
+    const details = (exception.getResponse() as { error: { details: Record<string, unknown> } })
+      .error.details
+    expect(details[`otp_${REDACTED_VALUE}`]).toBe(true)
+    expect(JSON.stringify(exception.getResponse())).not.toContain('555')
+  })
+
+  // A `__proto__` detail key must become a harmless OWN property of the clone,
+  // never a prototype write (defineProperty semantics), and no global
+  // prototype pollution may occur.
+  it('should treat a __proto__ detail key as an own property', () => {
+    const details = JSON.parse('{"__proto__": {"polluted": "555"}}') as Record<string, unknown>
+    const exception = new NotificationException('OTP_STORAGE_NOT_CONFIGURED', details)
+
+    scrubValuesFromErrorChain(exception, ['555'])
+
+    expect('polluted' in {}).toBe(false)
+    const clonedDetails = (
+      exception.getResponse() as { error: { details: Record<string, unknown> } }
+    ).error.details
+    const own = Object.getOwnPropertyDescriptor(clonedDetails, '__proto__')
+    expect(own?.value).toEqual({ polluted: REDACTED_VALUE })
+    expect(Object.getPrototypeOf(clonedDetails)).toBe(Object.prototype)
+  })
+
+  // SECURITY (regression): an adversarially DEEP chain must be scrubbed
+  // iteratively — a recursive walk would blow the call stack and replace the
+  // original failure with a RangeError, bypassing scrub and audit.
+  it('should scrub a 50k-link chain without exhausting the call stack', () => {
+    const nodes = Array.from({ length: 50_000 }, (_, level) => {
+      const node = new Error(`level ${level} 555`)
+      delete node.stack
+      return node
+    })
+    nodes.reduce((parent, node) => {
+      parent.cause = node
+      return node
+    })
+
+    const returned = scrubValuesFromErrorChain(nodes[0], ['555']) as Error
+
+    expect(returned).toBe(nodes[0])
+    expect(nodes.at(0)?.message).toBe(`level 0 ${REDACTED_VALUE}`)
+    expect(nodes.at(-1)?.message).toBe(`level 49999 ${REDACTED_VALUE}`)
+  })
+
+  // The clone walk is iterative too — deeply nested caller-supplied details
+  // must not exhaust the call stack.
+  it('should clone 50k-deep details without exhausting the call stack', () => {
+    let nested: Record<string, unknown> = { leaf: '555' }
+    for (let level = 0; level < 50_000; level += 1) {
+      nested = { inner: nested }
+    }
+    const exception = new NotificationException('OTP_STORAGE_NOT_CONFIGURED', nested)
+
+    scrubValuesFromErrorChain(exception, ['555'])
+
+    let cursor = (exception.getResponse() as { error: { details: Record<string, unknown> } }).error
+      .details
+    while (typeof cursor.inner === 'object' && cursor.inner !== null) {
+      cursor = cursor.inner as Record<string, unknown>
+    }
+    expect(cursor.leaf).toBe(REDACTED_VALUE)
   })
 
   // SECURITY (regression): FROZEN caller-supplied details cannot defeat the
