@@ -484,6 +484,29 @@ describe('EmailService.send', () => {
     )
   })
 
+  // SECURITY (regression): a provider error whose `message` getter throws must
+  // not escape unaudited — the audit read fails closed to the marker and the
+  // send still maps to EMAIL_SEND_FAILED.
+  it('should fail closed when the provider error message getter throws', async () => {
+    const provider = makeProvider()
+    const hostile = new Error('shell')
+    Object.defineProperty(hostile, 'message', {
+      get: (): never => {
+        throw new Error('getter leaked 998877')
+      }
+    })
+    provider.send.mockRejectedValue(hostile)
+    const audit = makeAudit()
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), audit)
+
+    await expect(service.send(baseInput)).rejects.toMatchObject({
+      code: 'notification.email_send_failed'
+    })
+    expect(audit.create).toHaveBeenCalledWith(
+      expect.objectContaining({ verb: 'failed', errorMessage: '[redacted]' })
+    )
+  })
+
   // A non-Error audit rejection rides as-is on the AUDIT_LOG_FAILED `cause`.
   it('should carry a non-Error audit rejection as the cause when not swallowing', async () => {
     const audit = makeAudit()

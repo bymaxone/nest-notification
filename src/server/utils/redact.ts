@@ -25,6 +25,41 @@ export function redactValues(text: string, values: readonly string[]): string {
 }
 
 /**
+ * Coerces an unknown value to a redacted string, failing closed — coercion
+ * runs consumer code (`toString`/`Symbol.toPrimitive`), and a hostile
+ * implementation that throws a secret-bearing error yields the marker
+ * instead of escaping.
+ *
+ * @param value - The value to coerce.
+ * @param values - The secret values to remove.
+ * @returns The redacted string form, or the marker when coercion threw.
+ */
+export function coerceRedacted(value: unknown, values: readonly string[]): string {
+  try {
+    return redactValues(String(value), values)
+  } catch {
+    return REDACTED_VALUE
+  }
+}
+
+/**
+ * Reads an error's message for an audit entry, failing closed — the `message`
+ * getter (or a non-Error's coercion) runs consumer code that may throw.
+ *
+ * @param error - The failure whose message is being recorded.
+ * @param values - The secret values to remove; omitted means no redaction.
+ * @returns The (optionally redacted) message, or the marker when reading threw.
+ */
+export function readRedactedMessage(error: unknown, values?: readonly string[]): string {
+  try {
+    const message = error instanceof Error ? error.message : String(error)
+    return values ? redactValues(message, values) : message
+  } catch {
+    return REDACTED_VALUE
+  }
+}
+
+/**
  * Removes the secret values from an error chain and returns its (possibly
  * replaced) head — `name`, `message`, and `stack` at every link. A node is
  * scrubbed in place when it accepts writes, preserving its identity and class
@@ -47,7 +82,7 @@ export function scrubValuesFromErrorChain(error: unknown, values: readonly strin
     if (error === undefined || error === null) {
       return error
     }
-    return redactValues(String(error), values)
+    return coerceRedacted(error, values)
   }
   const seen = new WeakMap<Error, Error>()
   const chain: ChainLink[] = []
@@ -95,7 +130,7 @@ function wireCauses(
     } else if (raw === undefined || raw === null) {
       childRepresentative = raw
     } else {
-      childRepresentative = redactValues(String(raw), values)
+      childRepresentative = coerceRedacted(raw, values)
     }
     if (link.representative === link.node) {
       Reflect.set(link.node, 'cause', childRepresentative)
@@ -260,6 +295,10 @@ function stripExtraProperties(node: Error, values: readonly string[]): boolean {
       // are deleted — they can carry the secret like on any raw error.
       return (
         Reflect.set(node, 'response', cloneRedacted(node.getResponse(), values)) &&
+        // The Nest options bag is rebuilt EMPTY: a consumer can stuff payloads
+        // into it, serializers spread it, and `initCause` already consumed it
+        // at construction time.
+        Reflect.set(node, 'options', {}) &&
         Object.keys(node).every(
           (key) => EXCEPTION_CONTRACT_KEYS.has(key) || Reflect.deleteProperty(node, key)
         )

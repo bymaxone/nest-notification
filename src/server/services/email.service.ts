@@ -28,7 +28,7 @@ import type {
   INotificationLogRepository,
   NotificationLogEntry
 } from '../interfaces/notification-log-repository.interface'
-import { redactValues } from '../utils/redact'
+import { readRedactedMessage } from '../utils/redact'
 
 /** Locale used as the fallback when the requested locale has no template. */
 const FALLBACK_LOCALE = 'en'
@@ -132,12 +132,9 @@ export class EmailService {
       if (error instanceof NotificationException) {
         throw error
       }
-      const rawMessage = error instanceof Error ? error.message : String(error)
       await this.audit(
         this.auditEntry('failed', input.tenantId, recipient, input.userId, {
-          errorMessage: input.auditRedactValues
-            ? redactValues(rawMessage, input.auditRedactValues)
-            : rawMessage
+          errorMessage: readRedactedMessage(error, input.auditRedactValues)
         })
       )
       throw new NotificationException(

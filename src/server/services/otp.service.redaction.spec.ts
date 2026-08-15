@@ -248,6 +248,34 @@ describe('OtpService.generate — delivery-error redaction', () => {
     expect(caught).toBe('cleanup dump [redacted]')
   })
 
+  // SECURITY (regression): a storage rejection whose COERCION throws (hostile
+  // toString) must fail closed to the marker — the hostile error must never
+  // escape the catch path unaudited.
+  it('should fail closed on a rejection whose coercion throws', async () => {
+    let leakedCode = ''
+    jest
+      .spyOn(storage, 'set')
+      .mockImplementation(async (_tenantId, _recipient, _purpose, entry) => {
+        leakedCode = entry.code
+        throw {
+          toString: (): never => {
+            throw new Error(`toString leaked ${entry.code}`)
+          }
+        }
+      })
+    const service = new OtpService(makeOptions(), storage, audit, emailServiceStub)
+
+    const caught: unknown = await service
+      .generate({ ...ref, deliverVia: 'manual' })
+      .catch((error: unknown) => error)
+
+    expect(leakedCode).not.toBe('')
+    expect(caught).toBe('[redacted]')
+    for (const call of audit.create.mock.calls) {
+      expect(JSON.stringify(call[0]).includes(leakedCode)).toBe(false)
+    }
+  })
+
   // SECURITY (regression): a custom storage may reject `set()` with the entry
   // attached as an enumerable property — the code inside it must not survive
   // into the rethrown error or any audit entry.

@@ -38,7 +38,7 @@ import type { OtpPurposeConfig } from '../interfaces/notification-module-options
 import type { IOtpStorage, OtpEntry, OtpVerifyResult } from '../interfaces/otp-storage.interface'
 import { generateOtpCode } from '../utils/code-generator'
 import { cooldownExpiresAt, toRetryAfterHeader } from '../utils/cooldown-helpers'
-import { redactValues, scrubValuesFromErrorChain } from '../utils/redact'
+import { coerceRedacted, readRedactedMessage, scrubValuesFromErrorChain } from '../utils/redact'
 import { safeCompare } from '../utils/timing-safe-compare'
 
 /** Milliseconds in one second. */
@@ -300,10 +300,12 @@ export class OtpService {
       const outgoing: unknown =
         failure instanceof Error
           ? scrubValuesFromErrorChain(failure, [code])
-          : redactValues(String(failure), [code])
+          : coerceRedacted(failure, [code])
       await this.audit(
         this.otpAuditEntry('failed', input, {
-          errorMessage: outgoing instanceof Error ? outgoing.message : String(outgoing)
+          // `outgoing` is already fully redacted by the scrub above; this read
+          // only needs the fail-closed guard, not a second redaction pass.
+          errorMessage: readRedactedMessage(outgoing)
         })
       )
       throw outgoing
