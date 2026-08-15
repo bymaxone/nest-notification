@@ -28,7 +28,11 @@ import type {
   INotificationLogRepository,
   NotificationLogEntry
 } from '../interfaces/notification-log-repository.interface'
-import { readRedactedMessage } from '../utils/redact'
+import {
+  collectEchoedExcerpts,
+  readRedactedMessage,
+  scrubValuesFromErrorChain
+} from '../utils/redact'
 
 /** Locale used as the fallback when the requested locale has no template. */
 const FALLBACK_LOCALE = 'en'
@@ -132,15 +136,20 @@ export class EmailService {
       if (error instanceof NotificationException) {
         throw error
       }
+      // Declared secrets plus detected BODY ECHOES: a relay that quotes the
+      // rejected content back puts the rendered body — and any secret inside
+      // it — into the provider error, detectably, even when the caller
+      // declared nothing.
+      const secretValues = this.gatherRedactionValues(error, input.auditRedactValues, sendOptions)
       await this.audit(
         this.auditEntry('failed', input.tenantId, recipient, input.userId, {
-          errorMessage: readRedactedMessage(error, input.auditRedactValues)
+          errorMessage: readRedactedMessage(error, secretValues)
         })
       )
       throw new NotificationException(
         'EMAIL_SEND_FAILED',
         { providerName: this.provider.name },
-        { cause: error }
+        { cause: secretValues.length > 0 ? scrubValuesFromErrorChain(error, secretValues) : error }
       )
     }
   }
@@ -156,7 +165,12 @@ export class EmailService {
   async sendTemplate(input: EmailSendTemplateInput): Promise<{ messageId: string }> {
     const requestedLocale = input.locale ?? this.options.global.defaultLocale
     const locale = await this.resolveTemplateLocale(input.template, requestedLocale)
-    const rendered = await this.renderTemplate(input.template, input.data, locale)
+    const rendered = await this.renderTemplate(
+      input.template,
+      input.data,
+      locale,
+      input.auditRedactValues
+    )
     const tags: EmailTag[] = [...(input.tags ?? []), { name: 'template', value: input.template }]
     // Each optional field is spread only when present, so an absent field never
     // becomes an `{ x: undefined }` key in the send input that `send()` would then
@@ -226,7 +240,8 @@ export class EmailService {
       ...(input.text !== undefined ? { text: input.text } : {}),
       ...(input.cc !== undefined ? { cc: input.cc } : {}),
       ...(input.bcc !== undefined ? { bcc: input.bcc } : {}),
-      ...(input.attachments !== undefined ? { attachments: input.attachments } : {})
+      ...(input.attachments !== undefined ? { attachments: input.attachments } : {}),
+      ...(input.auditRedactValues !== undefined ? { redactValues: input.auditRedactValues } : {})
     }
   }
 
@@ -245,12 +260,21 @@ export class EmailService {
   private async renderTemplate(
     template: string,
     data: Record<string, unknown>,
-    locale: string
+    locale: string,
+    redactValues?: readonly string[]
   ): Promise<{ subject: string; html: string; text?: string }> {
     try {
       return await this.renderer.render(template, data, locale)
     } catch (error) {
-      throw new NotificationException('TEMPLATE_RENDER_FAILED', { template }, { cause: error })
+      // A renderer error can echo the template data (which carries the
+      // caller's secrets); declared values are scrubbed from the cause.
+      throw new NotificationException(
+        'TEMPLATE_RENDER_FAILED',
+        { template },
+        {
+          cause: redactValues ? scrubValuesFromErrorChain(error, redactValues) : error
+        }
+      )
     }
   }
 
@@ -292,5 +316,30 @@ export class EmailService {
   private maskRecipients(to: string | string[]): string {
     const mask = this.options.audit.maskRecipient
     return Array.isArray(to) ? to.map((recipient) => mask(recipient)).join(', ') : mask(to)
+  }
+
+  /**
+   * Assembles every value to scrub from a provider failure: the caller's
+   * declared secrets plus any excerpt of the rendered body the error is
+   * ECHOING — a policy/DLP relay that quotes the rejected content puts the
+   * body (and any secret inside it) into the error without the caller having
+   * declared anything. Echo detection starts from the collected excerpts so
+   * that with nothing declared and nothing echoed the list is verifiably
+   * empty and the raw error passes through untouched.
+   */
+  private gatherRedactionValues(
+    error: unknown,
+    declared: readonly string[] | undefined,
+    sendOptions: EmailSendOptions
+  ): readonly string[] {
+    const errorText = readRedactedMessage(error)
+    const values = collectEchoedExcerpts(errorText, sendOptions.html)
+    if (sendOptions.text !== undefined) {
+      values.push(...collectEchoedExcerpts(errorText, sendOptions.text))
+    }
+    if (declared) {
+      values.push(...declared)
+    }
+    return values
   }
 }

@@ -689,7 +689,7 @@ A one-time password is a credential, so the suite is held to a bar beyond "it ru
 
 - ✅ **100% line coverage** — statements, branches, functions, and lines, enforced per file as a release gate across unit + e2e
 - ✅ **100% mutation score** — verified with [Stryker](https://stryker-mutator.io/): every viable seeded fault killed, with **no survivors**, against a `break` threshold of 100. The equivalents that no test can kill carry their reason on the line they apply to, so the number is an accounting rather than a target
-- ✅ **557 tests** — unit and end-to-end, spanning all three subpaths
+- ✅ **573 tests** — unit and end-to-end, spanning all three subpaths
 - ✅ **Invariants asserted, not assumed** — the never-log-codes rule is a test (`JSON.stringify(entry).includes(code) === false` on every audit entry, and the thrown exception is serialized recursively — message, stack, response body, every nested `cause` — asserting the code appears at no depth), not a review convention
 - ✅ **Published shape verified** — `attw` resolves every entrypoint against the packed tarball, and a dogfood smoke test installs the package into a scratch consumer before any tag is cut
 - ✅ **Every equivalent mutant documented** — the ones no test can kill carry an inline `// Stryker disable` with the reason, so the score is an accounting rather than a number
@@ -758,6 +758,8 @@ pnpm mutation      # Stryker mutation testing
 Error codes are namespaced (`notification.otp_invalid_code`, `notification.otp_cooldown_active`, `notification.email_send_failed`, …) and never change once published. Default messages are English; localize on the `code`.
 
 Failures raised by the library carry the underlying error as the native `Error.cause` — a provider's `connect ECONNREFUSED` sits on `exception.cause`, where cause-walking log serializers (e.g. pino's `err`) print it alongside the stable code. The cause is stored as a **log-safe copy**: `name`, `message`, `stack`, and the nested `cause` chain survive (depth-bounded); every other property is dropped, because SDK errors routinely retain the request payload (an axios-style `config.data`) and for an OTP email that payload contains the code. The cause never enters the HTTP response body either: `details` stays reserved for the structured, client-safe context shown above. To attach a cause in your own code, pass the options bag as the third constructor argument — `new NotificationException('EMAIL_SEND_FAILED', { providerName }, { cause: error })`; the positional `(key, details, status, message)` form keeps working.
+
+**If you send a secret through `EmailService` yourself — declare it.** A relay or DLP filter that quotes the rejected content puts the rendered body (and any secret inside it) into the provider error, which rides the `cause` into your logs. Pass `auditRedactValues: [code]` on the send input: the value is scrubbed from the attached `cause`, from the failed-audit `errorMessage`, and — forwarded as `EmailSendOptions.redactValues` — from the provider's own error logging. As defense-in-depth for the undeclared case, any run of 16+ characters of the rendered body detected inside a provider error is redacted automatically; a bare secret echoed without surrounding content is below that window, so declaration remains the only precise control.
 
 ### Reference adapters
 

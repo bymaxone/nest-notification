@@ -5,6 +5,39 @@ All notable changes to `@bymax-one/nest-notification` will be documented in this
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2026-08-15
+
+### Fixed
+
+- **A provider error that echoes the message body no longer carries the body's secrets into the
+  attached `cause`.** Measured by a consumer on published 1.2.0 with a server-side control: a
+  policy relay quoting the rejected content in its `550` put a live OTP into the ERROR-level log
+  entry, in `err.cause.message` and `err.cause.stack` — a path 1.2.0 created by attaching the
+  cause, upgrading a pre-existing `warn`-level leak. The 1.2.0 scrub only ran where THIS library
+  issues the code (`OtpService`); a consumer-issued code sent through `EmailService.send` (e.g.
+  `@bymax-one/nest-auth`'s OTP flows) was outside it.
+
+  Three layers now close the delivery path:
+  - `EmailService` scrubs the outgoing `cause` (not just the audit `errorMessage`) with the
+    caller's declared `auditRedactValues`, on `EMAIL_SEND_FAILED` and `TEMPLATE_RENDER_FAILED`.
+  - **Echo detection** (`collectEchoedExcerpts`): any run of 16+ characters of the rendered
+    body found inside the provider error is treated as an echo and redacted — this is what makes
+    the UNDECLARED case fail safe for the measured scenario, since the library knows the body it
+    just handed to the provider even when it does not know which part is secret. Limits, stated
+    plainly: matching is raw and literal (a re-encoded echo is missed) and a bare secret quoted
+    without surrounding content is shorter than the window and is not caught. Declared values
+    remain the precise control.
+  - Declared values travel to the provider as `EmailSendOptions.redactValues`, and
+    `SmtpEmailProvider` scrubs them plus detected body echoes from its `warn` line and thrown
+    message — closing the pre-existing `warn`-level half of the same leak.
+
+  **Boundary that this release does NOT close, so the note cannot read as "done":** a
+  consumer-issued secret is fully covered only when the caller declares it. Until
+  `@bymax-one/nest-auth` passes `auditRedactValues: [code]` on its OTP sends (their side,
+  version to watch for on their changelog), a bare code echoed WITHOUT surrounding body content
+  remains exposed on that path — the echo guard needs 16+ contiguous characters of body context
+  to trigger. Consumers sending secrets through `EmailService` directly should declare them now.
+
 ## [1.2.0] - 2026-08-14
 
 ### Added
@@ -378,6 +411,7 @@ rejected at startup rather than failing on the first send.
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
 [Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.0.6...HEAD
+[1.2.1]: https://github.com/bymaxone/nest-notification/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/bymaxone/nest-notification/compare/v1.1.2...v1.2.0
 [1.1.2]: https://github.com/bymaxone/nest-notification/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/bymaxone/nest-notification/compare/v1.1.0...v1.1.1

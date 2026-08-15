@@ -1,71 +1,13 @@
-import type { ResolvedNotificationOptions } from '../config/resolved-options'
 import { NotificationException } from '../errors/notification-exception'
-import type {
-  EmailSendOptions,
-  EmailSendResult,
-  IEmailProvider
-} from '../interfaces/email-provider.interface'
-import type {
-  IEmailTemplateRenderer,
-  RenderedEmail
-} from '../interfaces/email-template-renderer.interface'
-import type {
-  INotificationLogRepository,
-  NotificationLogEntry
-} from '../interfaces/notification-log-repository.interface'
 
+import {
+  baseInput,
+  makeAudit,
+  makeOptions,
+  makeProvider,
+  makeRenderer
+} from './__tests__/email-service.fixtures'
 import { EmailService } from './email.service'
-
-type EmailOpts = NonNullable<ResolvedNotificationOptions['email']>
-
-const makeOptions = (
-  email: Partial<EmailOpts> | null = {},
-  audit: Partial<ResolvedNotificationOptions['audit']> = {}
-): ResolvedNotificationOptions => ({
-  global: { redisNamespace: 'notification', defaultLocale: 'en' },
-  audit: { swallowErrors: true, maskRecipient: (recipient: string): string => recipient, ...audit },
-  ...(email
-    ? {
-        email: {
-          defaultFrom: 'noreply@acme.com',
-          defaultTags: [],
-          maxAttachmentBytes: 1_000_000,
-          ...email
-        }
-      }
-    : {})
-})
-
-const makeProvider = (): jest.Mocked<IEmailProvider> => ({
-  name: 'resend',
-  isConfigured: jest.fn((): boolean => true),
-  send: jest.fn(async (_options: EmailSendOptions): Promise<EmailSendResult> => ({
-    messageId: 'msg_1'
-  }))
-})
-
-const makeRenderer = (): jest.Mocked<IEmailTemplateRenderer> => ({
-  name: 'default',
-  hasTemplate: jest.fn(async (_template: string, _locale: string): Promise<boolean> => true),
-  render: jest.fn(
-    async (
-      _template: string,
-      _data: Record<string, unknown>,
-      _locale: string
-    ): Promise<RenderedEmail> => ({
-      subject: 'Hi',
-      html: '<p>Hi</p>',
-      text: 'Hi'
-    })
-  )
-})
-
-const makeAudit = (): jest.Mocked<INotificationLogRepository> => ({
-  name: 'audit',
-  create: jest.fn(async (_entry: NotificationLogEntry): Promise<void> => undefined)
-})
-
-const baseInput = { tenantId: 'tenant_a', to: 'jane@acme.com', subject: 'S', html: '<p>B</p>' }
 
 describe('EmailService.send', () => {
   // The happy path applies channel defaults, concatenates tags, and audits "sent".
@@ -465,47 +407,8 @@ describe('EmailService.send', () => {
     expect(provider.send).toHaveBeenCalledTimes(1)
   })
 
-  // SECURITY: a provider failure that echoes a declared secret value back must
-  // have it redacted from the failed-audit errorMessage — the caller names the
-  // secrets via `auditRedactValues` because only the caller knows them.
-  it('should redact declared values from the failed-audit errorMessage', async () => {
-    const provider = makeProvider()
-    provider.send.mockRejectedValue(new Error('rejected body with 998877 inside'))
-    const audit = makeAudit()
-    const service = new EmailService(makeOptions(), provider, makeRenderer(), audit)
-
-    await service.send({ ...baseInput, auditRedactValues: ['998877'] }).catch(() => undefined)
-
-    expect(audit.create).toHaveBeenCalledWith(
-      expect.objectContaining({
-        verb: 'failed',
-        errorMessage: 'rejected body with [redacted] inside'
-      })
-    )
-  })
-
-  // SECURITY (regression): a provider error whose `message` getter throws must
-  // not escape unaudited — the audit read fails closed to the marker and the
-  // send still maps to EMAIL_SEND_FAILED.
-  it('should fail closed when the provider error message getter throws', async () => {
-    const provider = makeProvider()
-    const hostile = new Error('shell')
-    Object.defineProperty(hostile, 'message', {
-      get: (): never => {
-        throw new Error('getter leaked 998877')
-      }
-    })
-    provider.send.mockRejectedValue(hostile)
-    const audit = makeAudit()
-    const service = new EmailService(makeOptions(), provider, makeRenderer(), audit)
-
-    await expect(service.send(baseInput)).rejects.toMatchObject({
-      code: 'notification.email_send_failed'
-    })
-    expect(audit.create).toHaveBeenCalledWith(
-      expect.objectContaining({ verb: 'failed', errorMessage: '[redacted]' })
-    )
-  })
+  // Redaction of the failed-audit entry and the outgoing cause is specified in
+  // email.service.redaction.spec.ts.
 
   // A non-Error audit rejection rides as-is on the AUDIT_LOG_FAILED `cause`.
   it('should carry a non-Error audit rejection as the cause when not swallowing', async () => {
@@ -725,24 +628,6 @@ describe('EmailService.sendTemplate', () => {
     for (const key of ['text', 'from', 'fromName', 'replyTo', 'userId', 'auditRedactValues']) {
       expect(key in input!).toBe(false)
     }
-  })
-
-  // Declared secret values must ride sendTemplate → send so the failed-audit
-  // redaction works on the template path (the one OTP delivery uses).
-  it('should forward auditRedactValues to the inner send input', async () => {
-    const renderer = makeRenderer()
-    const service = new EmailService(makeOptions(), makeProvider(), renderer, makeAudit())
-    const sendSpy = jest.spyOn(service, 'send').mockResolvedValue({ messageId: 'm' })
-
-    await service.sendTemplate({
-      tenantId: 't',
-      to: 'a@x.com',
-      template: 'welcome',
-      data: {},
-      auditRedactValues: ['998877']
-    })
-
-    expect(sendSpy.mock.calls[0]?.[0]?.auditRedactValues).toEqual(['998877'])
   })
 })
 

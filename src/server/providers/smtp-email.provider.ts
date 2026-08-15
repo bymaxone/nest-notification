@@ -28,6 +28,7 @@ import type {
   IEmailProvider
 } from '../interfaces/email-provider.interface'
 import { loadOptionalPeer } from '../utils/load-optional-peer'
+import { collectEchoedExcerpts, redactValues } from '../utils/redact'
 
 /** Submission port, used when no `port` is supplied. */
 const DEFAULT_PORT = 587
@@ -311,18 +312,22 @@ export class SmtpEmailProvider implements IEmailProvider {
     this.guardHeaderInjection(options)
     const from = this.buildSender(options.from, options.fromName)
     const transport = await this.getTransport()
-    const info = await this.dispatch(transport, {
-      from,
-      to: options.to,
-      subject: options.subject,
-      html: options.html,
-      text: options.text,
-      replyTo: options.replyTo,
-      cc: options.cc,
-      bcc: options.bcc,
-      headers: options.headers,
-      attachments: this.mapAttachments(options.attachments)
-    })
+    const info = await this.dispatch(
+      transport,
+      {
+        from,
+        to: options.to,
+        subject: options.subject,
+        html: options.html,
+        text: options.text,
+        replyTo: options.replyTo,
+        cc: options.cc,
+        bcc: options.bcc,
+        headers: options.headers,
+        attachments: this.mapAttachments(options.attachments)
+      },
+      options.redactValues
+    )
     if (!info.messageId) {
       throw new Error('SMTP transport returned no message ID')
     }
@@ -341,15 +346,44 @@ export class SmtpEmailProvider implements IEmailProvider {
    */
   private async dispatch(
     transport: SmtpTransportLike,
-    payload: SmtpSendPayload
+    payload: SmtpSendPayload,
+    redactValues?: readonly string[]
   ): Promise<{ messageId?: string }> {
     try {
       return await transport.sendMail(payload)
     } catch (error) {
-      const reason = this.redact(error instanceof Error ? error.message : String(error))
+      // Credentials first, then the caller's declared secrets, then any
+      // excerpt of the body the transport error is ECHOING — a policy/DLP
+      // relay that quotes the rejected content puts the body (and any secret
+      // inside it) into the error text this line is about to log.
+      const reason = this.scrubTransportError(
+        this.redact(error instanceof Error ? error.message : String(error)),
+        payload,
+        redactValues
+      )
       this.logger.warn(`[SMTP_SEND_FAILED] ${reason}`)
       throw new Error(`SMTP send failed: ${reason}`)
     }
+  }
+
+  /**
+   * Removes the caller's declared secrets and any echoed body excerpt from a
+   * transport error's text — the credential scrub alone cannot cover content
+   * the provider does not know is secret.
+   */
+  private scrubTransportError(
+    message: string,
+    payload: SmtpSendPayload,
+    declaredValues: readonly string[] | undefined
+  ): string {
+    const values = collectEchoedExcerpts(message, payload.html)
+    if (payload.text !== undefined) {
+      values.push(...collectEchoedExcerpts(message, payload.text))
+    }
+    if (declaredValues) {
+      values.push(...declaredValues)
+    }
+    return redactValues(message, values)
   }
 
   /**

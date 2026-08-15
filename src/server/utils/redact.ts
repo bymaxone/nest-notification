@@ -60,6 +60,48 @@ export function readRedactedMessage(error: unknown, values?: readonly string[]):
 }
 
 /**
+ * Shortest run of characters that counts as an ECHO of reference content.
+ * Below this, coincidental overlap between an error message and a message body
+ * is likely; at or above it, the error is quoting content.
+ */
+export const MIN_ECHO_LENGTH = 16
+
+/**
+ * Collects the substrings of `text` (each at least {@link MIN_ECHO_LENGTH}
+ * characters) that literally appear inside `reference` — the shape of a
+ * provider or relay echoing message content back inside an error. Each match
+ * is grown to the longest run still present in the reference, so an echo
+ * comes back as one excerpt instead of overlapping windows.
+ *
+ * Matching is raw and literal: a re-encoded or line-wrapped echo is missed,
+ * which is why DECLARED redaction values remain the precise control and this
+ * detector is defense-in-depth for the undeclared case. A bare secret quoted
+ * without surrounding content is shorter than the window and is not caught.
+ *
+ * @param text - The error text to inspect.
+ * @param reference - The content the error may be echoing (e.g. a message body).
+ * @returns The echoed excerpts, in order of appearance.
+ */
+export function collectEchoedExcerpts(text: string, reference: string): string[] {
+  const excerpts: string[] = []
+  let index = 0
+  while (index + MIN_ECHO_LENGTH <= text.length) {
+    if (!reference.includes(text.slice(index, index + MIN_ECHO_LENGTH))) {
+      index += 1
+      continue
+    }
+    let end = index + MIN_ECHO_LENGTH
+    // Stryker disable next-line EqualityOperator: equivalent — at end === text.length the mutant's one extra iteration slices past the end, which clamps to the same string, so the pushed excerpt is identical for every input
+    while (end < text.length && reference.includes(text.slice(index, end + 1))) {
+      end += 1
+    }
+    excerpts.push(text.slice(index, end))
+    index = end
+  }
+  return excerpts
+}
+
+/**
  * Classifies a value as an `Error`, failing closed — `instanceof` invokes the
  * `getPrototypeOf` trap on proxies, and a hostile or revoked proxy throws
  * right there, before any other guard can run.

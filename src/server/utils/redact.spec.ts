@@ -6,6 +6,7 @@ import {
   REDACTED_VALUE,
   attachCauseIfAbsent,
   coerceRedacted,
+  collectEchoedExcerpts,
   readRedactedMessage,
   redactValues,
   scrubValuesFromErrorChain
@@ -29,6 +30,52 @@ describe('redactValues', () => {
   // Text without any occurrence must come back unchanged.
   it('should return the text unchanged when nothing matches', () => {
     expect(redactValues('clean text', ['999999'])).toBe('clean text')
+  })
+})
+
+describe('collectEchoedExcerpts', () => {
+  const body = '<p>Hello Jane, Your password reset code is 998877. It expires shortly.</p>'
+
+  // An error quoting body content must come back as ONE grown excerpt, not
+  // overlapping windows — and the secret inside the echo rides along with it.
+  it('should collect a grown excerpt when the error echoes body content', () => {
+    const excerpts = collectEchoedExcerpts(
+      '550 rejected - body was: Your password reset code is 998877. It expires',
+      body
+    )
+
+    expect(excerpts).toEqual([' Your password reset code is 998877. It expires'])
+  })
+
+  // An error carrying no run of body content collects nothing — the gate that
+  // keeps unrelated transport errors (ECONNREFUSED and friends) untouched.
+  it('should collect nothing when the error echoes no body content', () => {
+    expect(collectEchoedExcerpts('connect ECONNREFUSED 127.0.0.1:1099', body)).toEqual([])
+  })
+
+  // Two separate echoes come back as two excerpts, in order.
+  it('should collect multiple distinct echoes', () => {
+    const excerpts = collectEchoedExcerpts(
+      'first: Hello Jane, Your password then: 998877. It expires shortly.',
+      body
+    )
+
+    expect(excerpts).toEqual(['Hello Jane, Your password ', ' 998877. It expires shortly.'])
+  })
+
+  // An echo sitting exactly at the tail of the error text, exactly one window
+  // long, must still be caught — pins the loop boundary.
+  it('should catch a window-sized echo at the end of the text', () => {
+    const tail = body.slice(10, 10 + 16)
+
+    expect(collectEchoedExcerpts(`prefix ${tail}`, body)).toEqual([tail])
+  })
+
+  // Below the window size, overlap is treated as coincidence, not echo — a
+  // bare 6-digit code without surrounding content is NOT caught (documented
+  // limit: declared values are the precise control).
+  it('should ignore overlap shorter than the window', () => {
+    expect(collectEchoedExcerpts('code 998877 only', body)).toEqual([])
   })
 })
 
