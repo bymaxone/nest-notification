@@ -48,9 +48,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The renderer receives the code inside its template `data` and the provider receives it inside
   the rendered body, so either may echo it in a thrown error's message or stack. On a failed OTP
   delivery the service now replaces every occurrence of the code with `[redacted]` — in the audit
-  entry's `errorMessage` and across the rethrown error chain (message and stack at every link,
-  depth-bounded) — at the one layer that knows the secret. A string rejection is rethrown as a
-  scrubbed copy, since a primitive cannot be mutated in place.
+  entry's `errorMessage` and across the rethrown error chain (message and stack at every link) —
+  at the one layer that knows the secret. Traversal is identity-based (`WeakSet`), so a cyclic
+  chain terminates and no depth limit leaves an unscrubbed tail; writes go through `Reflect.set`,
+  so a frozen foreign error degrades to best-effort instead of throwing. Any non-`Error`
+  rejection — a string, or an object a custom storage may reject with that retains the entry —
+  is flattened to a redacted string, since a raw object could carry the code in its properties.
+
+- **`EmailService` redacts declared secrets from its own failed-audit entry.** The email `failed`
+  audit entry records the provider's message, which is written before `OtpService` can scrub the
+  rethrown chain — so a provider that echoes the rendered body leaked the code into that one
+  entry. `EmailSendInput`/`EmailSendTemplateInput` gain `auditRedactValues`: secret values the
+  caller declares (only the caller knows them) that are replaced with `[redacted]` in the entry's
+  `errorMessage`. OTP delivery passes `[code]` automatically; a real-path regression (real
+  `EmailService`, echoing provider) asserts both audit entries and the rethrown chain are
+  code-free.
 
 ## [1.1.2] - 2026-08-14
 

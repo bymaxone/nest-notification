@@ -9,10 +9,19 @@ import type {
   INotificationLogRepository,
   NotificationLogEntry
 } from '../interfaces/notification-log-repository.interface'
+import type {
+  EmailSendOptions,
+  EmailSendResult,
+  IEmailProvider
+} from '../interfaces/email-provider.interface'
+import type {
+  IEmailTemplateRenderer,
+  RenderedEmail
+} from '../interfaces/email-template-renderer.interface'
 import { InMemoryOtpStorage } from '../providers/in-memory-otp.storage'
 import { toRetryAfterHeader } from '../utils/cooldown-helpers'
 
-import type { EmailService } from './email.service'
+import { EmailService } from './email.service'
 import { OtpService } from './otp.service'
 
 const dummyRepo = {
@@ -314,15 +323,15 @@ describe('OtpService.generate', () => {
     }
   })
 
-  // The scrub walk is depth-bounded — it cleans MAX_SCRUB_NODES links and leaves
-  // a deeper link untouched, which is also what terminates a cyclic chain on a
-  // foreign error. Pins the boundary exactly: node 8 scrubbed, node 9 not.
-  it('should bound the delivery-error scrub depth', async () => {
+  // The scrub traversal is identity-based, so a chain deeper than any fixed
+  // bound is scrubbed in full — no unscrubbed tail a cause-walking serializer
+  // could still print (regression for the old depth cap).
+  it('should scrub every link of a deep delivery-error chain', async () => {
     let leakedCode = ''
     const nodes: Error[] = []
     emailSendTemplate.mockImplementation((input: { data: { code: string } }) => {
       leakedCode = input.data.code
-      for (let level = 0; level < 10; level += 1) {
+      for (let level = 0; level < 12; level += 1) {
         const node = new Error(`level ${level} code=${input.data.code}`)
         delete node.stack
         nodes.push(node)
@@ -337,8 +346,71 @@ describe('OtpService.generate', () => {
 
     await service.generate({ ...ref, deliverVia: 'email' }).catch(() => undefined)
 
-    expect(nodes.at(8)?.message).not.toContain(leakedCode)
-    expect(nodes.at(9)?.message).toContain(leakedCode)
+    for (const node of nodes) {
+      expect(node.message.includes(leakedCode)).toBe(false)
+    }
+  })
+
+  // A custom storage or provider may reject with a raw OBJECT that carries the
+  // plaintext entry in its properties; every non-Error rejection is flattened
+  // to a redacted string so nothing serializable retains the code.
+  it('should flatten an object rejection to a redacted string', async () => {
+    let leakedCode = ''
+    emailSendTemplate.mockImplementation((input: { data: { code: string } }) => {
+      leakedCode = input.data.code
+      return Promise.reject({ entry: { code: input.data.code } })
+    })
+    const service = new OtpService(makeOptions(), storage, audit, emailServiceStub)
+
+    const caught: unknown = await service
+      .generate({ ...ref, deliverVia: 'email' })
+      .catch((error: unknown) => error)
+
+    expect(caught).toBe('[object Object]')
+    expect(JSON.stringify(audit.create.mock.calls).includes(leakedCode)).toBe(false)
+  })
+
+  // Real-path regression (no EmailService stub): a provider failure that echoes
+  // the rendered OTP body must leave the code out of BOTH audit entries — the
+  // EmailService 'failed' entry (redacted via `auditRedactValues`) and the
+  // OtpService 'failed' entry (scrubbed) — and out of the rethrown chain.
+  it('should keep the code out of both audit entries on a real email delivery failure', async () => {
+    let realCode = ''
+    const echoingProvider: IEmailProvider = {
+      name: 'echoing',
+      isConfigured: (): boolean => true,
+      send: async (sendOptions: EmailSendOptions): Promise<EmailSendResult> => {
+        throw new Error(`provider rejected payload: ${sendOptions.html}`)
+      }
+    }
+    const renderer: IEmailTemplateRenderer = {
+      name: 'capturing',
+      hasTemplate: async (): Promise<boolean> => true,
+      render: async (
+        _template: string,
+        data: Record<string, unknown>,
+        _locale: string
+      ): Promise<RenderedEmail> => {
+        realCode = String(data.code)
+        return { subject: 'Your code', html: `<p>Your code is ${realCode}</p>` }
+      }
+    }
+    const options: ResolvedNotificationOptions = {
+      ...makeOptions(),
+      email: { defaultFrom: 'noreply@acme.com', defaultTags: [], maxAttachmentBytes: 1_000_000 }
+    }
+    const emailService = new EmailService(options, echoingProvider, renderer, audit)
+    const service = new OtpService(options, storage, audit, emailService)
+
+    const caught: unknown = await service
+      .generate({ ...ref, deliverVia: 'email' })
+      .catch((error: unknown) => error)
+
+    expect(realCode.length).toBeGreaterThan(0)
+    expect(serializeErrorChain(caught).includes(realCode)).toBe(false)
+    for (const call of audit.create.mock.calls) {
+      expect(JSON.stringify(call[0]).includes(realCode)).toBe(false)
+    }
   })
 
   // A STRING rejection cannot be mutated in place, so a scrubbed copy must be

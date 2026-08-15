@@ -624,7 +624,7 @@ The library **never** writes a code to a sink that can be read back:
 - Not to the audit log — an entry is `{ verb, tenantId, recipient, purpose, providerName, … }`, never `code`.
 - Not to a console or logger line.
 - Not inside an `errorMessage`, which carries the message only — never a stack trace.
-- Not inside a rethrown delivery error: the renderer and the provider both receive the code (template `data`, rendered body), so on a failed delivery every occurrence of the code is scrubbed to `[redacted]` across the outgoing error chain — message **and** stack at every link — before the audit write and the rethrow. Default V8 stack frames carry only function names and source locations, never argument values; the header line (`Error: <message>`) is where a code could ride a stack, and the scrub covers it.
+- Not inside a rethrown delivery error: the renderer and the provider both receive the code (template `data`, rendered body), so on a failed delivery every occurrence of the code is scrubbed to `[redacted]` across the outgoing error chain — message **and** stack at every link, cycle-safe with no depth limit — before the audit write and the rethrow, and a non-`Error` rejection is flattened to a redacted string. The email channel's own `failed` audit entry is covered too: OTP delivery declares the code via `auditRedactValues`, and `EmailService` redacts it from the entry's `errorMessage`. Default V8 stack frames carry only function names and source locations, never argument values; the header line (`Error: <message>`) is where a code could ride a stack, and the scrub covers it.
 
 Codes exist only inside the OTP store, under a TTL, and in process memory for the duration of the request. `audit.maskRecipient` minimizes the recipient before it is persisted (`jane@acme.com` → `j***@acme.com`). A regression test asserts the invariant directly rather than trusting review: `JSON.stringify(auditEntry).includes(code) === false`.
 
@@ -689,7 +689,7 @@ A one-time password is a credential, so the suite is held to a bar beyond "it ru
 
 - ✅ **100% line coverage** — statements, branches, functions, and lines, enforced per file as a release gate across unit + e2e
 - ✅ **100% mutation score** — verified with [Stryker](https://stryker-mutator.io/): every viable seeded fault killed, with **no survivors**, against a `break` threshold of 100. The equivalents that no test can kill carry their reason on the line they apply to, so the number is an accounting rather than a target
-- ✅ **483 tests** — unit and end-to-end, spanning all three subpaths
+- ✅ **496 tests** — unit and end-to-end, spanning all three subpaths
 - ✅ **Invariants asserted, not assumed** — the never-log-codes rule is a test (`JSON.stringify(entry).includes(code) === false` on every audit entry, and the thrown exception is serialized recursively — message, stack, response body, every nested `cause` — asserting the code appears at no depth), not a review convention
 - ✅ **Published shape verified** — `attw` resolves every entrypoint against the packed tarball, and a dogfood smoke test installs the package into a scratch consumer before any tag is cut
 - ✅ **Every equivalent mutant documented** — the ones no test can kill carry an inline `// Stryker disable` with the reason, so the score is an accounting rather than a number

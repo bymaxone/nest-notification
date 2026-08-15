@@ -196,8 +196,8 @@ ineffective.
 | Metric             | Value         |
 | ------------------ | ------------- |
 | **Mutation score** | **100.00 %**  |
-| Viable mutants     | 951           |
-| Killed / timeout   | 944 / 7       |
+| Viable mutants     | 961           |
+| Killed / timeout   | 954 / 7       |
 | Surviving mutants  | 0             |
 | Break threshold    | 100 % -> PASS |
 
@@ -227,5 +227,8 @@ dropped). All new mutants die without a single new suppression:
   whose stack was never touched before the message scrub yields a clean stack for free — and a
   mutant deleting the stack scrub survives against such errors. The killing test materializes the
   stack (`void error.stack`) while the message still carries the code, which is the realistic
-  shape (libraries that read/normalize stacks freeze the leaky header). The scrub's depth bound is
-  pinned from both sides: link 8 scrubbed, link 9 documented untouched.
+  shape (libraries that read/normalize stacks freeze the leaky header). The scrub traversal is
+  identity-based (`WeakSet`), pinned by a 12-link chain scrubbed in full and by a cyclic chain
+  that must terminate — a mutant dropping the `visited` bookkeeping loops forever and dies by
+  timeout; a frozen link is pinned as best-effort (no throw, children still scrubbed) because
+  writes go through `Reflect.set`.

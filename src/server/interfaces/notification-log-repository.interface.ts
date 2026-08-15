@@ -10,12 +10,7 @@ import type { NotificationChannel } from '../../shared/types/notification-channe
 
 /** Event verb recorded on a {@link NotificationLogEntry}. */
 export type NotificationLogVerb =
-  | 'sent'
-  | 'generated'
-  | 'verified'
-  | 'failed'
-  | 'cooldown_blocked'
-  | 'max_attempts_exceeded'
+  'sent' | 'generated' | 'verified' | 'failed' | 'cooldown_blocked' | 'max_attempts_exceeded'
 
 /** A single audit-log entry. */
 export interface NotificationLogEntry {

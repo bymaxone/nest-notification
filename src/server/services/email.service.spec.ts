@@ -465,6 +465,25 @@ describe('EmailService.send', () => {
     expect(provider.send).toHaveBeenCalledTimes(1)
   })
 
+  // SECURITY: a provider failure that echoes a declared secret value back must
+  // have it redacted from the failed-audit errorMessage — the caller names the
+  // secrets via `auditRedactValues` because only the caller knows them.
+  it('should redact declared values from the failed-audit errorMessage', async () => {
+    const provider = makeProvider()
+    provider.send.mockRejectedValue(new Error('rejected body with 998877 inside'))
+    const audit = makeAudit()
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), audit)
+
+    await service.send({ ...baseInput, auditRedactValues: ['998877'] }).catch(() => undefined)
+
+    expect(audit.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        verb: 'failed',
+        errorMessage: 'rejected body with [redacted] inside'
+      })
+    )
+  })
+
   // A non-Error audit rejection rides as-is on the AUDIT_LOG_FAILED `cause`.
   it('should carry a non-Error audit rejection as the cause when not swallowing', async () => {
     const audit = makeAudit()
@@ -680,9 +699,27 @@ describe('EmailService.sendTemplate', () => {
     await service.sendTemplate({ tenantId: 't', to: 'a@x.com', template: 'welcome', data: {} })
 
     const input = sendSpy.mock.calls[0]?.[0]
-    for (const key of ['text', 'from', 'fromName', 'replyTo', 'userId']) {
+    for (const key of ['text', 'from', 'fromName', 'replyTo', 'userId', 'auditRedactValues']) {
       expect(key in input!).toBe(false)
     }
+  })
+
+  // Declared secret values must ride sendTemplate → send so the failed-audit
+  // redaction works on the template path (the one OTP delivery uses).
+  it('should forward auditRedactValues to the inner send input', async () => {
+    const renderer = makeRenderer()
+    const service = new EmailService(makeOptions(), makeProvider(), renderer, makeAudit())
+    const sendSpy = jest.spyOn(service, 'send').mockResolvedValue({ messageId: 'm' })
+
+    await service.sendTemplate({
+      tenantId: 't',
+      to: 'a@x.com',
+      template: 'welcome',
+      data: {},
+      auditRedactValues: ['998877']
+    })
+
+    expect(sendSpy.mock.calls[0]?.[0]?.auditRedactValues).toEqual(['998877'])
   })
 })
 
