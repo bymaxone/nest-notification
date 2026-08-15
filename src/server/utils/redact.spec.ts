@@ -52,16 +52,98 @@ describe('scrubValuesFromErrorChain', () => {
     expect(second.message).toBe(`second ${REDACTED_VALUE}`)
   })
 
-  // A frozen foreign error cannot be mutated; the scrub must degrade to
-  // best-effort on that node WITHOUT throwing, and still clean its children.
-  it('should not throw on a frozen link and still scrub past it', () => {
+  // A writable chain is scrubbed IN PLACE — the head keeps its identity (and
+  // therefore its class, e.g. a NotificationException stays one).
+  it('should preserve the identity of a writable head', () => {
+    const error = new Error('boom 555')
+
+    const returned = scrubValuesFromErrorChain(error, ['555'])
+
+    expect(returned).toBe(error)
+    expect(error.message).toBe(`boom ${REDACTED_VALUE}`)
+  })
+
+  // A frozen foreign error cannot be mutated; the scrub must return a redacted
+  // COPY instead — never an unredacted original, never a throw. The copy keeps
+  // the ORIGINAL (redacted) stack, not a fresh one from inside the scrub.
+  it('should replace a frozen head with a redacted copy', () => {
     const child = new Error('child 555')
     const frozen = new Error('frozen 555')
     frozen.cause = child
+    const originalStack = frozen.stack
     Object.freeze(frozen)
 
-    expect(() => scrubValuesFromErrorChain(frozen, ['555'])).not.toThrow()
-    expect(frozen.message).toBe('frozen 555')
+    const returned = scrubValuesFromErrorChain(frozen, ['555']) as Error
+
+    expect(returned).not.toBe(frozen)
+    expect(returned.message).toBe(`frozen ${REDACTED_VALUE}`)
+    expect(returned.stack).toBe(originalStack?.split('555').join(REDACTED_VALUE))
+    // The writable child was scrubbed in place and stays attached by identity.
+    expect(returned.cause).toBe(child)
+    expect(child.message).toBe(`child ${REDACTED_VALUE}`)
+  })
+
+  // The copy must stay redactable: its name and cause slots are writable, so a
+  // SECOND scrub with a different secret still works in place — pins the
+  // writable descriptors and the name transfer on the copy path.
+  it('should produce a copy that a second scrub can redact in place', () => {
+    const frozen = new Error('frozen 555 and 666')
+    frozen.name = 'REJECT_555_666'
+    Object.defineProperty(frozen, 'cause', { value: 'tail 555 666', enumerable: false })
+    Object.freeze(frozen)
+
+    const first = scrubValuesFromErrorChain(frozen, ['555']) as Error
+    expect(first.name).toBe(`REJECT_${REDACTED_VALUE}_666`)
+    expect(first.cause).toBe(`tail ${REDACTED_VALUE} 666`)
+
+    const second = scrubValuesFromErrorChain(first, ['666'])
+    expect(second).toBe(first)
+    expect(first.name).toBe(`REJECT_${REDACTED_VALUE}_${REDACTED_VALUE}`)
+    expect(first.cause).toBe(`tail ${REDACTED_VALUE} ${REDACTED_VALUE}`)
+  })
+
+  // A frozen MIDDLE link is replaced inside its writable parent, so the full
+  // returned chain is code-free while the parent keeps its identity.
+  it('should replace a frozen middle link inside a writable parent', () => {
+    const frozenChild = Object.freeze(new Error('frozen child 555'))
+    const parent = new Error('parent 555')
+    parent.cause = frozenChild
+
+    const returned = scrubValuesFromErrorChain(parent, ['555'])
+
+    expect(returned).toBe(parent)
+    expect(parent.cause).not.toBe(frozenChild)
+    expect((parent.cause as Error).message).toBe(`frozen child ${REDACTED_VALUE}`)
+  })
+
+  // A frozen error whose stack was stripped is copied without poisoning the
+  // copy with an `undefined` stack — the copy keeps its own defined stack.
+  it('should copy a frozen stackless error and keep a defined stack', () => {
+    const bare = new Error('frozen bare 555')
+    delete bare.stack
+    Object.freeze(bare)
+
+    const returned = scrubValuesFromErrorChain(bare, ['555']) as Error
+
+    expect(returned).not.toBe(bare)
+    expect(returned.message).toBe(`frozen bare ${REDACTED_VALUE}`)
+    expect(typeof returned.stack).toBe('string')
+    // No phantom `cause` key on a copy of an error that had none.
+    expect('cause' in returned).toBe(false)
+  })
+
+  // A node whose `cause` slot is read-only but whose child was scrubbed in
+  // place needs NO cause write — the identity check must skip it so the node
+  // itself is not needlessly replaced.
+  it('should keep a node whose read-only cause slot points at an in-place-scrubbed child', () => {
+    const child = new Error('child 555')
+    const parent = new Error('parent 555')
+    Object.defineProperty(parent, 'cause', { value: child })
+
+    const returned = scrubValuesFromErrorChain(parent, ['555'])
+
+    expect(returned).toBe(parent)
+    expect(parent.cause).toBe(child)
     expect(child.message).toBe(`child ${REDACTED_VALUE}`)
   })
 
@@ -86,13 +168,15 @@ describe('scrubValuesFromErrorChain', () => {
     scrubValuesFromErrorChain(bare, ['555'])
 
     expect(bare.stack).toBeUndefined()
+    // The key itself must stay absent — never re-created as `stack: undefined`.
+    expect('stack' in bare).toBe(false)
     expect(bare.message).toBe(`boom ${REDACTED_VALUE}`)
   })
 
-  // A non-Error head is not the scrub's job (callers flatten those) — it must
-  // be a silent no-op, never a throw.
-  it('should ignore a non-Error head', () => {
-    expect(() => scrubValuesFromErrorChain('raw 555', ['555'])).not.toThrow()
+  // A non-Error head is flattened to a redacted string, uniformly with the
+  // cause-link rule — nothing that enters the scrub leaves carrying a secret.
+  it('should flatten a non-Error head to a redacted string', () => {
+    expect(scrubValuesFromErrorChain('raw 555', ['555'])).toBe(`raw ${REDACTED_VALUE}`)
   })
 
   // `name` is emitted by error serializers just like `message` — a secret

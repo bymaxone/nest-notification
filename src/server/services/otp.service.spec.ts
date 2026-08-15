@@ -442,6 +442,71 @@ describe('OtpService.generate', () => {
     expect(JSON.stringify(audit.create.mock.calls).includes(leakedCode)).toBe(false)
   })
 
+  // SECURITY (regression): a failed cleanup used to escape the catch block
+  // BEFORE the scrub ran — the cleanup error must supersede the delivery error
+  // (the cooldown/OTP may be orphaned), carry it as `cause`, and still pass
+  // through the scrub and the audit like any outgoing delivery failure.
+  it('should scrub a cleanup failure and attach the delivery error as its cause', async () => {
+    let leakedCode = ''
+    emailSendTemplate.mockImplementation((input: { data: { code: string } }) => {
+      leakedCode = input.data.code
+      return Promise.reject(new Error(`delivery failed for ${input.data.code}`))
+    })
+    jest.spyOn(storage, 'clearCooldown').mockImplementation(async () => {
+      throw new Error(`cleanup failed while holding ${leakedCode}`)
+    })
+    const service = new OtpService(makeOptions(), storage, audit, emailServiceStub)
+
+    const caught: unknown = await service
+      .generate({ ...ref, deliverVia: 'email' })
+      .catch((error: unknown) => error)
+
+    expect(caught).toBeInstanceOf(Error)
+    expect((caught as Error).message).toBe('cleanup failed while holding [redacted]')
+    expect(((caught as Error).cause as Error).message).toBe('delivery failed for [redacted]')
+    expect(serializeErrorChain(caught).includes(leakedCode)).toBe(false)
+    for (const call of audit.create.mock.calls) {
+      expect(JSON.stringify(call[0]).includes(leakedCode)).toBe(false)
+    }
+  })
+
+  // A cleanup error that already carries its own cause must keep it — the
+  // delivery error is only attached when the slot is genuinely free.
+  it('should not overwrite an existing cause on a cleanup failure', async () => {
+    emailSendTemplate.mockRejectedValue(new Error('delivery failed'))
+    const ownCause = new Error('disk full')
+    jest
+      .spyOn(storage, 'clearCooldown')
+      .mockRejectedValue(new Error('cleanup failed', { cause: ownCause }))
+    const service = new OtpService(makeOptions(), storage, audit, emailServiceStub)
+
+    const caught: unknown = await service
+      .generate({ ...ref, deliverVia: 'email' })
+      .catch((error: unknown) => error)
+
+    expect((caught as Error).cause).toBe(ownCause)
+  })
+
+  // A non-Error cleanup rejection takes the same flattening path as any other
+  // non-Error outgoing failure.
+  it('should flatten a non-Error cleanup rejection to a redacted string', async () => {
+    let leakedCode = ''
+    emailSendTemplate.mockImplementation((input: { data: { code: string } }) => {
+      leakedCode = input.data.code
+      return Promise.reject(new Error('delivery failed'))
+    })
+    jest
+      .spyOn(storage, 'clearCooldown')
+      .mockImplementation(() => Promise.reject(`cleanup dump ${leakedCode}`))
+    const service = new OtpService(makeOptions(), storage, audit, emailServiceStub)
+
+    const caught: unknown = await service
+      .generate({ ...ref, deliverVia: 'email' })
+      .catch((error: unknown) => error)
+
+    expect(caught).toBe('cleanup dump [redacted]')
+  })
+
   // SECURITY: the plaintext code must never appear in any audit entry.
   it('should never place the code in audit metadata', async () => {
     const service = new OtpService(makeOptions(), storage, audit)

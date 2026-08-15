@@ -277,15 +277,30 @@ export class OtpService {
       })
       await this.deliverOtp(input, code, cfg)
     } catch (error) {
-      await this.releaseOtp(input)
+      let failure: unknown = error
+      try {
+        await this.releaseOtp(input)
+      } catch (cleanupError) {
+        // A failed cleanup supersedes the delivery error — the cooldown/OTP may
+        // now be orphaned, which the caller must see — and it must NOT bypass
+        // the scrub below. The delivery error is preserved as its cause when
+        // the cleanup error can carry one.
+        if (cleanupError instanceof Error && !('cause' in cleanupError)) {
+          Reflect.set(cleanupError, 'cause', error)
+        }
+        failure = cleanupError
+      }
       // Scrub BEFORE the audit write and the rethrow, so neither the entry's
       // `errorMessage` nor the outgoing chain can carry the plaintext code. An
-      // Error chain is scrubbed in place; ANY other rejection (string, object
-      // from a custom storage, number) is flattened to a redacted string,
-      // because a raw object could carry the code in its properties and a
-      // primitive cannot be mutated.
-      const outgoing: unknown = error instanceof Error ? error : redactValues(String(error), [code])
-      scrubValuesFromErrorChain(outgoing, [code])
+      // Error chain is scrubbed (in place, or via redacted copies when a node
+      // resists mutation); ANY other rejection (string, object from a custom
+      // storage, number) is flattened to a redacted string, because a raw
+      // object could carry the code in its properties and a primitive cannot
+      // be mutated.
+      const outgoing: unknown =
+        failure instanceof Error
+          ? scrubValuesFromErrorChain(failure, [code])
+          : redactValues(String(failure), [code])
       await this.audit(
         this.otpAuditEntry('failed', input, {
           errorMessage: outgoing instanceof Error ? outgoing.message : String(outgoing)
