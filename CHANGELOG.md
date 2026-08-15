@@ -19,11 +19,13 @@ makes a reader feel safer than they are.
   is false for the shipped wiring. Measured in the published `@bymax-one/nest-auth@1.4.3` bundle:
   `DefaultAuthEmailProvider` is exported, sends through an `AuthEmailSink` whose own typings name
   `EmailService.send` as the intended implementation, and `auditRedactValues` appears **zero**
-  times in the bundle. So on the intended wiring the call site is inside `nest-auth`, not in
-  consumer code, and a derived backend that binds a real SMTP or Resend provider inherits the
-  exposed path with **no call site of its own to declare at**. The remedy for that population sits
-  in `DefaultAuthEmailProvider`, which is the only place that knows both the code it rendered and
-  the call it is about to make. Credit: the `bymax-one` template seat measured it from the
+  times in the bundle. So wherever that bundled provider is the one bound — the wiring `nest-auth`
+  intends and the template uses — the call site is inside `nest-auth` rather than in consumer code,
+  and a derived backend that then binds a real SMTP or Resend provider inherits the exposed path
+  with **no call site of its own to declare at**. The remedy for that population sits in
+  `DefaultAuthEmailProvider`, which is the only place that knows both the code it rendered and the
+  call it is about to make. A consumer that implements `nest-auth`'s email port itself does own its
+  call site, and for that one the original advice held. Credit: the `bymax-one` template seat measured it from the
   consumer's vantage point; `nest-auth` confirmed it against their own bundle.
 
 - **Corrected: declared values are not a sufficient control.** The note called declaration "the
@@ -85,9 +87,10 @@ makes a reader feel safer than they are.
     `SmtpEmailProvider` scrubs them plus detected body echoes from its `warn` line and thrown
     message — closing the pre-existing `warn`-level half of the same leak.
 
-  **Boundary that this release does NOT close, so the note cannot read as "done":** a
-  consumer-issued secret is covered only when the caller declares it in `auditRedactValues`, and a
-  bare code echoed WITHOUT surrounding body content is below the echo guard's 16-character window.
+  **Boundary that this release does NOT close, so the note cannot read as "done":** declaring a
+  consumer-issued secret in `auditRedactValues` removes it only where it appears in the raw,
+  literal shape it was declared in — it is not coverage of the secret as such — and a bare code
+  echoed WITHOUT surrounding body content is below the echo guard's 16-character window.
   <!-- The two claims this paragraph originally made about WHERE that declaration belongs, and
   about declaration being a sufficient control, were both wrong. See 1.2.2 for the correction and
   the measurements. -->
