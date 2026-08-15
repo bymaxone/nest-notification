@@ -41,10 +41,18 @@ makes a reader feel safer than they are.
   Treat provider error text reaching a log as the thing to control, and declared values as
   precision on top of that — not as the barrier.
 
-- The residual risk this leaves is being tracked for a behaviour change rather than another note:
-  provider text should be non-publishing by default and opt-in per send, since one global switch
-  cannot serve an OTP path and a marketing path in the same application. That is a 1.3.0
-  discussion, and it is open, not decided.
+- The residual risk this leaves is tracked for a behaviour change rather than another note, and
+  the shape of that change is open. What the measurements above establish is the direction: value
+  redaction is a **blacklist** — it must predict the form the secret takes, and it loses to any
+  form it did not predict. A grammar-bounded extraction is a **whitelist**: publish only the SMTP
+  basic status and, when present, the RFC 3463 enhanced code, so the output alphabet is digits and
+  dots and cannot carry body content whatever the input held. The open questions are whether the
+  status codes alone carry enough diagnosis for non-OTP mail (a `550` content rejection and a
+  `550` blocklisted sender call for opposite actions, which the enhanced code distinguishes but
+  the basic one does not), and whether publishing the enhanced code is itself acceptable — with
+  punctuation stripped, `550 5.7.1` reads as `550571`, the shape of a live six-digit code, which
+  is why `@bymax-one/nest-auth` chose to drop it on their own line. Both positions come from teams
+  that measured. Nothing here is decided.
 
 ## [1.2.1] - 2026-08-15
 
