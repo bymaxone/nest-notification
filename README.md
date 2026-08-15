@@ -623,7 +623,8 @@ The library **never** writes a code to a sink that can be read back:
 
 - Not to the audit log — an entry is `{ verb, tenantId, recipient, purpose, providerName, … }`, never `code`.
 - Not to a console or logger line.
-- Not inside an `errorMessage`, which carries the message only — never a stack trace, whose frames can hold the code as an argument.
+- Not inside an `errorMessage`, which carries the message only — never a stack trace.
+- Not inside a rethrown delivery error: the renderer and the provider both receive the code (template `data`, rendered body), so on a failed delivery every occurrence of the code is scrubbed to `[redacted]` across the outgoing error chain — message **and** stack at every link — before the audit write and the rethrow. Default V8 stack frames carry only function names and source locations, never argument values; the header line (`Error: <message>`) is where a code could ride a stack, and the scrub covers it.
 
 Codes exist only inside the OTP store, under a TTL, and in process memory for the duration of the request. `audit.maskRecipient` minimizes the recipient before it is persisted (`jane@acme.com` → `j***@acme.com`). A regression test asserts the invariant directly rather than trusting review: `JSON.stringify(auditEntry).includes(code) === false`.
 
