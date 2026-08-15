@@ -630,7 +630,7 @@ The library **never** writes a code to a sink that can be read back:
 - Not inside an `errorMessage`, which carries the message only — never a stack trace.
 - Not inside a rethrown delivery error: the renderer and the provider both receive the code (template `data`, rendered body), so on a failed delivery every **literal** occurrence of the code — the form it was issued in, which is the form this library's own text carries — is scrubbed to `[redacted]` across the outgoing error chain — message **and** stack at every link, cycle-safe with no depth limit — before the audit write and the rethrow, and a non-`Error` rejection is flattened to a redacted string. The email channel's own `failed` audit entry is covered too: OTP delivery declares the code via `auditRedactValues`, and `EmailService` redacts it from the entry's `errorMessage`. Default V8 stack frames carry only function names and source locations, never argument values; the header line (`Error: <message>`) is where a code could ride a stack, and the scrub covers it.
 
-Codes exist only inside the OTP store, under a TTL, and in process memory for the duration of the request. `audit.maskRecipient` minimizes the recipient before it is persisted (`jane@acme.com` → `j***@acme.com`). A regression test asserts the invariant directly rather than trusting review: `JSON.stringify(auditEntry).includes(code) === false`.
+Within this library, codes exist only inside the OTP store, under a TTL, and in process memory for the duration of the request — a provider that quotes the body back is outside that boundary, and its ceiling is documented under [Errors](#errors). `audit.maskRecipient` minimizes the recipient before it is persisted (`jane@acme.com` → `j***@acme.com`). A regression test asserts the invariant directly rather than trusting review: `JSON.stringify(auditEntry).includes(code) === false`.
 
 ### Attempt ceilings and cooldowns are atomic
 
@@ -651,22 +651,22 @@ When integrating `@bymax-one/nest-notification` in production, verify each of th
 
 ## 🛡️ Security Table
 
-| Layer              | Implementation                                                                                                                                                                            |
-| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Code Generation    | `crypto.randomInt` per character over the configured alphabet — uniform at every position, no modulo bias                                                                                 |
-| Code Comparison    | `crypto.timingSafeEqual` (constant-time), never `===`                                                                                                                                     |
-| Storage Keys       | `sha256(tenantId:recipient)` — no recipient PII, no cross-tenant collision                                                                                                                |
-| Attempt Ceiling    | Counter spent atomically inside the storage (Redis Lua) — never a service-side read-then-write                                                                                            |
-| Resend Cooldown    | `SET NX EX` acquire, released only on delivery failure — two concurrent resends cannot both win                                                                                           |
-| Code Lifetime      | TTL-bound in the store; expiry and absence are reported identically so neither leaks the other                                                                                            |
-| Code Exposure      | Never logged, never audited, never in an error message or stack trace — asserted by a regression test                                                                                     |
-| Recipient PII      | Absent from keys; optionally masked before it reaches the audit sink                                                                                                                      |
-| Provider Secrets   | The Resend API key, the SMTP password and the Redis client live in private fields; serializing a provider omits them, and a failing SMTP session has its password scrubbed from the error |
-| Tenant Isolation   | `tenantId` scopes every operation and is resolved from a trusted source, not the payload                                                                                                  |
-| Template Injection | HTML body escaped on interpolation by the bundled renderer — closes stored XSS through a display name                                                                                     |
-| Attachment DoS     | Total attachment size rejected against a budget before the provider is called                                                                                                             |
-| Audit Failures     | Fire-and-forget with `swallowErrors` — an audit outage never becomes a delivery outage                                                                                                    |
-| Supply Chain       | `"dependencies": {}`; published with npm provenance (OIDC), CodeQL and OpenSSF Scorecard on every push                                                                                    |
+| Layer              | Implementation                                                                                                                                                                                  |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Code Generation    | `crypto.randomInt` per character over the configured alphabet — uniform at every position, no modulo bias                                                                                       |
+| Code Comparison    | `crypto.timingSafeEqual` (constant-time), never `===`                                                                                                                                           |
+| Storage Keys       | `sha256(tenantId:recipient)` — no recipient PII, no cross-tenant collision                                                                                                                      |
+| Attempt Ceiling    | Counter spent atomically inside the storage (Redis Lua) — never a service-side read-then-write                                                                                                  |
+| Resend Cooldown    | `SET NX EX` acquire, released only on delivery failure — two concurrent resends cannot both win                                                                                                 |
+| Code Lifetime      | TTL-bound in the store; expiry and absence are reported identically so neither leaks the other                                                                                                  |
+| Code Exposure      | Never logged, audited, or placed in an error message or stack trace **by this library** — asserted by a regression test. Provider-authored text has a documented ceiling: see [Errors](#errors) |
+| Recipient PII      | Absent from keys; optionally masked before it reaches the audit sink                                                                                                                            |
+| Provider Secrets   | The Resend API key, the SMTP password and the Redis client live in private fields; serializing a provider omits them, and a failing SMTP session has its password scrubbed from the error       |
+| Tenant Isolation   | `tenantId` scopes every operation and is resolved from a trusted source, not the payload                                                                                                        |
+| Template Injection | HTML body escaped on interpolation by the bundled renderer — closes stored XSS through a display name                                                                                           |
+| Attachment DoS     | Total attachment size rejected against a budget before the provider is called                                                                                                                   |
+| Audit Failures     | Fire-and-forget with `swallowErrors` — an audit outage never becomes a delivery outage                                                                                                          |
+| Supply Chain       | `"dependencies": {}`; published with npm provenance (OIDC), CodeQL and OpenSSF Scorecard on every push                                                                                          |
 
 > [!IMPORTANT]
 > This package uses **zero external cryptographic dependencies**. All operations use Node.js native `node:crypto`, eliminating supply chain attack vectors for critical security code.

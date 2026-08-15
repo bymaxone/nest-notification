@@ -52,7 +52,10 @@ makes a reader feel safer than they are.
   Found by applying a rule a consuming team derived after finding the identical drift in their own
   changelog: a claim written to explain and a claim written to instruct drift apart inside one
   author's head, because the explanation optimises for the point and the instruction for the cases.
-  Grep the narrative against the instructions whenever one document carries both.
+  Grep the narrative against the instructions whenever one document carries both. A second sweep
+  caught two more of the same shape — the security table's "Code Exposure" row and the
+  code-lifetime paragraph — which is the argument for sweeping by claim rather than by the wording
+  that happened to appear in the first one found.
 
 - The residual risk this leaves is tracked for a behaviour change rather than another note, and
   the shape of that change is open. What the measurements above establish is the direction: value
