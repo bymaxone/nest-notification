@@ -254,6 +254,35 @@ describe('ResendEmailProvider', () => {
     warnSpy.mockRestore()
   })
 
+  // SECURITY: the SDK can REJECT instead of resolving `{ error }` — a transport
+  // or fetch failure whose message quotes the request body. That path bypassed
+  // the result-error branch entirely and threw the raw error, so the echoed
+  // body reached the log and the audit entry unscrubbed.
+  it('should scrub a rejected SDK call the same way as an error result', async () => {
+    const body = String(baseOptions.html)
+    mockSend.mockRejectedValue(new Error(`fetch failed sending: ${body.slice(0, 40)}`))
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+    await expect(new ResendEmailProvider({ apiKey: 'k' }).send(baseOptions)).rejects.toThrow(
+      /^Resend send failed: fetch failed sending: \[redacted\]/
+    )
+    const logged = String(warnSpy.mock.calls[0]?.[0])
+    expect(logged).toContain('[redacted]')
+    expect(logged).not.toContain('Secret 123456')
+    warnSpy.mockRestore()
+  })
+
+  // A rejection can carry a non-Error value; it must still produce a usable
+  // message rather than "[object Object]", and declared secrets still go.
+  it('should stringify and scrub a non-Error rejection', async () => {
+    mockSend.mockRejectedValue('ECONNRESET while sending 998877')
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+    await expect(
+      new ResendEmailProvider({ apiKey: 'k' }).send({ ...baseOptions, redactValues: ['998877'] })
+    ).rejects.toThrow('Resend send failed: ECONNRESET while sending [redacted]')
+  })
+
   // A success result with no message id is a contract violation — fail loudly.
   it('should throw when the SDK returns no message id', async () => {
     mockSend.mockResolvedValue({ data: null, error: null })

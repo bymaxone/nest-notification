@@ -55,7 +55,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   nested `cause` (or a stack) chose the raw-cause path — it now feeds on message and stack at
   every link (`collectErrorChainText`, guarded reads, cycle-safe). `ResendEmailProvider` applies
   the same declared-value/body-echo scrub (plus its API key) to its warn line and thrown message,
-  matching `SmtpEmailProvider`. Echo matching extends anchored occurrences character-by-character
+  matching `SmtpEmailProvider` — on BOTH failure shapes the SDK can produce, the resolved
+  `{ error }` result and a rejected promise (a transport/fetch failure quoting the request body
+  previously bypassed the scrub entirely and threw raw). Echo matching extends anchored occurrences character-by-character
   instead of re-searching a growing substring per character, so a relay echoing a large body can
   no longer stall the event loop. And `SmtpEmailProvider` no longer redacts its credentials
   BEFORE detecting echoes: a quoted body containing the password split the echoed run into halves
