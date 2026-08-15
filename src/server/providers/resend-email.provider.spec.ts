@@ -177,6 +177,83 @@ describe('ResendEmailProvider', () => {
     expect(logged).not.toContain('Secret 123456')
   })
 
+  // SECURITY: a policy/DLP rejection that quotes the rejected content puts the
+  // body — and the OTP inside it — into the SDK error message. The echoed
+  // excerpt is scrubbed from the warn line and the thrown message with no
+  // declaration, mirroring the SMTP provider.
+  it('should scrub echoed body content out of an SDK error', async () => {
+    const body = String(baseOptions.html)
+    mockSend.mockResolvedValue({
+      data: null,
+      error: { message: `content rejected by policy - body was: ${body.slice(0, 40)}` }
+    })
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+    await expect(new ResendEmailProvider({ apiKey: 'k' }).send(baseOptions)).rejects.toThrow(
+      /^Resend send failed: content rejected by policy/
+    )
+    const logged = String(warnSpy.mock.calls[0]?.[0])
+    expect(logged).toContain('[redacted]')
+    expect(logged).not.toContain('Secret 123456')
+    warnSpy.mockRestore()
+  })
+
+  // An echo of the PLAIN-TEXT part alone must be detected too — pins the
+  // text-reference branch.
+  it('should scrub content echoed only from the text body', async () => {
+    const textOnly = 'plain-only sentence with code 998877 inside it'
+    mockSend.mockResolvedValue({
+      data: null,
+      error: { message: `rejected: ${textOnly.slice(0, 40)}` }
+    })
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+    await expect(
+      new ResendEmailProvider({ apiKey: 'k' }).send({ ...baseOptions, text: textOnly })
+    ).rejects.toThrow(/^Resend send failed: rejected: \[redacted\]/)
+    expect(String(warnSpy.mock.calls[0]?.[0])).not.toContain('998877')
+    warnSpy.mockRestore()
+  })
+
+  // An options set WITHOUT a plain-text part must not break the scrub — pins
+  // the `options.text` guard's absent side.
+  it('should handle an SDK error when no text body was sent', async () => {
+    mockSend.mockResolvedValue({ data: null, error: { message: 'quota exceeded' } })
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    const { text: _text, ...withoutText } = baseOptions
+
+    await expect(new ResendEmailProvider({ apiKey: 'k' }).send(withoutText)).rejects.toThrow(
+      'Resend send failed: quota exceeded'
+    )
+  })
+
+  // Declared secrets travel as `redactValues` and are scrubbed even when the
+  // echo is too short for detection.
+  it('should scrub declared redactValues out of an SDK error', async () => {
+    mockSend.mockResolvedValue({ data: null, error: { message: 'rejected: 998877' } })
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+    await expect(
+      new ResendEmailProvider({ apiKey: 'k' }).send({ ...baseOptions, redactValues: ['998877'] })
+    ).rejects.toThrow('Resend send failed: rejected: [redacted]')
+    expect(String(warnSpy.mock.calls[0]?.[0])).not.toContain('998877')
+    warnSpy.mockRestore()
+  })
+
+  // An auth-style error can echo the API key back — it is secret material and
+  // scrubbed like the SMTP credentials are.
+  it('should scrub the API key out of an SDK error', async () => {
+    const apiKey = 're_LEAKCANARY_key'
+    mockSend.mockResolvedValue({ data: null, error: { message: `invalid key: ${apiKey}` } })
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+    await expect(new ResendEmailProvider({ apiKey }).send(baseOptions)).rejects.toThrow(
+      'Resend send failed: invalid key: [redacted]'
+    )
+    expect(String(warnSpy.mock.calls[0]?.[0])).not.toContain(apiKey)
+    warnSpy.mockRestore()
+  })
+
   // A success result with no message id is a contract violation — fail loudly.
   it('should throw when the SDK returns no message id', async () => {
     mockSend.mockResolvedValue({ data: null, error: null })

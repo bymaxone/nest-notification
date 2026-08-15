@@ -30,6 +30,7 @@ import type {
 } from '../interfaces/notification-log-repository.interface'
 import {
   collectEchoedExcerpts,
+  collectErrorChainText,
   readRedactedMessage,
   scrubValuesFromErrorChain
 } from '../utils/redact'
@@ -332,7 +333,11 @@ export class EmailService {
     declared: readonly string[] | undefined,
     sendOptions: EmailSendOptions
   ): readonly string[] {
-    const errorText = readRedactedMessage(error)
+    // The WHOLE chain is inspected — message and stack at every `cause` link —
+    // because a wrapper with a generic outer message can carry the echo only in
+    // a nested cause, and discovery reading the top level alone would choose
+    // the raw-cause path with that plaintext aboard.
+    const errorText = collectErrorChainText(error)
     const values = collectEchoedExcerpts(errorText, sendOptions.html)
     if (sendOptions.text !== undefined) {
       values.push(...collectEchoedExcerpts(errorText, sendOptions.text))

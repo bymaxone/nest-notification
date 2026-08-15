@@ -52,6 +52,30 @@ describe('EmailService.send redaction', () => {
     )
   })
 
+  // Echo discovery reads the WHOLE chain: a wrapper with a generic outer
+  // message but the echoed body inside a nested cause must still be caught —
+  // reading only the top-level message would pick the raw-cause path with the
+  // plaintext aboard.
+  it('should scrub an echo living only in a nested cause message', async () => {
+    const provider = makeProvider()
+    const body = '<p>Hello Jane, Your password reset code is 998877. It expires shortly.</p>'
+    provider.send.mockImplementation(async (options) => {
+      throw new Error('delivery failed', {
+        cause: new Error(`550 rejected - body was: ${options.html.slice(3, 60)}`)
+      })
+    })
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), makeAudit())
+
+    const caught: unknown = await service
+      .send({ ...baseInput, html: body })
+      .catch((error: unknown) => error)
+
+    const cause = (caught as NotificationException).cause as Error
+    const nested = cause.cause as Error
+    expect(nested.message).toContain('[redacted]')
+    expect(nested.message.includes('998877')).toBe(false)
+  })
+
   // The PLAIN-TEXT body is an echo reference too — a relay may quote the text
   // part rather than the HTML part.
   it('should scrub content echoed from the plain-text body', async () => {

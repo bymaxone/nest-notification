@@ -94,6 +94,36 @@ describe('SmtpEmailProvider failure handling', () => {
     )
   })
 
+  // SECURITY (regression): the credential scrub used to run BEFORE echo
+  // detection, so a body quoting the password split the echoed run in two —
+  // each half below the 16-character window — and everything after the
+  // password, including the OTP, reached the log line. Detection now runs
+  // against the raw message and every value is replaced in one pass.
+  it('should still detect the echo when the quoted body contains the password', async () => {
+    const pass = 'SUPERSECRETPASSWORD'
+    // The segment before the password is a detectable echo on its own; the one
+    // after it (' 998877 ok') is not — only whole-run detection covers it.
+    const body = `<p>Hello Jane and team, ${pass} 998877 ok</p>`
+    mockSendMail.mockRejectedValue(new Error(`550 quoted: Hello Jane and team, ${pass} 998877 ok`))
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    const provider = new SmtpEmailProvider({
+      host: 'h',
+      credentials: { user: 'relay-user', pass }
+    })
+    const { text: _text, ...withoutText } = baseOptions
+
+    const thrown: unknown = await provider
+      .send({ ...withoutText, html: body })
+      .catch((error: unknown) => error)
+
+    const message = (thrown as Error).message
+    expect(message).toContain('550 quoted:')
+    expect(message).not.toContain('998877')
+    expect(message).not.toContain(pass)
+    expect(String(warnSpy.mock.calls[0]?.[0])).not.toContain('998877')
+    warnSpy.mockRestore()
+  })
+
   // Declared secrets travel to the provider as `redactValues` and are
   // scrubbed from the warn line even when the echo is too short to detect.
   it('should scrub declared redactValues out of a transport error', async () => {

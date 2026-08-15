@@ -124,6 +124,16 @@ describe('collectEchoedExcerpts', () => {
   it('should ignore overlap shorter than the window', () => {
     expect(collectEchoedExcerpts('code 998877 only', body)).toEqual([])
   })
+
+  // The same window can occur more than once in the reference with different
+  // continuations; the excerpt must extend along the LONGEST occurrence, not
+  // whichever happens to be found first.
+  it('should extend along the longest of several window occurrences', () => {
+    const window = 'ABCDEFGHIJKLMNOP'
+    const reference = `${window}xx filler${window}QRST`
+
+    expect(collectEchoedExcerpts(`err: ${window}QRST!`, reference)).toEqual([`${window}QRST`])
+  })
 })
 
 describe('coerceRedacted', () => {

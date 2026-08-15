@@ -349,12 +349,12 @@ export class SmtpEmailProvider implements IEmailProvider {
     try {
       return await transport.sendMail(payload)
     } catch (error) {
-      // Credentials first, then the caller's declared secrets, then any
-      // excerpt of the body the transport error is ECHOING — a policy/DLP
-      // relay that quotes the rejected content puts the body (and any secret
-      // inside it) into the error text this line is about to log.
+      // Credentials, declared secrets and echoed body excerpts are removed in
+      // ONE pass over the raw message — a policy/DLP relay that quotes the
+      // rejected content puts the body (and any secret inside it) into the
+      // error text this line is about to log.
       const reason = this.scrubTransportError(
-        this.redact(error instanceof Error ? error.message : String(error)),
+        error instanceof Error ? error.message : String(error),
         payload,
         redactValues
       )
@@ -364,9 +364,20 @@ export class SmtpEmailProvider implements IEmailProvider {
   }
 
   /**
-   * Removes the caller's declared secrets and any echoed body excerpt from a
-   * transport error's text — the credential scrub alone cannot cover content
-   * the provider does not know is secret.
+   * Removes the credentials, the caller's declared secrets and any echoed body
+   * excerpt from a transport error's text — the credential scrub alone cannot
+   * cover content the provider does not know is secret.
+   *
+   * Echo detection runs against the RAW message and every value is replaced in
+   * a single pass. Redacting credentials first would break a contiguous body
+   * run that happens to quote one, dropping the surviving halves below the
+   * detection window and leaving the rest of that body — and any secret inside
+   * it — in the log line.
+   *
+   * @param message - The raw transport error message.
+   * @param payload - The message that was sent, whose body is the echo reference.
+   * @param declaredValues - The caller's declared secrets, if any.
+   * @returns The message with every known-secret value replaced.
    */
   private scrubTransportError(
     message: string,
@@ -380,7 +391,16 @@ export class SmtpEmailProvider implements IEmailProvider {
     if (declaredValues) {
       values.push(...declaredValues)
     }
+    values.push(...this.credentialValues())
     return redactValues(message, values)
+  }
+
+  /** The configured credentials that qualify as secret material, if any. */
+  private credentialValues(): string[] {
+    const credentials = this.#options.credentials
+    return [credentials?.user, credentials?.pass].filter((secret): secret is string =>
+      Boolean(secret)
+    )
   }
 
   /**
@@ -404,11 +424,7 @@ export class SmtpEmailProvider implements IEmailProvider {
    * @returns The message with both credentials removed, unchanged when none is set.
    */
   private redact(message: string): string {
-    const credentials = this.#options.credentials
-    return redactValues(
-      message,
-      [credentials?.user, credentials?.pass].filter((secret): secret is string => Boolean(secret))
-    )
+    return redactValues(message, this.credentialValues())
   }
 
   /**

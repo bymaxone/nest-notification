@@ -1,7 +1,12 @@
 import { NotificationException } from '../errors/notification-exception'
 
 import { hostileToString } from './__tests__/redact-fixtures'
-import { REDACTED_VALUE, attachCauseIfAbsent, scrubValuesFromErrorChain } from './redact'
+import {
+  REDACTED_VALUE,
+  attachCauseIfAbsent,
+  collectErrorChainText,
+  scrubValuesFromErrorChain
+} from './redact'
 
 describe('scrubValuesFromErrorChain — hostile proxies and lying accessors', () => {
   // SECURITY (regression): classifying a value runs the getPrototypeOf trap —
@@ -253,5 +258,105 @@ describe('scrubValuesFromErrorChain — hostile proxies and lying accessors', ()
     expect(returned).toBe(exception)
     expect('options' in exception).toBe(true)
     expect(JSON.stringify({ ...exception })).not.toContain('555')
+  })
+})
+
+describe('collectErrorChainText — chain-wide echo discovery input', () => {
+  // Echo discovery must see content that lives ONLY in a nested cause message —
+  // a wrapper with a generic outer message would otherwise choose the raw-cause
+  // path with the echoed plaintext aboard.
+  it('should include the message of every cause link', () => {
+    const inner = new Error('inner body quote 998877 rejected')
+    const outer = new Error('send failed', { cause: inner })
+
+    const lines = collectErrorChainText(outer).split('\n')
+
+    // Whole lines, not substrings: each part must sit on its own newline so
+    // adjacent parts cannot merge into content that was never in either.
+    expect(lines).toContain('send failed')
+    expect(lines).toContain('inner body quote 998877 rejected')
+  })
+
+  // A `null` cause is a terminator, not a link — the walk must not coerce it
+  // into a literal 'null' line of discovery text.
+  it('should end the walk at a null cause without reading it', () => {
+    const error = new Error('outer message', { cause: null })
+
+    expect(collectErrorChainText(error).split('\n')).not.toContain('null')
+  })
+
+  // A stack can carry content the message does not (a custom error building its
+  // own stack string); both fields feed discovery.
+  it('should include each link stack', () => {
+    const error = new Error('generic')
+    error.stack = 'STACKLINE quoting body content 998877 here'
+
+    expect(collectErrorChainText(error)).toContain('STACKLINE quoting body content 998877 here')
+  })
+
+  // A self-referential chain must terminate — traversal is identity-based.
+  it('should terminate on a cyclic cause chain', () => {
+    const first = new Error('first')
+    const second = new Error('second', { cause: first })
+    first.cause = second
+
+    const text = collectErrorChainText(first)
+
+    expect(text).toContain('first')
+    expect(text).toContain('second')
+  })
+
+  // A hostile stack getter contributes nothing instead of escaping — the
+  // message of the same link and the rest of the chain still feed discovery.
+  it('should skip a hostile stack getter and keep walking', () => {
+    const hostile = new Error('outer message', { cause: new Error('inner message') })
+    Object.defineProperty(hostile, 'stack', {
+      get: (): never => {
+        throw new Error('trap')
+      }
+    })
+
+    const text = collectErrorChainText(hostile)
+
+    expect(text).toContain('outer message')
+    expect(text).toContain('inner message')
+  })
+
+  // An Error whose stack was stripped contributes only its message — the
+  // stack read is skipped, not crashed on.
+  it('should skip a link with no stack string', () => {
+    const error = new Error('stackless message')
+    delete error.stack
+
+    expect(collectErrorChainText(error)).toContain('stackless message')
+    expect(collectErrorChainText(error)).not.toContain('undefined')
+  })
+
+  // A hostile cause getter ends the walk at that link — everything already
+  // collected survives and nothing escapes.
+  it('should stop at a hostile cause getter', () => {
+    const hostile = new Error('readable message')
+    Object.defineProperty(hostile, 'cause', {
+      get: (): never => {
+        throw new Error('trap')
+      }
+    })
+
+    expect(collectErrorChainText(hostile)).toContain('readable message')
+  })
+
+  // A non-Error head is coerced once and the walk ends — there is no chain to
+  // follow, and a hostile coercion fails closed to the marker.
+  it('should coerce a non-Error head and fail closed on a hostile one', () => {
+    expect(collectErrorChainText('raw failure text')).toContain('raw failure text')
+    expect(collectErrorChainText(hostileToString('555'))).toBe(REDACTED_VALUE)
+  })
+
+  // A primitive tail (a string cause) is read like any other link, then the
+  // walk ends — primitives have no cause of their own.
+  it('should read a primitive cause tail', () => {
+    const error = new Error('outer', { cause: 'string tail 998877' })
+
+    expect(collectErrorChainText(error)).toContain('string tail 998877')
   })
 })

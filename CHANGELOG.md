@@ -49,6 +49,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   SMTP credential/echo redaction) inherits the fix. Credit: the defect class was measured by a
   consuming team's review of their own scrub of the same shape.
 
+- **Echo discovery reads the whole error chain, both bundled providers scrub, and matching is
+  no longer quadratic.** Review findings on the patch itself: discovery previously read only the
+  top-level `error.message`, so a wrapper with a generic outer message and the echoed body in a
+  nested `cause` (or a stack) chose the raw-cause path — it now feeds on message and stack at
+  every link (`collectErrorChainText`, guarded reads, cycle-safe). `ResendEmailProvider` applies
+  the same declared-value/body-echo scrub (plus its API key) to its warn line and thrown message,
+  matching `SmtpEmailProvider`. Echo matching extends anchored occurrences character-by-character
+  instead of re-searching a growing substring per character, so a relay echoing a large body can
+  no longer stall the event loop. And `SmtpEmailProvider` no longer redacts its credentials
+  BEFORE detecting echoes: a quoted body containing the password split the echoed run into halves
+  below the detection window, so everything after the password — the OTP included — reached the
+  log line; detection now runs on the raw message with every value replaced in one pass.
+
 - **`NotificationException` no longer exposes the constructor's `options` argument to
   serializers.** NestJS's `HttpException` keeps `options` as an enumerable own property, so
   structured log output showed `"options":{"cause":{}}` beside the real `cause` — a duplicate
@@ -427,7 +440,7 @@ rejected at startup rather than failing on the first send.
 
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.0.6...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.2.1...HEAD
 [1.2.1]: https://github.com/bymaxone/nest-notification/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/bymaxone/nest-notification/compare/v1.1.2...v1.2.0
 [1.1.2]: https://github.com/bymaxone/nest-notification/compare/v1.1.1...v1.1.2

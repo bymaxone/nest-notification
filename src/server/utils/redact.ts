@@ -86,6 +86,46 @@ export function readRedactedMessage(error: unknown, values?: readonly string[]):
 }
 
 /**
+ * Concatenates the readable text of an error and its whole `cause` chain —
+ * message and stack at every link — for echo DISCOVERY. A provider failure can
+ * carry a generic outer message while the echoed body content sits only in a
+ * nested `cause`'s message or stack, and discovery that reads the top-level
+ * message alone would choose the raw-cause path with that plaintext aboard.
+ * Every read is guarded — a hostile getter contributes nothing instead of
+ * escaping — and traversal is identity-based, so cycles terminate.
+ *
+ * @param error - The failure whose chain to read.
+ * @returns The chain's message and stack text, newline-joined.
+ */
+export function collectErrorChainText(error: unknown): string {
+  const parts: string[] = []
+  const seen = new Set<unknown>()
+  let current: unknown = error
+  while (current !== null && current !== undefined && !seen.has(current)) {
+    seen.add(current)
+    parts.push(readRedactedMessage(current))
+    if (!isSafeError(current)) {
+      break
+    }
+    try {
+      if (typeof current.stack === 'string') {
+        parts.push(current.stack)
+      }
+    } catch {
+      // A hostile `stack` getter contributes nothing.
+    }
+    try {
+      current = 'cause' in current ? current.cause : undefined
+    } catch {
+      // A hostile `cause` getter or proxy trap ends the walk: `current` keeps
+      // the value already recorded in `seen`, so the loop guard stops on the
+      // next check. Nothing to do here.
+    }
+  }
+  return parts.join('\n')
+}
+
+/**
  * Shortest run of characters that counts as an ECHO of reference content.
  * Below this, coincidental overlap between an error message and a message body
  * is likely; at or above it, the error is quoting content.
@@ -112,17 +152,28 @@ export function collectEchoedExcerpts(text: string, reference: string): string[]
   const excerpts: string[] = []
   let index = 0
   while (index + MIN_ECHO_LENGTH <= text.length) {
-    if (!reference.includes(text.slice(index, index + MIN_ECHO_LENGTH))) {
+    const window = text.slice(index, index + MIN_ECHO_LENGTH)
+    // Each occurrence of the window anchors a direct character-by-character
+    // extension — never a substring re-search per added character, whose cost
+    // grows quadratically with the echo and lets a relay quoting a large body
+    // stall the event loop.
+    let longest = 0
+    for (let at = reference.indexOf(window); at !== -1; at = reference.indexOf(window, at + 1)) {
+      let length = MIN_ECHO_LENGTH
+      while (
+        text[index + length] !== undefined &&
+        text[index + length] === reference[at + length]
+      ) {
+        length += 1
+      }
+      longest = Math.max(longest, length)
+    }
+    if (longest === 0) {
       index += 1
       continue
     }
-    let end = index + MIN_ECHO_LENGTH
-    // Stryker disable next-line EqualityOperator: equivalent — at end === text.length the mutant's one extra iteration slices past the end, which clamps to the same string, so the pushed excerpt is identical for every input
-    while (end < text.length && reference.includes(text.slice(index, end + 1))) {
-      end += 1
-    }
-    excerpts.push(text.slice(index, end))
-    index = end
+    excerpts.push(text.slice(index, index + longest))
+    index += longest
   }
   return excerpts
 }

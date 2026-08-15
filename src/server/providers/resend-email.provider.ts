@@ -21,6 +21,7 @@ import type {
   IEmailProvider
 } from '../interfaces/email-provider.interface'
 import { loadOptionalPeer } from '../utils/load-optional-peer'
+import { collectEchoedExcerpts, redactValues } from '../utils/redact'
 
 /** Construction options for {@link ResendEmailProvider}. */
 export interface ResendEmailProviderOptions {
@@ -140,14 +141,42 @@ export class ResendEmailProvider implements IEmailProvider {
       attachments: options.attachments
     })
     if (result.error) {
-      // Surface only the provider's message — never the email body.
-      this.logger.warn(`[RESEND_SEND_FAILED] ${result.error.message}`)
-      throw new Error(`Resend send failed: ${result.error.message}`)
+      // Surface only the provider's message — never the email body. The API key,
+      // the caller's declared secrets, and any excerpt of the body the error is
+      // ECHOING are scrubbed first: a policy/DLP rejection that quotes the
+      // rejected content puts the body (and any secret inside it) into the
+      // message this line is about to log.
+      const reason = this.scrubSendError(result.error.message, options)
+      this.logger.warn(`[RESEND_SEND_FAILED] ${reason}`)
+      throw new Error(`Resend send failed: ${reason}`)
     }
     if (!result.data?.id) {
       throw new Error('Resend returned no message ID')
     }
     return { messageId: result.data.id }
+  }
+
+  /**
+   * Removes the API key, the caller's declared secrets, and any echoed body
+   * excerpt from an SDK error message — the provider cannot know which part of
+   * the body is secret, so a detected echo is scrubbed wholesale.
+   *
+   * @param message - The raw SDK error message.
+   * @param options - The send input whose body and declared values to scrub.
+   * @returns The message with every known-secret value replaced.
+   */
+  private scrubSendError(message: string, options: EmailSendOptions): string {
+    const values = collectEchoedExcerpts(message, options.html)
+    if (options.text !== undefined) {
+      values.push(...collectEchoedExcerpts(message, options.text))
+    }
+    if (options.redactValues) {
+      values.push(...options.redactValues)
+    }
+    // The error path only exists after a successful client init, which requires
+    // the key — the filter narrows the type without a dead undefined branch.
+    values.push(...[this.#options.apiKey].filter((secret): secret is string => Boolean(secret)))
+    return redactValues(message, values)
   }
 
   /**
