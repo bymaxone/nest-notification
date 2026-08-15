@@ -132,19 +132,61 @@ describe('scrubValuesFromErrorChain', () => {
     expect('cause' in returned).toBe(false)
   })
 
-  // A node whose `cause` slot is read-only but whose child was scrubbed in
-  // place needs NO cause write — the identity check must skip it so the node
-  // itself is not needlessly replaced.
-  it('should keep a node whose read-only cause slot points at an in-place-scrubbed child', () => {
+  // A read-only `cause` slot fails the writability probe, so the node is
+  // represented by a copy — its child representative could never be attached
+  // otherwise. The original still gets its writable fields scrubbed.
+  it('should copy a node whose cause slot is read-only', () => {
     const child = new Error('child 555')
     const parent = new Error('parent 555')
     Object.defineProperty(parent, 'cause', { value: child })
+
+    const returned = scrubValuesFromErrorChain(parent, ['555']) as Error
+
+    expect(returned).not.toBe(parent)
+    expect(returned.message).toBe(`parent ${REDACTED_VALUE}`)
+    expect(returned.cause).toBe(child)
+    expect(child.message).toBe(`child ${REDACTED_VALUE}`)
+  })
+
+  // A writable node WITH a cause keeps its identity — pins the probe's
+  // same-value cause write against a mutant that forces the copy path.
+  it('should preserve the identity of a writable node with a cause', () => {
+    const child = new Error('child 555')
+    const parent = new Error('parent 555')
+    parent.cause = child
 
     const returned = scrubValuesFromErrorChain(parent, ['555'])
 
     expect(returned).toBe(parent)
     expect(parent.cause).toBe(child)
-    expect(child.message).toBe(`child ${REDACTED_VALUE}`)
+  })
+
+  // SECURITY (regression): a cycle THROUGH a frozen node must not retain an
+  // unredacted back-edge. With frozen `a` → `b` → `a`, the returned graph must
+  // wire `b.cause` to a's redacted REPRESENTATIVE — never to the original
+  // frozen `a`, whose message still carries the secret.
+  it('should rewire a cyclic back-edge away from a frozen original', () => {
+    const frozenA = new Error('a holds 555')
+    const b = new Error('b holds 555')
+    frozenA.cause = b
+    b.cause = frozenA
+    Object.freeze(frozenA)
+
+    const returned = scrubValuesFromErrorChain(frozenA, ['555']) as Error
+
+    expect(returned).not.toBe(frozenA)
+    expect(returned.message).toBe(`a holds ${REDACTED_VALUE}`)
+    expect(returned.cause).toBe(b)
+    expect(b.cause).not.toBe(frozenA)
+    expect(b.cause).toBe(returned)
+    // Walk the returned graph: no node may carry the secret.
+    const visited = new Set<unknown>()
+    let cursor: unknown = returned
+    while (cursor instanceof Error && !visited.has(cursor)) {
+      visited.add(cursor)
+      expect(cursor.message.includes('555')).toBe(false)
+      cursor = cursor.cause
+    }
   })
 
   // A materialized stack carries the secret in its header line; the scrub must

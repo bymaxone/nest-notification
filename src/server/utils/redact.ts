@@ -41,45 +41,67 @@ export function redactValues(text: string, values: readonly string[]): string {
  * redacted copy when it did not.
  */
 export function scrubValuesFromErrorChain(error: unknown, values: readonly string[]): unknown {
-  return scrubNode(error, values, new WeakSet<Error>())
+  return scrubNode(error, values, new WeakMap<Error, unknown>())
 }
 
-/** Recursive worker for {@link scrubValuesFromErrorChain} — one node per call. */
-function scrubNode(node: unknown, values: readonly string[], visited: WeakSet<Error>): unknown {
+/**
+ * Recursive worker for {@link scrubValuesFromErrorChain} — one node per call.
+ * Each original maps to its scrubbed REPRESENTATIVE (itself when it accepted
+ * writes, a redacted copy when it did not), registered BEFORE the child is
+ * walked so a cyclic back-edge resolves to the representative — never to an
+ * unredacted original.
+ */
+function scrubNode(
+  node: unknown,
+  values: readonly string[],
+  seen: WeakMap<Error, unknown>
+): unknown {
   if (!(node instanceof Error)) {
     if (node === undefined || node === null) {
       return node
     }
     return redactValues(String(node), values)
   }
-  if (visited.has(node)) {
-    return node
+  const known = seen.get(node)
+  if (known !== undefined) {
+    return known
   }
-  visited.add(node)
   const name = redactValues(node.name, values)
   const message = redactValues(node.message, values)
   const stack = node.stack === undefined ? undefined : redactValues(node.stack, values)
   const hasCause = 'cause' in node
-  const cause = hasCause ? scrubNode(node.cause, values, visited) : undefined
-  // `Reflect.set` reports failure instead of throwing; the identity check on
-  // `cause` skips a redundant write when the child was scrubbed in place.
-  const applied =
+  // `Reflect.set` reports failure instead of throwing. The final clause is a
+  // writability PROBE (a same-value write): it proves upfront that the later
+  // child-representative write cannot fail, so the in-place decision never has
+  // to be revisited after the children are walked.
+  const inPlace =
     Reflect.set(node, 'name', name) &&
     Reflect.set(node, 'message', message) &&
     (stack === undefined || Reflect.set(node, 'stack', stack)) &&
-    (!hasCause || cause === node.cause || Reflect.set(node, 'cause', cause))
-  if (applied) {
-    return node
+    (!hasCause || Reflect.set(node, 'cause', node.cause))
+  let representative: Error
+  if (inPlace) {
+    representative = node
+  } else {
+    // The node resists mutation: represent it by a redacted copy with the
+    // native Error shape (nothing enumerable; writable for later scrubs).
+    representative = new Error(message)
+    Object.defineProperty(representative, 'name', { value: name, writable: true })
+    if (stack !== undefined) {
+      representative.stack = stack
+    }
   }
-  // The node resists mutation: return a redacted copy with the native Error
-  // shape (nothing enumerable; writable so a later scrub can still redact).
-  const copy = new Error(message)
-  Object.defineProperty(copy, 'name', { value: name, writable: true })
-  if (stack !== undefined) {
-    copy.stack = stack
-  }
+  seen.set(node, representative)
   if (hasCause) {
-    Object.defineProperty(copy, 'cause', { value: cause, writable: true })
+    const childRepresentative = scrubNode(node.cause, values, seen)
+    if (inPlace) {
+      Reflect.set(node, 'cause', childRepresentative)
+    } else {
+      Object.defineProperty(representative, 'cause', {
+        value: childRepresentative,
+        writable: true
+      })
+    }
   }
-  return copy
+  return representative
 }
