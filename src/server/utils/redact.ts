@@ -45,6 +45,20 @@ export function scrubValuesFromErrorChain(error: unknown, values: readonly strin
 }
 
 /**
+ * Builds the redacted plain-Error copy representing a node that resists
+ * mutation — native Error shape (nothing enumerable), name writable so a
+ * later scrub can still redact it.
+ */
+function buildRedactedCopy(name: string, message: string, stack: string | undefined): Error {
+  const copy = new Error(message)
+  Object.defineProperty(copy, 'name', { value: name, writable: true })
+  if (stack !== undefined) {
+    copy.stack = stack
+  }
+  return copy
+}
+
+/**
  * Recursive worker for {@link scrubValuesFromErrorChain} — one node per call.
  * Each original maps to its scrubbed REPRESENTATIVE (itself when it accepted
  * writes, a redacted copy when it did not), registered BEFORE the child is
@@ -79,18 +93,7 @@ function scrubNode(
     Reflect.set(node, 'message', message) &&
     (stack === undefined || Reflect.set(node, 'stack', stack)) &&
     (!hasCause || Reflect.set(node, 'cause', node.cause))
-  let representative: Error
-  if (inPlace) {
-    representative = node
-  } else {
-    // The node resists mutation: represent it by a redacted copy with the
-    // native Error shape (nothing enumerable; writable for later scrubs).
-    representative = new Error(message)
-    Object.defineProperty(representative, 'name', { value: name, writable: true })
-    if (stack !== undefined) {
-      representative.stack = stack
-    }
-  }
+  const representative = inPlace ? node : buildRedactedCopy(name, message, stack)
   seen.set(node, representative)
   if (hasCause) {
     const childRepresentative = scrubNode(node.cause, values, seen)
