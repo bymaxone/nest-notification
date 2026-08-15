@@ -348,6 +348,23 @@ describe('scrubValuesFromErrorChain', () => {
     expect(JSON.stringify(exception.getResponse())).not.toContain('555')
   })
 
+  // SECURITY (regression): two source keys that redact to the SAME target key
+  // must not throw on the second define — the collision overwrites (last
+  // wins) instead of replacing the failure being scrubbed with a TypeError.
+  it('should survive a redacted-key collision', () => {
+    const exception = new NotificationException('OTP_STORAGE_NOT_CONFIGURED', {
+      ['otp_555']: 'first',
+      [`otp_${REDACTED_VALUE}`]: 'second'
+    })
+
+    expect(() => scrubValuesFromErrorChain(exception, ['555'])).not.toThrow()
+
+    const details = (exception.getResponse() as { error: { details: Record<string, unknown> } })
+      .error.details
+    expect(details[`otp_${REDACTED_VALUE}`]).toBe('second')
+    expect(JSON.stringify(exception.getResponse())).not.toContain('555')
+  })
+
   // A `__proto__` detail key must become a harmless OWN property of the clone,
   // never a prototype write (defineProperty semantics), and no global
   // prototype pollution may occur.

@@ -183,9 +183,13 @@ function cloneRedacted(root: unknown, values: readonly string[]): unknown {
   const result = cloneValue(root)
   for (let entry = pending.pop(); entry !== undefined; entry = pending.pop()) {
     for (const [key, value] of Object.entries(entry.source)) {
+      // `configurable` lets a redacted-key COLLISION overwrite (last wins):
+      // source keys `otp_<code>` and `otp_[redacted]` map to the same target
+      // key, and redefining a non-configurable property would throw.
       Object.defineProperty(entry.target, redactValues(key, values), {
         value: cloneValue(value),
-        enumerable: true
+        enumerable: true,
+        configurable: true
       })
     }
   }
