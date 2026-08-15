@@ -59,6 +59,7 @@ const serializeErrorChain = (error: unknown): string => {
   }
   const chained = error as Error & { cause?: unknown; getResponse?: () => unknown }
   return [
+    chained.name,
     chained.message,
     chained.stack ?? '',
     JSON.stringify({ ...chained }),
@@ -380,7 +381,14 @@ describe('OtpService.generate', () => {
       name: 'echoing',
       isConfigured: (): boolean => true,
       send: async (sendOptions: EmailSendOptions): Promise<EmailSendResult> => {
-        throw new Error(`provider rejected payload: ${sendOptions.html}`)
+        // Echo the OTP-bearing body through every serializer-visible surface:
+        // message, name, and a PRIMITIVE nested cause (which the log-safe copy
+        // preserves verbatim and only the scrub can clean).
+        const providerError = new Error(`provider rejected payload: ${sendOptions.html}`, {
+          cause: `wire dump: ${sendOptions.html}`
+        })
+        providerError.name = `REJECT_${sendOptions.html}`
+        throw providerError
       }
     }
     const renderer: IEmailTemplateRenderer = {

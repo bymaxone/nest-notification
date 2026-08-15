@@ -49,12 +49,16 @@ function toLogSafeCause(cause: unknown, depth = 0): unknown {
     const safe = new Error(cause.message)
     // `defineProperty` keeps the copy shaped like a native Error: `name` and
     // `cause` stay non-enumerable, so `Object.keys`/spread expose nothing.
-    Object.defineProperty(safe, 'name', { value: cause.name })
+    // Both stay writable so a downstream secret scrub can still redact them.
+    Object.defineProperty(safe, 'name', { value: cause.name, writable: true })
     if (cause.stack !== undefined) {
       safe.stack = cause.stack
     }
     if (depth < MAX_CAUSE_DEPTH && 'cause' in cause) {
-      Object.defineProperty(safe, 'cause', { value: toLogSafeCause(cause.cause, depth + 1) })
+      Object.defineProperty(safe, 'cause', {
+        value: toLogSafeCause(cause.cause, depth + 1),
+        writable: true
+      })
     }
     return safe
   }

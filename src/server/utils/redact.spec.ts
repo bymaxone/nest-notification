@@ -94,4 +94,48 @@ describe('scrubValuesFromErrorChain', () => {
   it('should ignore a non-Error head', () => {
     expect(() => scrubValuesFromErrorChain('raw 555', ['555'])).not.toThrow()
   })
+
+  // `name` is emitted by error serializers just like `message` — a secret
+  // riding there must be redacted too.
+  it('should scrub the error name', () => {
+    const error = new Error('boom')
+    error.name = 'REJECT_555'
+
+    scrubValuesFromErrorChain(error, ['555'])
+
+    expect(error.name).toBe(`REJECT_${REDACTED_VALUE}`)
+  })
+
+  // A STRING cause link cannot be walked as an Error; it must be flattened to a
+  // redacted string in place, or the secret rides the tail verbatim.
+  it('should redact a string cause link', () => {
+    const error = new Error('boom', { cause: 'body code=555' })
+
+    scrubValuesFromErrorChain(error, ['555'])
+
+    expect(error.cause).toBe(`body code=${REDACTED_VALUE}`)
+  })
+
+  // A bare-OBJECT cause link could carry the secret in a property; flattening
+  // to its String() form drops every property.
+  it('should flatten an object cause link', () => {
+    const error = new Error('boom', { cause: { code: '555' } })
+
+    scrubValuesFromErrorChain(error, ['555'])
+
+    expect(error.cause).toBe('[object Object]')
+  })
+
+  // `cause: undefined` and `cause: null` are legitimate empty links — they must
+  // stay as they are, never become the strings 'undefined'/'null'.
+  it('should leave an undefined or null cause link untouched', () => {
+    const withUndefined = new Error('boom', { cause: undefined })
+    const withNull = new Error('boom', { cause: null })
+
+    scrubValuesFromErrorChain(withUndefined, ['555'])
+    scrubValuesFromErrorChain(withNull, ['555'])
+
+    expect(withUndefined.cause).toBeUndefined()
+    expect(withNull.cause).toBeNull()
+  })
 })

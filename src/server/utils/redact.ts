@@ -23,10 +23,13 @@ export function redactValues(text: string, values: readonly string[]): string {
 }
 
 /**
- * Removes the secret values from an error chain in place — `message` and
- * `stack` at every link. Traversal is identity-based (a `WeakSet` of visited
- * nodes), so a cyclic chain terminates with every node scrubbed exactly once
- * and no depth limit leaves an unscrubbed tail. Writes go through
+ * Removes the secret values from an error chain in place — `name`, `message`,
+ * and `stack` at every link. Traversal is identity-based (a `WeakSet` of
+ * visited nodes), so a cyclic chain terminates with every node scrubbed
+ * exactly once and no depth limit leaves an unscrubbed tail. A non-Error
+ * `cause` link (a primitive or a bare object) cannot be walked, so it is
+ * flattened to a redacted string — a string tail could carry the secret
+ * verbatim and an object tail could carry it in a property. Writes go through
  * `Reflect.set`, which reports failure instead of throwing, so a frozen or
  * read-only foreign error degrades to best-effort rather than replacing the
  * original failure with a `TypeError`.
@@ -39,10 +42,18 @@ export function scrubValuesFromErrorChain(error: unknown, values: readonly strin
   let cursor: unknown = error
   while (cursor instanceof Error && !visited.has(cursor)) {
     visited.add(cursor)
+    Reflect.set(cursor, 'name', redactValues(cursor.name, values))
     Reflect.set(cursor, 'message', redactValues(cursor.message, values))
     if (cursor.stack !== undefined) {
       Reflect.set(cursor, 'stack', redactValues(cursor.stack, values))
     }
-    cursor = 'cause' in cursor ? cursor.cause : undefined
+    // An absent `cause` reads as `undefined`, which the guard below already
+    // treats as end-of-chain — no separate presence check needed.
+    const next: unknown = cursor.cause
+    if (!(next instanceof Error) && next !== undefined && next !== null) {
+      Reflect.set(cursor, 'cause', redactValues(String(next), values))
+      return
+    }
+    cursor = next
   }
 }
