@@ -11,17 +11,43 @@ export const REDACTED_VALUE = '[redacted]'
 
 /**
  * Replaces every occurrence of each value with {@link REDACTED_VALUE}.
- * Empty values are skipped — splitting on `''` would explode the text.
+ *
+ * Occurrences are located against the original text and overlapping or nested
+ * matches are merged into a single marker before anything is replaced. A
+ * sequential value-by-value replacement would let a fragment of one secret
+ * survive the replacement of another — `['1234', '2345']` over `'12345'`
+ * leaves `5` of a live secret — and would let a later value match inside a
+ * marker inserted for an earlier one. Neither can happen against the original
+ * text. Empty values are skipped — every position would match one.
  *
  * @param text - The text to clean.
- * @param values - The secret values to remove.
+ * @param values - The secret values to remove, in any order.
  * @returns The cleaned text.
  */
 export function redactValues(text: string, values: readonly string[]): string {
-  return values.reduce(
-    (cleaned, value) => (value === '' ? cleaned : cleaned.split(value).join(REDACTED_VALUE)),
-    text
-  )
+  const spans: Array<{ start: number; end: number }> = []
+  for (const value of values) {
+    if (value === '') {
+      continue
+    }
+    for (let start = text.indexOf(value); start !== -1; start = text.indexOf(value, start + 1)) {
+      spans.push({ start, end: start + value.length })
+    }
+  }
+  spans.sort((a, b) => a.start - b.start)
+  let cleaned = ''
+  let cursor = 0
+  for (const { start, end } of spans) {
+    if (start < cursor) {
+      // Overlaps or nests inside the span already replaced: widen it instead
+      // of writing a second marker over the same characters.
+      cursor = Math.max(cursor, end)
+      continue
+    }
+    cleaned += text.slice(cursor, start) + REDACTED_VALUE
+    cursor = end
+  }
+  return cleaned + text.slice(cursor)
 }
 
 /**

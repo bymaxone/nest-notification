@@ -45,9 +45,6 @@ const DEFAULT_GREETING_TIMEOUT_MS = 10_000
 /** Default idle-socket timeout during the SMTP conversation, in milliseconds. */
 const DEFAULT_SOCKET_TIMEOUT_MS = 20_000
 
-/** Placeholder substituted for a credential inside surfaced error messages. */
-const REDACTED = '[redacted]'
-
 /**
  * Hosts that cannot be reached across a network, and for which an unencrypted
  * session is therefore not exposed to a STARTTLS-stripping attacker. Used to decide
@@ -398,25 +395,20 @@ export class SmtpEmailProvider implements IEmailProvider {
    * public login: an SES SMTP username, for one, is itself generated secret
    * material. Matching is literal and unconditional, so a short credential
    * over-redacts a message rather than risking a miss — the safe direction for a
-   * control whose other failure mode is persisting a secret.
+   * control whose other failure mode is persisting a secret. The two credentials
+   * can overlap — a password built from the username, say `relay` /
+   * `relay-secret` — which {@link redactValues} handles by merging overlapping
+   * matches into a single marker.
    *
    * @param message - The raw error message.
    * @returns The message with both credentials removed, unchanged when none is set.
    */
   private redact(message: string): string {
     const credentials = this.#options.credentials
-    const secrets = [credentials?.user, credentials?.pass]
-      .filter((secret): secret is string => Boolean(secret))
-      // Longest first. The two credentials can overlap — a password built from the
-      // username, say `relay` / `relay-secret` — and replacing the shorter one first
-      // consumes the prefix, leaving `[redacted]-secret`: the part that actually
-      // distinguishes the password survives into the log and the audit entry.
-      .sort((a, b) => b.length - a.length)
-    let redacted = message
-    for (const secret of secrets) {
-      redacted = redacted.split(secret).join(REDACTED)
-    }
-    return redacted
+    return redactValues(
+      message,
+      [credentials?.user, credentials?.pass].filter((secret): secret is string => Boolean(secret))
+    )
   }
 
   /**

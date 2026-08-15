@@ -216,8 +216,8 @@ describe('SmtpEmailProvider failure handling', () => {
   // The two credentials can overlap — a password built from the username. Replacing
   // the shorter one first would consume the prefix and leave `[redacted]-secret`,
   // so the half that actually distinguishes the password would survive into the log
-  // and the audit entry. Longest is replaced first.
-  it('should redact the longer credential first when the two overlap', async () => {
+  // and the audit entry. Overlapping matches merge into a single marker.
+  it('should merge overlapping credentials into a single marker', async () => {
     const user = 'relay'
     const pass = 'relay-secret'
     mockSendMail.mockRejectedValue(new Error(`535 rejected ${pass}`))
@@ -235,7 +235,7 @@ describe('SmtpEmailProvider failure handling', () => {
 
   // The same hazard with the lengths the other way round: the password is the
   // shorter credential and a prefix of the username.
-  it('should redact the longer credential first when the password is the shorter one', async () => {
+  it('should merge the overlap when the password is the shorter credential', async () => {
     const user = 'relay-account'
     const pass = 'relay'
     mockSendMail.mockRejectedValue(new Error(`535 rejected ${user}`))

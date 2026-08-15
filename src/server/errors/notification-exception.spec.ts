@@ -254,6 +254,22 @@ describe('NotificationException', () => {
     expect(stored.cause).toBe('replaced')
   })
 
+  // `HttpException` assigns its raw `options` argument as an enumerable own
+  // property, so a spread or JSON serializer would print `options.cause`
+  // beside the real `cause` — measured in a consumer's structured log output
+  // as `"options":{"cause":{}}`. The property must be hidden from enumeration
+  // while staying readable for anything that reaches for it on purpose.
+  it('should keep the options argument out of enumerable serialization', () => {
+    const exception = new NotificationException('EMAIL_SEND_FAILED', undefined, {
+      cause: new Error('inner')
+    })
+
+    expect(Object.getOwnPropertyDescriptor(exception, 'options')?.enumerable).toBe(false)
+    expect(Object.keys(exception)).not.toContain('options')
+    expect(JSON.stringify({ ...exception })).not.toContain('"options"')
+    expect(Reflect.get(exception, 'options')).toMatchObject({ cause: { message: 'inner' } })
+  })
+
   // Without a cause the property must be genuinely absent — never `cause: undefined`.
   it('should not install a cause when none is given', () => {
     const exception = new NotificationException('OTP_INVALID_CODE')

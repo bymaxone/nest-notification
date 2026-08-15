@@ -32,11 +32,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     message — closing the pre-existing `warn`-level half of the same leak.
 
   **Boundary that this release does NOT close, so the note cannot read as "done":** a
-  consumer-issued secret is fully covered only when the caller declares it. Until
-  `@bymax-one/nest-auth` passes `auditRedactValues: [code]` on its OTP sends (their side,
-  version to watch for on their changelog), a bare code echoed WITHOUT surrounding body content
-  remains exposed on that path — the echo guard needs 16+ contiguous characters of body context
-  to trigger. Consumers sending secrets through `EmailService` directly should declare them now.
+  consumer-issued secret is fully covered only when the caller declares it. `@bymax-one/nest-auth`
+  never calls `EmailService` itself — it defines an email-provider port that the consumer's own
+  adapter implements — so the declaration belongs to that adapter: whoever calls
+  `EmailService.send`/`sendTemplate` with a secret should pass it in `auditRedactValues`. Until
+  then, a bare code echoed WITHOUT surrounding body content remains exposed on that path — the
+  echo guard needs 16+ contiguous characters of body context to trigger.
+
+- **Overlapping secrets can no longer leave a fragment behind after redaction.** `redactValues`
+  used to replace value-by-value over its own output, so `['123', '1234']` over `1234` emitted
+  `[redacted]4` — one digit of a live secret surviving — and two values overlapping without
+  nesting (`['1234', '2345']` over `12345`) leaked a fragment under EVERY replacement order.
+  Occurrences are now located against the original text and overlapping or nested matches merge
+  into a single marker before anything is replaced; a value can also no longer match inside a
+  marker inserted for an earlier one. Every scrub path (audit `errorMessage`, outgoing `cause`,
+  SMTP credential/echo redaction) inherits the fix. Credit: the defect class was measured by a
+  consuming team's review of their own scrub of the same shape.
+
+- **`NotificationException` no longer exposes the constructor's `options` argument to
+  serializers.** NestJS's `HttpException` keeps `options` as an enumerable own property, so
+  structured log output showed `"options":{"cause":{}}` beside the real `cause` — a duplicate
+  reference to the same sanitized copy (no additional secret exposure, but a second surface to
+  audit). The property is now non-enumerable; deliberate reads still work.
 
 ## [1.2.0] - 2026-08-14
 

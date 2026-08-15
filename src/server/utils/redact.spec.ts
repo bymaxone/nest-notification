@@ -31,6 +31,53 @@ describe('redactValues', () => {
   it('should return the text unchanged when nothing matches', () => {
     expect(redactValues('clean text', ['999999'])).toBe('clean text')
   })
+
+  // SECURITY (family of a defect measured in a consumer's own scrub): replacing
+  // value-by-value over the previous output lets a shorter value consume part of
+  // a longer one first — ['123', '1234'] over '1234' would emit '[redacted]4',
+  // one digit of a live secret. Matching against the original text is
+  // order-independent.
+  it('should redact a nested overlap fully regardless of value order', () => {
+    expect(redactValues('code 1234 end', ['123', '1234'])).toBe(`code ${REDACTED_VALUE} end`)
+    expect(redactValues('code 1234 end', ['1234', '123'])).toBe(`code ${REDACTED_VALUE} end`)
+  })
+
+  // Two values overlapping WITHOUT nesting — neither contains the other — is the
+  // case no replacement order can fix: replacing either first breaks the other's
+  // match and a fragment survives. The merged span covers both.
+  it('should merge a non-nested overlap into a single marker', () => {
+    expect(redactValues('12345', ['1234', '2345'])).toBe(REDACTED_VALUE)
+  })
+
+  // A value nested strictly inside another's span must not shrink the merged
+  // span — the tail of the longer secret would survive.
+  it('should keep the widest span when one match nests inside another', () => {
+    expect(redactValues('abcdefghij', ['abcdefghij', 'cde'])).toBe(REDACTED_VALUE)
+  })
+
+  // Two distinct secrets sitting back-to-back are separate matches, not one
+  // merged span — each gets its own marker.
+  it('should keep adjacent matches as separate markers', () => {
+    expect(redactValues('12345678', ['1234', '5678'])).toBe(`${REDACTED_VALUE}${REDACTED_VALUE}`)
+  })
+
+  // A value overlapping its own earlier occurrence ('aa' in 'aaa') must cover
+  // the full run — consuming match-length at a time would leave the odd tail.
+  it('should cover a self-overlapping run completely', () => {
+    expect(redactValues('aaa', ['aa'])).toBe(REDACTED_VALUE)
+  })
+
+  // A later value must never match inside the marker inserted for an earlier
+  // one — 'dact' occurs in '[redacted]' but not in the original text.
+  it('should not match a value inside an inserted marker', () => {
+    expect(redactValues('a secret b', ['secret', 'dact'])).toBe(`a ${REDACTED_VALUE} b`)
+  })
+
+  // Occurrences are replaced in text order even when the values arrive in the
+  // opposite order of their positions.
+  it('should replace occurrences in text order regardless of value order', () => {
+    expect(redactValues('aa and zz', ['zz', 'aa'])).toBe(`${REDACTED_VALUE} and ${REDACTED_VALUE}`)
+  })
 })
 
 describe('collectEchoedExcerpts', () => {

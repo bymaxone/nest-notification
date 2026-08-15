@@ -146,5 +146,10 @@ export class NotificationException extends HttpException {
     // `HttpException` only installs a truthy cause, so forwarding `undefined` is a no-op.
     super(body, options.status ?? definition.status, { cause: toLogSafeCause(options.cause) })
     this.code = definition.code
+    // `HttpException` keeps its raw `options` argument as an enumerable own
+    // property, so a spread or JSON serializer prints `options.cause` beside
+    // the real `cause` — a duplicate reference to the same sanitized copy.
+    // Hide it from enumeration; deliberate reads still work.
+    Object.defineProperty(this, 'options', { enumerable: false })
   }
 }
