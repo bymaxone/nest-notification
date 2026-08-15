@@ -47,32 +47,37 @@ export function scrubValuesFromErrorChain(error: unknown, values: readonly strin
 }
 
 /**
- * Redacts every string reachable inside a plain data object, in place —
- * nested objects and arrays included. A numeric value whose string form
- * carries a secret is replaced by the redaction marker outright. Cycles are
- * tolerated via the `visited` set; writes go through `Reflect.set`, so a
- * read-only slot degrades to best-effort.
+ * Builds a redacted CLONE of a plain data tree — fresh objects and arrays all
+ * the way down, so a frozen or read-only original can never defeat the
+ * redaction (cloning only READS the source). Strings are redacted; a numeric
+ * or bigint value whose string form carries a secret becomes the redaction
+ * marker; other primitives pass through. Cycles clone into cycles via the
+ * `seen` map.
  */
-function redactStringsDeep(
+function cloneRedacted(
   target: unknown,
   values: readonly string[],
-  visited: WeakSet<object>
-): void {
-  if (typeof target !== 'object' || target === null || visited.has(target)) {
-    return
+  seen: WeakMap<object, unknown>
+): unknown {
+  if (typeof target === 'string') {
+    return redactValues(target, values)
   }
-  visited.add(target)
+  if (typeof target === 'number' || typeof target === 'bigint') {
+    return redactValues(String(target), values) === String(target) ? target : REDACTED_VALUE
+  }
+  if (typeof target !== 'object' || target === null) {
+    return target
+  }
+  const existing = seen.get(target)
+  if (existing !== undefined) {
+    return existing
+  }
+  const clone: object = Array.isArray(target) ? [] : {}
+  seen.set(target, clone)
   for (const [key, value] of Object.entries(target)) {
-    if (typeof value === 'string') {
-      Reflect.set(target, key, redactValues(value, values))
-    } else if (typeof value === 'number' || typeof value === 'bigint') {
-      if (redactValues(String(value), values) !== String(value)) {
-        Reflect.set(target, key, REDACTED_VALUE)
-      }
-    } else {
-      redactStringsDeep(value, values, visited)
-    }
+    Reflect.set(clone, key, cloneRedacted(value, values, seen))
   }
+  return clone
 }
 
 /**
@@ -82,17 +87,22 @@ function redactStringsDeep(
  * `name`/`message`/`stack` are rewritten right after, so deleting an
  * enumerable variant of them is harmless. A `NotificationException` keeps its
  * contract properties (code, response, status — the HTTP shape consumers and
- * the Nest exception filter rely on), but its response body is deep-redacted
- * instead of trusted: a CONSUMER-constructed instance may carry the secret in
- * caller-supplied `details`.
+ * the Nest exception filter rely on), but its response is REPLACED by a
+ * redacted clone instead of trusted: a CONSUMER-constructed instance may
+ * carry the secret in caller-supplied `details`, and cloning fails closed
+ * even when those details are frozen.
  *
- * @returns `false` when a property resists deletion — the caller must fall
- * back to a copy, which drops extras inherently.
+ * @returns `false` when a property resists deletion or the response slot
+ * resists replacement — the caller must fall back to a copy.
  */
 function stripExtraProperties(node: Error, values: readonly string[]): boolean {
   if (node instanceof NotificationException) {
-    redactStringsDeep(node.getResponse(), values, new WeakSet<object>())
-    return true
+    const redactedResponse = cloneRedacted(
+      node.getResponse(),
+      values,
+      new WeakMap<object, unknown>()
+    )
+    return Reflect.set(node, 'response', redactedResponse)
   }
   return Object.keys(node).every((key) => key === 'cause' || Reflect.deleteProperty(node, key))
 }

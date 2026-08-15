@@ -285,7 +285,8 @@ describe('scrubValuesFromErrorChain', () => {
       list: ['x', '555'],
       numeric: 555,
       big: 555n,
-      benign: 42
+      benign: 42,
+      emptyList: []
     })
 
     scrubValuesFromErrorChain(exception, ['555'])
@@ -299,7 +300,28 @@ describe('scrubValuesFromErrorChain', () => {
     expect(details.big).toBe(REDACTED_VALUE)
     // A number that does not carry the secret keeps its type and value.
     expect(details.benign).toBe(42)
+    // An empty array clones to an empty array — nothing invented.
+    expect(details.emptyList).toEqual([])
     expect(JSON.stringify(exception.getResponse())).not.toContain('555')
+  })
+
+  // SECURITY (regression): FROZEN caller-supplied details cannot defeat the
+  // redaction — the response is replaced by a redacted clone, since cloning
+  // only reads the source.
+  it('should fail closed on frozen caller-supplied details', () => {
+    const exception = new NotificationException(
+      'OTP_STORAGE_NOT_CONFIGURED',
+      Object.freeze({ code: '555' })
+    )
+
+    const returned = scrubValuesFromErrorChain(exception, ['555'])
+
+    expect(returned).toBe(exception)
+    expect(JSON.stringify(exception.getResponse())).not.toContain('555')
+    expect(
+      (exception.getResponse() as { error: { details: Record<string, unknown> } }).error.details
+        .code
+    ).toBe(REDACTED_VALUE)
   })
 
   // Cyclic caller-supplied details must not hang the deep redaction.
