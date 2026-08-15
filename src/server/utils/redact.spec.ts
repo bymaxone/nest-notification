@@ -348,6 +348,77 @@ describe('scrubValuesFromErrorChain', () => {
     expect(JSON.stringify(exception.getResponse())).not.toContain('555')
   })
 
+  // SECURITY (regression): a hostile enumerable GETTER in consumer details
+  // must never be invoked — a getter that throws a secret-bearing error would
+  // otherwise escape mid-clone and replace the failure being scrubbed. The
+  // accessor-backed value is withheld as the redaction marker.
+  it('should withhold accessor-backed detail values without invoking the getter', () => {
+    const details: Record<string, unknown> = { safe: 'kept' }
+    Object.defineProperty(details, 'trap', {
+      get: (): never => {
+        throw new Error('getter leaked 555')
+      },
+      enumerable: true
+    })
+    const exception = new NotificationException('OTP_STORAGE_NOT_CONFIGURED', details)
+
+    expect(() => scrubValuesFromErrorChain(exception, ['555'])).not.toThrow()
+
+    const cloned = (exception.getResponse() as { error: { details: Record<string, unknown> } })
+      .error.details
+    expect(cloned.safe).toBe('kept')
+    expect(cloned.trap).toBe(REDACTED_VALUE)
+  })
+
+  // A non-enumerable own detail property is invisible to serializers and is
+  // dropped from the clone, mirroring what Object.entries would have exposed.
+  it('should drop non-enumerable detail properties from the clone', () => {
+    const details: Record<string, unknown> = { visible: 'yes' }
+    Object.defineProperty(details, 'hidden', { value: 'secret 555', enumerable: false })
+    const exception = new NotificationException('OTP_STORAGE_NOT_CONFIGURED', details)
+
+    scrubValuesFromErrorChain(exception, ['555'])
+
+    const cloned = (exception.getResponse() as { error: { details: Record<string, unknown> } })
+      .error.details
+    expect(cloned.visible).toBe('yes')
+    expect('hidden' in cloned).toBe(false)
+  })
+
+  // SECURITY (regression): when property DISCOVERY itself throws (a Proxy
+  // ownKeys trap), the clone fails closed to an empty object — never lets the
+  // trap's error replace the failure being scrubbed.
+  it('should fail closed when detail discovery throws', () => {
+    const trap = new Proxy(
+      {},
+      {
+        ownKeys: (): never => {
+          throw new Error('trap leaked 555')
+        }
+      }
+    ) as Record<string, unknown>
+    const exception = new NotificationException('OTP_STORAGE_NOT_CONFIGURED', trap)
+
+    expect(() => scrubValuesFromErrorChain(exception, ['555'])).not.toThrow()
+    expect((exception.getResponse() as { error: { details: unknown } }).error.details).toEqual({})
+  })
+
+  // The strip path fails closed the same way: an ERROR whose key discovery
+  // throws (a Proxy trap) is represented by a redacted copy, never rethrown
+  // through the trap.
+  it('should copy an error whose key discovery throws', () => {
+    const hostile = new Proxy(new Error('proxied 555'), {
+      ownKeys: (): never => {
+        throw new Error('trap leaked 555')
+      }
+    })
+
+    const returned = scrubValuesFromErrorChain(hostile, ['555']) as Error
+
+    expect(returned).not.toBe(hostile)
+    expect(returned.message).toBe(`proxied ${REDACTED_VALUE}`)
+  })
+
   // SECURITY (regression): two source keys that redact to the SAME target key
   // must not throw on the second define — the collision overwrites (last
   // wins) instead of replacing the failure being scrubbed with a TypeError.

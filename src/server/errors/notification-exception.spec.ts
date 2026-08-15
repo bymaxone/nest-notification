@@ -223,6 +223,20 @@ describe('NotificationException', () => {
     expect(JSON.stringify(exception.getResponse())).not.toContain('internal storage detail')
   })
 
+  // The sanitized copies stay writable so a downstream secret scrub can still
+  // redact them — pins the `writable` descriptors on `name` and `cause`.
+  it('should keep sanitized cause copies writable for downstream scrubs', () => {
+    const cause = new Error('outer', { cause: 'inner tail' })
+    cause.name = 'OuterName'
+    const exception = new NotificationException('EMAIL_SEND_FAILED', undefined, { cause })
+    const stored = exception.cause as Error
+
+    expect(Reflect.set(stored, 'name', 'Renamed')).toBe(true)
+    expect(stored.name).toBe('Renamed')
+    expect(Reflect.set(stored, 'cause', 'replaced')).toBe(true)
+    expect(stored.cause).toBe('replaced')
+  })
+
   // Without a cause the property must be genuinely absent — never `cause: undefined`.
   it('should not install a cause when none is given', () => {
     const exception = new NotificationException('OTP_INVALID_CODE')

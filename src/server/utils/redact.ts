@@ -182,18 +182,37 @@ function cloneRedacted(root: unknown, values: readonly string[]): unknown {
   }
   const result = cloneValue(root)
   for (let entry = pending.pop(); entry !== undefined; entry = pending.pop()) {
-    for (const [key, value] of Object.entries(entry.source)) {
+    for (const [key, descriptor] of collectOwnEntries(entry.source)) {
       // `configurable` lets a redacted-key COLLISION overwrite (last wins):
       // source keys `otp_<code>` and `otp_[redacted]` map to the same target
-      // key, and redefining a non-configurable property would throw.
+      // key, and redefining a non-configurable property would throw. An
+      // accessor-backed value is never INVOKED — it is withheld outright, so a
+      // hostile getter cannot throw a secret-bearing error from mid-clone.
       Object.defineProperty(entry.target, redactValues(key, values), {
-        value: cloneValue(value),
+        value: 'value' in descriptor ? cloneValue(descriptor.value) : REDACTED_VALUE,
         enumerable: true,
         configurable: true
       })
     }
   }
   return result
+}
+
+/**
+ * Lists a source's own enumerable properties as DESCRIPTORS, never invoking
+ * accessors — a hostile getter could throw an error that carries the secret,
+ * escaping mid-clone and replacing the very failure being scrubbed. When
+ * property discovery itself throws (a Proxy trap), the list fails closed to
+ * empty: an empty clone leaks nothing.
+ */
+function collectOwnEntries(source: object): Array<[string, PropertyDescriptor]> {
+  try {
+    return Object.entries(Object.getOwnPropertyDescriptors(source)).filter(
+      ([, descriptor]) => descriptor.enumerable === true
+    )
+  } catch {
+    return []
+  }
 }
 
 /**
@@ -215,7 +234,12 @@ function stripExtraProperties(node: Error, values: readonly string[]): boolean {
   if (node instanceof NotificationException) {
     return Reflect.set(node, 'response', cloneRedacted(node.getResponse(), values))
   }
-  return Object.keys(node).every((key) => key === 'cause' || Reflect.deleteProperty(node, key))
+  try {
+    return Object.keys(node).every((key) => key === 'cause' || Reflect.deleteProperty(node, key))
+  } catch {
+    // Property discovery itself threw (a Proxy trap): fail closed to the copy.
+    return false
+  }
 }
 
 /**
