@@ -126,7 +126,11 @@ export class EmailService {
           errorMessage: error instanceof Error ? error.message : String(error)
         })
       )
-      throw new NotificationException('EMAIL_SEND_FAILED', { providerName: this.provider.name })
+      throw new NotificationException(
+        'EMAIL_SEND_FAILED',
+        { providerName: this.provider.name },
+        { cause: error }
+      )
     }
   }
 
@@ -231,8 +235,8 @@ export class EmailService {
   ): Promise<{ subject: string; html: string; text?: string }> {
     try {
       return await this.renderer.render(template, data, locale)
-    } catch {
-      throw new NotificationException('TEMPLATE_RENDER_FAILED', { template })
+    } catch (error) {
+      throw new NotificationException('TEMPLATE_RENDER_FAILED', { template }, { cause: error })
     }
   }
 
@@ -263,9 +267,9 @@ export class EmailService {
       await this.auditLog.create(entry)
     } catch (error) {
       if (!this.options.audit.swallowErrors) {
-        throw new NotificationException('AUDIT_LOG_FAILED', {
-          cause: error instanceof Error ? error.message : String(error)
-        })
+        // The underlying error rides only on `Error.cause` — `details` is serialized
+        // into the HTTP response body, so internal error text must never land there.
+        throw new NotificationException('AUDIT_LOG_FAILED', undefined, { cause: error })
       }
     }
   }

@@ -378,9 +378,9 @@ export class OtpService {
       await this.auditLog.create(entry)
     } catch (error) {
       if (!this.options.audit.swallowErrors) {
-        throw new NotificationException('AUDIT_LOG_FAILED', {
-          cause: error instanceof Error ? error.message : String(error)
-        })
+        // The underlying error rides only on `Error.cause` — `details` is serialized
+        // into the HTTP response body, so internal error text must never land there.
+        throw new NotificationException('AUDIT_LOG_FAILED', undefined, { cause: error })
       }
     }
   }

@@ -5,6 +5,38 @@ All notable changes to `@bymax-one/nest-notification` will be documented in this
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-08-14
+
+### Added
+
+- **`NotificationException` now carries the underlying error as the native `Error.cause`.** A failed
+  dispatch used to log _what_ failed and never _why_: `EMAIL_SEND_FAILED` discarded the provider's
+  error, so a `connect ECONNREFUSED` existed only in a separate `warn` line — recoverable by
+  request-id correlation, and entirely absent for a deployment logging at `error`. Since dispatch is
+  fire-and-forget, the log is the only surface where the reason can appear at all. Reported by a
+  consumer with a live reproduction (SMTP pointed at a closed port), and verified against this
+  release the same way: the reason now sits nested inside the same serialized `err` object, with no
+  change on the logging side — cause-walking serializers (e.g. pino's `err`) pick it up natively.
+
+  The third constructor parameter accepts an options bag,
+  `new NotificationException(key, details, { status?, message?, cause? })`, mirroring how
+  `HttpException` itself evolved; the positional `(key, details, status, message)` form keeps
+  working unchanged. All five sites that previously discarded the underlying error now attach it:
+  `EMAIL_SEND_FAILED`, `TEMPLATE_RENDER_FAILED`, and the three `AUDIT_LOG_FAILED` throw sites.
+  `NotificationExceptionOptions` is exported from the server subpath. One nuance, inherited from
+  Nest and documented on the option: `HttpException` installs only a _truthy_ cause, so a falsy
+  cause is silently ignored.
+
+### Fixed
+
+- **`AUDIT_LOG_FAILED` no longer leaks internal error text into the HTTP response.** The three
+  audit-failure sites stuffed the caught error's message into `details.cause` — and `details` is
+  serialized into the response body, so storage/audit internals reached the HTTP client on a 502
+  whenever `audit.swallowErrors` was `false`. The error now rides only on `Error.cause` (never
+  serialized into the response) and those responses carry `details: null`. The security gate was
+  extended to match: tests serialize thrown exceptions recursively — message, stack, response body,
+  and every nested cause — and assert the plaintext OTP code appears at no depth.
+
 ## [1.1.2] - 2026-08-14
 
 ### Fixed

@@ -30,11 +30,30 @@ const FALLBACK_DEFINITION: NotificationErrorDefinition = {
 }
 
 /**
+ * Optional construction knobs, mirroring how `HttpException` itself moved its
+ * positional arguments into an options object.
+ */
+export interface NotificationExceptionOptions {
+  /** Replaces the catalog's default HTTP status when supplied. */
+  status?: HttpStatus
+  /** Replaces the catalog's default message when supplied. */
+  message?: string
+  /**
+   * The underlying error, exposed as the native `Error.cause` so log serializers
+   * can walk the chain. Never serialized into the HTTP response body. A falsy
+   * value is ignored — `HttpException` only installs a truthy cause.
+   */
+  cause?: unknown
+}
+
+/**
  * Typed HTTP exception over the notification error catalog.
  *
  * @example
  * ```ts
  * throw new NotificationException('OTP_INVALID_LENGTH', { provided: 0, allowed: '1-32' })
+ * // With the underlying error attached as `Error.cause`:
+ * throw new NotificationException('EMAIL_SEND_FAILED', { providerName: 'smtp' }, { cause: error })
  * ```
  */
 export class NotificationException extends HttpException {
@@ -44,24 +63,30 @@ export class NotificationException extends HttpException {
   /**
    * @param key - Catalog key selecting the code, default HTTP status, and message.
    * @param details - Optional structured context placed under `error.details`.
-   * @param overrideStatus - Replaces the catalog's default HTTP status when supplied.
-   * @param overrideMessage - Replaces the catalog's default message when supplied.
+   * @param optionsOrStatus - An {@link NotificationExceptionOptions} object, or — kept
+   * for backward compatibility — a bare `HttpStatus` acting as `options.status`.
+   * @param overrideMessage - Replaces the catalog's default message when supplied;
+   * kept for backward compatibility with the positional form. `options.message` wins
+   * when both are given.
    */
   constructor(
     key: NotificationErrorKey,
     details?: Record<string, unknown>,
-    overrideStatus?: HttpStatus,
+    optionsOrStatus?: HttpStatus | NotificationExceptionOptions,
     overrideMessage?: string
   ) {
     const definition = NOTIFICATION_ERROR_DEFINITION_MAP.get(key) ?? FALLBACK_DEFINITION
+    const options: NotificationExceptionOptions =
+      typeof optionsOrStatus === 'number' ? { status: optionsOrStatus } : (optionsOrStatus ?? {})
     const body: NotificationErrorResponse = {
       error: {
         code: definition.code,
-        message: overrideMessage ?? definition.message,
+        message: options.message ?? overrideMessage ?? definition.message,
         details: details ?? null
       }
     }
-    super(body, overrideStatus ?? definition.status)
+    // `HttpException` only installs a truthy cause, so forwarding `undefined` is a no-op.
+    super(body, options.status ?? definition.status, { cause: options.cause })
     this.code = definition.code
   }
 }

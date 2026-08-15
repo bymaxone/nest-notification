@@ -39,6 +39,23 @@ const emailServiceStub = { sendTemplate: emailSendTemplate } as unknown as Email
 
 const ref = { tenantId: 'tenant_a', recipient: 'jane@acme.com', purpose: 'email_verification' }
 
+/**
+ * Serializes an error the way a cause-walking log serializer would: message,
+ * stack, HTTP response body, and every nested `cause`, recursively.
+ */
+const serializeErrorChain = (error: unknown): string => {
+  if (error === null || typeof error !== 'object') {
+    return String(error)
+  }
+  const chained = error as Error & { cause?: unknown; getResponse?: () => unknown }
+  return [
+    chained.message,
+    chained.stack ?? '',
+    typeof chained.getResponse === 'function' ? JSON.stringify(chained.getResponse()) : '',
+    'cause' in chained ? serializeErrorChain(chained.cause) : ''
+  ].join('\n')
+}
+
 describe('OtpService.generate', () => {
   let storage: InMemoryOtpStorage
   let audit: jest.Mocked<INotificationLogRepository>
@@ -286,21 +303,41 @@ describe('OtpService.generate', () => {
   })
 
   // With swallowErrors:false an audit failure surfaces as AUDIT_LOG_FAILED carrying
-  // the underlying cause — pins the rethrow object and its `cause` field.
+  // the underlying error as `Error.cause` — while `details` stays null, because the
+  // details object is serialized into the HTTP response and must never expose
+  // internal error text to clients.
   it('should rethrow AUDIT_LOG_FAILED with the cause when swallowErrors is false', async () => {
-    audit.create.mockRejectedValue(new Error('db down'))
+    const auditError = new Error('db down')
+    audit.create.mockRejectedValue(auditError)
     const service = new OtpService(makeOptions({}, { swallowErrors: false }), storage, audit)
 
-    expect.assertions(2)
+    expect.assertions(3)
     try {
       await service.generate({ ...ref, deliverVia: 'manual' })
     } catch (error) {
       expect((error as NotificationException).code).toBe('notification.audit_log_failed')
-      const details = (
-        error as { getResponse: () => { error: { details: Record<string, unknown> } } }
-      ).getResponse().error.details
-      expect(details.cause).toBe('db down')
+      expect((error as NotificationException).cause).toBe(auditError)
+      const response = (
+        error as { getResponse: () => { error: { details: unknown } } }
+      ).getResponse()
+      expect(response.error.details).toBeNull()
     }
+  })
+
+  // SECURITY: with swallowErrors:false the AUDIT_LOG_FAILED chain — message, stack,
+  // response body, and every nested cause — must never carry the plaintext code.
+  // The cause chain is exactly what cause-walking log serializers now print.
+  it('should keep the code out of the full AUDIT_LOG_FAILED error chain', async () => {
+    audit.create.mockRejectedValue(new Error('db down'))
+    const service = new OtpService(makeOptions({}, { swallowErrors: false }), storage, audit)
+
+    const caught: unknown = await service
+      .generate({ ...ref, deliverVia: 'manual' })
+      .catch((error: unknown) => error)
+    const realCode = (await storage.get(ref.tenantId, ref.recipient, ref.purpose))?.code as string
+
+    expect(caught).toBeInstanceOf(NotificationException)
+    expect(serializeErrorChain(caught).includes(realCode)).toBe(false)
   })
 
   // userId is forwarded into the audit entry when present — pins the conditional
@@ -542,14 +579,15 @@ describe('OtpService not-configured + audit propagation', () => {
     })
   })
 
-  // A non-Error audit rejection is stringified into the AUDIT_LOG_FAILED cause.
-  it('should stringify a non-Error audit rejection when not swallowing', async () => {
+  // A non-Error audit rejection rides as-is on the AUDIT_LOG_FAILED `cause`.
+  it('should carry a non-Error audit rejection as the cause when not swallowing', async () => {
     const audit = makeAudit()
     audit.create.mockRejectedValue('weird')
     const service = new OtpService(makeOptions({}, { swallowErrors: false }), storage, audit)
 
     await expect(service.generate({ ...ref, deliverVia: 'manual' })).rejects.toMatchObject({
-      code: 'notification.audit_log_failed'
+      code: 'notification.audit_log_failed',
+      cause: 'weird'
     })
   })
 })

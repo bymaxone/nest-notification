@@ -750,10 +750,13 @@ pnpm mutation      # Stryker mutation testing
 | Member                           | Purpose                                                                    |
 | -------------------------------- | -------------------------------------------------------------------------- |
 | `NotificationException`          | `HttpException` carrying a stable `code`, a status, and optional `details` |
+| `NotificationExceptionOptions`   | Constructor options bag: `{ status?, message?, cause? }`                   |
 | `NOTIFICATION_ERROR_CODES`       | The 22 stable `notification.*` codes — branch on these, not on messages    |
 | `NOTIFICATION_ERROR_DEFINITIONS` | Server-side code → HTTP status + default English message                   |
 
 Error codes are namespaced (`notification.otp_invalid_code`, `notification.otp_cooldown_active`, `notification.email_send_failed`, …) and never change once published. Default messages are English; localize on the `code`.
+
+Failures raised by the library carry the underlying error as the native `Error.cause` — a provider's `connect ECONNREFUSED` sits on `exception.cause`, where cause-walking log serializers (e.g. pino's `err`) print it alongside the stable code. The cause never enters the HTTP response body: `details` stays reserved for the structured, client-safe context shown above. To attach a cause in your own code, pass the options bag as the third constructor argument — `new NotificationException('EMAIL_SEND_FAILED', { providerName }, { cause: error })`; the positional `(key, details, status, message)` form keeps working.
 
 ### Reference adapters
 

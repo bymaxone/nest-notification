@@ -22,7 +22,10 @@ describe('NotificationException', () => {
   // Structured context handed in must land under `error.details` so callers can
   // read machine-readable failure data.
   it('should embed details in the response body shape', () => {
-    const exception = new NotificationException('OTP_INVALID_LENGTH', { provided: 0, allowed: '1-32' })
+    const exception = new NotificationException('OTP_INVALID_LENGTH', {
+      provided: 0,
+      allowed: '1-32'
+    })
 
     expect(exception.getResponse()).toEqual({
       error: {
@@ -61,6 +64,67 @@ describe('NotificationException', () => {
     const response = exception.getResponse() as { error: { message: string } }
 
     expect(response.error.message).toBe('Custom message')
+  })
+
+  // The options-object form must override the status exactly like the positional form.
+  it('should allow overriding the HTTP status via the options object', () => {
+    const exception = new NotificationException('OTP_INVALID_CODE', undefined, {
+      status: HttpStatus.FORBIDDEN
+    })
+
+    expect(exception.getStatus()).toBe(HttpStatus.FORBIDDEN)
+  })
+
+  // The options-object form must override the message exactly like the positional form.
+  it('should allow overriding the message via the options object', () => {
+    const exception = new NotificationException('OTP_INVALID_CODE', undefined, {
+      message: 'Custom message'
+    })
+    const response = exception.getResponse() as { error: { message: string } }
+
+    expect(response.error.message).toBe('Custom message')
+  })
+
+  // When both forms are supplied, the options object wins over the positional override.
+  it('should prefer options.message over the positional overrideMessage', () => {
+    const exception = new NotificationException(
+      'OTP_INVALID_CODE',
+      undefined,
+      { message: 'From options' },
+      'From positional'
+    )
+    const response = exception.getResponse() as { error: { message: string } }
+
+    expect(response.error.message).toBe('From options')
+  })
+
+  // The underlying error must surface as the native `Error.cause` so cause-walking
+  // log serializers can report WHY a notification failed, not only WHAT failed.
+  it('should expose options.cause as Error.cause', () => {
+    const cause = new Error('connect ECONNREFUSED 127.0.0.1:1099')
+    const exception = new NotificationException(
+      'EMAIL_SEND_FAILED',
+      { providerName: 'smtp' },
+      { cause }
+    )
+
+    expect(exception.cause).toBe(cause)
+  })
+
+  // SECURITY: the cause carries internal error text and must never leak into the
+  // serialized HTTP response body handed to clients.
+  it('should keep the cause out of the response body', () => {
+    const cause = new Error('internal storage detail')
+    const exception = new NotificationException('AUDIT_LOG_FAILED', undefined, { cause })
+
+    expect(JSON.stringify(exception.getResponse())).not.toContain('internal storage detail')
+  })
+
+  // Without a cause the property must be genuinely absent — never `cause: undefined`.
+  it('should not install a cause when none is given', () => {
+    const exception = new NotificationException('OTP_INVALID_CODE')
+
+    expect('cause' in exception).toBe(false)
   })
 
   // Every catalog key must produce a well-formed exception — guards against a

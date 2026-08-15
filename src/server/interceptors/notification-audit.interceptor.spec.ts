@@ -179,10 +179,15 @@ describe('NotificationAuditInterceptor', () => {
   // rather than being silently swallowed (which would mask the mutant).
   it('skips a null argument without recording', async () => {
     const repo = new CapturingRepo()
-    const interceptor = new NotificationAuditInterceptor(buildOptions({ swallowErrors: false }), repo)
+    const interceptor = new NotificationAuditInterceptor(
+      buildOptions({ swallowErrors: false }),
+      repo
+    )
     const ctx = buildContext([null, 'a string', 42])
 
-    await expect(firstValueFrom(interceptor.intercept(ctx, handlerOf(of('ok'))))).resolves.toBe('ok')
+    await expect(firstValueFrom(interceptor.intercept(ctx, handlerOf(of('ok'))))).resolves.toBe(
+      'ok'
+    )
     expect(repo.entries).toHaveLength(0)
   })
 
@@ -191,10 +196,15 @@ describe('NotificationAuditInterceptor', () => {
   // broken guard would record an entry (mis-detection), which the length check fails.
   it('skips an arg with a non-object payload', async () => {
     const repo = new CapturingRepo()
-    const interceptor = new NotificationAuditInterceptor(buildOptions({ swallowErrors: false }), repo)
+    const interceptor = new NotificationAuditInterceptor(
+      buildOptions({ swallowErrors: false }),
+      repo
+    )
     const ctx = buildContext([{ channel: 'otp', tenantId: 't', payload: 'not-an-object' }])
 
-    await expect(firstValueFrom(interceptor.intercept(ctx, handlerOf(of('ok'))))).resolves.toBe('ok')
+    await expect(firstValueFrom(interceptor.intercept(ctx, handlerOf(of('ok'))))).resolves.toBe(
+      'ok'
+    )
     expect(repo.entries).toHaveLength(0)
   })
 
@@ -202,10 +212,15 @@ describe('NotificationAuditInterceptor', () => {
   // `payload !== null` half of the guard.
   it('skips an arg with a null payload', async () => {
     const repo = new CapturingRepo()
-    const interceptor = new NotificationAuditInterceptor(buildOptions({ swallowErrors: false }), repo)
+    const interceptor = new NotificationAuditInterceptor(
+      buildOptions({ swallowErrors: false }),
+      repo
+    )
     const ctx = buildContext([{ channel: 'email', tenantId: 't', payload: null }])
 
-    await expect(firstValueFrom(interceptor.intercept(ctx, handlerOf(of('ok'))))).resolves.toBe('ok')
+    await expect(firstValueFrom(interceptor.intercept(ctx, handlerOf(of('ok'))))).resolves.toBe(
+      'ok'
+    )
     expect(repo.entries).toHaveLength(0)
   })
 
@@ -215,7 +230,10 @@ describe('NotificationAuditInterceptor', () => {
   // entry, since its `channel`/`tenantId`/`payload` props otherwise pass every check.
   it('skips a function argument that carries dispatch-shaped properties', async () => {
     const repo = new CapturingRepo()
-    const interceptor = new NotificationAuditInterceptor(buildOptions({ swallowErrors: false }), repo)
+    const interceptor = new NotificationAuditInterceptor(
+      buildOptions({ swallowErrors: false }),
+      repo
+    )
     const fnArg = Object.assign(() => undefined, {
       channel: 'otp',
       tenantId: 't',
@@ -223,7 +241,9 @@ describe('NotificationAuditInterceptor', () => {
     })
     const ctx = buildContext([fnArg])
 
-    await expect(firstValueFrom(interceptor.intercept(ctx, handlerOf(of('ok'))))).resolves.toBe('ok')
+    await expect(firstValueFrom(interceptor.intercept(ctx, handlerOf(of('ok'))))).resolves.toBe(
+      'ok'
+    )
     expect(repo.entries).toHaveLength(0)
   })
 
@@ -247,37 +267,50 @@ describe('NotificationAuditInterceptor', () => {
     const interceptor = new NotificationAuditInterceptor(buildOptions(), repo)
     const ctx = buildContext([otpInput])
 
-    await expect(
-      firstValueFrom(interceptor.intercept(ctx, handlerOf(of('ok'))))
-    ).resolves.toBe('ok')
+    await expect(firstValueFrom(interceptor.intercept(ctx, handlerOf(of('ok'))))).resolves.toBe(
+      'ok'
+    )
   })
 
-  // With swallowErrors=false an audit write failure propagates as AUDIT_LOG_FAILED.
+  // With swallowErrors=false an audit write failure propagates as AUDIT_LOG_FAILED,
+  // exposing the underlying error as `Error.cause` while `details` stays null — the
+  // details object is serialized into the HTTP response and must never expose
+  // internal error text to clients.
   it('propagates audit failures when swallowErrors is false', async () => {
     const repo = new CapturingRepo()
-    repo.create.mockRejectedValueOnce(new Error('db down'))
-    const interceptor = new NotificationAuditInterceptor(buildOptions({ swallowErrors: false }), repo)
+    const auditError = new Error('db down')
+    repo.create.mockRejectedValueOnce(auditError)
+    const interceptor = new NotificationAuditInterceptor(
+      buildOptions({ swallowErrors: false }),
+      repo
+    )
     const ctx = buildContext([otpInput])
 
-    // Assert the rethrow carries the underlying cause — pins the `{ cause }` detail.
     await expect(
       firstValueFrom(interceptor.intercept(ctx, handlerOf(of('ok'))))
     ).rejects.toMatchObject({
       code: 'notification.audit_log_failed',
-      response: { error: { details: { cause: 'db down' } } }
+      cause: auditError,
+      response: { error: { details: null } }
     })
   })
 
-  // A non-Error audit rejection is stringified into the AUDIT_LOG_FAILED cause.
-  it('stringifies a non-Error audit rejection cause', async () => {
+  // A non-Error audit rejection rides as-is on the AUDIT_LOG_FAILED `cause`.
+  it('carries a non-Error audit rejection as the cause', async () => {
     const repo = new CapturingRepo()
     repo.create.mockRejectedValueOnce('raw failure')
-    const interceptor = new NotificationAuditInterceptor(buildOptions({ swallowErrors: false }), repo)
+    const interceptor = new NotificationAuditInterceptor(
+      buildOptions({ swallowErrors: false }),
+      repo
+    )
     const ctx = buildContext([otpInput])
 
-    await expect(
-      firstValueFrom(interceptor.intercept(ctx, handlerOf(of('ok'))))
-    ).rejects.toBeInstanceOf(NotificationException)
+    const error: unknown = await firstValueFrom(
+      interceptor.intercept(ctx, handlerOf(of('ok')))
+    ).catch((thrown: unknown) => thrown)
+
+    expect(error).toBeInstanceOf(NotificationException)
+    expect((error as NotificationException).cause).toBe('raw failure')
   })
 
   // Security gate: a verify payload's guessed code must never reach the entry.
