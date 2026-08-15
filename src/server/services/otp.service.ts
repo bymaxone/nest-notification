@@ -38,6 +38,13 @@ import type { OtpPurposeConfig } from '../interfaces/notification-module-options
 import type { IOtpStorage, OtpEntry, OtpVerifyResult } from '../interfaces/otp-storage.interface'
 import { generateOtpCode } from '../utils/code-generator'
 import { cooldownExpiresAt, toRetryAfterHeader } from '../utils/cooldown-helpers'
+import {
+  attachCauseIfAbsent,
+  coerceRedacted,
+  isSafeError,
+  readRedactedMessage,
+  scrubValuesFromErrorChain
+} from '../utils/redact'
 import { safeCompare } from '../utils/timing-safe-compare'
 
 /** Milliseconds in one second. */
@@ -46,7 +53,6 @@ const MS_PER_SECOND = 1000
 const SECONDS_PER_MINUTE = 60
 /** Default template name used when the caller does not name one. */
 const DEFAULT_OTP_TEMPLATE = 'otp_code'
-
 /** Common `(tenant, recipient, purpose)` reference shared by every OTP operation. */
 interface OtpRecipientRef {
   tenantId: string
@@ -277,13 +283,36 @@ export class OtpService {
       })
       await this.deliverOtp(input, code, cfg)
     } catch (error) {
-      await this.releaseOtp(input)
+      let failure: unknown = error
+      try {
+        await this.releaseOtp(input)
+      } catch (cleanupError) {
+        // A failed cleanup supersedes the delivery error — the cooldown/OTP may
+        // now be orphaned, which the caller must see — and it must NOT bypass
+        // the scrub below. The delivery error is preserved as its cause when
+        // the cleanup error can verifiably carry one; a hostile trap inside
+        // the attachment is contained by the helper.
+        attachCauseIfAbsent(cleanupError, error)
+        failure = cleanupError
+      }
+      // Scrub BEFORE the audit write and the rethrow, so neither the entry's
+      // `errorMessage` nor the outgoing chain can carry the plaintext code. An
+      // Error chain is scrubbed (in place, or via redacted copies when a node
+      // resists mutation); ANY other rejection (string, object from a custom
+      // storage, number) is flattened to a redacted string, because a raw
+      // object could carry the code in its properties and a primitive cannot
+      // be mutated.
+      const outgoing: unknown = isSafeError(failure)
+        ? scrubValuesFromErrorChain(failure, [code])
+        : coerceRedacted(failure, [code])
       await this.audit(
         this.otpAuditEntry('failed', input, {
-          errorMessage: error instanceof Error ? error.message : String(error)
+          // `outgoing` is already fully redacted by the scrub above; this read
+          // only needs the fail-closed guard, not a second redaction pass.
+          errorMessage: readRedactedMessage(outgoing)
         })
       )
-      throw error
+      throw outgoing
     }
   }
 
@@ -322,6 +351,9 @@ export class OtpService {
       to: input.recipient,
       template: input.emailTemplate ?? DEFAULT_OTP_TEMPLATE,
       data: { ...input.emailData, code, expiresInMinutes, purpose: input.purpose },
+      // The provider receives the code inside the rendered body and may echo it
+      // in an error; EmailService must redact it from ITS OWN failed-audit entry.
+      auditRedactValues: [code],
       ...(input.locale !== undefined ? { locale: input.locale } : {}),
       ...(input.userId !== undefined ? { userId: input.userId } : {})
     }
@@ -378,9 +410,9 @@ export class OtpService {
       await this.auditLog.create(entry)
     } catch (error) {
       if (!this.options.audit.swallowErrors) {
-        throw new NotificationException('AUDIT_LOG_FAILED', {
-          cause: error instanceof Error ? error.message : String(error)
-        })
+        // The underlying error rides only on `Error.cause` — `details` is serialized
+        // into the HTTP response body, so internal error text must never land there.
+        throw new NotificationException('AUDIT_LOG_FAILED', undefined, { cause: error })
       }
     }
   }

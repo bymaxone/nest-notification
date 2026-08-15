@@ -188,3 +188,47 @@ Where a `// Stryker disable next-line` directive was found not to apply — abov
 builder chain — it was replaced with the block `disable`/`restore` form, or, where that does not
 work either, with a plain comment at the line so the reasoning is visible rather than silently
 ineffective.
+
+---
+
+## Re-run — 2026-08-14 (after the `Error.cause` change, 1.2.0)
+
+| Metric             | Value         |
+| ------------------ | ------------- |
+| **Mutation score** | **100.00 %**  |
+| Viable mutants     | 1090          |
+| Killed / timeout   | 1081 / 9      |
+| Surviving mutants  | 0             |
+| Break threshold    | 100 % -> PASS |
+
+The 1.2.0 change added a discriminated branch to `NotificationException` (the third constructor
+parameter accepts `HttpStatus | NotificationExceptionOptions`, split on `typeof === 'number'`),
+rewired five throw sites to forward the underlying error as `Error.cause`, and sanitizes that
+cause into a log-safe copy (name/message/stack + depth-bounded nested chain; every other property
+dropped). All new mutants die without a single new suppression:
+
+- The `typeof` discriminator is pinned from both sides — a mutant forcing the number path breaks
+  the options-object tests (status/message/cause), and one forcing the object path breaks the
+  legacy positional-status test.
+- The sanitizer earned its own kills the hard way: the first run left two survivors, both real
+  test gaps. `'name'` → `''` survived because every test error was already named `'Error'` — the
+  prototype default masked a lost copy; killed by a custom-named error. `cause !== null` → `true`
+  survived because no test passed `cause: null` — the original passes `null` verbatim (falsy,
+  never installed) where the mutant flattens it to the truthy string `'null'`; killed by a
+  null-cause test. The depth bound, the missing-stack guard, and the `defineProperty` descriptors
+  are each pinned by a dedicated test.
+- The never-log-codes gate deepened to match the new chain: the thrown exception is serialized
+  recursively (message, stack, enumerable own properties, response body, every nested `cause`)
+  and the plaintext OTP code is asserted absent at every depth — including a regression whose
+  provider error retains the rendered OTP body in an axios-style `config.data` property and in a
+  nested cause, which is exactly the shape sanitization exists to strip.
+- The `OtpService` code scrub (messages/stacks of a failed delivery's error chain) surfaced a V8
+  subtlety worth recording: the `stack` header line is formatted lazily on FIRST read, so an error
+  whose stack was never touched before the message scrub yields a clean stack for free — and a
+  mutant deleting the stack scrub survives against such errors. The killing test materializes the
+  stack (`void error.stack`) while the message still carries the code, which is the realistic
+  shape (libraries that read/normalize stacks freeze the leaky header). The scrub traversal is
+  identity-based (`WeakSet`), pinned by a 12-link chain scrubbed in full and by a cyclic chain
+  that must terminate — a mutant dropping the `visited` bookkeeping loops forever and dies by
+  timeout; a frozen link is pinned as best-effort (no throw, children still scrubbed) because
+  writes go through `Reflect.set`.

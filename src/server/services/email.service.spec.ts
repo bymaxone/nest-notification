@@ -39,14 +39,20 @@ const makeOptions = (
 const makeProvider = (): jest.Mocked<IEmailProvider> => ({
   name: 'resend',
   isConfigured: jest.fn((): boolean => true),
-  send: jest.fn(async (_options: EmailSendOptions): Promise<EmailSendResult> => ({ messageId: 'msg_1' }))
+  send: jest.fn(async (_options: EmailSendOptions): Promise<EmailSendResult> => ({
+    messageId: 'msg_1'
+  }))
 })
 
 const makeRenderer = (): jest.Mocked<IEmailTemplateRenderer> => ({
   name: 'default',
   hasTemplate: jest.fn(async (_template: string, _locale: string): Promise<boolean> => true),
   render: jest.fn(
-    async (_template: string, _data: Record<string, unknown>, _locale: string): Promise<RenderedEmail> => ({
+    async (
+      _template: string,
+      _data: Record<string, unknown>,
+      _locale: string
+    ): Promise<RenderedEmail> => ({
       subject: 'Hi',
       html: '<p>Hi</p>',
       text: 'Hi'
@@ -67,12 +73,20 @@ describe('EmailService.send', () => {
     const provider = makeProvider()
     const audit = makeAudit()
     const options = makeOptions(
-      { defaultFromName: 'Acme', defaultReplyTo: 'reply@acme.com', defaultTags: [{ name: 'env', value: 'prod' }] },
+      {
+        defaultFromName: 'Acme',
+        defaultReplyTo: 'reply@acme.com',
+        defaultTags: [{ name: 'env', value: 'prod' }]
+      },
       { maskRecipient: (r): string => `masked:${r}` }
     )
     const service = new EmailService(options, provider, makeRenderer(), audit)
 
-    const result = await service.send({ ...baseInput, tags: [{ name: 'x', value: '1' }], userId: 'u1' })
+    const result = await service.send({
+      ...baseInput,
+      tags: [{ name: 'x', value: '1' }],
+      userId: 'u1'
+    })
 
     expect(result).toEqual({ messageId: 'msg_1' })
     expect(provider.send).toHaveBeenCalledWith(
@@ -107,7 +121,12 @@ describe('EmailService.send', () => {
   it('should rethrow a NotificationException without remapping or auditing failed', async () => {
     const provider = makeProvider()
     const audit = makeAudit()
-    const service = new EmailService(makeOptions({ maxAttachmentBytes: 1 }), provider, makeRenderer(), audit)
+    const service = new EmailService(
+      makeOptions({ maxAttachmentBytes: 1 }),
+      provider,
+      makeRenderer(),
+      audit
+    )
 
     await expect(
       service.send({ ...baseInput, attachments: [{ filename: 'big', content: 'toolong' }] })
@@ -157,7 +176,12 @@ describe('EmailService.send', () => {
   // A string content of length 5 is 5 bytes; the budget is 5.
   it('should accept attachments exactly at the byte budget', async () => {
     const provider = makeProvider()
-    const service = new EmailService(makeOptions({ maxAttachmentBytes: 5 }), provider, makeRenderer(), makeAudit())
+    const service = new EmailService(
+      makeOptions({ maxAttachmentBytes: 5 }),
+      provider,
+      makeRenderer(),
+      makeAudit()
+    )
 
     await expect(
       service.send({ ...baseInput, attachments: [{ filename: 'edge', content: 'abcde' }] })
@@ -170,10 +194,18 @@ describe('EmailService.send', () => {
   // under the budget of 3? No: exactly 3, which must pass; four bytes must fail.
   it('should measure Buffer attachment size by byte length', async () => {
     const provider = makeProvider()
-    const service = new EmailService(makeOptions({ maxAttachmentBytes: 3 }), provider, makeRenderer(), makeAudit())
+    const service = new EmailService(
+      makeOptions({ maxAttachmentBytes: 3 }),
+      provider,
+      makeRenderer(),
+      makeAudit()
+    )
 
     await expect(
-      service.send({ ...baseInput, attachments: [{ filename: 'buf', content: Buffer.from([1, 2, 3, 4]) }] })
+      service.send({
+        ...baseInput,
+        attachments: [{ filename: 'buf', content: Buffer.from([1, 2, 3, 4]) }]
+      })
     ).rejects.toMatchObject({ code: 'notification.email_attachments_too_large' })
     expect(provider.send).not.toHaveBeenCalled()
   })
@@ -184,7 +216,12 @@ describe('EmailService.send', () => {
   // of 3 must reject it. A `.length` mutant (which would see 2 ≤ 3) lets it through.
   it('should measure a multi-byte string attachment by UTF-8 byte length', async () => {
     const provider = makeProvider()
-    const service = new EmailService(makeOptions({ maxAttachmentBytes: 3 }), provider, makeRenderer(), makeAudit())
+    const service = new EmailService(
+      makeOptions({ maxAttachmentBytes: 3 }),
+      provider,
+      makeRenderer(),
+      makeAudit()
+    )
 
     await expect(
       service.send({ ...baseInput, attachments: [{ filename: 'emoji', content: '😀' }] })
@@ -196,11 +233,19 @@ describe('EmailService.send', () => {
   // in its details — pins the `{ totalBytes, limit }` detail object against an
   // emptied-object mutant. 'abcdefghij' is 10 bytes; the budget is 5.
   it('should include totalBytes and limit in the EMAIL_ATTACHMENTS_TOO_LARGE details', async () => {
-    const service = new EmailService(makeOptions({ maxAttachmentBytes: 5 }), makeProvider(), makeRenderer(), makeAudit())
+    const service = new EmailService(
+      makeOptions({ maxAttachmentBytes: 5 }),
+      makeProvider(),
+      makeRenderer(),
+      makeAudit()
+    )
 
     expect.assertions(2)
     try {
-      await service.send({ ...baseInput, attachments: [{ filename: 'big', content: 'abcdefghij' }] })
+      await service.send({
+        ...baseInput,
+        attachments: [{ filename: 'big', content: 'abcdefghij' }]
+      })
     } catch (error) {
       const details = (
         error as { getResponse: () => { error: { details: Record<string, unknown> } } }
@@ -279,7 +324,12 @@ describe('EmailService.send', () => {
   // Oversized attachments are rejected before contacting the provider.
   it('should throw EMAIL_ATTACHMENTS_TOO_LARGE when over the byte budget', async () => {
     const provider = makeProvider()
-    const service = new EmailService(makeOptions({ maxAttachmentBytes: 5 }), provider, makeRenderer(), makeAudit())
+    const service = new EmailService(
+      makeOptions({ maxAttachmentBytes: 5 }),
+      provider,
+      makeRenderer(),
+      makeAudit()
+    )
 
     await expect(
       service.send({ ...baseInput, attachments: [{ filename: 'big', content: 'abcdefghij' }] })
@@ -289,18 +339,21 @@ describe('EmailService.send', () => {
 
   // A provider failure becomes EMAIL_SEND_FAILED and audits "failed". The rethrown
   // exception carries the provider name in its details — pins the `{ providerName }`
-  // detail object against an emptied-object mutant.
+  // detail object against an emptied-object mutant — and the provider error itself
+  // as `Error.cause`, so logs can show WHY delivery failed.
   it('should map a provider failure to EMAIL_SEND_FAILED and audit failed', async () => {
     const provider = makeProvider()
-    provider.send.mockRejectedValue(new Error('smtp down'))
+    const providerError = new Error('smtp down')
+    provider.send.mockRejectedValue(providerError)
     const audit = makeAudit()
     const service = new EmailService(makeOptions(), provider, makeRenderer(), audit)
 
-    expect.assertions(3)
+    expect.assertions(4)
     try {
       await service.send(baseInput)
     } catch (error) {
       expect((error as NotificationException).code).toBe('notification.email_send_failed')
+      expect((error as NotificationException).cause).toMatchObject({ message: 'smtp down' })
       const details = (
         error as { getResponse: () => { error: { details: Record<string, unknown> } } }
       ).getResponse().error.details
@@ -309,6 +362,34 @@ describe('EmailService.send', () => {
     expect(audit.create).toHaveBeenCalledWith(
       expect.objectContaining({ verb: 'failed', errorMessage: 'smtp down' })
     )
+  })
+
+  // SECURITY (regression): an SDK error that retains the request payload — the
+  // rendered OTP-bearing body — in its own properties or a nested cause must
+  // reach the thrown exception stripped to name/message/stack, so a
+  // cause-walking log serializer cannot leak the code.
+  it('should strip a payload-retaining provider error before it becomes the cause', async () => {
+    const provider = makeProvider()
+    const providerError = Object.assign(new Error('request failed'), {
+      config: { data: '<p>Your code is 998877</p>' },
+      cause: Object.assign(new Error('socket closed'), { buffer: 'code=998877' })
+    })
+    provider.send.mockRejectedValue(providerError)
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), makeAudit())
+
+    const error: unknown = await service
+      .send({ ...baseInput, html: '<p>Your code is 998877</p>' })
+      .catch((thrown: unknown) => thrown)
+
+    const chain: string[] = []
+    let cursor: unknown = error
+    while (cursor instanceof Error) {
+      chain.push(cursor.message, cursor.stack ?? '', JSON.stringify({ ...cursor }))
+      cursor = 'cause' in cursor ? cursor.cause : undefined
+    }
+    expect(error).toBeInstanceOf(NotificationException)
+    expect(chain.join('\n')).not.toContain('998877')
+    expect(chain.join('\n')).toContain('socket closed')
   })
 
   // A non-Error provider rejection is stringified for the audit message.
@@ -334,21 +415,30 @@ describe('EmailService.send', () => {
   })
 
   // With swallowErrors false an audit failure surfaces as AUDIT_LOG_FAILED carrying
-  // the underlying cause — pins the `{ cause }` detail object on the rethrow.
+  // the underlying error as `Error.cause` — while `details` stays null, because the
+  // details object is serialized into the HTTP response and must never expose
+  // internal error text to clients.
   it('should propagate AUDIT_LOG_FAILED when swallowErrors is false', async () => {
     const audit = makeAudit()
-    audit.create.mockRejectedValue(new Error('db down'))
-    const service = new EmailService(makeOptions({}, { swallowErrors: false }), makeProvider(), makeRenderer(), audit)
+    const auditError = new Error('db down')
+    audit.create.mockRejectedValue(auditError)
+    const service = new EmailService(
+      makeOptions({}, { swallowErrors: false }),
+      makeProvider(),
+      makeRenderer(),
+      audit
+    )
 
-    expect.assertions(2)
+    expect.assertions(3)
     try {
       await service.send(baseInput)
     } catch (error) {
       expect((error as NotificationException).code).toBe('notification.audit_log_failed')
-      const details = (
-        error as { getResponse: () => { error: { details: Record<string, unknown> } } }
-      ).getResponse().error.details
-      expect(details.cause).toBe('db down')
+      expect((error as NotificationException).cause).toMatchObject({ message: 'db down' })
+      const response = (
+        error as { getResponse: () => { error: { details: unknown } } }
+      ).getResponse()
+      expect(response.error.details).toBeNull()
     }
   })
 
@@ -361,7 +451,12 @@ describe('EmailService.send', () => {
     const audit = makeAudit()
     // First (success) audit write fails; any later write succeeds.
     audit.create.mockRejectedValueOnce(new Error('db down')).mockResolvedValue(undefined)
-    const service = new EmailService(makeOptions({}, { swallowErrors: false }), provider, makeRenderer(), audit)
+    const service = new EmailService(
+      makeOptions({}, { swallowErrors: false }),
+      provider,
+      makeRenderer(),
+      audit
+    )
 
     await expect(service.send(baseInput)).rejects.toMatchObject({
       code: 'notification.audit_log_failed'
@@ -370,13 +465,63 @@ describe('EmailService.send', () => {
     expect(provider.send).toHaveBeenCalledTimes(1)
   })
 
-  // A non-Error audit rejection is stringified into the AUDIT_LOG_FAILED cause.
-  it('should stringify a non-Error audit rejection when not swallowing', async () => {
+  // SECURITY: a provider failure that echoes a declared secret value back must
+  // have it redacted from the failed-audit errorMessage — the caller names the
+  // secrets via `auditRedactValues` because only the caller knows them.
+  it('should redact declared values from the failed-audit errorMessage', async () => {
+    const provider = makeProvider()
+    provider.send.mockRejectedValue(new Error('rejected body with 998877 inside'))
+    const audit = makeAudit()
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), audit)
+
+    await service.send({ ...baseInput, auditRedactValues: ['998877'] }).catch(() => undefined)
+
+    expect(audit.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        verb: 'failed',
+        errorMessage: 'rejected body with [redacted] inside'
+      })
+    )
+  })
+
+  // SECURITY (regression): a provider error whose `message` getter throws must
+  // not escape unaudited — the audit read fails closed to the marker and the
+  // send still maps to EMAIL_SEND_FAILED.
+  it('should fail closed when the provider error message getter throws', async () => {
+    const provider = makeProvider()
+    const hostile = new Error('shell')
+    Object.defineProperty(hostile, 'message', {
+      get: (): never => {
+        throw new Error('getter leaked 998877')
+      }
+    })
+    provider.send.mockRejectedValue(hostile)
+    const audit = makeAudit()
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), audit)
+
+    await expect(service.send(baseInput)).rejects.toMatchObject({
+      code: 'notification.email_send_failed'
+    })
+    expect(audit.create).toHaveBeenCalledWith(
+      expect.objectContaining({ verb: 'failed', errorMessage: '[redacted]' })
+    )
+  })
+
+  // A non-Error audit rejection rides as-is on the AUDIT_LOG_FAILED `cause`.
+  it('should carry a non-Error audit rejection as the cause when not swallowing', async () => {
     const audit = makeAudit()
     audit.create.mockRejectedValue('weird')
-    const service = new EmailService(makeOptions({}, { swallowErrors: false }), makeProvider(), makeRenderer(), audit)
+    const service = new EmailService(
+      makeOptions({}, { swallowErrors: false }),
+      makeProvider(),
+      makeRenderer(),
+      audit
+    )
 
-    await expect(service.send(baseInput)).rejects.toBeInstanceOf(NotificationException)
+    const error: unknown = await service.send(baseInput).catch((thrown: unknown) => thrown)
+
+    expect(error).toBeInstanceOf(NotificationException)
+    expect((error as NotificationException).cause).toBe('weird')
   })
 })
 
@@ -484,7 +629,13 @@ describe('EmailService.sendTemplate', () => {
     const provider = makeProvider()
     const service = new EmailService(makeOptions(), provider, renderer, makeAudit())
 
-    await service.sendTemplate({ tenantId: 't', to: 'a@x.com', template: 'welcome', data: {}, locale: 'pt-BR' })
+    await service.sendTemplate({
+      tenantId: 't',
+      to: 'a@x.com',
+      template: 'welcome',
+      data: {},
+      locale: 'pt-BR'
+    })
 
     expect(renderer.render).toHaveBeenCalledWith('welcome', {}, 'en')
   })
@@ -498,7 +649,13 @@ describe('EmailService.sendTemplate', () => {
     renderer.hasTemplate.mockImplementation(async (_t, locale) => locale === 'pt-BR')
     const service = new EmailService(makeOptions(), makeProvider(), renderer, makeAudit())
 
-    await service.sendTemplate({ tenantId: 't', to: 'a@x.com', template: 'welcome', data: {}, locale: 'pt-BR' })
+    await service.sendTemplate({
+      tenantId: 't',
+      to: 'a@x.com',
+      template: 'welcome',
+      data: {},
+      locale: 'pt-BR'
+    })
 
     expect(renderer.render).toHaveBeenCalledWith('welcome', {}, 'pt-BR')
   })
@@ -513,7 +670,13 @@ describe('EmailService.sendTemplate', () => {
 
     expect.assertions(3)
     try {
-      await service.sendTemplate({ tenantId: 't', to: 'a@x.com', template: 'welcome', data: {}, locale: 'fr' })
+      await service.sendTemplate({
+        tenantId: 't',
+        to: 'a@x.com',
+        template: 'welcome',
+        data: {},
+        locale: 'fr'
+      })
     } catch (error) {
       expect((error as NotificationException).code).toBe('notification.template_not_found')
       const details = (
@@ -525,17 +688,20 @@ describe('EmailService.sendTemplate', () => {
   })
 
   // A renderer that throws maps to TEMPLATE_RENDER_FAILED, whose details name the
-  // template — pins the `{ template }` detail object against an emptied-object mutant.
+  // template — pins the `{ template }` detail object against an emptied-object
+  // mutant — and whose `Error.cause` carries the renderer's own error.
   it('should throw TEMPLATE_RENDER_FAILED with template details when the renderer throws', async () => {
     const renderer = makeRenderer()
-    renderer.render.mockRejectedValue(new Error('bad syntax'))
+    const rendererError = new Error('bad syntax')
+    renderer.render.mockRejectedValue(rendererError)
     const service = new EmailService(makeOptions(), makeProvider(), renderer, makeAudit())
 
-    expect.assertions(2)
+    expect.assertions(3)
     try {
       await service.sendTemplate({ tenantId: 't', to: 'a@x.com', template: 'welcome', data: {} })
     } catch (error) {
       expect((error as NotificationException).code).toBe('notification.template_render_failed')
+      expect((error as NotificationException).cause).toMatchObject({ message: 'bad syntax' })
       const details = (
         error as { getResponse: () => { error: { details: Record<string, unknown> } } }
       ).getResponse().error.details
@@ -556,9 +722,27 @@ describe('EmailService.sendTemplate', () => {
     await service.sendTemplate({ tenantId: 't', to: 'a@x.com', template: 'welcome', data: {} })
 
     const input = sendSpy.mock.calls[0]?.[0]
-    for (const key of ['text', 'from', 'fromName', 'replyTo', 'userId']) {
+    for (const key of ['text', 'from', 'fromName', 'replyTo', 'userId', 'auditRedactValues']) {
       expect(key in input!).toBe(false)
     }
+  })
+
+  // Declared secret values must ride sendTemplate → send so the failed-audit
+  // redaction works on the template path (the one OTP delivery uses).
+  it('should forward auditRedactValues to the inner send input', async () => {
+    const renderer = makeRenderer()
+    const service = new EmailService(makeOptions(), makeProvider(), renderer, makeAudit())
+    const sendSpy = jest.spyOn(service, 'send').mockResolvedValue({ messageId: 'm' })
+
+    await service.sendTemplate({
+      tenantId: 't',
+      to: 'a@x.com',
+      template: 'welcome',
+      data: {},
+      auditRedactValues: ['998877']
+    })
+
+    expect(sendSpy.mock.calls[0]?.[0]?.auditRedactValues).toEqual(['998877'])
   })
 })
 
@@ -566,7 +750,9 @@ describe('EmailService.isConfigured', () => {
   // True only when the channel is present AND the provider reports ready.
   it('should reflect both the channel presence and the provider state', () => {
     const provider = makeProvider()
-    expect(new EmailService(makeOptions(), provider, makeRenderer(), makeAudit()).isConfigured()).toBe(true)
+    expect(
+      new EmailService(makeOptions(), provider, makeRenderer(), makeAudit()).isConfigured()
+    ).toBe(true)
 
     expect(
       new EmailService(makeOptions(null), provider, makeRenderer(), makeAudit()).isConfigured()
@@ -574,6 +760,8 @@ describe('EmailService.isConfigured', () => {
 
     const unready = makeProvider()
     unready.isConfigured.mockReturnValue(false)
-    expect(new EmailService(makeOptions(), unready, makeRenderer(), makeAudit()).isConfigured()).toBe(false)
+    expect(
+      new EmailService(makeOptions(), unready, makeRenderer(), makeAudit()).isConfigured()
+    ).toBe(false)
   })
 })

@@ -28,6 +28,7 @@ import type {
   INotificationLogRepository,
   NotificationLogEntry
 } from '../interfaces/notification-log-repository.interface'
+import { readRedactedMessage } from '../utils/redact'
 
 /** Locale used as the fallback when the requested locale has no template. */
 const FALLBACK_LOCALE = 'en'
@@ -51,6 +52,11 @@ export interface EmailSendInput {
   attachments?: EmailSendOptions['attachments']
   /** Associated user id, recorded in the audit entry. */
   userId?: string
+  /**
+   * Secret values (e.g. an OTP code the body carries) redacted from the audit
+   * entry's `errorMessage` when a provider failure echoes them back.
+   */
+  auditRedactValues?: readonly string[]
 }
 
 /** Input for {@link EmailService.sendTemplate} — the renderer produces the body. */
@@ -65,6 +71,11 @@ export interface EmailSendTemplateInput {
   replyTo?: string
   tags?: ReadonlyArray<EmailTag>
   userId?: string
+  /**
+   * Secret values (e.g. an OTP code inside `data`) redacted from the audit
+   * entry's `errorMessage` when a provider failure echoes them back.
+   */
+  auditRedactValues?: readonly string[]
 }
 
 /** Transactional email service. */
@@ -123,10 +134,14 @@ export class EmailService {
       }
       await this.audit(
         this.auditEntry('failed', input.tenantId, recipient, input.userId, {
-          errorMessage: error instanceof Error ? error.message : String(error)
+          errorMessage: readRedactedMessage(error, input.auditRedactValues)
         })
       )
-      throw new NotificationException('EMAIL_SEND_FAILED', { providerName: this.provider.name })
+      throw new NotificationException(
+        'EMAIL_SEND_FAILED',
+        { providerName: this.provider.name },
+        { cause: error }
+      )
     }
   }
 
@@ -156,7 +171,10 @@ export class EmailService {
       ...(input.from !== undefined ? { from: input.from } : {}),
       ...(input.fromName !== undefined ? { fromName: input.fromName } : {}),
       ...(input.replyTo !== undefined ? { replyTo: input.replyTo } : {}),
-      ...(input.userId !== undefined ? { userId: input.userId } : {})
+      ...(input.userId !== undefined ? { userId: input.userId } : {}),
+      ...(input.auditRedactValues !== undefined
+        ? { auditRedactValues: input.auditRedactValues }
+        : {})
     })
   }
 
@@ -231,8 +249,8 @@ export class EmailService {
   ): Promise<{ subject: string; html: string; text?: string }> {
     try {
       return await this.renderer.render(template, data, locale)
-    } catch {
-      throw new NotificationException('TEMPLATE_RENDER_FAILED', { template })
+    } catch (error) {
+      throw new NotificationException('TEMPLATE_RENDER_FAILED', { template }, { cause: error })
     }
   }
 
@@ -263,9 +281,9 @@ export class EmailService {
       await this.auditLog.create(entry)
     } catch (error) {
       if (!this.options.audit.swallowErrors) {
-        throw new NotificationException('AUDIT_LOG_FAILED', {
-          cause: error instanceof Error ? error.message : String(error)
-        })
+        // The underlying error rides only on `Error.cause` — `details` is serialized
+        // into the HTTP response body, so internal error text must never land there.
+        throw new NotificationException('AUDIT_LOG_FAILED', undefined, { cause: error })
       }
     }
   }

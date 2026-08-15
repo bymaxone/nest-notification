@@ -32,9 +32,7 @@ export interface OtpEntry {
  * - `ok` — an attempt was consumed; `entry` carries the updated entry (incl. the stored `code`).
  */
 export type ConsumeAttemptResult =
-  | { status: 'not_found' }
-  | { status: 'max_attempts' }
-  | { status: 'ok'; entry: OtpEntry }
+  { status: 'not_found' } | { status: 'max_attempts' } | { status: 'ok'; entry: OtpEntry }
 
 /**
  * Outcome of a verification, as returned by `OtpService.verify()`.

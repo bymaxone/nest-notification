@@ -161,8 +161,7 @@ export interface BymaxNotificationModuleOptions {
  */
 export interface BymaxNotificationModuleOptionsFactory {
   createNotificationOptions():
-    | BymaxNotificationModuleOptions
-    | Promise<BymaxNotificationModuleOptions>
+    BymaxNotificationModuleOptions | Promise<BymaxNotificationModuleOptions>
 }
 
 /**

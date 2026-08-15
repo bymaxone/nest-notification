@@ -140,6 +140,7 @@ export {
   NotificationException,
   NOTIFICATION_ERROR_DEFINITIONS,
   NOTIFICATION_ERROR_CODES,
+  type NotificationExceptionOptions,
   type NotificationErrorKey,
   type NotificationErrorDefinition
 } from './errors'

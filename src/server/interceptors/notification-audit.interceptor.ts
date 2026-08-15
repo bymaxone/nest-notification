@@ -106,7 +106,9 @@ export class NotificationAuditInterceptor implements NestInterceptor {
       await this.auditLog.create(this.buildEntry(input, tenantId, verb, errorMessage))
     } catch (error) {
       if (!this.options.audit.swallowErrors) {
-        throw new NotificationException('AUDIT_LOG_FAILED', { cause: toErrorMessage(error) })
+        // The underlying error rides only on `Error.cause` — `details` is serialized
+        // into the HTTP response body, so internal error text must never land there.
+        throw new NotificationException('AUDIT_LOG_FAILED', undefined, { cause: error })
       }
     }
   }

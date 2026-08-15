@@ -9,35 +9,30 @@ import type {
   INotificationLogRepository,
   NotificationLogEntry
 } from '../interfaces/notification-log-repository.interface'
+import type {
+  EmailSendOptions,
+  EmailSendResult,
+  IEmailProvider
+} from '../interfaces/email-provider.interface'
+import type {
+  IEmailTemplateRenderer,
+  RenderedEmail
+} from '../interfaces/email-template-renderer.interface'
 import { InMemoryOtpStorage } from '../providers/in-memory-otp.storage'
 import { toRetryAfterHeader } from '../utils/cooldown-helpers'
 
-import type { EmailService } from './email.service'
+import { EmailService } from './email.service'
 import { OtpService } from './otp.service'
 
-const dummyRepo = {
-  name: 'x',
-  create: async (): Promise<void> => undefined
-} as INotificationLogRepository
-
-const makeOptions = (
-  otp: Partial<OtpChannelOptions> | null = {},
-  audit: Partial<AuditOptions> = {}
-): ResolvedNotificationOptions =>
-  resolveOptions({
-    ...(otp ? { otp: { storage: InMemoryOtpStorage, ...otp } } : {}),
-    audit: { repository: dummyRepo, ...audit }
-  })
-
-const makeAudit = (): jest.Mocked<INotificationLogRepository> => ({
-  name: 'audit',
-  create: jest.fn(async (_entry: NotificationLogEntry): Promise<void> => undefined)
-})
-
-const emailSendTemplate = jest.fn()
-const emailServiceStub = { sendTemplate: emailSendTemplate } as unknown as EmailService
-
-const ref = { tenantId: 'tenant_a', recipient: 'jane@acme.com', purpose: 'email_verification' }
+import {
+  dummyRepo,
+  emailSendTemplate,
+  emailServiceStub,
+  makeAudit,
+  makeOptions,
+  ref,
+  serializeErrorChain
+} from './__tests__/otp-service.fixtures'
 
 describe('OtpService.generate', () => {
   let storage: InMemoryOtpStorage
@@ -286,20 +281,24 @@ describe('OtpService.generate', () => {
   })
 
   // With swallowErrors:false an audit failure surfaces as AUDIT_LOG_FAILED carrying
-  // the underlying cause — pins the rethrow object and its `cause` field.
+  // the underlying error as `Error.cause` — while `details` stays null, because the
+  // details object is serialized into the HTTP response and must never expose
+  // internal error text to clients.
   it('should rethrow AUDIT_LOG_FAILED with the cause when swallowErrors is false', async () => {
-    audit.create.mockRejectedValue(new Error('db down'))
+    const auditError = new Error('db down')
+    audit.create.mockRejectedValue(auditError)
     const service = new OtpService(makeOptions({}, { swallowErrors: false }), storage, audit)
 
-    expect.assertions(2)
+    expect.assertions(3)
     try {
       await service.generate({ ...ref, deliverVia: 'manual' })
     } catch (error) {
       expect((error as NotificationException).code).toBe('notification.audit_log_failed')
-      const details = (
-        error as { getResponse: () => { error: { details: Record<string, unknown> } } }
-      ).getResponse().error.details
-      expect(details.cause).toBe('db down')
+      expect((error as NotificationException).cause).toMatchObject({ message: 'db down' })
+      const response = (
+        error as { getResponse: () => { error: { details: unknown } } }
+      ).getResponse()
+      expect(response.error.details).toBeNull()
     }
   })
 
@@ -542,14 +541,15 @@ describe('OtpService not-configured + audit propagation', () => {
     })
   })
 
-  // A non-Error audit rejection is stringified into the AUDIT_LOG_FAILED cause.
-  it('should stringify a non-Error audit rejection when not swallowing', async () => {
+  // A non-Error audit rejection rides as-is on the AUDIT_LOG_FAILED `cause`.
+  it('should carry a non-Error audit rejection as the cause when not swallowing', async () => {
     const audit = makeAudit()
     audit.create.mockRejectedValue('weird')
     const service = new OtpService(makeOptions({}, { swallowErrors: false }), storage, audit)
 
     await expect(service.generate({ ...ref, deliverVia: 'manual' })).rejects.toMatchObject({
-      code: 'notification.audit_log_failed'
+      code: 'notification.audit_log_failed',
+      cause: 'weird'
     })
   })
 })

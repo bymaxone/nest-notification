@@ -11,4 +11,4 @@ export {
   type NotificationErrorKey
 } from './notification-error-codes'
 
-export { NotificationException } from './notification-exception'
+export { NotificationException, type NotificationExceptionOptions } from './notification-exception'

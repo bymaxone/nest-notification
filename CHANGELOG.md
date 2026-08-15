@@ -5,6 +5,71 @@ All notable changes to `@bymax-one/nest-notification` will be documented in this
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-08-14
+
+### Added
+
+- **`NotificationException` now carries the underlying error as the native `Error.cause`.** A failed
+  dispatch used to log _what_ failed and never _why_: `EMAIL_SEND_FAILED` discarded the provider's
+  error, so a `connect ECONNREFUSED` existed only in a separate `warn` line — recoverable by
+  request-id correlation, and entirely absent for a deployment logging at `error`. Since dispatch is
+  fire-and-forget, the log is the only surface where the reason can appear at all. Reported by a
+  consumer with a live reproduction (SMTP pointed at a closed port), and verified against this
+  release the same way: the reason now sits nested inside the same serialized `err` object, with no
+  change on the logging side — cause-walking serializers (e.g. pino's `err`) pick it up natively.
+
+  The third constructor parameter accepts an options bag,
+  `new NotificationException(key, details, { status?, message?, cause? })`, mirroring how
+  `HttpException` itself evolved; the positional `(key, details, status, message)` form keeps
+  working unchanged. All five sites that previously discarded the underlying error now attach it:
+  `EMAIL_SEND_FAILED`, `TEMPLATE_RENDER_FAILED`, and the three `AUDIT_LOG_FAILED` throw sites.
+  `NotificationExceptionOptions` is exported from the server subpath.
+
+  The cause is stored as a **log-safe copy**, not the raw object: `name`, `message`, `stack`, and
+  the nested `cause` chain survive (depth-bounded); every other property is dropped. Provider/SDK
+  errors routinely retain the request payload in extra properties (an axios-style `config.data`),
+  and for an OTP email that payload contains the code — attaching the raw object would have handed
+  a cause-walking serializer exactly what the never-log-codes rule exists to keep out of logs.
+  Non-Error object causes are flattened to their `String()` form for the same reason; primitives
+  pass through. One nuance, inherited from Nest and documented on the option: `HttpException`
+  installs only a _truthy_ cause, so a falsy cause is silently ignored.
+
+### Fixed
+
+- **`AUDIT_LOG_FAILED` no longer leaks internal error text into the HTTP response.** The three
+  audit-failure sites stuffed the caught error's message into `details.cause` — and `details` is
+  serialized into the response body, so storage/audit internals reached the HTTP client on a 502
+  whenever `audit.swallowErrors` was `false`. The error now rides only on `Error.cause` (never
+  serialized into the response) and those responses carry `details: null`. The security gate was
+  extended to match: tests serialize thrown exceptions recursively — message, stack, response body,
+  and every nested cause — and assert the plaintext OTP code appears at no depth.
+
+- **A delivery error that echoes the plaintext code is scrubbed before it leaves `OtpService`.**
+  The renderer receives the code inside its template `data` and the provider receives it inside
+  the rendered body, so either may echo it in a thrown error's message or stack. On a failed OTP
+  delivery the service now replaces every occurrence of the code with `[redacted]` — in the audit
+  entry's `errorMessage` and across the rethrown error chain (message and stack at every link) —
+  at the one layer that knows the secret. The scrub also covers `name` (serializers emit it like
+  `message`), deletes payload-bearing own enumerable properties from arbitrary errors (a storage
+  may reject with `Object.assign(new Error(...), { entry })` — and the entry carries the code —
+  while a `NotificationException` keeps its contract properties, safe by construction), and
+  flattens a non-`Error` `cause` link — a primitive string tail carries the secret verbatim and
+  an object tail can carry it in a property, and neither can be walked as an Error.
+  Traversal is identity-based (`WeakSet`), so a cyclic chain terminates and no depth limit leaves
+  an unscrubbed tail; writes go through `Reflect.set`, so a frozen foreign error degrades to
+  best-effort instead of throwing. Any non-`Error` rejection — a string, or an object a custom
+  storage may reject with that retains the entry — is flattened to a redacted string, since a raw
+  object could carry the code in its properties.
+
+- **`EmailService` redacts declared secrets from its own failed-audit entry.** The email `failed`
+  audit entry records the provider's message, which is written before `OtpService` can scrub the
+  rethrown chain — so a provider that echoes the rendered body leaked the code into that one
+  entry. `EmailSendInput`/`EmailSendTemplateInput` gain `auditRedactValues`: secret values the
+  caller declares (only the caller knows them) that are replaced with `[redacted]` in the entry's
+  `errorMessage`. OTP delivery passes `[code]` automatically; a real-path regression (real
+  `EmailService`, echoing provider) asserts both audit entries and the rethrown chain are
+  code-free.
+
 ## [1.1.2] - 2026-08-14
 
 ### Fixed
@@ -313,6 +378,7 @@ rejected at startup rather than failing on the first send.
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
 [Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.0.6...HEAD
+[1.2.0]: https://github.com/bymaxone/nest-notification/compare/v1.1.2...v1.2.0
 [1.1.2]: https://github.com/bymaxone/nest-notification/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/bymaxone/nest-notification/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/bymaxone/nest-notification/compare/v1.0.6...v1.1.0
