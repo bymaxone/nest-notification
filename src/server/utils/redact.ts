@@ -327,13 +327,38 @@ function collectOwnEntries(source: object): Array<[string, PropertyDescriptor]> 
  * resists replacement — the caller must fall back to a copy.
  */
 /**
- * Own properties a `NotificationException` needs to keep working — the HTTP
- * body, the status, the Nest options bag, and the stable code. `name`,
- * `message`, and `cause` need no entry: the register step rewrites them right
- * after the strip. Anything else on the instance is consumer-added and gets
- * deleted like on any other error.
+ * Own keys every scrubbed error keeps: the standard Error fields, all
+ * rewritten in place right after the strip — deleting them would only churn
+ * their enumerability, and a redacted COPY carries them non-configurable, so
+ * deleting would needlessly force a second copy on a re-scrub. Everything
+ * else own — enumerable or not, string or symbol — is consumer-added and
+ * deleted.
  */
-const EXCEPTION_CONTRACT_KEYS = new Set(['response', 'status', 'options', 'code'])
+const STANDARD_ERROR_KEYS = new Set<string | symbol>(['name', 'message', 'stack', 'cause'])
+
+/**
+ * Own properties a `NotificationException` needs beyond the standard Error
+ * keys — the HTTP body, the status, the Nest options bag, and the stable code.
+ */
+const EXCEPTION_CONTRACT_KEYS = new Set<string | symbol>(['response', 'status', 'options', 'code'])
+
+/**
+ * Deletes every consumer-added OWN key from the node — `Reflect.ownKeys` sees
+ * non-enumerable and symbol keys too, which serializers that inspect all own
+ * properties would otherwise still read.
+ *
+ * @returns `false` when any extra resists deletion — the caller must fall
+ * back to the redacted copy.
+ */
+function deleteExtraOwnKeys(node: Error, contractKeys: ReadonlySet<string | symbol>): boolean {
+  return Reflect.ownKeys(node).every(
+    (key) =>
+      STANDARD_ERROR_KEYS.has(key) || contractKeys.has(key) || Reflect.deleteProperty(node, key)
+  )
+}
+
+/** The generic error contract adds nothing beyond the standard keys. */
+const NO_CONTRACT_KEYS: ReadonlySet<string | symbol> = new Set()
 
 function stripExtraProperties(node: Error, values: readonly string[]): boolean {
   try {
@@ -353,14 +378,10 @@ function stripExtraProperties(node: Error, values: readonly string[]): boolean {
         node.getResponse() === redactedResponse &&
         Reflect.set(node, 'options', rebuiltOptions) &&
         Reflect.get(node, 'options') === rebuiltOptions &&
-        Object.keys(node).every(
-          (key) => EXCEPTION_CONTRACT_KEYS.has(key) || Reflect.deleteProperty(node, key)
-        )
+        deleteExtraOwnKeys(node, EXCEPTION_CONTRACT_KEYS)
       )
     }
-    // Deleting `cause` too is fine: it was captured before the strip, the
-    // probe recreates the slot, and pass 2 rewires it.
-    return Object.keys(node).every((key) => Reflect.deleteProperty(node, key))
+    return deleteExtraOwnKeys(node, NO_CONTRACT_KEYS)
   } catch {
     // Property discovery or a trap threw: fail closed to the copy path.
     return false

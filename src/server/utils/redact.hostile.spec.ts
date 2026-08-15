@@ -152,6 +152,67 @@ describe('scrubValuesFromErrorChain — hostile proxies and lying accessors', ()
     expect(JSON.stringify({ ...returned })).not.toContain('555')
   })
 
+  // SECURITY (regression): a NON-ENUMERABLE extra hides from Object.keys but
+  // is still readable by serializers that inspect all own properties — the
+  // strip sees every own key via Reflect.ownKeys and deletes it in place.
+  it('should delete a non-enumerable extra from a NotificationException', () => {
+    const exception = new NotificationException('EMAIL_SEND_FAILED')
+    Object.defineProperty(exception, 'entry', {
+      value: { code: '555' },
+      enumerable: false,
+      configurable: true
+    })
+
+    const returned = scrubValuesFromErrorChain(exception, ['555'])
+
+    expect(returned).toBe(exception)
+    expect(Object.getOwnPropertyNames(exception).includes('entry')).toBe(false)
+  })
+
+  // A SYMBOL-keyed extra is equally invisible to Object.keys and equally
+  // deleted by the own-keys strip.
+  it('should delete a symbol-keyed extra from a scrubbed error', () => {
+    const hidden = Symbol('entry')
+    const error = new Error('boom 555')
+    Object.defineProperty(error, hidden, {
+      value: { code: '555' },
+      enumerable: false,
+      configurable: true
+    })
+
+    const returned = scrubValuesFromErrorChain(error, ['555'])
+
+    expect(returned).toBe(error)
+    expect(Object.getOwnPropertySymbols(error).includes(hidden)).toBe(false)
+  })
+
+  // A non-enumerable, NON-configurable extra resists deletion and forces the
+  // copy path — the copy carries no extras at all.
+  it('should copy an error with an undeletable non-enumerable extra', () => {
+    const error = new Error('boom 555')
+    Object.defineProperty(error, 'entry', { value: { code: '555' }, enumerable: false })
+
+    const returned = scrubValuesFromErrorChain(error, ['555']) as Error
+
+    expect(returned).not.toBe(error)
+    expect(returned.message).toBe(`boom ${REDACTED_VALUE}`)
+    expect(Object.getOwnPropertyNames(returned).includes('entry')).toBe(false)
+  })
+
+  // The standard fields are rewritten IN PLACE, never deleted-and-recreated —
+  // a scrubbed plain error keeps `message` and `stack` non-enumerable, exactly
+  // like a native Error.
+  it('should keep message and stack non-enumerable on a scrubbed error', () => {
+    const error = new Error('boom 555')
+    void error.stack
+
+    scrubValuesFromErrorChain(error, ['555'])
+
+    expect(Object.getOwnPropertyDescriptor(error, 'message')?.enumerable).toBe(false)
+    expect(Object.getOwnPropertyDescriptor(error, 'stack')?.enumerable).toBe(false)
+    expect(error.message).toBe(`boom ${REDACTED_VALUE}`)
+  })
+
   // The guarded cause attachment reports what verifiably happened and never
   // lets a hostile trap throw past it.
   it('should attach a cause only when the slot is verifiably free', () => {
