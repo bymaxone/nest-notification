@@ -74,7 +74,7 @@ pnpm add @bymax-one/nest-notification
 - ✅ **SHA-256 storage keys** — `sha256(tenantId:recipient)`: no recipient PII in a key, no cross-tenant collision
 - ✅ **`tenantIdResolver`** — the audited tenant comes from a trusted source (a JWT claim, a subdomain, a gateway-checked header), not the payload
 - ✅ **Opt-in audit log** — a fire-and-forget `INotificationLogRepository` plus a `NotificationAuditInterceptor`; audit failures never break delivery
-- ✅ **Codes are never logged** — not to a logger, not to an audit entry, not into an error message, enforced by a regression test
+- ✅ **This library never logs a code** — not to a logger, not to an audit entry, not into an error message it authors, enforced by a regression test. Text a **provider** authors is a separate problem with a documented ceiling: an error quoting the body in another encoding survives every guard, so control whether provider error text reaches your logs at all
 
 ### 🧩 Developer Experience
 
@@ -617,14 +617,18 @@ const tenantIdResolver = (req: NotificationRequest): string =>
 > [!NOTE]
 > The resolver governs what the audit interceptor trusts. Service methods still take an explicit `tenantId`: resolve the tenant in your controller and pass it down — there is no hidden override of a method argument.
 
-### Codes are never written anywhere readable
+### The library never writes a code anywhere readable
+
+Everything below is about text **this library authors**. Text a provider authors is a separate
+problem with a documented ceiling — see [Errors](#errors) — and
+the two must not be read as one guarantee.
 
 The library **never** writes a code to a sink that can be read back:
 
 - Not to the audit log — an entry is `{ verb, tenantId, recipient, purpose, providerName, … }`, never `code`.
 - Not to a console or logger line.
 - Not inside an `errorMessage`, which carries the message only — never a stack trace.
-- Not inside a rethrown delivery error: the renderer and the provider both receive the code (template `data`, rendered body), so on a failed delivery every occurrence of the code is scrubbed to `[redacted]` across the outgoing error chain — message **and** stack at every link, cycle-safe with no depth limit — before the audit write and the rethrow, and a non-`Error` rejection is flattened to a redacted string. The email channel's own `failed` audit entry is covered too: OTP delivery declares the code via `auditRedactValues`, and `EmailService` redacts it from the entry's `errorMessage`. Default V8 stack frames carry only function names and source locations, never argument values; the header line (`Error: <message>`) is where a code could ride a stack, and the scrub covers it.
+- Not inside a rethrown delivery error: the renderer and the provider both receive the code (template `data`, rendered body), so on a failed delivery every **literal** occurrence of the code — the form it was issued in, which is the form this library's own text carries — is scrubbed to `[redacted]` across the outgoing error chain — message **and** stack at every link, cycle-safe with no depth limit — before the audit write and the rethrow, and a non-`Error` rejection is flattened to a redacted string. The email channel's own `failed` audit entry is covered too: OTP delivery declares the code via `auditRedactValues`, and `EmailService` redacts it from the entry's `errorMessage`. Default V8 stack frames carry only function names and source locations, never argument values; the header line (`Error: <message>`) is where a code could ride a stack, and the scrub covers it.
 
 Codes exist only inside the OTP store, under a TTL, and in process memory for the duration of the request. `audit.maskRecipient` minimizes the recipient before it is persisted (`jane@acme.com` → `j***@acme.com`). A regression test asserts the invariant directly rather than trusting review: `JSON.stringify(auditEntry).includes(code) === false`.
 

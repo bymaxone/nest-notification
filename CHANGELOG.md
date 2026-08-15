@@ -43,6 +43,17 @@ makes a reader feel safer than they are.
   Treat provider error text reaching a log as the thing to control, and declared values as
   precision on top of that — not as the barrier.
 
+- **Corrected: the README asserted and refuted the same guarantee.** The feature list said "Codes
+  are never logged … not into an error message" and the security section promised "every
+  occurrence of the code is scrubbed", while the paragraph added by this same patch documents an
+  encoded echo surviving both guards. The unconditional claims came first, which is the half a
+  skimming reader takes away. They now say what they actually cover: text **this library authors**,
+  and every **literal** occurrence — with a pointer to the ceiling for text a provider authors.
+  Found by applying a rule a consuming team derived after finding the identical drift in their own
+  changelog: a claim written to explain and a claim written to instruct drift apart inside one
+  author's head, because the explanation optimises for the point and the instruction for the cases.
+  Grep the narrative against the instructions whenever one document carries both.
+
 - The residual risk this leaves is tracked for a behaviour change rather than another note, and
   the shape of that change is open. What the measurements above establish is the direction: value
   redaction is a **blacklist** — it must predict the form the secret takes, and it loses to any
