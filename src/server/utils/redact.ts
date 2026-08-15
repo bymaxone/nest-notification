@@ -69,9 +69,22 @@ export function scrubValuesFromErrorChain(error: unknown, values: readonly strin
     }
     cursor = next
   }
-  // Pass 2 — wire each link's cause to its child's representative (or the
-  // flattened form of a non-Error tail). Every representative is registered
-  // already, so a cyclic back-edge resolves without recursion.
+  wireCauses(chain, values, seen)
+  return headRepresentative
+}
+
+/**
+ * Pass 2 of the scrub — wires each link's cause to its child's representative
+ * (or the flattened form of a non-Error tail). Every representative is
+ * registered already, so a cyclic back-edge resolves without recursion. An
+ * in-place node is rewired through `Reflect.set` (a setter-backed slot works);
+ * a copy gets its `cause` defined writable.
+ */
+function wireCauses(
+  chain: readonly ChainLink[],
+  values: readonly string[],
+  seen: WeakMap<Error, Error>
+): void {
   for (const link of chain) {
     if (!link.hasCause) {
       continue
@@ -94,7 +107,6 @@ export function scrubValuesFromErrorChain(error: unknown, values: readonly strin
       })
     }
   }
-  return headRepresentative
 }
 
 /** One walked link — the original node paired with its scrubbed representative. */
