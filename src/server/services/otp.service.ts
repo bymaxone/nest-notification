@@ -38,7 +38,13 @@ import type { OtpPurposeConfig } from '../interfaces/notification-module-options
 import type { IOtpStorage, OtpEntry, OtpVerifyResult } from '../interfaces/otp-storage.interface'
 import { generateOtpCode } from '../utils/code-generator'
 import { cooldownExpiresAt, toRetryAfterHeader } from '../utils/cooldown-helpers'
-import { coerceRedacted, readRedactedMessage, scrubValuesFromErrorChain } from '../utils/redact'
+import {
+  attachCauseIfAbsent,
+  coerceRedacted,
+  isSafeError,
+  readRedactedMessage,
+  scrubValuesFromErrorChain
+} from '../utils/redact'
 import { safeCompare } from '../utils/timing-safe-compare'
 
 /** Milliseconds in one second. */
@@ -284,10 +290,9 @@ export class OtpService {
         // A failed cleanup supersedes the delivery error — the cooldown/OTP may
         // now be orphaned, which the caller must see — and it must NOT bypass
         // the scrub below. The delivery error is preserved as its cause when
-        // the cleanup error can carry one.
-        if (cleanupError instanceof Error && !('cause' in cleanupError)) {
-          Reflect.set(cleanupError, 'cause', error)
-        }
+        // the cleanup error can verifiably carry one; a hostile trap inside
+        // the attachment is contained by the helper.
+        attachCauseIfAbsent(cleanupError, error)
         failure = cleanupError
       }
       // Scrub BEFORE the audit write and the rethrow, so neither the entry's
@@ -297,10 +302,9 @@ export class OtpService {
       // storage, number) is flattened to a redacted string, because a raw
       // object could carry the code in its properties and a primitive cannot
       // be mutated.
-      const outgoing: unknown =
-        failure instanceof Error
-          ? scrubValuesFromErrorChain(failure, [code])
-          : coerceRedacted(failure, [code])
+      const outgoing: unknown = isSafeError(failure)
+        ? scrubValuesFromErrorChain(failure, [code])
+        : coerceRedacted(failure, [code])
       await this.audit(
         this.otpAuditEntry('failed', input, {
           // `outgoing` is already fully redacted by the scrub above; this read

@@ -1,19 +1,15 @@
 import { NotificationException } from '../errors/notification-exception'
 
+import { hostileToString } from './__tests__/redact-fixtures'
+
 import {
   REDACTED_VALUE,
+  attachCauseIfAbsent,
   coerceRedacted,
   readRedactedMessage,
   redactValues,
   scrubValuesFromErrorChain
 } from './redact'
-
-/** A value whose coercion throws a secret-bearing error — hostile by design. */
-const hostileToString = (secret: string): object => ({
-  toString: (): never => {
-    throw new Error(`toString leaked ${secret}`)
-  }
-})
 
 describe('redactValues', () => {
   // Every occurrence of every value must be replaced — a single pass that stops
@@ -79,36 +75,6 @@ describe('readRedactedMessage', () => {
 })
 
 describe('scrubValuesFromErrorChain', () => {
-  // SECURITY (regression): a non-Error HEAD whose coercion throws must become
-  // the marker — the hostile toString error must never escape the scrub.
-  it('should fail closed on a head whose coercion throws', () => {
-    expect(scrubValuesFromErrorChain(hostileToString('555'), ['555'])).toBe(REDACTED_VALUE)
-  })
-
-  // SECURITY (regression): a non-Error CAUSE TAIL whose coercion throws is
-  // flattened to the marker instead of letting the hostile error escape.
-  it('should fail closed on a cause tail whose coercion throws', () => {
-    const parent = new Error('parent 555')
-    parent.cause = hostileToString('555')
-
-    const returned = scrubValuesFromErrorChain(parent, ['555']) as Error
-
-    expect(returned).toBe(parent)
-    expect(returned.cause).toBe(REDACTED_VALUE)
-  })
-
-  // SECURITY (regression): the Nest options bag is rebuilt empty — a consumer
-  // can stuff payloads into it and serializers spread its enumerable fields.
-  it('should rebuild the exception options bag empty', () => {
-    const exception = new NotificationException('EMAIL_SEND_FAILED')
-    Reflect.set(exception, 'options', { entry: { code: '555' } })
-
-    const returned = scrubValuesFromErrorChain(exception, ['555'])
-
-    expect(returned).toBe(exception)
-    expect('options' in exception).toBe(true)
-    expect(JSON.stringify({ ...exception })).not.toContain('555')
-  })
   // The traversal is identity-based, so a chain deeper than any fixed bound is
   // scrubbed in full — no unscrubbed tail (regression for the old depth cap).
   it('should scrub every link of an arbitrarily deep chain', () => {

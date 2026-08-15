@@ -60,6 +60,43 @@ export function readRedactedMessage(error: unknown, values?: readonly string[]):
 }
 
 /**
+ * Classifies a value as an `Error`, failing closed — `instanceof` invokes the
+ * `getPrototypeOf` trap on proxies, and a hostile or revoked proxy throws
+ * right there, before any other guard can run.
+ *
+ * @param value - The value to classify.
+ * @returns `true` only when the check ran AND matched.
+ */
+export function isSafeError(value: unknown): value is Error {
+  try {
+    return value instanceof Error
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Best-effort: attaches `cause` to an error when the slot is genuinely free.
+ * Every step runs consumer code (`instanceof`, the `in` check, the write), so
+ * the whole operation is guarded — a hostile trap must never throw past the
+ * caller, who keeps the target as its failure either way.
+ *
+ * @param target - The error to receive the cause.
+ * @param cause - The value to attach.
+ * @returns `true` when the attachment verifiably happened.
+ */
+export function attachCauseIfAbsent(target: unknown, cause: unknown): boolean {
+  try {
+    if (target instanceof Error && !('cause' in target)) {
+      return Reflect.set(target, 'cause', cause) && target.cause === cause
+    }
+    return false
+  } catch {
+    return false
+  }
+}
+
+/**
  * Removes the secret values from an error chain and returns its (possibly
  * replaced) head — `name`, `message`, and `stack` at every link. A node is
  * scrubbed in place when it accepts writes, preserving its identity and class
@@ -78,7 +115,7 @@ export function readRedactedMessage(error: unknown, values?: readonly string[]):
  * redacted copy when it did not.
  */
 export function scrubValuesFromErrorChain(error: unknown, values: readonly string[]): unknown {
-  if (!(error instanceof Error)) {
+  if (!isSafeError(error)) {
     if (error === undefined || error === null) {
       return error
     }
@@ -98,7 +135,7 @@ export function scrubValuesFromErrorChain(error: unknown, values: readonly strin
     if (cursor === error) {
       headRepresentative = link.representative
     }
-    if (!link.hasCause || !(link.rawCause instanceof Error)) {
+    if (!link.hasCause || !isSafeError(link.rawCause)) {
       break
     }
     cursor = link.rawCause
@@ -125,7 +162,7 @@ function wireCauses(
     }
     const raw: unknown = link.rawCause
     let childRepresentative: unknown
-    if (raw instanceof Error) {
+    if (isSafeError(raw)) {
       childRepresentative = seen.get(raw)
     } else if (raw === undefined || raw === null) {
       childRepresentative = raw
@@ -177,12 +214,23 @@ function registerLink(
     // rather than pointing at an unredacted original. The `name` write is
     // skipped when the value is unchanged, so a default-named error does not
     // gain an own enumerable `name` the strip just removed.
-    const inPlace =
+    const applied =
       stripExtraProperties(node, values) &&
       (node.name === name || Reflect.set(node, 'name', name)) &&
       Reflect.set(node, 'message', message) &&
       (stack === undefined || Reflect.set(node, 'stack', stack)) &&
       (!hasCause || Reflect.set(node, 'cause', undefined))
+    // A truthy `Reflect.set` does not prove the value changed — an accessor
+    // with a no-op setter reports success while keeping the plaintext. Only a
+    // node whose fields READ BACK as the redacted values stays in place.
+    const inPlace =
+      applied &&
+      node.name === name &&
+      node.message === message &&
+      // When `stack` is undefined the node had none and none was written, so
+      // the single read-back comparison covers both shapes.
+      node.stack === stack &&
+      (!hasCause || node.cause === undefined)
     const representative = inPlace ? node : buildRedactedCopy(name, message, stack)
     seen.set(node, representative)
     return { node, representative, hasCause, rawCause }
@@ -293,12 +341,18 @@ function stripExtraProperties(node: Error, values: readonly string[]): boolean {
       // The contract fields stay; the response is swapped for a redacted
       // clone; consumer-added extras (`Object.assign(exception, { entry })`)
       // are deleted — they can carry the secret like on any raw error.
+      const redactedResponse = cloneRedacted(node.getResponse(), values)
+      // The Nest options bag is rebuilt EMPTY: a consumer can stuff payloads
+      // into it, serializers spread it, and `initCause` already consumed it at
+      // construction time. Both replacements are VERIFIED by reading back —
+      // a no-op setter reports success while `getResponse()` still exposes
+      // the original secret-bearing object.
+      const rebuiltOptions = {}
       return (
-        Reflect.set(node, 'response', cloneRedacted(node.getResponse(), values)) &&
-        // The Nest options bag is rebuilt EMPTY: a consumer can stuff payloads
-        // into it, serializers spread it, and `initCause` already consumed it
-        // at construction time.
-        Reflect.set(node, 'options', {}) &&
+        Reflect.set(node, 'response', redactedResponse) &&
+        node.getResponse() === redactedResponse &&
+        Reflect.set(node, 'options', rebuiltOptions) &&
+        Reflect.get(node, 'options') === rebuiltOptions &&
         Object.keys(node).every(
           (key) => EXCEPTION_CONTRACT_KEYS.has(key) || Reflect.deleteProperty(node, key)
         )
