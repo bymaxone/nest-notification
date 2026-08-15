@@ -5,6 +5,47 @@ All notable changes to `@bymax-one/nest-notification` will be documented in this
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.2] - 2026-08-16
+
+### Documentation
+
+Code is unchanged: the built `dist/` is byte-identical to 1.2.1, verified by unpacking the
+published tarball and diffing it against a fresh build. This release exists because the 1.2.1
+security note ships inside the package, and two of its statements were wrong in the direction that
+makes a reader feel safer than they are.
+
+- **Corrected: where the declaration belongs.** The 1.2.1 note said `@bymax-one/nest-auth` never
+  calls `EmailService` itself, so the declaration belonged to "the consumer's own adapter". That
+  is false for the shipped wiring. Measured in the published `@bymax-one/nest-auth@1.4.3` bundle:
+  `DefaultAuthEmailProvider` is exported, sends through an `AuthEmailSink` whose own typings name
+  `EmailService.send` as the intended implementation, and `auditRedactValues` appears **zero**
+  times in the bundle. So on the intended wiring the call site is inside `nest-auth`, not in
+  consumer code, and a derived backend that binds a real SMTP or Resend provider inherits the
+  exposed path with **no call site of its own to declare at**. The remedy for that population sits
+  in `DefaultAuthEmailProvider`, which is the only place that knows both the code it rendered and
+  the call it is about to make. Credit: the `bymax-one` template seat measured it from the
+  consumer's vantage point; `nest-auth` confirmed it against their own bundle.
+
+- **Corrected: declared values are not a sufficient control.** The note called declaration "the
+  precise control" and the README called it "the only precise control". Both overstate it. A relay
+  quotes what it _transmitted_, not what it was handed, and a MIME body travels raw,
+  quoted-printable or base64. Measured through `EmailService.send` on this exact build: with the
+  code declared in `auditRedactValues`, an error quoting the **base64** of the body is returned
+  completely unredacted, and decoding the surviving text yields the OTP in cleartext. The declared
+  value cannot match (`123456` does not occur in `MTIzNDU2`) and echo detection cannot match
+  either, because it compares the error against the _rendered_ body it holds, not against the
+  encoding the relay chose. This is the ceiling of value-list redaction, not a defect in either
+  guard: **no list of values closes an encoding gap.**
+
+  What the guards are, accurately: defence in depth that removes the shapes they can predict.
+  Treat provider error text reaching a log as the thing to control, and declared values as
+  precision on top of that — not as the barrier.
+
+- The residual risk this leaves is being tracked for a behaviour change rather than another note:
+  provider text should be non-publishing by default and opt-in per send, since one global switch
+  cannot serve an OTP path and a marketing path in the same application. That is a 1.3.0
+  discussion, and it is open, not decided.
+
 ## [1.2.1] - 2026-08-15
 
 ### Fixed
@@ -25,19 +66,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     the UNDECLARED case fail safe for the measured scenario, since the library knows the body it
     just handed to the provider even when it does not know which part is secret. Limits, stated
     plainly: matching is raw and literal (a re-encoded echo is missed) and a bare secret quoted
-    without surrounding content is shorter than the window and is not caught. Declared values
-    remain the precise control.
+    without surrounding content is shorter than the window and is not caught. Declared values add
+    precision where the shape is predictable — but they are NOT a sufficient control either; see
+    the 1.2.2 entry for the measurement that shows an encoded echo defeating both.
   - Declared values travel to the provider as `EmailSendOptions.redactValues`, and
     `SmtpEmailProvider` scrubs them plus detected body echoes from its `warn` line and thrown
     message — closing the pre-existing `warn`-level half of the same leak.
 
   **Boundary that this release does NOT close, so the note cannot read as "done":** a
-  consumer-issued secret is fully covered only when the caller declares it. `@bymax-one/nest-auth`
-  never calls `EmailService` itself — it defines an email-provider port that the consumer's own
-  adapter implements — so the declaration belongs to that adapter: whoever calls
-  `EmailService.send`/`sendTemplate` with a secret should pass it in `auditRedactValues`. Until
-  then, a bare code echoed WITHOUT surrounding body content remains exposed on that path — the
-  echo guard needs 16+ contiguous characters of body context to trigger.
+  consumer-issued secret is covered only when the caller declares it in `auditRedactValues`, and a
+  bare code echoed WITHOUT surrounding body content is below the echo guard's 16-character window.
+  <!-- The two claims this paragraph originally made about WHERE that declaration belongs, and
+  about declaration being a sufficient control, were both wrong. See 1.2.2 for the correction and
+  the measurements. -->
+
+  **See the 1.2.2 entry above before relying on this paragraph.**
 
 - **Overlapping secrets can no longer leave a fragment behind after redaction.** `redactValues`
   used to replace value-by-value over its own output, so `['123', '1234']` over `1234` emitted
@@ -442,7 +485,8 @@ rejected at startup rather than failing on the first send.
 
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.2.1...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.2.2...HEAD
+[1.2.2]: https://github.com/bymaxone/nest-notification/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/bymaxone/nest-notification/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/bymaxone/nest-notification/compare/v1.1.2...v1.2.0
 [1.1.2]: https://github.com/bymaxone/nest-notification/compare/v1.1.1...v1.1.2
