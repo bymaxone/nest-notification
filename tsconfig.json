@@ -26,7 +26,8 @@
     "paths": {
       "@bymax-one/nest-notification": ["./src/server/index.ts"],
       "@bymax-one/nest-notification/shared": ["./src/shared/index.ts"],
-      "@bymax-one/nest-notification/react": ["./src/react/index.ts"]
+      "@bymax-one/nest-notification/react": ["./src/react/index.ts"],
+      "@bymax-one/nest-notification/testing": ["./src/testing/index.ts"]
     }
   },
   "include": ["src/**/*"],
