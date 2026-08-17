@@ -16,6 +16,19 @@ export type NotificationLogVerb =
 export interface NotificationLogEntry {
   /** Event time as a Unix timestamp in milliseconds. */
   timestamp: number
+  /**
+   * Basic SMTP reply code of a failed delivery, when the provider's answer
+   * carried exactly one. Recorded for sends that withhold the provider's text:
+   * the code is independent of the message body, so it diagnoses the failure
+   * without disclosing anything the body held.
+   */
+  deliveryStatus?: number
+  /**
+   * RFC 3463 enhanced status code (`5.7.1`, `5.2.2`, …) of a failed delivery,
+   * when the provider's answer carried exactly one. Distinguishes failures a
+   * basic `550` cannot — a content rejection from a blocked sender.
+   */
+  deliveryEnhancedStatus?: string
   /** Tenant the event belongs to. */
   tenantId: string
   /** Channel the event occurred on. */

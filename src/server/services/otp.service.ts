@@ -352,8 +352,11 @@ export class OtpService {
       template: input.emailTemplate ?? DEFAULT_OTP_TEMPLATE,
       data: { ...input.emailData, code, expiresInMinutes, purpose: input.purpose },
       // The provider receives the code inside the rendered body and may echo it
-      // in an error; EmailService must redact it from ITS OWN failed-audit entry.
+      // in an error. Declaring it covers the shapes redaction can predict; the
+      // flag below covers the ones it cannot — an OTP body is a credential by
+      // definition, so this path never publishes what the provider wrote.
       auditRedactValues: [code],
+      publishProviderText: false,
       ...(input.locale !== undefined ? { locale: input.locale } : {}),
       ...(input.userId !== undefined ? { userId: input.userId } : {})
     }

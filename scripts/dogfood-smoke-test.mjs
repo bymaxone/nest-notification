@@ -3,10 +3,10 @@
  * Dogfood smoke test — validates the published package shape before tagging.
  *
  * Validates:
- *   1. Build artifacts exist for all three subpaths (ESM, CJS, .d.ts)
+ *   1. Build artifacts exist for all four subpaths (ESM, CJS, .d.ts)
  *   2. ESM import resolves the expected named exports (server + shared)
  *   3. CJS require resolves the expected named exports (server + shared)
- *   4. The react subpath resolves (no named exports asserted yet)
+ *   4. The react subpath resolves; the testing subpath exposes otpStorageContract
  *   5. Tarball contents (npm pack --dry-run) contain only dist/ + meta files
  *   6. A minimal consumer (file: link in an OS temp dir) resolves every subpath
  *      through the published `exports` map
@@ -36,7 +36,10 @@ const EXPECTED_DIST_FILES = [
   'dist/shared/index.d.ts',
   'dist/react/index.mjs',
   'dist/react/index.cjs',
-  'dist/react/index.d.ts'
+  'dist/react/index.d.ts',
+  'dist/testing/index.mjs',
+  'dist/testing/index.cjs',
+  'dist/testing/index.d.ts'
 ]
 
 const EXPECTED_SERVER_EXPORTS = [
@@ -55,6 +58,7 @@ const EXPECTED_SERVER_EXPORTS = [
 ]
 
 const EXPECTED_SHARED_EXPORTS = ['NOTIFICATION_ERROR_CODES', 'DEFAULT_TTLS']
+const EXPECTED_TESTING_EXPORTS = ['otpStorageContract']
 
 const ALLOWED_TARBALL_PATHS = ['package.json', 'README.md', 'CHANGELOG.md', 'LICENSE', 'dist/']
 
@@ -88,6 +92,10 @@ const sharedEsm = await import(resolve(ROOT, 'dist/shared/index.mjs'))
 for (const name of EXPECTED_SHARED_EXPORTS) {
   name in sharedEsm ? pass(`export ${name}`) : fail(`Missing export: ${name}`)
 }
+const testingEsmExports = await import(resolve(ROOT, 'dist/testing/index.mjs'))
+for (const name of EXPECTED_TESTING_EXPORTS) {
+  name in testingEsmExports ? pass(`export ${name}`) : fail(`Missing export: ${name}`)
+}
 
 // -- 4. CJS exports ----------------------------------------------------------
 section('4. CJS exports')
@@ -99,6 +107,18 @@ for (const name of EXPECTED_SERVER_EXPORTS) {
 const sharedCjs = req(resolve(ROOT, 'dist/shared/index.cjs'))
 for (const name of EXPECTED_SHARED_EXPORTS) {
   name in sharedCjs ? pass(`cjs shared ${name}`) : fail(`Missing CJS export (shared): ${name}`)
+}
+// The CJS condition is a separate build output: an ESM-only assertion would let
+// a broken `require('@bymax-one/nest-notification/testing')` through the gate.
+const testingCjs = req(resolve(ROOT, 'dist/testing/index.cjs'))
+for (const name of EXPECTED_TESTING_EXPORTS) {
+  // Read through a descriptor rather than a dynamic index: the value must be
+  // callable, and the lint rule against index sinks is right that a bare
+  // `obj[name]` on external data is the wrong habit to keep.
+  const exported = Object.getOwnPropertyDescriptor(testingCjs, name)?.value
+  typeof exported === 'function'
+    ? pass(`cjs testing ${name}`)
+    : fail(`Missing or non-callable CJS export (testing): ${name}`)
 }
 
 // -- 5. Tarball contents -----------------------------------------------------
@@ -162,6 +182,8 @@ try {
       ".then(() => import('@bymax-one/nest-notification/shared'))",
       ".then((s) => { if (!('DEFAULT_TTLS' in s)) process.exit(4) })",
       ".then(() => import('@bymax-one/nest-notification/react'))",
+      ".then(() => import('@bymax-one/nest-notification/testing'))",
+      ".then((t) => { if (typeof t.otpStorageContract !== 'function') process.exit(6) })",
       '.catch((e) => { console.error(e); process.exit(5) })'
     ].join('')
     const importResult = spawnSync('node', ['--input-type=module', '-e', probe], {
@@ -206,6 +228,14 @@ try {
   wired
     ? pass('forRoot({ email, otp }) returns a wired DynamicModule')
     : fail('forRoot did not return a wired DynamicModule descriptor')
+
+  const testingEsm = await import(resolve(ROOT, 'dist/testing/index.mjs'))
+  const contractCases = testingEsm.otpStorageContract(() => {
+    throw new Error('the factory must not run while only building the case list')
+  })
+  Array.isArray(contractCases) && contractCases.length > 0
+    ? pass(`testing export otpStorageContract builds ${contractCases.length} cases`)
+    : fail('otpStorageContract did not return cases')
 
   const reactEsm = await import(resolve(ROOT, 'dist/react/index.mjs'))
   for (const [hook, fn] of [

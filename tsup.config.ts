@@ -73,5 +73,23 @@ export default defineConfig([
     splitting: false,
     treeshake: true,
     sourcemap: false
+  },
+
+  // Testing entry — helpers a consumer runs against their own implementations
+  // of this library's extension points. Node-targeted like the server entry,
+  // and imported by no runtime entry, so it never reaches a production bundle.
+  {
+    entry: { 'testing/index': 'src/testing/index.ts' },
+    format: ['esm', 'cjs'],
+    dts: true,
+    tsconfig: 'tsconfig.build.json',
+    outDir: 'dist',
+    outExtension: ({ format }) => ({ js: format === 'esm' ? '.mjs' : '.cjs' }),
+    external: PEER_EXTERNALS,
+    target: 'node24',
+    clean: false,
+    splitting: false,
+    treeshake: true,
+    sourcemap: false
   }
 ])

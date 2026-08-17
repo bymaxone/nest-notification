@@ -5,6 +5,61 @@ All notable changes to `@bymax-one/nest-notification` will be documented in this
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-08-17
+
+### Added
+
+- **`publishProviderText: false` — a send may now refuse to surface anything the provider wrote.**
+  The 1.2.2 note documented the ceiling of value redaction: it removes the shapes it can predict,
+  and a relay quoting the body in another transfer encoding defeats every declared value. This is
+  the control that does not have that ceiling. With the flag set on `EmailService.send` (or
+  forwarded to a provider as `EmailSendOptions.publishProviderText`), a delivery failure carries no
+  provider-authored byte — no `cause`, and no provider message in the audit entry, whose
+  `errorMessage` becomes the fixed label `[provider text withheld]`.
+
+  What it publishes instead is what a **fixed grammar** can express: the basic SMTP reply code and,
+  when present, the RFC 3463 enhanced code, as structured fields (`deliveryStatus` /
+  `deliveryEnhancedStatus` on the audit entry, and the exception's `details`). The safety property
+  is that this output is **independent of the secret** — the same reply publishes `550 5.7.1`
+  whether the code was `550571`, `123456`, or absent — not that its alphabet differs from a code's,
+  which is false for a numeric secret. Ambiguity resolves to silence: a text carrying two different
+  replies publishes neither, so a cause chain cannot have `424` and `242` read as one value.
+
+  The default is unchanged (`true`): ordinary mail keeps full diagnosability, because for a receipt
+  or a marketing send the provider's message is often the only diagnosis available. The flag is
+  **per send**, never global — one setting cannot serve an OTP path and a marketing path in the
+  same application. `EmailSendTemplateInput` carries it too, and **the built-in OTP delivery sets
+  it to `false`**: an OTP body is a credential by definition, so that path no longer publishes what
+  the provider wrote. The bundled `SmtpEmailProvider` attaches the reply codes to the error it
+  throws, so the service can publish them without parsing a message that is a fixed label by then.
+
+- **`@bymax-one/nest-notification/testing` — an executable contract for `IOtpStorage`.**
+  `otpStorageContract(factory)` returns 13 cases that a consumer runs against their own storage in
+  whatever runner they use; the package depends on none. Four of the interface's obligations cannot
+  be checked by a type — `consumeAttempt` and `tryAcquireCooldown` must be **atomic**, the TTL must
+  be applied, and keys must be scoped by `(tenantId, recipient, purpose)` — and a violation
+  type-checks, passes a casual smoke test, and silently lets the brute-force ceiling be bypassed
+  under concurrency. The two atomicity cases run 25 concurrent calls and fail when more than the
+  ceiling gets through. Each case is itself pinned by a test that points it at a storage violating
+  exactly that obligation, so the contract is proven to have teeth rather than merely to run.
+
+### Changed
+
+- The audit entry gained two optional fields, `deliveryStatus` and `deliveryEnhancedStatus`.
+  Adding optional fields is not breaking for an `INotificationLogRepository` implementation.
+- `collectErrorChainMessages` joins the internal redaction helpers alongside `collectErrorChainText`:
+  reply-code extraction reads messages only, because a stack trace is dense with three-digit line
+  numbers and feeding those to a reply-code grammar makes almost every text ambiguous. Found by a
+  test, not by review.
+
+### Fixed
+
+- A test-only flake that would have read as a security regression: the audit-entry assertions
+  compared a generated six-digit code against a payload containing the 13-digit `timestamp`, which
+  holds eight overlapping six-digit windows — roughly one spurious "the code is in the audit entry"
+  failure per 10^5 runs. The machine-generated timestamp provably cannot BE the code, so it is
+  excluded from the comparison while every field the library writes stays in it.
+
 ## [1.2.2] - 2026-08-15
 
 ### Documentation
@@ -514,7 +569,8 @@ rejected at startup rather than failing on the first send.
 
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.2.2...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/bymaxone/nest-notification/compare/v1.2.2...v1.3.0
 [1.2.2]: https://github.com/bymaxone/nest-notification/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/bymaxone/nest-notification/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/bymaxone/nest-notification/compare/v1.1.2...v1.2.0

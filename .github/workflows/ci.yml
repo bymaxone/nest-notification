@@ -73,7 +73,7 @@ jobs:
         # `.d.cts` files in particular are what the `exports` map hands to a
         # CommonJS consumer.
         run: |
-          for subpath in server shared react; do
+          for subpath in server shared react testing; do
             for ext in mjs cjs d.ts d.cts; do
               if [ ! -f "dist/$subpath/index.$ext" ]; then
                 echo "Missing dist/$subpath/index.$ext"

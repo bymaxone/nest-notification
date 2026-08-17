@@ -124,6 +124,28 @@ describe('SmtpEmailProvider failure handling', () => {
     warnSpy.mockRestore()
   })
 
+  // SECURITY: coercing the rejection runs consumer code. A `message` getter
+  // that throws a secret-bearing error must not escape from BEFORE the
+  // withholding branch — the flag would be honoured by a line that never runs.
+  it('should withhold even when the error message getter throws', async () => {
+    const hostile = new Error('shell')
+    Object.defineProperty(hostile, 'message', {
+      get: (): never => {
+        throw new Error('getter leaked 998877')
+      }
+    })
+    mockSendMail.mockRejectedValue(hostile)
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+    const thrown: unknown = await new SmtpEmailProvider({ host: 'h' })
+      .send({ ...baseOptions, publishProviderText: false })
+      .catch((error: unknown) => error)
+
+    expect((thrown as Error).message).toBe('SMTP send failed')
+    expect(String(warnSpy.mock.calls[0]?.[0])).not.toContain('998877')
+    warnSpy.mockRestore()
+  })
+
   // Declared secrets travel to the provider as `redactValues` and are
   // scrubbed from the warn line even when the echo is too short to detect.
   it('should scrub declared redactValues out of a transport error', async () => {
@@ -135,6 +157,112 @@ describe('SmtpEmailProvider failure handling', () => {
     ).rejects.toThrow('SMTP send failed: 550 rejected: [redacted]')
     const logged = String(warnSpy.mock.calls[0]?.[0])
     expect(logged).not.toContain('998877')
+    warnSpy.mockRestore()
+  })
+
+  // SECURITY: with `publishProviderText: false` the relay's own words reach
+  // neither the warn line nor the thrown message — not even redacted — because
+  // redaction cannot cover an echo the caller did not predict. Only the reply
+  // codes survive, and they are independent of what the body held.
+  it('should publish only the reply codes when provider text is withheld', async () => {
+    const body = '<p>Your code is 998877 and it expires soon</p>'
+    mockSendMail.mockRejectedValue(new Error(`550 5.7.1 refused by policy - body: ${body}`))
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+    const thrown: unknown = await new SmtpEmailProvider({ host: 'h' })
+      .send({ ...baseOptions, html: body, publishProviderText: false })
+      .catch((error: unknown) => error)
+
+    expect((thrown as Error).message).toBe('SMTP send failed')
+    expect(String(warnSpy.mock.calls[0]?.[0])).toBe('[SMTP_SEND_FAILED] 550 5.7.1')
+    expect(String(warnSpy.mock.calls[0]?.[0])).not.toContain('998877')
+    warnSpy.mockRestore()
+  })
+
+  // The codes ride as properties on the thrown error, because the message is a
+  // fixed label by then and `EmailService` could not parse them back out.
+  it('should attach the reply codes to the thrown error', async () => {
+    mockSendMail.mockRejectedValue(new Error('550 5.7.1 refused by policy'))
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+    const thrown = (await new SmtpEmailProvider({ host: 'h' })
+      .send({ ...baseOptions, publishProviderText: false })
+      .catch((error: unknown) => error)) as Error & {
+      deliveryStatus?: number
+      deliveryEnhancedStatus?: string
+    }
+
+    expect(thrown.deliveryStatus).toBe(550)
+    expect(thrown.deliveryEnhancedStatus).toBe('5.7.1')
+  })
+
+  // Absent codes must be genuinely absent keys, not `undefined` values — the
+  // service reads them by type and a phantom key is a second thing to audit.
+  it('should attach no code keys when the failure carries none', async () => {
+    mockSendMail.mockRejectedValue(new Error('connection reset'))
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+    const thrown = (await new SmtpEmailProvider({ host: 'h' })
+      .send({ ...baseOptions, publishProviderText: false })
+      .catch((error: unknown) => error)) as Error
+
+    expect('deliveryStatus' in thrown).toBe(false)
+    expect('deliveryEnhancedStatus' in thrown).toBe(false)
+  })
+
+  // Only the basic code present: the basic key is attached, the enhanced one is
+  // not — the two are independently absent.
+  it('should attach only the basic code when no enhanced code is present', async () => {
+    mockSendMail.mockRejectedValue(new Error('421 service not available'))
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+    const thrown = (await new SmtpEmailProvider({ host: 'h' })
+      .send({ ...baseOptions, publishProviderText: false })
+      .catch((error: unknown) => error)) as Error & { deliveryStatus?: number }
+
+    expect(thrown.deliveryStatus).toBe(421)
+    expect('deliveryEnhancedStatus' in thrown).toBe(false)
+  })
+
+  // SECURITY: this adapter is public, so its own warn line must apply the
+  // filter too — waiting for EmailService would already have written a code
+  // containing the caller's declared secret to the SMTP logger.
+  it('should not log a reply code containing a declared secret', async () => {
+    mockSendMail.mockRejectedValue(new Error('550 5.7.1 refused'))
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+    const thrown = (await new SmtpEmailProvider({ host: 'h' })
+      .send({ ...baseOptions, publishProviderText: false, redactValues: ['55'] })
+      .catch((error: unknown) => error)) as Error & { deliveryStatus?: number }
+
+    expect(String(warnSpy.mock.calls[0]?.[0])).toBe('[SMTP_SEND_FAILED] 5.7.1')
+    expect('deliveryStatus' in thrown).toBe(false)
+    warnSpy.mockRestore()
+  })
+
+  // A failure carrying no reply code says so, rather than falling back to the
+  // relay's prose to have something to log.
+  it('should say so when a withheld failure carries no reply code', async () => {
+    mockSendMail.mockRejectedValue(new Error('connect ECONNREFUSED 127.0.0.1:1099'))
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+    await expect(
+      new SmtpEmailProvider({ host: 'h' }).send({ ...baseOptions, publishProviderText: false })
+    ).rejects.toThrow('SMTP send failed')
+    expect(String(warnSpy.mock.calls[0]?.[0])).toBe('[SMTP_SEND_FAILED] no reply code')
+    warnSpy.mockRestore()
+  })
+
+  // Only the basic code present: the line carries it alone, with no separator
+  // left dangling and no invented enhanced value.
+  it('should publish a lone basic status without padding', async () => {
+    mockSendMail.mockRejectedValue(new Error('421 service not available'))
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+    await expect(
+      new SmtpEmailProvider({ host: 'h' }).send({ ...baseOptions, publishProviderText: false })
+    ).rejects.toThrow('SMTP send failed')
+    expect(String(warnSpy.mock.calls[0]?.[0])).toBe('[SMTP_SEND_FAILED] 421')
     warnSpy.mockRestore()
   })
 

@@ -184,7 +184,449 @@ describe('EmailService.send redaction', () => {
   })
 })
 
+describe('EmailService.send with publishProviderText: false', () => {
+  const body = '<p>Hello Jane, your verification code is 883779. It expires shortly.</p>'
+
+  // SECURITY: the case redaction provably cannot cover. The relay quotes the
+  // body in BASE64, so no declared value and no echo excerpt matches — and the
+  // failure still carries nothing the provider wrote.
+  it('should carry no provider text even when the echo is re-encoded', async () => {
+    const provider = makeProvider()
+    provider.send.mockImplementation(async (options) => {
+      const encoded = Buffer.from(options.html, 'utf8').toString('base64')
+      throw new Error(`550 5.7.1 refused by policy - body was: ${encoded}`)
+    })
+    const audit = makeAudit()
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), audit)
+
+    const caught: unknown = await service
+      .send({ ...baseInput, html: body, publishProviderText: false })
+      .catch((error: unknown) => error)
+
+    const exception = caught as NotificationException
+    expect('cause' in exception).toBe(false)
+    const serialized = JSON.stringify(exception.getResponse())
+    expect(serialized.includes('883779')).toBe(false)
+    expect(serialized.includes('refused by policy')).toBe(false)
+    // Decoding what survives must not reconstruct the body either.
+    expect(Buffer.from(serialized, 'utf8').toString('base64').includes('883779')).toBe(false)
+  })
+
+  // The reply codes ARE published: they are independent of the body, and they
+  // are the whole diagnosis an operator acts on.
+  it('should publish the reply codes in the details and the audit entry', async () => {
+    const provider = makeProvider()
+    provider.send.mockRejectedValue(new Error('550 5.7.1 refused by policy - body: 883779'))
+    const audit = makeAudit()
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), audit)
+
+    const caught: unknown = await service
+      .send({ ...baseInput, html: body, publishProviderText: false })
+      .catch((error: unknown) => error)
+
+    const details = (
+      caught as { getResponse: () => { error: { details: Record<string, unknown> } } }
+    ).getResponse().error.details
+    expect(details).toStrictEqual({ providerName: 'resend', status: 550, enhanced: '5.7.1' })
+    expect(audit.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        verb: 'failed',
+        errorMessage: '[provider text withheld]',
+        deliveryStatus: 550,
+        deliveryEnhancedStatus: '5.7.1'
+      })
+    )
+  })
+
+  // A failure with no reply code publishes neither field — absent, not
+  // `undefined`, so a serializer does not emit empty keys.
+  it('should omit both codes when the failure carries none', async () => {
+    const provider = makeProvider()
+    provider.send.mockRejectedValue(new Error('connect ECONNREFUSED 127.0.0.1:1099'))
+    const audit = makeAudit()
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), audit)
+
+    const caught: unknown = await service
+      .send({ ...baseInput, publishProviderText: false })
+      .catch((error: unknown) => error)
+
+    const details = (
+      caught as { getResponse: () => { error: { details: Record<string, unknown> } } }
+    ).getResponse().error.details
+    expect(details).toStrictEqual({ providerName: 'resend' })
+    const entry = audit.create.mock.calls[0]?.[0]
+    expect('deliveryStatus' in entry!).toBe(false)
+    expect('deliveryEnhancedStatus' in entry!).toBe(false)
+  })
+
+  // Discovery reads the whole chain here too: a wrapper with a generic outer
+  // message must not hide the reply code sitting in a nested cause.
+  it('should find the reply code in a nested cause', async () => {
+    const provider = makeProvider()
+    provider.send.mockRejectedValue(
+      new Error('delivery failed', { cause: new Error('552 5.2.2 mailbox full') })
+    )
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), makeAudit())
+
+    const caught: unknown = await service
+      .send({ ...baseInput, publishProviderText: false })
+      .catch((error: unknown) => error)
+
+    const details = (
+      caught as { getResponse: () => { error: { details: Record<string, unknown> } } }
+    ).getResponse().error.details
+    expect(details).toStrictEqual({ providerName: 'resend', status: 552, enhanced: '5.2.2' })
+  })
+
+  // The flag reaches the provider so its OWN log line can withhold too — and
+  // an absent flag adds no phantom key.
+  it('should forward the flag to the provider send options', async () => {
+    const provider = makeProvider()
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), makeAudit())
+
+    await service.send({ ...baseInput, publishProviderText: false })
+    await service.send(baseInput)
+
+    expect(provider.send.mock.calls[0]?.[0]?.publishProviderText).toBe(false)
+    expect('publishProviderText' in (provider.send.mock.calls[1]?.[0] ?? {})).toBe(false)
+  })
+
+  // A provider that already applied the grammar itself attaches the codes to
+  // the error it throws, because its message is a fixed label by then and the
+  // service could not parse them back out. The bundled SMTP adapter does this.
+  it('should publish codes the provider attached rather than reparsing', async () => {
+    const provider = makeProvider()
+    provider.send.mockRejectedValue(
+      Object.assign(new Error('SMTP send failed'), {
+        deliveryStatus: 421,
+        deliveryEnhancedStatus: '4.3.0'
+      })
+    )
+    const audit = makeAudit()
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), audit)
+
+    const caught: unknown = await service
+      .send({ ...baseInput, publishProviderText: false })
+      .catch((error: unknown) => error)
+
+    const details = (
+      caught as { getResponse: () => { error: { details: Record<string, unknown> } } }
+    ).getResponse().error.details
+    expect(details).toStrictEqual({ providerName: 'resend', status: 421, enhanced: '4.3.0' })
+  })
+
+  // Only ONE of the two codes attached: the present half publishes and the
+  // absent half stays an absent key, independently of each other.
+  it('should publish a lone attached basic code', async () => {
+    const provider = makeProvider()
+    provider.send.mockRejectedValue(
+      Object.assign(new Error('SMTP send failed'), { deliveryStatus: 421 })
+    )
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), makeAudit())
+
+    const caught: unknown = await service
+      .send({ ...baseInput, publishProviderText: false })
+      .catch((error: unknown) => error)
+
+    const details = (
+      caught as { getResponse: () => { error: { details: Record<string, unknown> } } }
+    ).getResponse().error.details
+    expect(details).toStrictEqual({ providerName: 'resend', status: 421 })
+  })
+
+  it('should publish a lone attached enhanced code', async () => {
+    const provider = makeProvider()
+    provider.send.mockRejectedValue(
+      Object.assign(new Error('SMTP send failed'), { deliveryEnhancedStatus: '4.3.0' })
+    )
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), makeAudit())
+
+    const caught: unknown = await service
+      .send({ ...baseInput, publishProviderText: false })
+      .catch((error: unknown) => error)
+
+    const details = (
+      caught as { getResponse: () => { error: { details: Record<string, unknown> } } }
+    ).getResponse().error.details
+    expect(details).toStrictEqual({ providerName: 'resend', enhanced: '4.3.0' })
+  })
+
+  // Attached values of the wrong type are ignored rather than published — the
+  // properties come from consumer code and are not trusted by shape alone.
+  it('should ignore attached codes of the wrong type', async () => {
+    const provider = makeProvider()
+    provider.send.mockRejectedValue(
+      Object.assign(new Error('550 5.7.1 rejected'), {
+        deliveryStatus: 'not-a-number',
+        deliveryEnhancedStatus: 42
+      })
+    )
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), makeAudit())
+
+    const caught: unknown = await service
+      .send({ ...baseInput, publishProviderText: false })
+      .catch((error: unknown) => error)
+
+    const details = (
+      caught as { getResponse: () => { error: { details: Record<string, unknown> } } }
+    ).getResponse().error.details
+    // Falls back to the message grammar, which finds the real codes.
+    expect(details).toStrictEqual({ providerName: 'resend', status: 550, enhanced: '5.7.1' })
+  })
+
+  // SECURITY: attached values are provider-authored, so type-checking them is
+  // not enough — a provider attaching the quoted body as an "enhanced status"
+  // would have it published by the one path that promises only the grammar.
+  it('should reject attached values that do not match the grammar', async () => {
+    const provider = makeProvider()
+    provider.send.mockRejectedValue(
+      Object.assign(new Error('delivery failed'), {
+        deliveryStatus: 998877,
+        deliveryEnhancedStatus: 'Your code is 998877, do not share it'
+      })
+    )
+    const audit = makeAudit()
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), audit)
+
+    const caught: unknown = await service
+      .send({ ...baseInput, publishProviderText: false })
+      .catch((error: unknown) => error)
+
+    const details = (
+      caught as { getResponse: () => { error: { details: Record<string, unknown> } } }
+    ).getResponse().error.details
+    expect(details).toStrictEqual({ providerName: 'resend' })
+    expect(JSON.stringify(audit.create.mock.calls[0]?.[0]).includes('998877')).toBe(false)
+  })
+
+  // SECURITY: a custom provider may throw a NotificationException of its own,
+  // carrying provider-authored text in its message, details and cause. That
+  // shape used to be rethrown verbatim before the withholding branch ran, so
+  // the flag was honoured for every failure except the one a provider chose.
+  it('should withhold a NotificationException the provider itself throws', async () => {
+    const provider = makeProvider()
+    provider.send.mockRejectedValue(
+      new NotificationException(
+        'EMAIL_SEND_FAILED',
+        { quoted: 'Your code is 998877, do not share it' },
+        { cause: new Error('550 5.7.1 refused: 998877') }
+      )
+    )
+    const audit = makeAudit()
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), audit)
+
+    const caught: unknown = await service
+      .send({ ...baseInput, publishProviderText: false })
+      .catch((error: unknown) => error)
+
+    const exception = caught as NotificationException
+    expect('cause' in exception).toBe(false)
+    const serialized = JSON.stringify(exception.getResponse())
+    expect(serialized.includes('998877')).toBe(false)
+    expect(serialized.includes('quoted')).toBe(false)
+    // The reply codes still publish: they are independent of the body.
+    const details = (
+      caught as { getResponse: () => { error: { details: Record<string, unknown> } } }
+    ).getResponse().error.details
+    expect(details).toStrictEqual({ providerName: 'resend', status: 550, enhanced: '5.7.1' })
+    expect(JSON.stringify(audit.create.mock.calls[0]?.[0]).includes('998877')).toBe(false)
+  })
+
+  // SECURITY: a stateful getter can answer the validation and the assignment
+  // differently. Each property is read once and validated from that snapshot,
+  // so the value that was checked is the value that gets published.
+  it('should not let a stateful getter slip past the grammar', async () => {
+    const provider = makeProvider()
+    let reads = 0
+    const hostile = new Error('delivery failed')
+    Object.defineProperty(hostile, 'deliveryEnhancedStatus', {
+      get: (): string => {
+        reads += 1
+        return reads === 1 ? '5.7.1' : 'Your code is 998877, do not share it'
+      }
+    })
+    provider.send.mockRejectedValue(hostile)
+    const audit = makeAudit()
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), audit)
+
+    const caught: unknown = await service
+      .send({ ...baseInput, publishProviderText: false })
+      .catch((error: unknown) => error)
+
+    const details = (
+      caught as { getResponse: () => { error: { details: Record<string, unknown> } } }
+    ).getResponse().error.details
+    expect(details).toStrictEqual({ providerName: 'resend', enhanced: '5.7.1' })
+    expect(JSON.stringify(audit.create.mock.calls[0]?.[0]).includes('998877')).toBe(false)
+  })
+
+  // The collision filter is CONTAINMENT-based: a short declared code sits
+  // inside a genuine reply code, and the invariant it protects is containment.
+  it('should drop a reply code containing a declared secret', async () => {
+    const provider = makeProvider()
+    provider.send.mockRejectedValue(new Error('550 5.7.1 rejected'))
+    const audit = makeAudit()
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), audit)
+
+    const caught: unknown = await service
+      .send({ ...baseInput, publishProviderText: false, auditRedactValues: ['55'] })
+      .catch((error: unknown) => error)
+
+    const details = (
+      caught as { getResponse: () => { error: { details: Record<string, unknown> } } }
+    ).getResponse().error.details
+    expect(details).toStrictEqual({ providerName: 'resend', enhanced: '5.7.1' })
+    expect(JSON.stringify(audit.create.mock.calls[0]?.[0]).includes('55')).toBe(false)
+  })
+
+  // A non-integer or out-of-class number is not a reply code either.
+  it('should reject an attached status outside the reply classes', async () => {
+    const provider = makeProvider()
+    provider.send.mockRejectedValue(
+      Object.assign(new Error('delivery failed'), { deliveryStatus: Number.NaN })
+    )
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), makeAudit())
+
+    const caught: unknown = await service
+      .send({ ...baseInput, publishProviderText: false })
+      .catch((error: unknown) => error)
+
+    const details = (
+      caught as { getResponse: () => { error: { details: Record<string, unknown> } } }
+    ).getResponse().error.details
+    expect(details).toStrictEqual({ providerName: 'resend' })
+  })
+
+  // SECURITY: a short numeric OTP can equal a genuine reply code. Publishing it
+  // discloses nothing — the relay answered 550 whatever the code was — but the
+  // library's invariant is that a code's characters never reach an audit entry,
+  // so a collision with a DECLARED value drops the code rather than the rule.
+  it('should drop a reply code that collides with a declared secret', async () => {
+    const provider = makeProvider()
+    provider.send.mockRejectedValue(new Error('550 5.7.1 rejected'))
+    const audit = makeAudit()
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), audit)
+
+    const caught: unknown = await service
+      .send({ ...baseInput, publishProviderText: false, auditRedactValues: ['550'] })
+      .catch((error: unknown) => error)
+
+    const details = (
+      caught as { getResponse: () => { error: { details: Record<string, unknown> } } }
+    ).getResponse().error.details
+    // The enhanced code does not collide, so it still publishes.
+    expect(details).toStrictEqual({ providerName: 'resend', enhanced: '5.7.1' })
+    expect(JSON.stringify(audit.create.mock.calls[0]?.[0]).includes('550')).toBe(false)
+  })
+
+  // Declared values present, but the failure carries no basic code: the absent
+  // field must stay an absent KEY, not become `status: undefined` on its way
+  // through the collision filter.
+  it('should not invent a status key when only the enhanced code is present', async () => {
+    const provider = makeProvider()
+    provider.send.mockRejectedValue(new Error('rejected with 5.7.1 and no reply code'))
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), makeAudit())
+
+    const caught: unknown = await service
+      .send({ ...baseInput, publishProviderText: false, auditRedactValues: ['998877'] })
+      .catch((error: unknown) => error)
+
+    const details = (
+      caught as { getResponse: () => { error: { details: Record<string, unknown> } } }
+    ).getResponse().error.details
+    expect(details).toStrictEqual({ providerName: 'resend', enhanced: '5.7.1' })
+  })
+
+  // A declared value that collides with the ENHANCED code drops that one.
+  it('should drop an enhanced code that collides with a declared secret', async () => {
+    const provider = makeProvider()
+    provider.send.mockRejectedValue(new Error('421 5.7.1 rejected'))
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), makeAudit())
+
+    const caught: unknown = await service
+      .send({ ...baseInput, publishProviderText: false, auditRedactValues: ['5.7.1'] })
+      .catch((error: unknown) => error)
+
+    const details = (
+      caught as { getResponse: () => { error: { details: Record<string, unknown> } } }
+    ).getResponse().error.details
+    expect(details).toStrictEqual({ providerName: 'resend', status: 421 })
+  })
+
+  // A hostile property getter must not escape the read — the failure still
+  // resolves through the message grammar.
+  it('should fail closed on a hostile attached property', async () => {
+    const provider = makeProvider()
+    const hostile = new Error('552 5.2.2 mailbox full')
+    Object.defineProperty(hostile, 'deliveryStatus', {
+      get: (): never => {
+        throw new Error('trap')
+      }
+    })
+    provider.send.mockRejectedValue(hostile)
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), makeAudit())
+
+    const caught: unknown = await service
+      .send({ ...baseInput, publishProviderText: false })
+      .catch((error: unknown) => error)
+
+    const details = (
+      caught as { getResponse: () => { error: { details: Record<string, unknown> } } }
+    ).getResponse().error.details
+    expect(details).toStrictEqual({ providerName: 'resend', status: 552, enhanced: '5.2.2' })
+  })
+
+  // A non-Error rejection has no properties to read; the grammar still applies.
+  it('should read the grammar from a non-Error rejection', async () => {
+    const provider = makeProvider()
+    provider.send.mockRejectedValue('421 4.3.0 try again later')
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), makeAudit())
+
+    const caught: unknown = await service
+      .send({ ...baseInput, publishProviderText: false })
+      .catch((error: unknown) => error)
+
+    const details = (
+      caught as { getResponse: () => { error: { details: Record<string, unknown> } } }
+    ).getResponse().error.details
+    expect(details).toStrictEqual({ providerName: 'resend', status: 421, enhanced: '4.3.0' })
+  })
+
+  // Explicit `true` is the documented default and must keep the cause — the
+  // flag only ever removes diagnosability when it is exactly `false`.
+  it('should keep the cause when the flag is true', async () => {
+    const provider = makeProvider()
+    provider.send.mockRejectedValue(new Error('550 plain failure'))
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), makeAudit())
+
+    const caught: unknown = await service
+      .send({ ...baseInput, publishProviderText: true })
+      .catch((error: unknown) => error)
+
+    expect(((caught as NotificationException).cause as Error).message).toBe('550 plain failure')
+  })
+})
+
 describe('EmailService.sendTemplate redaction', () => {
+  // The flag must ride sendTemplate → send, or the template path — the one OTP
+  // delivery uses — silently keeps publishing provider text.
+  it('should forward publishProviderText to the inner send input', async () => {
+    const service = new EmailService(makeOptions(), makeProvider(), makeRenderer(), makeAudit())
+    const sendSpy = jest.spyOn(service, 'send').mockResolvedValue({ messageId: 'm' })
+
+    await service.sendTemplate({
+      tenantId: 't',
+      to: 'a@x.com',
+      template: 'welcome',
+      data: {},
+      publishProviderText: false
+    })
+    await service.sendTemplate({ tenantId: 't', to: 'a@x.com', template: 'welcome', data: {} })
+
+    expect(sendSpy.mock.calls[0]?.[0]?.publishProviderText).toBe(false)
+    expect('publishProviderText' in (sendSpy.mock.calls[1]?.[0] ?? {})).toBe(false)
+  })
+
   // A renderer error can echo the template data (which carries the caller's
   // secret); declared values are scrubbed from the TEMPLATE_RENDER_FAILED
   // cause too.

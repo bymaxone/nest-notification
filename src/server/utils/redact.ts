@@ -98,6 +98,27 @@ export function readRedactedMessage(error: unknown, values?: readonly string[]):
  * @returns The chain's message and stack text, newline-joined.
  */
 export function collectErrorChainText(error: unknown): string {
+  return walkChain(error, true)
+}
+
+/**
+ * The same walk as {@link collectErrorChainText}, but messages only.
+ *
+ * Stacks are OUR frames, not the provider's answer, and they are dense with
+ * three-digit line numbers — feeding them to a reply-code grammar makes almost
+ * every text ambiguous and publishes nothing. Use this where the question is
+ * "what did the provider SAY", and the full text where the question is "what
+ * bytes might this chain be carrying".
+ *
+ * @param error - The failure whose chain to read.
+ * @returns The chain's messages, newline-joined.
+ */
+export function collectErrorChainMessages(error: unknown): string {
+  return walkChain(error, false)
+}
+
+/** Shared walker for the two collectors above. */
+function walkChain(error: unknown, includeStack: boolean): string {
   const parts: string[] = []
   const seen = new Set<unknown>()
   let current: unknown = error
@@ -108,7 +129,7 @@ export function collectErrorChainText(error: unknown): string {
       break
     }
     try {
-      if (typeof current.stack === 'string') {
+      if (includeStack && typeof current.stack === 'string') {
         parts.push(current.stack)
       }
     } catch {

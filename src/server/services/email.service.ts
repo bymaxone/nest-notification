@@ -28,8 +28,16 @@ import type {
   INotificationLogRepository,
   NotificationLogEntry
 } from '../interfaces/notification-log-repository.interface'
+import type { DeliveryStatus } from '../utils/delivery-status'
+import {
+  extractDeliveryStatus,
+  isBasicStatus,
+  isEnhancedStatus,
+  withoutDeclaredValues
+} from '../utils/delivery-status'
 import {
   collectEchoedExcerpts,
+  collectErrorChainMessages,
   collectErrorChainText,
   readRedactedMessage,
   scrubValuesFromErrorChain
@@ -37,6 +45,13 @@ import {
 
 /** Locale used as the fallback when the requested locale has no template. */
 const FALLBACK_LOCALE = 'en'
+
+/**
+ * Stands in for the provider's own message when the caller set
+ * `publishProviderText: false`. A fixed label, so the audit entry records THAT
+ * delivery failed without recording anything the provider wrote.
+ */
+const WITHHELD_PROVIDER_TEXT = '[provider text withheld]'
 
 /** An email tag pair. */
 type EmailTag = { name: string; value: string }
@@ -60,8 +75,27 @@ export interface EmailSendInput {
   /**
    * Secret values (e.g. an OTP code the body carries) redacted from the audit
    * entry's `errorMessage` when a provider failure echoes them back.
+   *
+   * Precision where text is published on purpose — NOT a barrier. Matching is
+   * literal, so the same bytes in another transfer encoding are missed; set
+   * {@link EmailSendInput.publishProviderText} to `false` when the body must
+   * not surface at all.
    */
   auditRedactValues?: readonly string[]
+  /**
+   * Whether a delivery failure may surface the text the PROVIDER authored —
+   * its message, its stack, and the `cause` chain built from them. Defaults to
+   * `true`, which keeps full diagnosability for ordinary mail.
+   *
+   * Set it to `false` for a message whose body carries a credential. A relay
+   * that quotes the rejected content puts the body into its error, and a
+   * declared value cannot be relied on to remove it: redaction predicts shapes,
+   * and a body quoted in base64 matches nothing. With this `false` the failure
+   * carries no provider-authored byte — no `cause`, and no message in the audit
+   * entry — only the SMTP reply codes a fixed grammar can express, which are
+   * the same whatever the body held.
+   */
+  publishProviderText?: boolean
 }
 
 /** Input for {@link EmailService.sendTemplate} — the renderer produces the body. */
@@ -81,6 +115,57 @@ export interface EmailSendTemplateInput {
    * entry's `errorMessage` when a provider failure echoes them back.
    */
   auditRedactValues?: readonly string[]
+  /**
+   * Whether a delivery failure may surface provider-authored text. Forwarded
+   * verbatim to {@link EmailService.send} — see
+   * {@link EmailSendInput.publishProviderText}, which documents why a declared
+   * value cannot substitute for it.
+   */
+  publishProviderText?: boolean
+}
+
+/**
+ * Reads reply codes a provider attached to the error it threw, when it has
+ * already applied the grammar itself.
+ *
+ * A provider that withholds its own text cannot leave the codes in the message
+ * for this service to parse back out — the message is a fixed label by then —
+ * so it attaches them instead. Reading is guarded: the value is consumer code.
+ *
+ * @param error - The failure the provider threw.
+ * @returns The attached codes, or `undefined` when the provider attached none.
+ */
+function readAttachedStatus(error: unknown): DeliveryStatus | undefined {
+  // No `instanceof` guard: reading a property off a primitive yields undefined
+  // rather than throwing, and the only failure mode left — a hostile getter or
+  // proxy trap — is what the catch is for. A guard here would be a branch no
+  // input can distinguish.
+  try {
+    const carrier = error as { deliveryStatus?: unknown; deliveryEnhancedStatus?: unknown }
+    // Each property is read EXACTLY ONCE and then validated from the snapshot.
+    // A stateful getter would otherwise return a well-formed code to the checks
+    // and arbitrary provider text to the assignment — validating a value that
+    // never reaches the audit entry.
+    const rawStatus: unknown = carrier.deliveryStatus
+    const rawEnhanced: unknown = carrier.deliveryEnhancedStatus
+    // Validated against the SAME grammar the extractor applies, not merely
+    // type-checked: these values come from provider code, and a provider that
+    // attached the quoted body as a "status" would otherwise have it published
+    // by the one path whose promise is that only the grammar gets out.
+    const status = typeof rawStatus === 'number' && isBasicStatus(rawStatus) ? rawStatus : undefined
+    const enhanced =
+      typeof rawEnhanced === 'string' && isEnhancedStatus(rawEnhanced) ? rawEnhanced : undefined
+    if (status === undefined && enhanced === undefined) {
+      return undefined
+    }
+    return {
+      ...(status !== undefined ? { status } : {}),
+      ...(enhanced !== undefined ? { enhanced } : {})
+    }
+  } catch {
+    // A hostile getter contributes nothing; the message grammar still applies.
+    return undefined
+  }
 }
 
 /** Transactional email service. */
@@ -125,17 +210,43 @@ export class EmailService {
     this.guardAttachmentSize(input.attachments, email.maxAttachmentBytes)
     const sendOptions = this.buildSendOptions(input, email)
     const recipient = this.maskRecipients(input.to)
+    const result = await this.deliver(sendOptions, input, recipient)
+    await this.audit(
+      this.auditEntry('sent', input.tenantId, recipient, input.userId, {
+        messageId: result.messageId
+      })
+    )
+    return { messageId: result.messageId }
+  }
+
+  /**
+   * Hands the message to the provider, converting any failure it raises.
+   *
+   * Only the provider call sits in this `try`. The success-path audit is the
+   * caller's business, so an `AUDIT_LOG_FAILED` cannot be mistaken for a
+   * delivery failure — and, more importantly, a `NotificationException` the
+   * PROVIDER throws no longer escapes unconverted. A custom adapter may raise
+   * one carrying its own message, details and cause, and an early rethrow would
+   * have handed that provider-authored text straight to the caller even with
+   * `publishProviderText: false`.
+   *
+   * @param sendOptions - The envelope handed to the provider.
+   * @param input - The original input, for redaction values and the audit entry.
+   * @param recipient - The already-masked recipient.
+   * @returns The provider's result.
+   * @throws NotificationException `EMAIL_SEND_FAILED`, carrying only what the
+   * caller allows to be published.
+   */
+  private async deliver(
+    sendOptions: EmailSendOptions,
+    input: EmailSendInput,
+    recipient: string
+  ): Promise<{ messageId: string }> {
     try {
-      const result = await this.provider.send(sendOptions)
-      await this.audit(
-        this.auditEntry('sent', input.tenantId, recipient, input.userId, {
-          messageId: result.messageId
-        })
-      )
-      return { messageId: result.messageId }
+      return await this.provider.send(sendOptions)
     } catch (error) {
-      if (error instanceof NotificationException) {
-        throw error
+      if (input.publishProviderText === false) {
+        await this.failWithoutProviderText(error, input, recipient)
       }
       // Declared secrets plus detected BODY ECHOES: a relay that quotes the
       // rejected content back puts the rendered body — and any secret inside
@@ -189,6 +300,9 @@ export class EmailService {
       ...(input.userId !== undefined ? { userId: input.userId } : {}),
       ...(input.auditRedactValues !== undefined
         ? { auditRedactValues: input.auditRedactValues }
+        : {}),
+      ...(input.publishProviderText !== undefined
+        ? { publishProviderText: input.publishProviderText }
         : {})
     })
   }
@@ -242,7 +356,10 @@ export class EmailService {
       ...(input.cc !== undefined ? { cc: input.cc } : {}),
       ...(input.bcc !== undefined ? { bcc: input.bcc } : {}),
       ...(input.attachments !== undefined ? { attachments: input.attachments } : {}),
-      ...(input.auditRedactValues !== undefined ? { redactValues: input.auditRedactValues } : {})
+      ...(input.auditRedactValues !== undefined ? { redactValues: input.auditRedactValues } : {}),
+      ...(input.publishProviderText !== undefined
+        ? { publishProviderText: input.publishProviderText }
+        : {})
     }
   }
 
@@ -285,7 +402,7 @@ export class EmailService {
     tenantId: string,
     recipient: string,
     userId: string | undefined,
-    extra: { messageId?: string; errorMessage?: string }
+    extra: { messageId?: string; errorMessage?: string; status?: number; enhanced?: string }
   ): NotificationLogEntry {
     return {
       timestamp: Date.now(),
@@ -296,6 +413,8 @@ export class EmailService {
       providerName: this.provider.name,
       ...(extra.messageId !== undefined ? { messageId: extra.messageId } : {}),
       ...(extra.errorMessage !== undefined ? { errorMessage: extra.errorMessage } : {}),
+      ...(extra.status !== undefined ? { deliveryStatus: extra.status } : {}),
+      ...(extra.enhanced !== undefined ? { deliveryEnhancedStatus: extra.enhanced } : {}),
       ...(userId !== undefined ? { userId } : {})
     }
   }
@@ -317,6 +436,41 @@ export class EmailService {
   private maskRecipients(to: string | string[]): string {
     const mask = this.options.audit.maskRecipient
     return Array.isArray(to) ? to.map((recipient) => mask(recipient)).join(', ') : mask(to)
+  }
+
+  /**
+   * Fails a send whose caller forbade publishing provider-authored text.
+   *
+   * Nothing the provider wrote is carried: no `cause`, and no provider message
+   * in the audit entry. Redaction could not honour the promise — it removes the
+   * shapes it predicts, and an echo in another transfer encoding defeats every
+   * declared value — so the failure publishes only the reply codes a fixed
+   * grammar can express, which are independent of whatever the body held.
+   *
+   * @param error - The provider failure, read but never surfaced.
+   * @param input - The send input, for the tenant and user recorded in the audit.
+   * @param recipient - The already-masked recipient.
+   * @throws NotificationException Always — `EMAIL_SEND_FAILED` carrying the codes only.
+   */
+  private async failWithoutProviderText(
+    error: unknown,
+    input: EmailSendInput,
+    recipient: string
+  ): Promise<never> {
+    const status = withoutDeclaredValues(
+      readAttachedStatus(error) ?? extractDeliveryStatus(collectErrorChainMessages(error)),
+      input.auditRedactValues
+    )
+    await this.audit(
+      this.auditEntry('failed', input.tenantId, recipient, input.userId, {
+        errorMessage: WITHHELD_PROVIDER_TEXT,
+        ...status
+      })
+    )
+    throw new NotificationException('EMAIL_SEND_FAILED', {
+      providerName: this.provider.name,
+      ...status
+    })
   }
 
   /**

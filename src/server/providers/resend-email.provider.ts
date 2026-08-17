@@ -21,7 +21,30 @@ import type {
   IEmailProvider
 } from '../interfaces/email-provider.interface'
 import { loadOptionalPeer } from '../utils/load-optional-peer'
-import { collectEchoedExcerpts, redactValues } from '../utils/redact'
+import {
+  REDACTED_VALUE,
+  collectEchoedExcerpts,
+  readRedactedMessage,
+  redactValues
+} from '../utils/redact'
+
+/**
+ * Reads the message off an SDK error object, failing closed.
+ *
+ * The object comes from the SDK, so the property read runs consumer code: a
+ * getter that throws a secret-bearing error would escape from the dereference
+ * itself, before any withholding decision has been made.
+ *
+ * @param error - The SDK's `{ message }` error object.
+ * @returns Its message, or the redaction marker when the read threw.
+ */
+function readSdkMessage(error: { message: string }): string {
+  try {
+    return String(error.message)
+  } catch {
+    return REDACTED_VALUE
+  }
+}
 
 /** Construction options for {@link ResendEmailProvider}. */
 export interface ResendEmailProviderOptions {
@@ -146,10 +169,15 @@ export class ResendEmailProvider implements IEmailProvider {
       // The SDK can REJECT instead of resolving `{ error }` — a transport or
       // fetch failure whose message quotes the request body carries the same
       // secrets a quoted rejection does, so it takes the identical exit.
-      throw this.sendFailure(error instanceof Error ? error.message : String(error), options)
+      // Read through the fail-closed helper: coercion runs consumer code, and a
+      // hostile `message` getter would otherwise escape with its own text
+      // before `sendFailure` could withhold anything.
+      throw this.sendFailure(readRedactedMessage(error), options)
     }
     if (result.error) {
-      throw this.sendFailure(result.error.message, options)
+      // The SDK's error object is consumer code too, so reading its `message`
+      // is guarded rather than dereferenced directly.
+      throw this.sendFailure(readSdkMessage(result.error), options)
     }
     if (!result.data?.id) {
       throw new Error('Resend returned no message ID')
@@ -167,6 +195,13 @@ export class ResendEmailProvider implements IEmailProvider {
    * @returns The `Error` for the caller to throw.
    */
   private sendFailure(rawMessage: string, options: EmailSendOptions): Error {
+    if (options.publishProviderText === false) {
+      // The body carries a credential, so nothing the API wrote may reach a
+      // log line or the thrown message. Unlike SMTP there is no reply code to
+      // fall back on here, so the failure publishes only that it happened.
+      this.logger.warn('[RESEND_SEND_FAILED] (provider text withheld)')
+      return new Error('Resend send failed')
+    }
     // Surface only the provider's message — never the email body.
     const reason = this.scrubSendError(rawMessage, options)
     this.logger.warn(`[RESEND_SEND_FAILED] ${reason}`)

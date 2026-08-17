@@ -46,6 +46,27 @@ export const ref = {
 }
 
 /**
+ * Freezes `Date.now()` at a value SHORTER than a numeric OTP, for the tests
+ * that assert the code appears nowhere in a serialized audit entry.
+ *
+ * Those assertions compare a generated code against the whole entry, and the
+ * entry carries a 13-digit epoch — eight overlapping six-digit windows, every
+ * one of them a value the generator can produce (`010101` included). So the
+ * comparison fails by coincidence roughly once in 10^5 runs and reads as a leak
+ * rather than a flake. A five-digit clock has no six-digit window at all, which
+ * removes the coincidence by construction while keeping the FULL entry under
+ * assertion — excluding the field would have weakened the gate instead.
+ *
+ * @returns A restore function; call it once the assertion has run.
+ */
+export const freezeClockAwayFromCodes = (): (() => void) => {
+  const spy = jest.spyOn(Date, 'now').mockReturnValue(12_345)
+  return () => {
+    spy.mockRestore()
+  }
+}
+
+/**
  * Serializes an error the way a cause-walking log serializer would: message,
  * stack, enumerable own properties, HTTP response body, and every nested
  * `cause`, recursively.

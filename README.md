@@ -87,13 +87,14 @@ pnpm add @bymax-one/nest-notification
 
 ## 📦 Subpath Exports
 
-One package, three entry points — import only what your app needs:
+One package, four entry points — import only what your app needs:
 
-| Subpath    | Import                                | Purpose                                            |               Peer deps                |
-| ---------- | ------------------------------------- | -------------------------------------------------- | :------------------------------------: |
-| **Server** | `@bymax-one/nest-notification`        | NestJS module, services, providers, errors, tokens | NestJS 11 (+ your provider/store SDKs) |
-| **Shared** | `@bymax-one/nest-notification/shared` | Types + constants (error codes, TTLs)              |                  None                  |
-| **React**  | `@bymax-one/nest-notification/react`  | `useOtpInput` + `useOtpCountdown` (UX/state only)  |                React 19                |
+| Subpath     | Import                                 | Purpose                                                |               Peer deps                |
+| ----------- | -------------------------------------- | ------------------------------------------------------ | :------------------------------------: |
+| **Server**  | `@bymax-one/nest-notification`         | NestJS module, services, providers, errors, tokens     | NestJS 11 (+ your provider/store SDKs) |
+| **Shared**  | `@bymax-one/nest-notification/shared`  | Types + constants (error codes, TTLs)                  |                  None                  |
+| **React**   | `@bymax-one/nest-notification/react`   | `useOtpInput` + `useOtpCountdown` (UX/state only)      |                React 19                |
+| **Testing** | `@bymax-one/nest-notification/testing` | Executable `IOtpStorage` contract for your own storage |                  None                  |
 
 ```
 shared (zero deps)
@@ -693,7 +694,7 @@ A one-time password is a credential, so the suite is held to a bar beyond "it ru
 
 - ✅ **100% line coverage** — statements, branches, functions, and lines, enforced per file as a release gate across unit + e2e
 - ✅ **100% mutation score** — verified with [Stryker](https://stryker-mutator.io/): every viable seeded fault killed, with **no survivors**, against a `break` threshold of 100. The equivalents that no test can kill carry their reason on the line they apply to, so the number is an accounting rather than a target
-- ✅ **600 tests** — unit and end-to-end, spanning all three subpaths
+- ✅ **679 tests** — unit and end-to-end, spanning all four subpaths
 - ✅ **Invariants asserted, not assumed** — the never-log-codes rule is a test (`JSON.stringify(entry).includes(code) === false` on every audit entry, and the thrown exception is serialized recursively — message, stack, response body, every nested `cause` — asserting the code appears at no depth), not a review convention
 - ✅ **Published shape verified** — `attw` resolves every entrypoint against the packed tarball, and a dogfood smoke test installs the package into a scratch consumer before any tag is cut
 - ✅ **Every equivalent mutant documented** — the ones no test can kill carry an inline `// Stryker disable` with the reason, so the score is an accounting rather than a number
@@ -765,7 +766,7 @@ Failures raised by the library carry the underlying error as the native `Error.c
 
 **If you send a secret through `EmailService` yourself — declare it, and treat the provider's error text as untrusted anyway.** A relay or DLP filter that quotes the rejected content puts the rendered body (and any secret inside it) into the provider error, which rides the `cause` into your logs. Pass `auditRedactValues: [code]` on the send input: the value is scrubbed from the attached `cause`, from the failed-audit `errorMessage`, and — forwarded as `EmailSendOptions.redactValues` — from the provider's own error logging. As defense-in-depth for the undeclared case, any run of 16+ characters of the rendered body detected inside a provider error is redacted automatically.
 
-**Know the ceiling of both guards.** They remove the shapes they can predict, and a relay quotes what it _transmitted_, not what you handed it — a MIME body travels raw, quoted-printable or base64. A declared `123456` cannot match `MTIzNDU2`, and echo detection compares the error against the rendered body it holds, not against the encoding the relay chose; measured, an error quoting the base64 of the body survives both. No list of values closes an encoding gap. So control whether provider error text reaches your logs at all for secret-bearing sends, and use declared values as precision on top of that rather than as the barrier. If you consume `@bymax-one/nest-auth` and bind its bundled `DefaultAuthEmailProvider`, that provider is the call site, so the declaration belongs there rather than in your application code; if you implement `nest-auth`'s email port yourself, your adapter is the call site and the declaration is yours to make.
+**Know the ceiling of both guards.** They remove the shapes they can predict, and a relay quotes what it _transmitted_, not what you handed it — a MIME body travels raw, quoted-printable or base64. A declared `123456` cannot match `MTIzNDU2`, and echo detection compares the error against the rendered body it holds, not against the encoding the relay chose; measured, an error quoting the base64 of the body survives both. No list of values closes an encoding gap. So control whether provider error text reaches your logs at all for secret-bearing sends — pass `publishProviderText: false` on the send input, which withholds every provider-authored byte and publishes only the SMTP reply codes a fixed grammar can express — and use declared values as precision on top of that rather than as the barrier. If you consume `@bymax-one/nest-auth` and bind its bundled `DefaultAuthEmailProvider`, that provider is the call site, so the declaration belongs there rather than in your application code; if you implement `nest-auth`'s email port yourself, your adapter is the call site and the declaration is yours to make.
 
 ### Reference adapters
 
