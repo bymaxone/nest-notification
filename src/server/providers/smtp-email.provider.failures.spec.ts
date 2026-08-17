@@ -224,6 +224,22 @@ describe('SmtpEmailProvider failure handling', () => {
     expect('deliveryEnhancedStatus' in thrown).toBe(false)
   })
 
+  // SECURITY: this adapter is public, so its own warn line must apply the
+  // filter too — waiting for EmailService would already have written a code
+  // containing the caller's declared secret to the SMTP logger.
+  it('should not log a reply code containing a declared secret', async () => {
+    mockSendMail.mockRejectedValue(new Error('550 5.7.1 refused'))
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+    const thrown = (await new SmtpEmailProvider({ host: 'h' })
+      .send({ ...baseOptions, publishProviderText: false, redactValues: ['55'] })
+      .catch((error: unknown) => error)) as Error & { deliveryStatus?: number }
+
+    expect(String(warnSpy.mock.calls[0]?.[0])).toBe('[SMTP_SEND_FAILED] 5.7.1')
+    expect('deliveryStatus' in thrown).toBe(false)
+    warnSpy.mockRestore()
+  })
+
   // A failure carrying no reply code says so, rather than falling back to the
   // relay's prose to have something to log.
   it('should say so when a withheld failure carries no reply code', async () => {

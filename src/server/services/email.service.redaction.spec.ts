@@ -399,6 +399,53 @@ describe('EmailService.send with publishProviderText: false', () => {
     expect(JSON.stringify(audit.create.mock.calls[0]?.[0]).includes('998877')).toBe(false)
   })
 
+  // SECURITY: a stateful getter can answer the validation and the assignment
+  // differently. Each property is read once and validated from that snapshot,
+  // so the value that was checked is the value that gets published.
+  it('should not let a stateful getter slip past the grammar', async () => {
+    const provider = makeProvider()
+    let reads = 0
+    const hostile = new Error('delivery failed')
+    Object.defineProperty(hostile, 'deliveryEnhancedStatus', {
+      get: (): string => {
+        reads += 1
+        return reads === 1 ? '5.7.1' : 'Your code is 998877, do not share it'
+      }
+    })
+    provider.send.mockRejectedValue(hostile)
+    const audit = makeAudit()
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), audit)
+
+    const caught: unknown = await service
+      .send({ ...baseInput, publishProviderText: false })
+      .catch((error: unknown) => error)
+
+    const details = (
+      caught as { getResponse: () => { error: { details: Record<string, unknown> } } }
+    ).getResponse().error.details
+    expect(details).toStrictEqual({ providerName: 'resend', enhanced: '5.7.1' })
+    expect(JSON.stringify(audit.create.mock.calls[0]?.[0]).includes('998877')).toBe(false)
+  })
+
+  // The collision filter is CONTAINMENT-based: a short declared code sits
+  // inside a genuine reply code, and the invariant it protects is containment.
+  it('should drop a reply code containing a declared secret', async () => {
+    const provider = makeProvider()
+    provider.send.mockRejectedValue(new Error('550 5.7.1 rejected'))
+    const audit = makeAudit()
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), audit)
+
+    const caught: unknown = await service
+      .send({ ...baseInput, publishProviderText: false, auditRedactValues: ['55'] })
+      .catch((error: unknown) => error)
+
+    const details = (
+      caught as { getResponse: () => { error: { details: Record<string, unknown> } } }
+    ).getResponse().error.details
+    expect(details).toStrictEqual({ providerName: 'resend', enhanced: '5.7.1' })
+    expect(JSON.stringify(audit.create.mock.calls[0]?.[0]).includes('55')).toBe(false)
+  })
+
   // A non-integer or out-of-class number is not a reply code either.
   it('should reject an attached status outside the reply classes', async () => {
     const provider = makeProvider()

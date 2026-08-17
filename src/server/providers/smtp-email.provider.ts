@@ -27,7 +27,7 @@ import type {
   EmailSendResult,
   IEmailProvider
 } from '../interfaces/email-provider.interface'
-import { extractDeliveryStatus } from '../utils/delivery-status'
+import { extractDeliveryStatus, withoutDeclaredValues } from '../utils/delivery-status'
 import { loadOptionalPeer } from '../utils/load-optional-peer'
 import { collectEchoedExcerpts, readRedactedMessage, redactValues } from '../utils/redact'
 
@@ -346,7 +346,7 @@ export class SmtpEmailProvider implements IEmailProvider {
   private async dispatch(
     transport: SmtpTransportLike,
     payload: SmtpSendPayload,
-    redactValues?: readonly string[],
+    redactValuesList?: readonly string[],
     publishProviderText?: boolean
   ): Promise<{ messageId?: string }> {
     try {
@@ -367,7 +367,13 @@ export class SmtpEmailProvider implements IEmailProvider {
         // the shapes it predicts and a re-encoded echo defeats it. Only the
         // reply codes a fixed grammar can express are published, and they are
         // the same whatever the body held.
-        const { status, enhanced } = extractDeliveryStatus(raw)
+        // Filtered HERE, not only in EmailService: this adapter is public, and
+        // its own warn line would otherwise write a code that contains the
+        // caller's declared secret — an OTP of `55` sits inside a `550` reply.
+        const { status, enhanced } = withoutDeclaredValues(
+          extractDeliveryStatus(raw),
+          redactValuesList
+        )
         const codes = [status, enhanced].filter((code) => code !== undefined).join(' ')
         this.logger.warn(`[SMTP_SEND_FAILED] ${codes || 'no reply code'}`)
         // The codes ride on the thrown error rather than in its message: the
@@ -379,7 +385,7 @@ export class SmtpEmailProvider implements IEmailProvider {
           ...(enhanced !== undefined ? { deliveryEnhancedStatus: enhanced } : {})
         })
       }
-      const reason = this.scrubTransportError(raw, payload, redactValues)
+      const reason = this.scrubTransportError(raw, payload, redactValuesList)
       this.logger.warn(`[SMTP_SEND_FAILED] ${reason}`)
       throw new Error(`SMTP send failed: ${reason}`)
     }

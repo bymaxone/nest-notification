@@ -103,3 +103,40 @@ export function extractDeliveryStatus(text: string): DeliveryStatus {
     ...(enhanced !== undefined ? { enhanced } : {})
   }
 }
+
+/**
+ * Drops a reply code that would carry a declared secret into a log.
+ *
+ * The check is CONTAINMENT, not equality, because the invariant it protects is
+ * containment: the gate asserts a code's characters never appear in an audit
+ * entry, and OTP lengths go down to one — a code of `55` is inside a genuine
+ * `550` reply.
+ *
+ * Publishing the code discloses nothing on its own: the relay answered `550`
+ * whatever the secret was, so the value is independent of it. The reason to
+ * drop it is the invariant, and a rare lost diagnosis is the cheaper side of
+ * that trade.
+ *
+ * @param status - The codes about to be published.
+ * @param declared - Values the caller marked secret, if any.
+ * @returns The codes with any collision removed.
+ */
+export function withoutDeclaredValues(
+  status: DeliveryStatus,
+  declared: readonly string[] | undefined
+): DeliveryStatus {
+  // An empty list collides with nothing, so it needs no branch of its own.
+  if (!declared) {
+    return status
+  }
+  const collides = (value: string): boolean =>
+    declared.some((secret) => secret !== '' && value.includes(secret))
+  return {
+    ...(status.status !== undefined && !collides(String(status.status))
+      ? { status: status.status }
+      : {}),
+    ...(status.enhanced !== undefined && !collides(status.enhanced)
+      ? { enhanced: status.enhanced }
+      : {})
+  }
+}

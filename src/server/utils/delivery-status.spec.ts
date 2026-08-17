@@ -3,7 +3,12 @@
  * @layer domain
  */
 
-import { extractDeliveryStatus, isBasicStatus, isEnhancedStatus } from './delivery-status'
+import {
+  extractDeliveryStatus,
+  isBasicStatus,
+  isEnhancedStatus,
+  withoutDeclaredValues
+} from './delivery-status'
 
 describe('extractDeliveryStatus', () => {
   // The shape this exists for: a policy rejection quoting the whole body.
@@ -121,5 +126,47 @@ describe('isEnhancedStatus', () => {
     expect(isEnhancedStatus('Your code is 998877')).toBe(false)
     expect(isEnhancedStatus('1.7.1')).toBe(false)
     expect(isEnhancedStatus('5.4812.345')).toBe(false)
+  })
+})
+
+describe('withoutDeclaredValues', () => {
+  // SECURITY: the invariant this protects is CONTAINMENT — the gate asserts a
+  // code's characters never appear in an audit entry — so equality is not
+  // enough. OTP lengths go down to one, and `55` sits inside a genuine `550`.
+  it('should drop a code that CONTAINS a declared secret', () => {
+    expect(withoutDeclaredValues({ status: 550, enhanced: '5.7.1' }, ['55'])).toStrictEqual({
+      enhanced: '5.7.1'
+    })
+    expect(withoutDeclaredValues({ status: 421, enhanced: '5.7.1' }, ['7.1'])).toStrictEqual({
+      status: 421
+    })
+  })
+
+  // An exact match is the ordinary case and still drops.
+  it('should drop a code that equals a declared secret', () => {
+    expect(withoutDeclaredValues({ status: 550 }, ['550'])).toStrictEqual({})
+  })
+
+  // Nothing declared, nothing dropped — a deployment that declares no secrets
+  // keeps its full diagnosis.
+  it('should keep every code when nothing is declared', () => {
+    const both = { status: 550, enhanced: '5.7.1' }
+
+    expect(withoutDeclaredValues(both, undefined)).toStrictEqual(both)
+    expect(withoutDeclaredValues(both, [])).toStrictEqual(both)
+  })
+
+  // An empty declared value is skipped: every string contains it, so honouring
+  // it would drop every code for no gain.
+  it('should ignore an empty declared value', () => {
+    expect(withoutDeclaredValues({ status: 550 }, [''])).toStrictEqual({ status: 550 })
+  })
+
+  // Absent fields stay absent rather than becoming undefined-valued keys.
+  it('should not invent keys for absent codes', () => {
+    const only = withoutDeclaredValues({ enhanced: '5.7.1' }, ['999'])
+
+    expect('status' in only).toBe(false)
+    expect(only).toStrictEqual({ enhanced: '5.7.1' })
   })
 })
