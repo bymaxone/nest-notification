@@ -399,6 +399,39 @@ describe('EmailService.send with publishProviderText: false', () => {
     expect(JSON.stringify(audit.create.mock.calls[0]?.[0]).includes('998877')).toBe(false)
   })
 
+  // SECURITY: a custom provider may throw a NotificationException of its own,
+  // carrying provider-authored text in its message, details and cause. That
+  // shape used to be rethrown verbatim before the withholding branch ran, so
+  // the flag was honoured for every failure except the one a provider chose.
+  it('should withhold a NotificationException the provider itself throws', async () => {
+    const provider = makeProvider()
+    provider.send.mockRejectedValue(
+      new NotificationException(
+        'EMAIL_SEND_FAILED',
+        { quoted: 'Your code is 998877, do not share it' },
+        { cause: new Error('550 5.7.1 refused: 998877') }
+      )
+    )
+    const audit = makeAudit()
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), audit)
+
+    const caught: unknown = await service
+      .send({ ...baseInput, publishProviderText: false })
+      .catch((error: unknown) => error)
+
+    const exception = caught as NotificationException
+    expect('cause' in exception).toBe(false)
+    const serialized = JSON.stringify(exception.getResponse())
+    expect(serialized.includes('998877')).toBe(false)
+    expect(serialized.includes('quoted')).toBe(false)
+    // The reply codes still publish: they are independent of the body.
+    const details = (
+      caught as { getResponse: () => { error: { details: Record<string, unknown> } } }
+    ).getResponse().error.details
+    expect(details).toStrictEqual({ providerName: 'resend', status: 550, enhanced: '5.7.1' })
+    expect(JSON.stringify(audit.create.mock.calls[0]?.[0]).includes('998877')).toBe(false)
+  })
+
   // SECURITY: a stateful getter can answer the validation and the assignment
   // differently. Each property is read once and validated from that snapshot,
   // so the value that was checked is the value that gets published.

@@ -210,18 +210,41 @@ export class EmailService {
     this.guardAttachmentSize(input.attachments, email.maxAttachmentBytes)
     const sendOptions = this.buildSendOptions(input, email)
     const recipient = this.maskRecipients(input.to)
+    const result = await this.deliver(sendOptions, input, recipient)
+    await this.audit(
+      this.auditEntry('sent', input.tenantId, recipient, input.userId, {
+        messageId: result.messageId
+      })
+    )
+    return { messageId: result.messageId }
+  }
+
+  /**
+   * Hands the message to the provider, converting any failure it raises.
+   *
+   * Only the provider call sits in this `try`. The success-path audit is the
+   * caller's business, so an `AUDIT_LOG_FAILED` cannot be mistaken for a
+   * delivery failure — and, more importantly, a `NotificationException` the
+   * PROVIDER throws no longer escapes unconverted. A custom adapter may raise
+   * one carrying its own message, details and cause, and an early rethrow would
+   * have handed that provider-authored text straight to the caller even with
+   * `publishProviderText: false`.
+   *
+   * @param sendOptions - The envelope handed to the provider.
+   * @param input - The original input, for redaction values and the audit entry.
+   * @param recipient - The already-masked recipient.
+   * @returns The provider's result.
+   * @throws NotificationException `EMAIL_SEND_FAILED`, carrying only what the
+   * caller allows to be published.
+   */
+  private async deliver(
+    sendOptions: EmailSendOptions,
+    input: EmailSendInput,
+    recipient: string
+  ): Promise<{ messageId: string }> {
     try {
-      const result = await this.provider.send(sendOptions)
-      await this.audit(
-        this.auditEntry('sent', input.tenantId, recipient, input.userId, {
-          messageId: result.messageId
-        })
-      )
-      return { messageId: result.messageId }
+      return await this.provider.send(sendOptions)
     } catch (error) {
-      if (error instanceof NotificationException) {
-        throw error
-      }
       if (input.publishProviderText === false) {
         await this.failWithoutProviderText(error, input, recipient)
       }
