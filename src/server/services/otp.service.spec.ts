@@ -25,6 +25,7 @@ import { EmailService } from './email.service'
 import { OtpService } from './otp.service'
 
 import {
+  auditPayloadWithoutTimestamp,
   dummyRepo,
   emailSendTemplate,
   emailServiceStub,
@@ -266,7 +267,7 @@ describe('OtpService.generate', () => {
     const realCode = (await storage.get(ref.tenantId, ref.recipient, ref.purpose))?.code as string
 
     for (const call of audit.create.mock.calls) {
-      expect(JSON.stringify(call[0]).includes(realCode)).toBe(false)
+      expect(auditPayloadWithoutTimestamp(call[0]).includes(realCode)).toBe(false)
     }
   })
 

@@ -75,6 +75,13 @@ export interface EmailSendOptions {
    * inside it, e.g. an OTP code) into the transport error.
    */
   redactValues?: readonly string[]
+  /**
+   * Whether this send's failures may surface the text the provider authored.
+   * `false` means the adapter must publish none of it — not in a log line, not
+   * in the message of the error it throws — because the body carries a
+   * credential and redaction cannot be relied on to remove it.
+   */
+  publishProviderText?: boolean
 }
 
 /** Result of a successful send. `messageId` is provider-specific; useful for audit correlation. */

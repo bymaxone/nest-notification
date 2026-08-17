@@ -167,6 +167,13 @@ export class ResendEmailProvider implements IEmailProvider {
    * @returns The `Error` for the caller to throw.
    */
   private sendFailure(rawMessage: string, options: EmailSendOptions): Error {
+    if (options.publishProviderText === false) {
+      // The body carries a credential, so nothing the API wrote may reach a
+      // log line or the thrown message. Unlike SMTP there is no reply code to
+      // fall back on here, so the failure publishes only that it happened.
+      this.logger.warn('[RESEND_SEND_FAILED] (provider text withheld)')
+      return new Error('Resend send failed')
+    }
     // Surface only the provider's message — never the email body.
     const reason = this.scrubSendError(rawMessage, options)
     this.logger.warn(`[RESEND_SEND_FAILED] ${reason}`)

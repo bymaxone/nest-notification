@@ -138,6 +138,51 @@ describe('SmtpEmailProvider failure handling', () => {
     warnSpy.mockRestore()
   })
 
+  // SECURITY: with `publishProviderText: false` the relay's own words reach
+  // neither the warn line nor the thrown message — not even redacted — because
+  // redaction cannot cover an echo the caller did not predict. Only the reply
+  // codes survive, and they are independent of what the body held.
+  it('should publish only the reply codes when provider text is withheld', async () => {
+    const body = '<p>Your code is 998877 and it expires soon</p>'
+    mockSendMail.mockRejectedValue(new Error(`550 5.7.1 refused by policy - body: ${body}`))
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+    const thrown: unknown = await new SmtpEmailProvider({ host: 'h' })
+      .send({ ...baseOptions, html: body, publishProviderText: false })
+      .catch((error: unknown) => error)
+
+    expect((thrown as Error).message).toBe('SMTP send failed')
+    expect(String(warnSpy.mock.calls[0]?.[0])).toBe('[SMTP_SEND_FAILED] 550 5.7.1')
+    expect(String(warnSpy.mock.calls[0]?.[0])).not.toContain('998877')
+    warnSpy.mockRestore()
+  })
+
+  // A failure carrying no reply code says so, rather than falling back to the
+  // relay's prose to have something to log.
+  it('should say so when a withheld failure carries no reply code', async () => {
+    mockSendMail.mockRejectedValue(new Error('connect ECONNREFUSED 127.0.0.1:1099'))
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+    await expect(
+      new SmtpEmailProvider({ host: 'h' }).send({ ...baseOptions, publishProviderText: false })
+    ).rejects.toThrow('SMTP send failed')
+    expect(String(warnSpy.mock.calls[0]?.[0])).toBe('[SMTP_SEND_FAILED] no reply code')
+    warnSpy.mockRestore()
+  })
+
+  // Only the basic code present: the line carries it alone, with no separator
+  // left dangling and no invented enhanced value.
+  it('should publish a lone basic status without padding', async () => {
+    mockSendMail.mockRejectedValue(new Error('421 service not available'))
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+    await expect(
+      new SmtpEmailProvider({ host: 'h' }).send({ ...baseOptions, publishProviderText: false })
+    ).rejects.toThrow('SMTP send failed')
+    expect(String(warnSpy.mock.calls[0]?.[0])).toBe('[SMTP_SEND_FAILED] 421')
+    warnSpy.mockRestore()
+  })
+
   // A transport can reject with a non-Error value; it must still produce a usable
   // message rather than "[object Object]" swallowing the cause.
   it('should stringify a non-Error rejection', async () => {

@@ -283,6 +283,28 @@ describe('ResendEmailProvider', () => {
     ).rejects.toThrow('Resend send failed: ECONNRESET while sending [redacted]')
   })
 
+  // SECURITY: with `publishProviderText: false` nothing the API wrote reaches
+  // the log or the thrown message. Resend answers with prose rather than an
+  // SMTP reply, so there is no code to fall back on — the failure publishes
+  // only that it happened.
+  it('should publish no provider text when it is withheld', async () => {
+    const body = String(baseOptions.html)
+    mockSend.mockResolvedValue({
+      data: null,
+      error: { message: `rejected by policy - body was: ${body}` }
+    })
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+    const thrown: unknown = await new ResendEmailProvider({ apiKey: 'k' })
+      .send({ ...baseOptions, publishProviderText: false })
+      .catch((error: unknown) => error)
+
+    expect((thrown as Error).message).toBe('Resend send failed')
+    expect(String(warnSpy.mock.calls[0]?.[0])).toBe('[RESEND_SEND_FAILED] (provider text withheld)')
+    expect(String(warnSpy.mock.calls[0]?.[0])).not.toContain('Secret 123456')
+    warnSpy.mockRestore()
+  })
+
   // A success result with no message id is a contract violation — fail loudly.
   it('should throw when the SDK returns no message id', async () => {
     mockSend.mockResolvedValue({ data: null, error: null })

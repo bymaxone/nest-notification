@@ -27,6 +27,7 @@ import type {
   EmailSendResult,
   IEmailProvider
 } from '../interfaces/email-provider.interface'
+import { extractDeliveryStatus } from '../utils/delivery-status'
 import { loadOptionalPeer } from '../utils/load-optional-peer'
 import { collectEchoedExcerpts, redactValues } from '../utils/redact'
 
@@ -323,7 +324,8 @@ export class SmtpEmailProvider implements IEmailProvider {
         headers: options.headers,
         attachments: this.mapAttachments(options.attachments)
       },
-      options.redactValues
+      options.redactValues,
+      options.publishProviderText
     )
     if (!info.messageId) {
       throw new Error('SMTP transport returned no message ID')
@@ -344,7 +346,8 @@ export class SmtpEmailProvider implements IEmailProvider {
   private async dispatch(
     transport: SmtpTransportLike,
     payload: SmtpSendPayload,
-    redactValues?: readonly string[]
+    redactValues?: readonly string[],
+    publishProviderText?: boolean
   ): Promise<{ messageId?: string }> {
     try {
       return await transport.sendMail(payload)
@@ -353,11 +356,19 @@ export class SmtpEmailProvider implements IEmailProvider {
       // ONE pass over the raw message — a policy/DLP relay that quotes the
       // rejected content puts the body (and any secret inside it) into the
       // error text this line is about to log.
-      const reason = this.scrubTransportError(
-        error instanceof Error ? error.message : String(error),
-        payload,
-        redactValues
-      )
+      const raw = error instanceof Error ? error.message : String(error)
+      if (publishProviderText === false) {
+        // The caller's body carries a credential, so none of the relay's own
+        // words may reach a log line or a thrown message — redaction removes
+        // the shapes it predicts and a re-encoded echo defeats it. Only the
+        // reply codes a fixed grammar can express are published, and they are
+        // the same whatever the body held.
+        const { status, enhanced } = extractDeliveryStatus(raw)
+        const codes = [status, enhanced].filter((code) => code !== undefined).join(' ')
+        this.logger.warn(`[SMTP_SEND_FAILED] ${codes || 'no reply code'}`)
+        throw new Error('SMTP send failed')
+      }
+      const reason = this.scrubTransportError(raw, payload, redactValues)
       this.logger.warn(`[SMTP_SEND_FAILED] ${reason}`)
       throw new Error(`SMTP send failed: ${reason}`)
     }

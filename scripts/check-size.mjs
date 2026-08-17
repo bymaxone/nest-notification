@@ -31,7 +31,8 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const BUDGETS = [
   { name: 'server (NestJS module)', path: 'dist/server/index.mjs', brotli: 30 * 1024 },
   { name: 'shared (types + constants)', path: 'dist/shared/index.mjs', brotli: 4 * 1024 },
-  { name: 'react (hooks)', path: 'dist/react/index.mjs', brotli: 8 * 1024 }
+  { name: 'react (hooks)', path: 'dist/react/index.mjs', brotli: 8 * 1024 },
+  { name: 'testing (storage contract)', path: 'dist/testing/index.mjs', brotli: 4 * 1024 }
 ]
 
 const fmt = (n) => `${(n / 1024).toFixed(2)} kB`

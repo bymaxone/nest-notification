@@ -35,6 +35,8 @@ import {
 import type { NotificationErrorCode, OtpPurpose } from '@bymax-one/nest-notification/shared'
 import { NOTIFICATION_ERROR_CODES } from '@bymax-one/nest-notification/shared'
 import type { UseOtpInputState, UseOtpCountdownState } from '@bymax-one/nest-notification/react'
+import type { OtpStorageContractCase } from '@bymax-one/nest-notification/testing'
+import { otpStorageContract } from '@bymax-one/nest-notification/testing'
 
 /** Exact (invariant) type equality — stricter than mutual assignability. */
 type Equal<X, Y> =
@@ -199,3 +201,19 @@ type _NoVerify = Expect<Equal<'verify' extends keyof UseOtpInputState ? true : f
 type _Values = Expect<Equal<typeof inputState.values, string[]>>
 type _Reset = Expect<Equal<typeof inputState.reset, () => void>>
 type _Remaining = Expect<Equal<typeof countdownState.remainingSeconds, number>>
+
+// ---------------------------------------------------------------------------
+// Testing subpath — an executable contract for consumer-supplied storages
+// ---------------------------------------------------------------------------
+
+declare const consumerStorage: IOtpStorage
+
+// The factory may be sync or async, and the result is a plain array the
+// consumer feeds to whatever runner they use — no test framework in the type.
+const contractCases = otpStorageContract(() => consumerStorage)
+const asyncContractCases = otpStorageContract(async () => consumerStorage)
+
+type _ContractCases = Expect<Equal<typeof contractCases, OtpStorageContractCase[]>>
+type _AsyncContractCases = Expect<Equal<typeof asyncContractCases, OtpStorageContractCase[]>>
+type _CaseRun = Expect<Equal<OtpStorageContractCase['run'], () => Promise<void>>>
+type _CaseName = Expect<Equal<OtpStorageContractCase['name'], string>>

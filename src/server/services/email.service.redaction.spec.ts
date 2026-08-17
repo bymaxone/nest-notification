@@ -184,6 +184,128 @@ describe('EmailService.send redaction', () => {
   })
 })
 
+describe('EmailService.send with publishProviderText: false', () => {
+  const body = '<p>Hello Jane, your verification code is 883779. It expires shortly.</p>'
+
+  // SECURITY: the case redaction provably cannot cover. The relay quotes the
+  // body in BASE64, so no declared value and no echo excerpt matches — and the
+  // failure still carries nothing the provider wrote.
+  it('should carry no provider text even when the echo is re-encoded', async () => {
+    const provider = makeProvider()
+    provider.send.mockImplementation(async (options) => {
+      const encoded = Buffer.from(options.html, 'utf8').toString('base64')
+      throw new Error(`550 5.7.1 refused by policy - body was: ${encoded}`)
+    })
+    const audit = makeAudit()
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), audit)
+
+    const caught: unknown = await service
+      .send({ ...baseInput, html: body, publishProviderText: false })
+      .catch((error: unknown) => error)
+
+    const exception = caught as NotificationException
+    expect('cause' in exception).toBe(false)
+    const serialized = JSON.stringify(exception.getResponse())
+    expect(serialized.includes('883779')).toBe(false)
+    expect(serialized.includes('refused by policy')).toBe(false)
+    // Decoding what survives must not reconstruct the body either.
+    expect(Buffer.from(serialized, 'utf8').toString('base64').includes('883779')).toBe(false)
+  })
+
+  // The reply codes ARE published: they are independent of the body, and they
+  // are the whole diagnosis an operator acts on.
+  it('should publish the reply codes in the details and the audit entry', async () => {
+    const provider = makeProvider()
+    provider.send.mockRejectedValue(new Error('550 5.7.1 refused by policy - body: 883779'))
+    const audit = makeAudit()
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), audit)
+
+    const caught: unknown = await service
+      .send({ ...baseInput, html: body, publishProviderText: false })
+      .catch((error: unknown) => error)
+
+    const details = (
+      caught as { getResponse: () => { error: { details: Record<string, unknown> } } }
+    ).getResponse().error.details
+    expect(details).toEqual({ providerName: 'resend', status: 550, enhanced: '5.7.1' })
+    expect(audit.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        verb: 'failed',
+        errorMessage: '[provider text withheld]',
+        deliveryStatus: 550,
+        deliveryEnhancedStatus: '5.7.1'
+      })
+    )
+  })
+
+  // A failure with no reply code publishes neither field — absent, not
+  // `undefined`, so a serializer does not emit empty keys.
+  it('should omit both codes when the failure carries none', async () => {
+    const provider = makeProvider()
+    provider.send.mockRejectedValue(new Error('connect ECONNREFUSED 127.0.0.1:1099'))
+    const audit = makeAudit()
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), audit)
+
+    const caught: unknown = await service
+      .send({ ...baseInput, publishProviderText: false })
+      .catch((error: unknown) => error)
+
+    const details = (
+      caught as { getResponse: () => { error: { details: Record<string, unknown> } } }
+    ).getResponse().error.details
+    expect(details).toEqual({ providerName: 'resend' })
+    const entry = audit.create.mock.calls[0]?.[0]
+    expect('deliveryStatus' in entry!).toBe(false)
+    expect('deliveryEnhancedStatus' in entry!).toBe(false)
+  })
+
+  // Discovery reads the whole chain here too: a wrapper with a generic outer
+  // message must not hide the reply code sitting in a nested cause.
+  it('should find the reply code in a nested cause', async () => {
+    const provider = makeProvider()
+    provider.send.mockRejectedValue(
+      new Error('delivery failed', { cause: new Error('552 5.2.2 mailbox full') })
+    )
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), makeAudit())
+
+    const caught: unknown = await service
+      .send({ ...baseInput, publishProviderText: false })
+      .catch((error: unknown) => error)
+
+    const details = (
+      caught as { getResponse: () => { error: { details: Record<string, unknown> } } }
+    ).getResponse().error.details
+    expect(details).toEqual({ providerName: 'resend', status: 552, enhanced: '5.2.2' })
+  })
+
+  // The flag reaches the provider so its OWN log line can withhold too — and
+  // an absent flag adds no phantom key.
+  it('should forward the flag to the provider send options', async () => {
+    const provider = makeProvider()
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), makeAudit())
+
+    await service.send({ ...baseInput, publishProviderText: false })
+    await service.send(baseInput)
+
+    expect(provider.send.mock.calls[0]?.[0]?.publishProviderText).toBe(false)
+    expect('publishProviderText' in (provider.send.mock.calls[1]?.[0] ?? {})).toBe(false)
+  })
+
+  // Explicit `true` is the documented default and must keep the cause — the
+  // flag only ever removes diagnosability when it is exactly `false`.
+  it('should keep the cause when the flag is true', async () => {
+    const provider = makeProvider()
+    provider.send.mockRejectedValue(new Error('550 plain failure'))
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), makeAudit())
+
+    const caught: unknown = await service
+      .send({ ...baseInput, publishProviderText: true })
+      .catch((error: unknown) => error)
+
+    expect(((caught as NotificationException).cause as Error).message).toBe('550 plain failure')
+  })
+})
+
 describe('EmailService.sendTemplate redaction', () => {
   // A renderer error can echo the template data (which carries the caller's
   // secret); declared values are scrubbed from the TEMPLATE_RENDER_FAILED

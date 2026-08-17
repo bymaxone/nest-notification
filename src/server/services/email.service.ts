@@ -28,8 +28,10 @@ import type {
   INotificationLogRepository,
   NotificationLogEntry
 } from '../interfaces/notification-log-repository.interface'
+import { extractDeliveryStatus } from '../utils/delivery-status'
 import {
   collectEchoedExcerpts,
+  collectErrorChainMessages,
   collectErrorChainText,
   readRedactedMessage,
   scrubValuesFromErrorChain
@@ -37,6 +39,13 @@ import {
 
 /** Locale used as the fallback when the requested locale has no template. */
 const FALLBACK_LOCALE = 'en'
+
+/**
+ * Stands in for the provider's own message when the caller set
+ * `publishProviderText: false`. A fixed label, so the audit entry records THAT
+ * delivery failed without recording anything the provider wrote.
+ */
+const WITHHELD_PROVIDER_TEXT = '[provider text withheld]'
 
 /** An email tag pair. */
 type EmailTag = { name: string; value: string }
@@ -60,8 +69,27 @@ export interface EmailSendInput {
   /**
    * Secret values (e.g. an OTP code the body carries) redacted from the audit
    * entry's `errorMessage` when a provider failure echoes them back.
+   *
+   * Precision where text is published on purpose — NOT a barrier. Matching is
+   * literal, so the same bytes in another transfer encoding are missed; set
+   * {@link EmailSendInput.publishProviderText} to `false` when the body must
+   * not surface at all.
    */
   auditRedactValues?: readonly string[]
+  /**
+   * Whether a delivery failure may surface the text the PROVIDER authored —
+   * its message, its stack, and the `cause` chain built from them. Defaults to
+   * `true`, which keeps full diagnosability for ordinary mail.
+   *
+   * Set it to `false` for a message whose body carries a credential. A relay
+   * that quotes the rejected content puts the body into its error, and a
+   * declared value cannot be relied on to remove it: redaction predicts shapes,
+   * and a body quoted in base64 matches nothing. With this `false` the failure
+   * carries no provider-authored byte — no `cause`, and no message in the audit
+   * entry — only the SMTP reply codes a fixed grammar can express, which are
+   * the same whatever the body held.
+   */
+  publishProviderText?: boolean
 }
 
 /** Input for {@link EmailService.sendTemplate} — the renderer produces the body. */
@@ -136,6 +164,9 @@ export class EmailService {
     } catch (error) {
       if (error instanceof NotificationException) {
         throw error
+      }
+      if (input.publishProviderText === false) {
+        await this.failWithoutProviderText(error, input, recipient)
       }
       // Declared secrets plus detected BODY ECHOES: a relay that quotes the
       // rejected content back puts the rendered body — and any secret inside
@@ -242,7 +273,10 @@ export class EmailService {
       ...(input.cc !== undefined ? { cc: input.cc } : {}),
       ...(input.bcc !== undefined ? { bcc: input.bcc } : {}),
       ...(input.attachments !== undefined ? { attachments: input.attachments } : {}),
-      ...(input.auditRedactValues !== undefined ? { redactValues: input.auditRedactValues } : {})
+      ...(input.auditRedactValues !== undefined ? { redactValues: input.auditRedactValues } : {}),
+      ...(input.publishProviderText !== undefined
+        ? { publishProviderText: input.publishProviderText }
+        : {})
     }
   }
 
@@ -285,7 +319,7 @@ export class EmailService {
     tenantId: string,
     recipient: string,
     userId: string | undefined,
-    extra: { messageId?: string; errorMessage?: string }
+    extra: { messageId?: string; errorMessage?: string; status?: number; enhanced?: string }
   ): NotificationLogEntry {
     return {
       timestamp: Date.now(),
@@ -296,6 +330,8 @@ export class EmailService {
       providerName: this.provider.name,
       ...(extra.messageId !== undefined ? { messageId: extra.messageId } : {}),
       ...(extra.errorMessage !== undefined ? { errorMessage: extra.errorMessage } : {}),
+      ...(extra.status !== undefined ? { deliveryStatus: extra.status } : {}),
+      ...(extra.enhanced !== undefined ? { deliveryEnhancedStatus: extra.enhanced } : {}),
       ...(userId !== undefined ? { userId } : {})
     }
   }
@@ -317,6 +353,38 @@ export class EmailService {
   private maskRecipients(to: string | string[]): string {
     const mask = this.options.audit.maskRecipient
     return Array.isArray(to) ? to.map((recipient) => mask(recipient)).join(', ') : mask(to)
+  }
+
+  /**
+   * Fails a send whose caller forbade publishing provider-authored text.
+   *
+   * Nothing the provider wrote is carried: no `cause`, and no provider message
+   * in the audit entry. Redaction could not honour the promise — it removes the
+   * shapes it predicts, and an echo in another transfer encoding defeats every
+   * declared value — so the failure publishes only the reply codes a fixed
+   * grammar can express, which are independent of whatever the body held.
+   *
+   * @param error - The provider failure, read but never surfaced.
+   * @param input - The send input, for the tenant and user recorded in the audit.
+   * @param recipient - The already-masked recipient.
+   * @throws NotificationException Always — `EMAIL_SEND_FAILED` carrying the codes only.
+   */
+  private async failWithoutProviderText(
+    error: unknown,
+    input: EmailSendInput,
+    recipient: string
+  ): Promise<never> {
+    const status = extractDeliveryStatus(collectErrorChainMessages(error))
+    await this.audit(
+      this.auditEntry('failed', input.tenantId, recipient, input.userId, {
+        errorMessage: WITHHELD_PROVIDER_TEXT,
+        ...status
+      })
+    )
+    throw new NotificationException('EMAIL_SEND_FAILED', {
+      providerName: this.provider.name,
+      ...status
+    })
   }
 
   /**

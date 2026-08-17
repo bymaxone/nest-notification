@@ -13,6 +13,7 @@ import type { INotificationLogRepository } from '../interfaces/notification-log-
 import { InMemoryOtpStorage } from '../providers/in-memory-otp.storage'
 
 import {
+  auditPayloadWithoutTimestamp,
   emailSendTemplate,
   emailServiceStub,
   makeAudit,
@@ -156,7 +157,7 @@ describe('OtpService.generate — delivery-error redaction', () => {
     expect(realCode.length).toBeGreaterThan(0)
     expect(serializeErrorChain(caught).includes(realCode)).toBe(false)
     for (const call of audit.create.mock.calls) {
-      expect(JSON.stringify(call[0]).includes(realCode)).toBe(false)
+      expect(auditPayloadWithoutTimestamp(call[0]).includes(realCode)).toBe(false)
     }
   })
 
@@ -202,7 +203,7 @@ describe('OtpService.generate — delivery-error redaction', () => {
     expect(realCode.length).toBeGreaterThan(0)
     expect(serializeErrorChain(caught).includes(realCode)).toBe(false)
     for (const call of audit.create.mock.calls) {
-      expect(JSON.stringify(call[0]).includes(realCode)).toBe(false)
+      expect(auditPayloadWithoutTimestamp(call[0]).includes(realCode)).toBe(false)
     }
   })
 

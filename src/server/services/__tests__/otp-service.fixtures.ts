@@ -46,6 +46,22 @@ export const ref = {
 }
 
 /**
+ * Serializes an audit entry for a "the code appears nowhere" assertion, with
+ * the machine-generated `timestamp` removed.
+ *
+ * A generated numeric code can collide with any digit-dense field in the same
+ * payload — a 13-digit epoch holds eight overlapping six-digit windows, so the
+ * assertion fails by coincidence roughly once in 10^5 runs and reads as a leak
+ * rather than a flake. The timestamp is produced by `Date.now()` and provably
+ * cannot BE the code, so removing it keeps the invariant while removing the
+ * false alarm. Every field the library actually writes stays in the payload.
+ */
+export const auditPayloadWithoutTimestamp = (entry: unknown): string => {
+  const { timestamp: _timestamp, ...rest } = entry as Record<string, unknown>
+  return JSON.stringify(rest)
+}
+
+/**
  * Serializes an error the way a cause-walking log serializer would: message,
  * stack, enumerable own properties, HTTP response body, and every nested
  * `cause`, recursively.

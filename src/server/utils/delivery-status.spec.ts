@@ -1,0 +1,92 @@
+import { extractDeliveryStatus } from './delivery-status'
+
+describe('extractDeliveryStatus', () => {
+  // The shape this exists for: a policy rejection quoting the whole body.
+  // Everything the relay wrote is discarded; only the two codes survive.
+  it('should publish the codes and none of the quoted body', () => {
+    const body = 'Your password reset code is 883779. It expires shortly.'
+
+    expect(extractDeliveryStatus(`550 5.7.1 refused by policy - body was: ${body}`)).toEqual({
+      status: 550,
+      enhanced: '5.7.1'
+    })
+  })
+
+  // SECURITY: the output must not depend on the secret. The same reply
+  // publishes the same two codes whatever the body carried — including a code
+  // that collides with the status once punctuation is stripped (550571).
+  it('should publish identically regardless of the code in the body', () => {
+    const reply = (code: string): string => `550 5.7.1 refused: your code is ${code}`
+    const expected = { status: 550, enhanced: '5.7.1' }
+
+    expect(extractDeliveryStatus(reply('550571'))).toEqual(expected)
+    expect(extractDeliveryStatus(reply('123456'))).toEqual(expected)
+    expect(extractDeliveryStatus('550 5.7.1 refused')).toEqual(expected)
+  })
+
+  // The enhanced code is optional: a relay may answer with the basic one only,
+  // and the absence must read as unknown rather than be inferred from prose.
+  it('should return only the basic status when no enhanced code is present', () => {
+    expect(extractDeliveryStatus('550 Rejected')).toEqual({ status: 550 })
+  })
+
+  // A body full of digits with no reply code yields nothing at all — the
+  // extractor never invents a status to have something to say.
+  it('should return an empty status when the text carries no reply code', () => {
+    expect(extractDeliveryStatus('connect ECONNREFUSED 127.0.0.1:1099')).toEqual({})
+  })
+
+  // SECURITY: a cause chain can place two replies in one text. Picking either
+  // would publish a value assembled from two different answers, so ambiguity
+  // resolves to silence — per field, since one may be unambiguous while the
+  // other is not.
+  it('should publish nothing for a field the text makes ambiguous', () => {
+    expect(extractDeliveryStatus('424 then 242')).toEqual({})
+    expect(extractDeliveryStatus('550 5.7.1 then 552 5.2.2')).toEqual({})
+    // Two mentions of the SAME reply are not ambiguity.
+    expect(extractDeliveryStatus('550 5.7.1 (550 5.7.1 repeated)')).toEqual({
+      status: 550,
+      enhanced: '5.7.1'
+    })
+    // The basic code repeats consistently while the enhanced one conflicts:
+    // the unambiguous half still publishes.
+    expect(extractDeliveryStatus('550 5.7.1 and 550 5.7.28')).toEqual({ status: 550 })
+  })
+
+  // Only 2xx/4xx/5xx open an SMTP reply. A six-digit code beginning with 1, 3
+  // or any other class is not a status and must not be read as one.
+  it('should ignore digit runs outside the SMTP reply classes', () => {
+    expect(extractDeliveryStatus('361966 and 100 and 399')).toEqual({})
+  })
+
+  // The boundaries matter: a three-digit run inside a longer number is part of
+  // that number, not a reply code — otherwise any 6-digit OTP would parse as
+  // one and the extractor would publish a fragment of the secret.
+  it('should not read a status out of a longer digit run', () => {
+    expect(extractDeliveryStatus('code 550123 and id 2451')).toEqual({})
+    expect(extractDeliveryStatus('version 5.7.1.4')).toEqual({})
+  })
+
+  // A hostile relay can encode digits of its choosing into the grammar, so the
+  // subfields are bounded at three digits — `5.4812.345` is not a status.
+  it('should reject an enhanced code whose subfields exceed the bound', () => {
+    expect(extractDeliveryStatus('550 5.4812.345 rejected')).toEqual({ status: 550 })
+    // At the bound it is still a valid code.
+    expect(extractDeliveryStatus('550 5.481.345 rejected')).toEqual({
+      status: 550,
+      enhanced: '5.481.345'
+    })
+  })
+
+  // Absent fields must be genuinely absent, never `undefined` values — the
+  // object is spread into exception details and an audit entry.
+  it('should omit absent fields rather than setting them undefined', () => {
+    const empty = extractDeliveryStatus('nothing here')
+    const basicOnly = extractDeliveryStatus('421 service unavailable')
+
+    expect('status' in empty).toBe(false)
+    expect('enhanced' in empty).toBe(false)
+    expect('enhanced' in basicOnly).toBe(false)
+    expect('status' in basicOnly).toBe(true)
+  })
+})
