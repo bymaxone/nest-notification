@@ -305,6 +305,49 @@ describe('ResendEmailProvider', () => {
     warnSpy.mockRestore()
   })
 
+  // SECURITY: the SDK's error object is consumer code, so its `message` is read
+  // fail-closed — a hostile getter must not escape before the withholding
+  // branch, nor leak through the published path.
+  it('should withhold when the SDK error message getter throws', async () => {
+    const hostileError = {}
+    Object.defineProperty(hostileError, 'message', {
+      get: (): never => {
+        throw new Error('getter leaked 998877')
+      },
+      enumerable: true
+    })
+    mockSend.mockResolvedValue({ data: null, error: hostileError })
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+    const thrown: unknown = await new ResendEmailProvider({ apiKey: 'k' })
+      .send({ ...baseOptions, publishProviderText: false })
+      .catch((error: unknown) => error)
+
+    expect((thrown as Error).message).toBe('Resend send failed')
+    expect(String(warnSpy.mock.calls[0]?.[0])).not.toContain('998877')
+    warnSpy.mockRestore()
+  })
+
+  // The same hostile shape on the PUBLISHED path fails closed to the marker
+  // rather than escaping with the getter's own error.
+  it('should fail closed when the SDK error message getter throws', async () => {
+    const hostileError = {}
+    Object.defineProperty(hostileError, 'message', {
+      get: (): never => {
+        throw new Error('getter leaked 998877')
+      },
+      enumerable: true
+    })
+    mockSend.mockResolvedValue({ data: null, error: hostileError })
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+    await expect(new ResendEmailProvider({ apiKey: 'k' }).send(baseOptions)).rejects.toThrow(
+      'Resend send failed: [redacted]'
+    )
+    expect(String(warnSpy.mock.calls[0]?.[0])).not.toContain('998877')
+    warnSpy.mockRestore()
+  })
+
   // A success result with no message id is a contract violation — fail loudly.
   it('should throw when the SDK returns no message id', async () => {
     mockSend.mockResolvedValue({ data: null, error: null })

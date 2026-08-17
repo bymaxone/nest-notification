@@ -61,7 +61,7 @@ describe('otpStorageContract', () => {
 
     // The count is part of the published promise, so it is asserted exactly:
     // a generic "more than zero" would pass with 12 of the 13 cases removed.
-    expect(cases).toHaveLength(17)
+    expect(cases).toHaveLength(18)
     expect(factory).not.toHaveBeenCalled()
   })
 
@@ -178,6 +178,27 @@ describe('otpStorageContract', () => {
             attempts: 0,
             maxAttempts: 3
           })
+        })
+      },
+      {
+        caseName: 'scopes keys by recipient',
+        message:
+          /two recipients under one tenant share a key — one user can overwrite or verify another user's code/,
+        break: (inner) => ({
+          set: (t, _r, p, entry) => inner.set(t, 'one', p, entry),
+          get: (t, _r, p) => inner.get(t, 'one', p),
+          delete: (t, _r, p) => inner.delete(t, 'one', p)
+        })
+      },
+      {
+        // The SECOND recipient's read decides this operand: a storage that
+        // serves the first correctly and loses the other still violates the
+        // obligation, and only this shape proves the operand is load-bearing.
+        caseName: 'scopes keys by recipient',
+        message: /two recipients under one tenant share a key/,
+        break: (inner) => ({
+          set: (t, r, p, entry) =>
+            r.includes('absent') ? Promise.resolve() : inner.set(t, r, p, entry)
         })
       },
       {

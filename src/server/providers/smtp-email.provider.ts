@@ -29,7 +29,7 @@ import type {
 } from '../interfaces/email-provider.interface'
 import { extractDeliveryStatus } from '../utils/delivery-status'
 import { loadOptionalPeer } from '../utils/load-optional-peer'
-import { collectEchoedExcerpts, redactValues } from '../utils/redact'
+import { collectEchoedExcerpts, readRedactedMessage, redactValues } from '../utils/redact'
 
 /** Submission port, used when no `port` is supplied. */
 const DEFAULT_PORT = 587
@@ -356,7 +356,11 @@ export class SmtpEmailProvider implements IEmailProvider {
       // ONE pass over the raw message — a policy/DLP relay that quotes the
       // rejected content puts the body (and any secret inside it) into the
       // error text this line is about to log.
-      const raw = error instanceof Error ? error.message : String(error)
+      // Read through the fail-closed helper: coercing a hostile rejection runs
+      // consumer code, and a `message` getter that throws a secret-bearing
+      // error would otherwise escape from here — before the branch below has
+      // had a chance to withhold anything.
+      const raw = readRedactedMessage(error)
       if (publishProviderText === false) {
         // The caller's body carries a credential, so none of the relay's own
         // words may reach a log line or a thrown message — redaction removes

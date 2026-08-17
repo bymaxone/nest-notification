@@ -202,6 +202,32 @@ function tenantScopeCase({ scope, withStorage }: ContractContext): OtpStorageCon
   }
 }
 
+function recipientScopeCase({ scope, withStorage }: ContractContext): OtpStorageContractCase {
+  return {
+    name: 'scopes keys by recipient',
+    run: () =>
+      withStorage(async (storage) => {
+        await storage.set(scope.tenantA, scope.recipient, scope.purpose, makeEntry(60_000))
+        await storage.set(
+          scope.tenantA,
+          scope.absentRecipient,
+          scope.purpose,
+          makeEntry(60_000, 3, OTHER_CODE)
+        )
+
+        const first = await storage.get(scope.tenantA, scope.recipient, scope.purpose)
+        const second = await storage.get(scope.tenantA, scope.absentRecipient, scope.purpose)
+        await storage.delete(scope.tenantA, scope.absentRecipient, scope.purpose)
+
+        check(
+          first?.code === ANY_CODE && second?.code === OTHER_CODE,
+          'two recipients under one tenant share a key — one user can overwrite or verify ' +
+            "another user's code"
+        )
+      })
+  }
+}
+
 function purposeScopeCase({ scope, withStorage }: ContractContext): OtpStorageContractCase {
   return {
     name: 'scopes keys by purpose',
@@ -502,6 +528,7 @@ const CASE_BUILDERS = [
   roundTripCase,
   absentCase,
   tenantScopeCase,
+  recipientScopeCase,
   purposeScopeCase,
   deleteCase,
   ttlCase,

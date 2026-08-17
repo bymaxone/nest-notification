@@ -124,6 +124,28 @@ describe('SmtpEmailProvider failure handling', () => {
     warnSpy.mockRestore()
   })
 
+  // SECURITY: coercing the rejection runs consumer code. A `message` getter
+  // that throws a secret-bearing error must not escape from BEFORE the
+  // withholding branch — the flag would be honoured by a line that never runs.
+  it('should withhold even when the error message getter throws', async () => {
+    const hostile = new Error('shell')
+    Object.defineProperty(hostile, 'message', {
+      get: (): never => {
+        throw new Error('getter leaked 998877')
+      }
+    })
+    mockSendMail.mockRejectedValue(hostile)
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+    const thrown: unknown = await new SmtpEmailProvider({ host: 'h' })
+      .send({ ...baseOptions, publishProviderText: false })
+      .catch((error: unknown) => error)
+
+    expect((thrown as Error).message).toBe('SMTP send failed')
+    expect(String(warnSpy.mock.calls[0]?.[0])).not.toContain('998877')
+    warnSpy.mockRestore()
+  })
+
   // Declared secrets travel to the provider as `redactValues` and are
   // scrubbed from the warn line even when the echo is too short to detect.
   it('should scrub declared redactValues out of a transport error', async () => {
