@@ -374,6 +374,105 @@ describe('EmailService.send with publishProviderText: false', () => {
     expect(details).toStrictEqual({ providerName: 'resend', status: 550, enhanced: '5.7.1' })
   })
 
+  // SECURITY: attached values are provider-authored, so type-checking them is
+  // not enough — a provider attaching the quoted body as an "enhanced status"
+  // would have it published by the one path that promises only the grammar.
+  it('should reject attached values that do not match the grammar', async () => {
+    const provider = makeProvider()
+    provider.send.mockRejectedValue(
+      Object.assign(new Error('delivery failed'), {
+        deliveryStatus: 998877,
+        deliveryEnhancedStatus: 'Your code is 998877, do not share it'
+      })
+    )
+    const audit = makeAudit()
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), audit)
+
+    const caught: unknown = await service
+      .send({ ...baseInput, publishProviderText: false })
+      .catch((error: unknown) => error)
+
+    const details = (
+      caught as { getResponse: () => { error: { details: Record<string, unknown> } } }
+    ).getResponse().error.details
+    expect(details).toStrictEqual({ providerName: 'resend' })
+    expect(JSON.stringify(audit.create.mock.calls[0]?.[0]).includes('998877')).toBe(false)
+  })
+
+  // A non-integer or out-of-class number is not a reply code either.
+  it('should reject an attached status outside the reply classes', async () => {
+    const provider = makeProvider()
+    provider.send.mockRejectedValue(
+      Object.assign(new Error('delivery failed'), { deliveryStatus: Number.NaN })
+    )
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), makeAudit())
+
+    const caught: unknown = await service
+      .send({ ...baseInput, publishProviderText: false })
+      .catch((error: unknown) => error)
+
+    const details = (
+      caught as { getResponse: () => { error: { details: Record<string, unknown> } } }
+    ).getResponse().error.details
+    expect(details).toStrictEqual({ providerName: 'resend' })
+  })
+
+  // SECURITY: a short numeric OTP can equal a genuine reply code. Publishing it
+  // discloses nothing — the relay answered 550 whatever the code was — but the
+  // library's invariant is that a code's characters never reach an audit entry,
+  // so a collision with a DECLARED value drops the code rather than the rule.
+  it('should drop a reply code that collides with a declared secret', async () => {
+    const provider = makeProvider()
+    provider.send.mockRejectedValue(new Error('550 5.7.1 rejected'))
+    const audit = makeAudit()
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), audit)
+
+    const caught: unknown = await service
+      .send({ ...baseInput, publishProviderText: false, auditRedactValues: ['550'] })
+      .catch((error: unknown) => error)
+
+    const details = (
+      caught as { getResponse: () => { error: { details: Record<string, unknown> } } }
+    ).getResponse().error.details
+    // The enhanced code does not collide, so it still publishes.
+    expect(details).toStrictEqual({ providerName: 'resend', enhanced: '5.7.1' })
+    expect(JSON.stringify(audit.create.mock.calls[0]?.[0]).includes('550')).toBe(false)
+  })
+
+  // Declared values present, but the failure carries no basic code: the absent
+  // field must stay an absent KEY, not become `status: undefined` on its way
+  // through the collision filter.
+  it('should not invent a status key when only the enhanced code is present', async () => {
+    const provider = makeProvider()
+    provider.send.mockRejectedValue(new Error('rejected with 5.7.1 and no reply code'))
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), makeAudit())
+
+    const caught: unknown = await service
+      .send({ ...baseInput, publishProviderText: false, auditRedactValues: ['998877'] })
+      .catch((error: unknown) => error)
+
+    const details = (
+      caught as { getResponse: () => { error: { details: Record<string, unknown> } } }
+    ).getResponse().error.details
+    expect(details).toStrictEqual({ providerName: 'resend', enhanced: '5.7.1' })
+  })
+
+  // A declared value that collides with the ENHANCED code drops that one.
+  it('should drop an enhanced code that collides with a declared secret', async () => {
+    const provider = makeProvider()
+    provider.send.mockRejectedValue(new Error('421 5.7.1 rejected'))
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), makeAudit())
+
+    const caught: unknown = await service
+      .send({ ...baseInput, publishProviderText: false, auditRedactValues: ['5.7.1'] })
+      .catch((error: unknown) => error)
+
+    const details = (
+      caught as { getResponse: () => { error: { details: Record<string, unknown> } } }
+    ).getResponse().error.details
+    expect(details).toStrictEqual({ providerName: 'resend', status: 421 })
+  })
+
   // A hostile property getter must not escape the read — the failure still
   // resolves through the message grammar.
   it('should fail closed on a hostile attached property', async () => {

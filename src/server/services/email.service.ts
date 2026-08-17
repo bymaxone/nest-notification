@@ -29,7 +29,7 @@ import type {
   NotificationLogEntry
 } from '../interfaces/notification-log-repository.interface'
 import type { DeliveryStatus } from '../utils/delivery-status'
-import { extractDeliveryStatus } from '../utils/delivery-status'
+import { extractDeliveryStatus, isBasicStatus, isEnhancedStatus } from '../utils/delivery-status'
 import {
   collectEchoedExcerpts,
   collectErrorChainMessages,
@@ -137,9 +137,17 @@ function readAttachedStatus(error: unknown): DeliveryStatus | undefined {
   // input can distinguish.
   try {
     const carrier = error as { deliveryStatus?: unknown; deliveryEnhancedStatus?: unknown }
-    const status = typeof carrier.deliveryStatus === 'number' ? carrier.deliveryStatus : undefined
+    // Validated against the SAME grammar the extractor applies, not merely
+    // type-checked: these values come from provider code, and a provider that
+    // attached the quoted body as a "status" would otherwise have it published
+    // by the one path whose promise is that only the grammar gets out.
+    const status =
+      typeof carrier.deliveryStatus === 'number' && isBasicStatus(carrier.deliveryStatus)
+        ? carrier.deliveryStatus
+        : undefined
     const enhanced =
-      typeof carrier.deliveryEnhancedStatus === 'string'
+      typeof carrier.deliveryEnhancedStatus === 'string' &&
+      isEnhancedStatus(carrier.deliveryEnhancedStatus)
         ? carrier.deliveryEnhancedStatus
         : undefined
     if (status === undefined && enhanced === undefined) {
@@ -152,6 +160,39 @@ function readAttachedStatus(error: unknown): DeliveryStatus | undefined {
   } catch {
     // A hostile getter contributes nothing; the message grammar still applies.
     return undefined
+  }
+}
+
+/**
+ * Drops a reply code that happens to equal a value the caller declared secret.
+ *
+ * A deployment may configure a short numeric OTP, and `550` is both a genuine
+ * SMTP reply and a code the generator can produce. Publishing it discloses
+ * nothing — the relay answered `550` whatever the code was, so the value is
+ * independent of the secret — but it would put the code's own characters into
+ * an audit entry, and this library's invariant is that they never appear there.
+ * The rare collision costs a diagnosis; keeping the invariant is worth more.
+ *
+ * @param status - The codes about to be published.
+ * @param declared - Values the caller marked secret, if any.
+ * @returns The codes with any collision removed.
+ */
+function withoutDeclaredValues(
+  status: DeliveryStatus,
+  declared: readonly string[] | undefined
+): DeliveryStatus {
+  // An empty list collides with nothing, so it needs no branch of its own.
+  if (!declared) {
+    return status
+  }
+  const collides = (value: string): boolean => declared.includes(value)
+  return {
+    ...(status.status !== undefined && !collides(String(status.status))
+      ? { status: status.status }
+      : {}),
+    ...(status.enhanced !== undefined && !collides(status.enhanced)
+      ? { enhanced: status.enhanced }
+      : {})
   }
 }
 
@@ -421,8 +462,10 @@ export class EmailService {
     input: EmailSendInput,
     recipient: string
   ): Promise<never> {
-    const status =
-      readAttachedStatus(error) ?? extractDeliveryStatus(collectErrorChainMessages(error))
+    const status = withoutDeclaredValues(
+      readAttachedStatus(error) ?? extractDeliveryStatus(collectErrorChainMessages(error)),
+      input.auditRedactValues
+    )
     await this.audit(
       this.auditEntry('failed', input.tenantId, recipient, input.userId, {
         errorMessage: WITHHELD_PROVIDER_TEXT,

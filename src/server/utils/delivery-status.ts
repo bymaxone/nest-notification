@@ -57,6 +57,33 @@ function soleMatch(text: string, pattern: RegExp): string | undefined {
 }
 
 /**
+ * Whether a value is a well-formed basic SMTP reply code.
+ *
+ * Attached values come from provider code, so they are validated against the
+ * same grammar the extractor applies — otherwise a provider could attach the
+ * quoted body as a "status" and have it published verbatim by a path whose
+ * whole promise is that only the grammar reaches a log.
+ *
+ * @param value - The candidate, from an untrusted provider.
+ * @returns `true` when it is a 2xx/4xx/5xx integer.
+ */
+export function isBasicStatus(value: number): boolean {
+  return Number.isInteger(value) && /^[245]\d\d$/.test(String(value))
+}
+
+/**
+ * Whether a value is a well-formed RFC 3463 enhanced status code.
+ *
+ * @param value - The candidate, from an untrusted provider.
+ * @returns `true` when it matches `class.subject.detail` within the bounds.
+ */
+export function isEnhancedStatus(value: string): boolean {
+  return new RegExp(`^[245]\\.\\d{1,${MAX_SUBFIELD_DIGITS}}\\.\\d{1,${MAX_SUBFIELD_DIGITS}}$`).test(
+    value
+  )
+}
+
+/**
  * Extracts the SMTP reply codes a provider error carries, discarding
  * everything else it says.
  *

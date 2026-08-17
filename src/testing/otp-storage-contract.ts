@@ -33,7 +33,7 @@ import type { IOtpStorage, OtpEntry } from '../server/interfaces/otp-storage.int
 // through the same values, so their SPELLING cannot change an outcome — only
 // their distinctness can, and that is asserted by the cases themselves. No test
 // can distinguish one spelling from another, so mutating them is equivalent.
-// Stryker disable StringLiteral
+// Stryker disable StringLiteral: equivalent — these identifiers are arbitrary fixtures read and written through the same constants, so no test can distinguish one spelling from another; only their distinctness carries meaning and the cases assert that
 const KEY_PREFIX = 'nest_notification_contract'
 const TENANT_A = 'tenant_a'
 const TENANT_B = 'tenant_b'
@@ -72,7 +72,7 @@ interface ContractScope {
  * uniqueness per run carry meaning, so no test can tell one spelling from
  * another and mutating the pieces is equivalent.
  */
-// Stryker disable StringLiteral
+// Stryker disable StringLiteral: equivalent — the composed key strings are arbitrary; only their distinctness and their uniqueness per run carry meaning, neither of which a spelling change alters
 function makeScope(): ContractScope {
   const run = randomUUID()
   return {

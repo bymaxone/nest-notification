@@ -3,7 +3,7 @@
  * @layer domain
  */
 
-import { extractDeliveryStatus } from './delivery-status'
+import { extractDeliveryStatus, isBasicStatus, isEnhancedStatus } from './delivery-status'
 
 describe('extractDeliveryStatus', () => {
   // The shape this exists for: a policy rejection quoting the whole body.
@@ -93,5 +93,33 @@ describe('extractDeliveryStatus', () => {
     expect('enhanced' in empty).toBe(false)
     expect('enhanced' in basicOnly).toBe(false)
     expect('status' in basicOnly).toBe(true)
+  })
+})
+
+describe('isBasicStatus', () => {
+  // The validator exists because attached values come from provider code and
+  // must clear the same bar the extractor applies to text.
+  it('should accept only 2xx/4xx/5xx integers', () => {
+    expect(isBasicStatus(550)).toBe(true)
+    expect(isBasicStatus(421)).toBe(true)
+    expect(isBasicStatus(250)).toBe(true)
+    expect(isBasicStatus(100)).toBe(false)
+    expect(isBasicStatus(35)).toBe(false)
+    expect(isBasicStatus(5500)).toBe(false)
+    expect(isBasicStatus(550.5)).toBe(false)
+    expect(isBasicStatus(Number.NaN)).toBe(false)
+  })
+})
+
+describe('isEnhancedStatus', () => {
+  // Anchored end to end: a value that merely CONTAINS a code — the shape a
+  // provider quoting the body would produce — must not pass.
+  it('should accept only a complete enhanced code', () => {
+    expect(isEnhancedStatus('5.7.1')).toBe(true)
+    expect(isEnhancedStatus('4.481.345')).toBe(true)
+    expect(isEnhancedStatus('5.7.1 rejected: your code is 998877')).toBe(false)
+    expect(isEnhancedStatus('Your code is 998877')).toBe(false)
+    expect(isEnhancedStatus('1.7.1')).toBe(false)
+    expect(isEnhancedStatus('5.4812.345')).toBe(false)
   })
 })
