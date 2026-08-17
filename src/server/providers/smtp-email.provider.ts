@@ -366,7 +366,14 @@ export class SmtpEmailProvider implements IEmailProvider {
         const { status, enhanced } = extractDeliveryStatus(raw)
         const codes = [status, enhanced].filter((code) => code !== undefined).join(' ')
         this.logger.warn(`[SMTP_SEND_FAILED] ${codes || 'no reply code'}`)
-        throw new Error('SMTP send failed')
+        // The codes ride on the thrown error rather than in its message: the
+        // message is a fixed label, so `EmailService` could not recover them by
+        // parsing it, and interpolating them would put digits back into a
+        // string a log rule then has to scan.
+        throw Object.assign(new Error('SMTP send failed'), {
+          ...(status !== undefined ? { deliveryStatus: status } : {}),
+          ...(enhanced !== undefined ? { deliveryEnhancedStatus: enhanced } : {})
+        })
       }
       const reason = this.scrubTransportError(raw, payload, redactValues)
       this.logger.warn(`[SMTP_SEND_FAILED] ${reason}`)

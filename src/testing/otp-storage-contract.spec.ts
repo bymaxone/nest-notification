@@ -1,3 +1,10 @@
+/**
+ * @fileoverview Specs for the published `IOtpStorage` contract: it must pass
+ * against the bundled reference storage AND fail against a storage that
+ * violates each obligation, since a contract that cannot fail is decoration.
+ * @layer testing
+ */
+
 import type { ConsumeAttemptResult, IOtpStorage } from '../server/interfaces/otp-storage.interface'
 import { InMemoryOtpStorage } from '../server/providers/in-memory-otp.storage'
 
@@ -52,7 +59,9 @@ describe('otpStorageContract', () => {
 
     const cases = otpStorageContract(factory)
 
-    expect(cases.length).toBeGreaterThan(0)
+    // The count is part of the published promise, so it is asserted exactly:
+    // a generic "more than zero" would pass with 12 of the 13 cases removed.
+    expect(cases).toHaveLength(17)
     expect(factory).not.toHaveBeenCalled()
   })
 
@@ -188,7 +197,7 @@ describe('otpStorageContract', () => {
         message: /one tenant can read or overwrite another tenant's code/,
         break: (inner) => ({
           set: (t, r, p, entry) =>
-            t === 'contract_tenant_b' ? Promise.resolve() : inner.set(t, r, p, entry)
+            t.endsWith('tenant_b') ? Promise.resolve() : inner.set(t, r, p, entry)
         })
       },
       {
@@ -289,6 +298,42 @@ describe('otpStorageContract', () => {
         break: () => ({ clearCooldown: async (): Promise<void> => undefined })
       },
       {
+        caseName: 'update preserves the remaining TTL',
+        message: /update reset the expiry, extending the code beyond its TTL/,
+        break: (inner) => ({
+          update: (t, r, p, entry) =>
+            inner.set(t, r, p, { ...entry, expiresAt: Date.now() + 60_000 })
+        })
+      },
+      {
+        caseName: 'update does not resurrect an expired entry',
+        message: /update recreated an entry that had already expired/,
+        break: (inner) => ({
+          update: (t, r, p, entry) =>
+            inner.set(t, r, p, { ...entry, expiresAt: Date.now() + 60_000 })
+        })
+      },
+      {
+        caseName: 'scopes the cooldown by tenant',
+        message:
+          /a cooldown held for one tenant blocked another — cooldown keys are not scoped by tenant, so one tenant can suppress another tenant resends/,
+        break: (inner) => ({
+          tryAcquireCooldown: (_t, r, p, s) => inner.tryAcquireCooldown('one', r, p, s),
+          getCooldown: (_t, r, p) => inner.getCooldown('one', r, p),
+          clearCooldown: (_t, r, p) => inner.clearCooldown('one', r, p)
+        })
+      },
+      {
+        caseName: 'scopes the cooldown by purpose',
+        message:
+          /a cooldown held for one purpose blocked another — a password reset and an email verification would share one anti-resend window/,
+        break: (inner) => ({
+          tryAcquireCooldown: (t, r, _p, s) => inner.tryAcquireCooldown(t, r, 'one', s),
+          getCooldown: (t, r, _p) => inner.getCooldown(t, r, 'one'),
+          clearCooldown: (t, r, _p) => inner.clearCooldown(t, r, 'one')
+        })
+      },
+      {
         caseName: 'getCooldown reports zero',
         message: /must report 0 when nothing is held/,
         break: () => ({ getCooldown: async () => 42 })
@@ -312,10 +357,12 @@ describe('otpStorageContract', () => {
     const storage = new InMemoryOtpStorage()
     const failing = delegating(storage, { get: async (): Promise<null> => null })
 
-    await expect(runCase(failing, 'stores an entry and reads it back')).rejects.toThrow()
-    // The entry the failing case wrote must be gone despite the throw.
-    expect(await storage.get('contract_tenant_a', 'contract@example.com', 'contract_purpose')).toBe(
-      null
+    await expect(runCase(failing, 'stores an entry and reads it back')).rejects.toThrow(
+      /get did not return the entry that was set/
     )
+    // The entry the failing case wrote must be gone despite the throw.
+    // The scope is random per invocation, so the assertion asks the storage
+    // whether ANY key survived rather than naming one.
+    expect(storage.size()).toEqual({ otps: 0, cooldowns: 0 })
   })
 })

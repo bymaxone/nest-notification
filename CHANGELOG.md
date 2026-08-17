@@ -28,7 +28,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The default is unchanged (`true`): ordinary mail keeps full diagnosability, because for a receipt
   or a marketing send the provider's message is often the only diagnosis available. The flag is
   **per send**, never global — one setting cannot serve an OTP path and a marketing path in the
-  same application.
+  same application. `EmailSendTemplateInput` carries it too, and **the built-in OTP delivery sets
+  it to `false`**: an OTP body is a credential by definition, so that path no longer publishes what
+  the provider wrote. The bundled `SmtpEmailProvider` attaches the reply codes to the error it
+  throws, so the service can publish them without parsing a message that is a fixed label by then.
 
 - **`@bymax-one/nest-notification/testing` — an executable contract for `IOtpStorage`.**
   `otpStorageContract(factory)` returns 13 cases that a consumer runs against their own storage in

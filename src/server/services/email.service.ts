@@ -28,6 +28,7 @@ import type {
   INotificationLogRepository,
   NotificationLogEntry
 } from '../interfaces/notification-log-repository.interface'
+import type { DeliveryStatus } from '../utils/delivery-status'
 import { extractDeliveryStatus } from '../utils/delivery-status'
 import {
   collectEchoedExcerpts,
@@ -109,6 +110,49 @@ export interface EmailSendTemplateInput {
    * entry's `errorMessage` when a provider failure echoes them back.
    */
   auditRedactValues?: readonly string[]
+  /**
+   * Whether a delivery failure may surface provider-authored text. Forwarded
+   * verbatim to {@link EmailService.send} — see
+   * {@link EmailSendInput.publishProviderText}, which documents why a declared
+   * value cannot substitute for it.
+   */
+  publishProviderText?: boolean
+}
+
+/**
+ * Reads reply codes a provider attached to the error it threw, when it has
+ * already applied the grammar itself.
+ *
+ * A provider that withholds its own text cannot leave the codes in the message
+ * for this service to parse back out — the message is a fixed label by then —
+ * so it attaches them instead. Reading is guarded: the value is consumer code.
+ *
+ * @param error - The failure the provider threw.
+ * @returns The attached codes, or `undefined` when the provider attached none.
+ */
+function readAttachedStatus(error: unknown): DeliveryStatus | undefined {
+  // No `instanceof` guard: reading a property off a primitive yields undefined
+  // rather than throwing, and the only failure mode left — a hostile getter or
+  // proxy trap — is what the catch is for. A guard here would be a branch no
+  // input can distinguish.
+  try {
+    const carrier = error as { deliveryStatus?: unknown; deliveryEnhancedStatus?: unknown }
+    const status = typeof carrier.deliveryStatus === 'number' ? carrier.deliveryStatus : undefined
+    const enhanced =
+      typeof carrier.deliveryEnhancedStatus === 'string'
+        ? carrier.deliveryEnhancedStatus
+        : undefined
+    if (status === undefined && enhanced === undefined) {
+      return undefined
+    }
+    return {
+      ...(status !== undefined ? { status } : {}),
+      ...(enhanced !== undefined ? { enhanced } : {})
+    }
+  } catch {
+    // A hostile getter contributes nothing; the message grammar still applies.
+    return undefined
+  }
 }
 
 /** Transactional email service. */
@@ -220,6 +264,9 @@ export class EmailService {
       ...(input.userId !== undefined ? { userId: input.userId } : {}),
       ...(input.auditRedactValues !== undefined
         ? { auditRedactValues: input.auditRedactValues }
+        : {}),
+      ...(input.publishProviderText !== undefined
+        ? { publishProviderText: input.publishProviderText }
         : {})
     })
   }
@@ -374,7 +421,8 @@ export class EmailService {
     input: EmailSendInput,
     recipient: string
   ): Promise<never> {
-    const status = extractDeliveryStatus(collectErrorChainMessages(error))
+    const status =
+      readAttachedStatus(error) ?? extractDeliveryStatus(collectErrorChainMessages(error))
     await this.audit(
       this.auditEntry('failed', input.tenantId, recipient, input.userId, {
         errorMessage: WITHHELD_PROVIDER_TEXT,

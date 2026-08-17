@@ -25,7 +25,66 @@
  * ```
  */
 
+import { randomUUID } from 'node:crypto'
+
 import type { IOtpStorage, OtpEntry } from '../server/interfaces/otp-storage.interface'
+
+// The identifiers below are arbitrary fixtures: every case reads and writes
+// through the same values, so their SPELLING cannot change an outcome — only
+// their distinctness can, and that is asserted by the cases themselves. No test
+// can distinguish one spelling from another, so mutating them is equivalent.
+// Stryker disable StringLiteral
+const KEY_PREFIX = 'nest_notification_contract'
+const TENANT_A = 'tenant_a'
+const TENANT_B = 'tenant_b'
+const RECIPIENT_LOCAL = 'contract@example.com'
+const ABSENT_LOCAL = 'absent@example.com'
+const PURPOSE_MAIN = 'purpose_main'
+const PURPOSE_OTHER = 'purpose_other'
+/** Code stored by the cases that assert nothing about the code itself. */
+const ANY_CODE = '111111'
+/** A second, distinct code, for the cases that must tell two entries apart. */
+const OTHER_CODE = '222222'
+// Stryker restore StringLiteral
+
+/**
+ * Names the keys one contract run owns.
+ *
+ * Two suites running in parallel against one backend — a runner executing test
+ * files concurrently is the ordinary case — would otherwise write and clean up
+ * the same keys, and each would see the other's state as a violation. A random
+ * scope per invocation keeps runs independent without asking the caller to
+ * arrange it.
+ */
+interface ContractScope {
+  tenantA: string
+  tenantB: string
+  recipient: string
+  absentRecipient: string
+  purpose: string
+  otherPurpose: string
+}
+
+/**
+ * Builds a fresh, collision-free scope for one `otpStorageContract()` call.
+ *
+ * The composed strings are arbitrary: only their distinctness and their
+ * uniqueness per run carry meaning, so no test can tell one spelling from
+ * another and mutating the pieces is equivalent.
+ */
+// Stryker disable StringLiteral
+function makeScope(): ContractScope {
+  const run = randomUUID()
+  return {
+    tenantA: `${KEY_PREFIX}_${run}_${TENANT_A}`,
+    tenantB: `${KEY_PREFIX}_${run}_${TENANT_B}`,
+    recipient: `${run}_${RECIPIENT_LOCAL}`,
+    absentRecipient: `${run}_${ABSENT_LOCAL}`,
+    purpose: `${KEY_PREFIX}_${run}_${PURPOSE_MAIN}`,
+    otherPurpose: `${KEY_PREFIX}_${run}_${PURPOSE_OTHER}`
+  }
+}
+// Stryker restore StringLiteral
 
 /** One executable obligation. `run` throws when the storage violates it. */
 export interface OtpStorageContractCase {
@@ -41,35 +100,25 @@ export type OtpStorageFactory = () => IOtpStorage | Promise<IOtpStorage>
 /** Tuning for the cases that must observe real time pass. */
 export interface OtpStorageContractOptions {
   /**
-   * Milliseconds the TTL case waits for an entry to lapse. Must exceed the
+   * Milliseconds the TTL cases wait for an entry to lapse. Must exceed the
    * storage's own expiry granularity — Redis expires in whole seconds, so the
    * default allows for that. Raise it for a backend with coarser granularity.
    */
   expiryWaitMs?: number
 }
 
-/** Default wait for the TTL case: past Redis's one-second expiry granularity. */
+/** Default wait for the TTL cases: past Redis's one-second expiry granularity. */
 const DEFAULT_EXPIRY_WAIT_MS = 1_500
 
 /** Concurrency used by the atomicity cases — enough to lose a race that exists. */
 const RACERS = 25
 
-// The identifiers below are arbitrary fixtures: every case reads and writes
-// through the same constants, so their VALUES cannot change an outcome — only
-// their distinctness can, and that is asserted by the cases themselves. No test
-// can distinguish one spelling from another, so mutating them is equivalent.
-// Stryker disable StringLiteral
-const TENANT = 'contract_tenant_a'
-const OTHER_TENANT = 'contract_tenant_b'
-const RECIPIENT = 'contract@example.com'
-const ABSENT_RECIPIENT = 'contract_absent@example.com'
-const PURPOSE = 'contract_purpose'
-const OTHER_PURPOSE = 'contract_purpose_other'
-/** Code stored by the cases that assert nothing about the code itself. */
-const ANY_CODE = '111111'
-/** A second, distinct code, for the cases that must tell two entries apart. */
-const OTHER_CODE = '222222'
-// Stryker restore StringLiteral
+/** What every case is handed: the keys it owns and how to obtain a storage. */
+interface ContractContext {
+  scope: ContractScope
+  expiryWaitMs: number
+  withStorage: (body: (storage: IOtpStorage) => Promise<void>) => Promise<void>
+}
 
 /** Builds an entry that expires `ttlMs` from now. */
 function makeEntry(ttlMs: number, maxAttempts = 3, code: string = ANY_CODE): OtpEntry {
@@ -83,230 +132,420 @@ function check(condition: boolean, message: string): void {
   }
 }
 
-/** Resolves after `ms`, used only by the TTL case. */
+/** Resolves after `ms`, used only by the TTL cases. */
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms)
   })
 }
 
+/** Removes every key a case may have written, whether or not it threw. */
+async function cleanUp(storage: IOtpStorage, scope: ContractScope): Promise<void> {
+  const keys = [
+    [scope.tenantA, scope.purpose],
+    [scope.tenantA, scope.otherPurpose],
+    [scope.tenantB, scope.purpose]
+  ] as const
+  for (const [tenant, purpose] of keys) {
+    await storage.delete(tenant, scope.recipient, purpose)
+    await storage.clearCooldown(tenant, scope.recipient, purpose)
+  }
+}
+
+function roundTripCase({ scope, withStorage }: ContractContext): OtpStorageContractCase {
+  return {
+    name: 'stores an entry and reads it back',
+    run: () =>
+      withStorage(async (storage) => {
+        await storage.set(scope.tenantA, scope.recipient, scope.purpose, makeEntry(60_000))
+        const found = await storage.get(scope.tenantA, scope.recipient, scope.purpose)
+
+        check(found?.code === ANY_CODE, 'get did not return the entry that was set')
+      })
+  }
+}
+
+function absentCase({ scope, withStorage }: ContractContext): OtpStorageContractCase {
+  return {
+    name: 'returns null for an entry that was never set',
+    run: () =>
+      withStorage(async (storage) => {
+        const missing = await storage.get(scope.tenantA, scope.absentRecipient, scope.purpose)
+
+        check(missing === null, 'get must return null for an absent entry, not undefined')
+      })
+  }
+}
+
+function tenantScopeCase({ scope, withStorage }: ContractContext): OtpStorageContractCase {
+  return {
+    name: 'scopes keys by tenant so two tenants never collide',
+    run: () =>
+      withStorage(async (storage) => {
+        await storage.set(scope.tenantA, scope.recipient, scope.purpose, makeEntry(60_000))
+        await storage.set(
+          scope.tenantB,
+          scope.recipient,
+          scope.purpose,
+          makeEntry(60_000, 3, OTHER_CODE)
+        )
+
+        const first = await storage.get(scope.tenantA, scope.recipient, scope.purpose)
+        const second = await storage.get(scope.tenantB, scope.recipient, scope.purpose)
+
+        check(
+          first?.code === ANY_CODE && second?.code === OTHER_CODE,
+          'the same recipient under two tenants shares one key — one tenant can read or ' +
+            "overwrite another tenant's code"
+        )
+      })
+  }
+}
+
+function purposeScopeCase({ scope, withStorage }: ContractContext): OtpStorageContractCase {
+  return {
+    name: 'scopes keys by purpose',
+    run: () =>
+      withStorage(async (storage) => {
+        await storage.set(scope.tenantA, scope.recipient, scope.purpose, makeEntry(60_000))
+        await storage.set(
+          scope.tenantA,
+          scope.recipient,
+          scope.otherPurpose,
+          makeEntry(60_000, 3, OTHER_CODE)
+        )
+
+        const found = await storage.get(scope.tenantA, scope.recipient, scope.purpose)
+
+        check(found?.code === ANY_CODE, 'two purposes for one recipient share a key')
+      })
+  }
+}
+
+function deleteCase({ scope, withStorage }: ContractContext): OtpStorageContractCase {
+  return {
+    name: 'deletes an entry',
+    run: () =>
+      withStorage(async (storage) => {
+        await storage.set(scope.tenantA, scope.recipient, scope.purpose, makeEntry(60_000))
+        await storage.delete(scope.tenantA, scope.recipient, scope.purpose)
+
+        const found = await storage.get(scope.tenantA, scope.recipient, scope.purpose)
+
+        check(found === null, 'delete left the entry')
+      })
+  }
+}
+
+function ttlCase({ scope, withStorage, expiryWaitMs }: ContractContext): OtpStorageContractCase {
+  return {
+    name: 'applies the TTL: an expired entry is gone',
+    run: () =>
+      withStorage(async (storage) => {
+        await storage.set(scope.tenantA, scope.recipient, scope.purpose, makeEntry(1))
+        await wait(expiryWaitMs)
+
+        const found = await storage.get(scope.tenantA, scope.recipient, scope.purpose)
+        const consumed = await storage.consumeAttempt(scope.tenantA, scope.recipient, scope.purpose)
+
+        check(found === null, 'get returned an entry whose expiresAt has passed')
+        check(
+          consumed.status === 'not_found',
+          'consumeAttempt served an expired entry instead of reporting not_found'
+        )
+      })
+  }
+}
+
+function updateKeepsTtlCase({
+  scope,
+  withStorage,
+  expiryWaitMs
+}: ContractContext): OtpStorageContractCase {
+  return {
+    name: 'update preserves the remaining TTL',
+    run: () =>
+      withStorage(async (storage) => {
+        // `consumeOnVerify: false` marks an entry validated through `update`,
+        // so an implementation that resets the key's TTL on write extends a
+        // live credential past the lifetime the caller configured.
+        const entry = makeEntry(1)
+        await storage.set(scope.tenantA, scope.recipient, scope.purpose, entry)
+        // The real caller marks `validated` here; this case measures the TTL,
+        // so it writes the entry back unchanged and lets the expiry decide.
+        await storage.update(scope.tenantA, scope.recipient, scope.purpose, entry)
+        await wait(expiryWaitMs)
+
+        const found = await storage.get(scope.tenantA, scope.recipient, scope.purpose)
+
+        check(found === null, 'update reset the expiry, extending the code beyond its TTL')
+      })
+  }
+}
+
+function updateAfterExpiryCase({
+  scope,
+  withStorage,
+  expiryWaitMs
+}: ContractContext): OtpStorageContractCase {
+  return {
+    name: 'update does not resurrect an expired entry',
+    run: () =>
+      withStorage(async (storage) => {
+        const entry = makeEntry(1)
+        await storage.set(scope.tenantA, scope.recipient, scope.purpose, entry)
+        await wait(expiryWaitMs)
+        await storage.update(scope.tenantA, scope.recipient, scope.purpose, entry)
+
+        const found = await storage.get(scope.tenantA, scope.recipient, scope.purpose)
+
+        check(found === null, 'update recreated an entry that had already expired')
+      })
+  }
+}
+
+function consumeNotFoundCase({ scope, withStorage }: ContractContext): OtpStorageContractCase {
+  return {
+    name: 'consumeAttempt reports not_found when there is no entry',
+    run: () =>
+      withStorage(async (storage) => {
+        const result = await storage.consumeAttempt(scope.tenantA, scope.recipient, scope.purpose)
+
+        check(result.status === 'not_found', 'consumeAttempt must report not_found')
+      })
+  }
+}
+
+function consumeSpendsCase({ scope, withStorage }: ContractContext): OtpStorageContractCase {
+  return {
+    name: 'consumeAttempt spends one attempt per call and returns the stored entry',
+    run: () =>
+      withStorage(async (storage) => {
+        await storage.set(scope.tenantA, scope.recipient, scope.purpose, makeEntry(60_000, 3))
+
+        const first = await storage.consumeAttempt(scope.tenantA, scope.recipient, scope.purpose)
+
+        check(first.status === 'ok', 'the first attempt must succeed')
+        check(
+          first.status === 'ok' && first.entry.code === ANY_CODE,
+          'consumeAttempt must return the STORED code so the caller can compare it'
+        )
+        check(
+          first.status === 'ok' && first.entry.attempts === 1,
+          'consumeAttempt must return the entry with the attempt already counted'
+        )
+      })
+  }
+}
+
+function consumeCeilingCase({ scope, withStorage }: ContractContext): OtpStorageContractCase {
+  return {
+    name: 'consumeAttempt reports max_attempts once the ceiling is reached',
+    run: () =>
+      withStorage(async (storage) => {
+        await storage.set(scope.tenantA, scope.recipient, scope.purpose, makeEntry(60_000, 2))
+
+        await storage.consumeAttempt(scope.tenantA, scope.recipient, scope.purpose)
+        await storage.consumeAttempt(scope.tenantA, scope.recipient, scope.purpose)
+        const third = await storage.consumeAttempt(scope.tenantA, scope.recipient, scope.purpose)
+        const found = await storage.get(scope.tenantA, scope.recipient, scope.purpose)
+
+        check(third.status === 'max_attempts', 'the ceiling was not enforced')
+        check(found === null, 'the entry must be deleted once the ceiling is reached')
+      })
+  }
+}
+
+function consumeAtomicCase({ scope, withStorage }: ContractContext): OtpStorageContractCase {
+  return {
+    name: 'consumeAttempt is ATOMIC under concurrency',
+    run: () =>
+      withStorage(async (storage) => {
+        const maxAttempts = 5
+        await storage.set(
+          scope.tenantA,
+          scope.recipient,
+          scope.purpose,
+          makeEntry(60_000, maxAttempts)
+        )
+
+        const results = await Promise.all(
+          Array.from({ length: RACERS }, () =>
+            storage.consumeAttempt(scope.tenantA, scope.recipient, scope.purpose)
+          )
+        )
+        const succeeded = results.filter((result) => result.status === 'ok').length
+
+        check(
+          succeeded <= maxAttempts,
+          `${succeeded} of ${RACERS} concurrent calls consumed an attempt against a ceiling ` +
+            `of ${maxAttempts} — the lookup and the increment are not one indivisible ` +
+            'operation, so the brute-force limit can be bypassed by sending requests in parallel'
+        )
+      })
+  }
+}
+
+function cooldownHoldsCase({ scope, withStorage }: ContractContext): OtpStorageContractCase {
+  return {
+    name: 'tryAcquireCooldown holds until cleared',
+    run: () =>
+      withStorage(async (storage) => {
+        const acquired = await storage.tryAcquireCooldown(
+          scope.tenantA,
+          scope.recipient,
+          scope.purpose,
+          60
+        )
+        const second = await storage.tryAcquireCooldown(
+          scope.tenantA,
+          scope.recipient,
+          scope.purpose,
+          60
+        )
+        const remaining = await storage.getCooldown(scope.tenantA, scope.recipient, scope.purpose)
+        await storage.clearCooldown(scope.tenantA, scope.recipient, scope.purpose)
+        const reacquired = await storage.tryAcquireCooldown(
+          scope.tenantA,
+          scope.recipient,
+          scope.purpose,
+          60
+        )
+
+        check(acquired, 'the first acquire must succeed')
+        check(!second, 'a second acquire must fail while the cooldown is held')
+        check(remaining > 0, 'getCooldown must report the seconds still to run')
+        check(reacquired, 'clearCooldown must release the cooldown')
+      })
+  }
+}
+
+function cooldownZeroCase({ scope, withStorage }: ContractContext): OtpStorageContractCase {
+  return {
+    name: 'getCooldown reports zero when no cooldown is held',
+    run: () =>
+      withStorage(async (storage) => {
+        const remaining = await storage.getCooldown(scope.tenantA, scope.recipient, scope.purpose)
+
+        check(remaining === 0, 'getCooldown must report 0 when nothing is held')
+      })
+  }
+}
+
+function cooldownTenantScopeCase({ scope, withStorage }: ContractContext): OtpStorageContractCase {
+  return {
+    name: 'scopes the cooldown by tenant',
+    run: () =>
+      withStorage(async (storage) => {
+        await storage.tryAcquireCooldown(scope.tenantA, scope.recipient, scope.purpose, 60)
+        const other = await storage.tryAcquireCooldown(
+          scope.tenantB,
+          scope.recipient,
+          scope.purpose,
+          60
+        )
+
+        check(
+          other,
+          'a cooldown held for one tenant blocked another — cooldown keys are not scoped by ' +
+            'tenant, so one tenant can suppress another tenant resends'
+        )
+      })
+  }
+}
+
+function cooldownPurposeScopeCase({ scope, withStorage }: ContractContext): OtpStorageContractCase {
+  return {
+    name: 'scopes the cooldown by purpose',
+    run: () =>
+      withStorage(async (storage) => {
+        await storage.tryAcquireCooldown(scope.tenantA, scope.recipient, scope.purpose, 60)
+        const other = await storage.tryAcquireCooldown(
+          scope.tenantA,
+          scope.recipient,
+          scope.otherPurpose,
+          60
+        )
+
+        check(
+          other,
+          'a cooldown held for one purpose blocked another — a password reset and an email ' +
+            'verification would share one anti-resend window'
+        )
+      })
+  }
+}
+
+function cooldownAtomicCase({ scope, withStorage }: ContractContext): OtpStorageContractCase {
+  return {
+    name: 'tryAcquireCooldown is ATOMIC under concurrency',
+    run: () =>
+      withStorage(async (storage) => {
+        const results = await Promise.all(
+          Array.from({ length: RACERS }, () =>
+            storage.tryAcquireCooldown(scope.tenantA, scope.recipient, scope.purpose, 60)
+          )
+        )
+        const winners = results.filter(Boolean).length
+
+        check(
+          winners === 1,
+          `${winners} of ${RACERS} concurrent acquires won — the check and the set are not one ` +
+            'step, so two resends can both pass and the anti-resend window stops holding'
+        )
+      })
+  }
+}
+
+/** Every obligation this contract executes, in the order it reports them. */
+const CASE_BUILDERS = [
+  roundTripCase,
+  absentCase,
+  tenantScopeCase,
+  purposeScopeCase,
+  deleteCase,
+  ttlCase,
+  updateKeepsTtlCase,
+  updateAfterExpiryCase,
+  consumeNotFoundCase,
+  consumeSpendsCase,
+  consumeCeilingCase,
+  consumeAtomicCase,
+  cooldownHoldsCase,
+  cooldownZeroCase,
+  cooldownTenantScopeCase,
+  cooldownPurposeScopeCase,
+  cooldownAtomicCase
+] as const
+
 /**
  * Builds the contract cases for an `IOtpStorage` implementation.
  *
  * Each case obtains its own storage from `factory` and cleans up the keys it
- * wrote, so the cases are order-independent and safe against a shared backend.
+ * wrote, so the cases are order-independent. Every call gets a random key scope,
+ * so two suites running in parallel against one backend cannot see each other's
+ * state as a violation.
  *
  * @param factory - Produces the storage under test; called once per case.
- * @param options - Timing tuning for the case that waits for a TTL to lapse.
+ * @param options - Timing tuning for the cases that wait for a TTL to lapse.
  * @returns The cases to run, each throwing on violation.
  */
 export function otpStorageContract(
   factory: OtpStorageFactory,
   options: OtpStorageContractOptions = {}
 ): OtpStorageContractCase[] {
-  const expiryWaitMs = options.expiryWaitMs ?? DEFAULT_EXPIRY_WAIT_MS
-
-  const withStorage = async (body: (storage: IOtpStorage) => Promise<void>): Promise<void> => {
-    const storage = await factory()
-    try {
-      await body(storage)
-    } finally {
-      await storage.delete(TENANT, RECIPIENT, PURPOSE)
-      await storage.delete(OTHER_TENANT, RECIPIENT, PURPOSE)
-      await storage.clearCooldown(TENANT, RECIPIENT, PURPOSE)
-      await storage.clearCooldown(OTHER_TENANT, RECIPIENT, PURPOSE)
+  const scope = makeScope()
+  const context: ContractContext = {
+    scope,
+    expiryWaitMs: options.expiryWaitMs ?? DEFAULT_EXPIRY_WAIT_MS,
+    withStorage: async (body) => {
+      const storage = await factory()
+      try {
+        await body(storage)
+      } finally {
+        await cleanUp(storage, scope)
+      }
     }
   }
-
-  return [
-    {
-      name: 'stores an entry and reads it back',
-      run: () =>
-        withStorage(async (storage) => {
-          await storage.set(TENANT, RECIPIENT, PURPOSE, makeEntry(60_000))
-          const found = await storage.get(TENANT, RECIPIENT, PURPOSE)
-
-          check(found?.code === ANY_CODE, 'get did not return the entry that was set')
-        })
-    },
-    {
-      name: 'returns null for an entry that was never set',
-      run: () =>
-        withStorage(async (storage) => {
-          const missing = await storage.get(TENANT, ABSENT_RECIPIENT, PURPOSE)
-
-          check(missing === null, 'get must return null for an absent entry, not undefined')
-        })
-    },
-    {
-      name: 'scopes keys by tenant so two tenants never collide',
-      run: () =>
-        withStorage(async (storage) => {
-          await storage.set(TENANT, RECIPIENT, PURPOSE, makeEntry(60_000))
-          await storage.set(OTHER_TENANT, RECIPIENT, PURPOSE, makeEntry(60_000, 3, OTHER_CODE))
-
-          const first = await storage.get(TENANT, RECIPIENT, PURPOSE)
-          const second = await storage.get(OTHER_TENANT, RECIPIENT, PURPOSE)
-
-          check(
-            first?.code === ANY_CODE && second?.code === OTHER_CODE,
-            'the same recipient under two tenants shares one key — one tenant can read or ' +
-              "overwrite another tenant's code"
-          )
-        })
-    },
-    {
-      name: 'scopes keys by purpose',
-      run: () =>
-        withStorage(async (storage) => {
-          await storage.set(TENANT, RECIPIENT, PURPOSE, makeEntry(60_000))
-          await storage.set(TENANT, RECIPIENT, OTHER_PURPOSE, makeEntry(60_000, 3, OTHER_CODE))
-
-          const found = await storage.get(TENANT, RECIPIENT, PURPOSE)
-          await storage.delete(TENANT, RECIPIENT, OTHER_PURPOSE)
-
-          check(found?.code === ANY_CODE, 'two purposes for one recipient share a key')
-        })
-    },
-    {
-      name: 'deletes an entry',
-      run: () =>
-        withStorage(async (storage) => {
-          await storage.set(TENANT, RECIPIENT, PURPOSE, makeEntry(60_000))
-          await storage.delete(TENANT, RECIPIENT, PURPOSE)
-
-          check((await storage.get(TENANT, RECIPIENT, PURPOSE)) === null, 'delete left the entry')
-        })
-    },
-    {
-      name: 'applies the TTL: an expired entry is gone',
-      run: () =>
-        withStorage(async (storage) => {
-          await storage.set(TENANT, RECIPIENT, PURPOSE, makeEntry(1))
-          await wait(expiryWaitMs)
-
-          const found = await storage.get(TENANT, RECIPIENT, PURPOSE)
-          const consumed = await storage.consumeAttempt(TENANT, RECIPIENT, PURPOSE)
-
-          check(found === null, 'get returned an entry whose expiresAt has passed')
-          check(
-            consumed.status === 'not_found',
-            'consumeAttempt served an expired entry instead of reporting not_found'
-          )
-        })
-    },
-    {
-      name: 'consumeAttempt reports not_found when there is no entry',
-      run: () =>
-        withStorage(async (storage) => {
-          const result = await storage.consumeAttempt(TENANT, RECIPIENT, PURPOSE)
-
-          check(result.status === 'not_found', 'consumeAttempt must report not_found')
-        })
-    },
-    {
-      name: 'consumeAttempt spends one attempt per call and returns the stored entry',
-      run: () =>
-        withStorage(async (storage) => {
-          await storage.set(TENANT, RECIPIENT, PURPOSE, makeEntry(60_000, 3))
-
-          const first = await storage.consumeAttempt(TENANT, RECIPIENT, PURPOSE)
-
-          check(first.status === 'ok', 'the first attempt must succeed')
-          check(
-            first.status === 'ok' && first.entry.code === ANY_CODE,
-            'consumeAttempt must return the STORED code so the caller can compare it'
-          )
-          check(
-            first.status === 'ok' && first.entry.attempts === 1,
-            'consumeAttempt must return the entry with the attempt already counted'
-          )
-        })
-    },
-    {
-      name: 'consumeAttempt reports max_attempts once the ceiling is reached',
-      run: () =>
-        withStorage(async (storage) => {
-          await storage.set(TENANT, RECIPIENT, PURPOSE, makeEntry(60_000, 2))
-
-          await storage.consumeAttempt(TENANT, RECIPIENT, PURPOSE)
-          await storage.consumeAttempt(TENANT, RECIPIENT, PURPOSE)
-          const third = await storage.consumeAttempt(TENANT, RECIPIENT, PURPOSE)
-
-          check(third.status === 'max_attempts', 'the ceiling was not enforced')
-          check(
-            (await storage.get(TENANT, RECIPIENT, PURPOSE)) === null,
-            'the entry must be deleted once the ceiling is reached'
-          )
-        })
-    },
-    {
-      name: 'consumeAttempt is ATOMIC under concurrency',
-      run: () =>
-        withStorage(async (storage) => {
-          const maxAttempts = 5
-          await storage.set(TENANT, RECIPIENT, PURPOSE, makeEntry(60_000, maxAttempts))
-
-          const results = await Promise.all(
-            Array.from({ length: RACERS }, () => storage.consumeAttempt(TENANT, RECIPIENT, PURPOSE))
-          )
-          const succeeded = results.filter((result) => result.status === 'ok').length
-
-          check(
-            succeeded <= maxAttempts,
-            `${succeeded} of ${RACERS} concurrent calls consumed an attempt against a ceiling ` +
-              `of ${maxAttempts} — the lookup and the increment are not one indivisible ` +
-              'operation, so the brute-force limit can be bypassed by sending requests in parallel'
-          )
-        })
-    },
-    {
-      name: 'tryAcquireCooldown holds until cleared',
-      run: () =>
-        withStorage(async (storage) => {
-          const acquired = await storage.tryAcquireCooldown(TENANT, RECIPIENT, PURPOSE, 60)
-          const second = await storage.tryAcquireCooldown(TENANT, RECIPIENT, PURPOSE, 60)
-
-          check(acquired, 'the first acquire must succeed')
-          check(!second, 'a second acquire must fail while the cooldown is held')
-
-          const remaining = await storage.getCooldown(TENANT, RECIPIENT, PURPOSE)
-          check(remaining > 0, 'getCooldown must report the seconds still to run')
-
-          await storage.clearCooldown(TENANT, RECIPIENT, PURPOSE)
-          check(
-            await storage.tryAcquireCooldown(TENANT, RECIPIENT, PURPOSE, 60),
-            'clearCooldown must release the cooldown'
-          )
-        })
-    },
-    {
-      name: 'getCooldown reports zero when no cooldown is held',
-      run: () =>
-        withStorage(async (storage) => {
-          check(
-            (await storage.getCooldown(TENANT, RECIPIENT, PURPOSE)) === 0,
-            'getCooldown must report 0 when nothing is held'
-          )
-        })
-    },
-    {
-      name: 'tryAcquireCooldown is ATOMIC under concurrency',
-      run: () =>
-        withStorage(async (storage) => {
-          const results = await Promise.all(
-            Array.from({ length: RACERS }, () =>
-              storage.tryAcquireCooldown(TENANT, RECIPIENT, PURPOSE, 60)
-            )
-          )
-          const winners = results.filter(Boolean).length
-
-          check(
-            winners === 1,
-            `${winners} of ${RACERS} concurrent acquires won — the check and the set are not one ` +
-              'step, so two resends can both pass and the anti-resend window stops holding'
-          )
-        })
-    }
-  ]
+  return CASE_BUILDERS.map((build) => build(context))
 }

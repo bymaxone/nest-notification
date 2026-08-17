@@ -1,3 +1,8 @@
+/**
+ * @fileoverview Specs for the grammar-bounded reply-code extractor.
+ * @layer domain
+ */
+
 import { extractDeliveryStatus } from './delivery-status'
 
 describe('extractDeliveryStatus', () => {

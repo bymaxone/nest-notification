@@ -13,7 +13,7 @@ import type { INotificationLogRepository } from '../interfaces/notification-log-
 import { InMemoryOtpStorage } from '../providers/in-memory-otp.storage'
 
 import {
-  auditPayloadWithoutTimestamp,
+  freezeClockAwayFromCodes,
   emailSendTemplate,
   emailServiceStub,
   makeAudit,
@@ -23,6 +23,31 @@ import {
 } from './__tests__/otp-service.fixtures'
 import { EmailService } from './email.service'
 import { OtpService } from './otp.service'
+
+describe('OtpService email delivery contract', () => {
+  // SECURITY: the OTP body IS a credential, so its send must both declare the
+  // code (precision where text is published) and forbid publishing provider
+  // text at all (the shapes declaration cannot predict). Pinned on the input
+  // the service builds, because a failure here is silent — delivery still
+  // works, and only a provider echo would reveal it.
+  it('should declare the code and withhold provider text on OTP delivery', async () => {
+    const audit = makeAudit()
+    const storage = new InMemoryOtpStorage()
+    const service = new OtpService(makeOptions(), storage, audit, emailServiceStub)
+    emailSendTemplate.mockClear()
+
+    await service.generate({ ...ref, deliverVia: 'email' })
+
+    const sent = emailSendTemplate.mock.calls[0]?.[0] as {
+      auditRedactValues?: readonly string[]
+      publishProviderText?: boolean
+      data?: { code?: string }
+    }
+    const issued = sent.data?.code as string
+    expect(sent.auditRedactValues).toEqual([issued])
+    expect(sent.publishProviderText).toBe(false)
+  })
+})
 
 describe('OtpService.generate — delivery-error redaction', () => {
   let storage: InMemoryOtpStorage
@@ -122,6 +147,7 @@ describe('OtpService.generate — delivery-error redaction', () => {
   // from buildOtpEmail is the control that scrubs it. Pins the declaration
   // against an emptied-array mutant that the echo guard would mask.
   it('should scrub a short code-only echo through the declared values', async () => {
+    const restoreClock = freezeClockAwayFromCodes()
     let realCode = ''
     const shortEchoProvider: IEmailProvider = {
       name: 'short-echo',
@@ -157,11 +183,13 @@ describe('OtpService.generate — delivery-error redaction', () => {
     expect(realCode.length).toBeGreaterThan(0)
     expect(serializeErrorChain(caught).includes(realCode)).toBe(false)
     for (const call of audit.create.mock.calls) {
-      expect(auditPayloadWithoutTimestamp(call[0]).includes(realCode)).toBe(false)
+      expect(JSON.stringify(call[0]).includes(realCode)).toBe(false)
     }
+    restoreClock()
   })
 
   it('should keep the code out of both audit entries on a real email delivery failure', async () => {
+    const restoreClock = freezeClockAwayFromCodes()
     let realCode = ''
     const echoingProvider: IEmailProvider = {
       name: 'echoing',
@@ -203,8 +231,9 @@ describe('OtpService.generate — delivery-error redaction', () => {
     expect(realCode.length).toBeGreaterThan(0)
     expect(serializeErrorChain(caught).includes(realCode)).toBe(false)
     for (const call of audit.create.mock.calls) {
-      expect(auditPayloadWithoutTimestamp(call[0]).includes(realCode)).toBe(false)
+      expect(JSON.stringify(call[0]).includes(realCode)).toBe(false)
     }
+    restoreClock()
   })
 
   // A STRING rejection cannot be mutated in place, so a scrubbed copy must be

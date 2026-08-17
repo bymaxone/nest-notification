@@ -58,6 +58,7 @@ const EXPECTED_SERVER_EXPORTS = [
 ]
 
 const EXPECTED_SHARED_EXPORTS = ['NOTIFICATION_ERROR_CODES', 'DEFAULT_TTLS']
+const EXPECTED_TESTING_EXPORTS = ['otpStorageContract']
 
 const ALLOWED_TARBALL_PATHS = ['package.json', 'README.md', 'CHANGELOG.md', 'LICENSE', 'dist/']
 
@@ -91,6 +92,10 @@ const sharedEsm = await import(resolve(ROOT, 'dist/shared/index.mjs'))
 for (const name of EXPECTED_SHARED_EXPORTS) {
   name in sharedEsm ? pass(`export ${name}`) : fail(`Missing export: ${name}`)
 }
+const testingEsmExports = await import(resolve(ROOT, 'dist/testing/index.mjs'))
+for (const name of EXPECTED_TESTING_EXPORTS) {
+  name in testingEsmExports ? pass(`export ${name}`) : fail(`Missing export: ${name}`)
+}
 
 // -- 4. CJS exports ----------------------------------------------------------
 section('4. CJS exports')
@@ -102,6 +107,18 @@ for (const name of EXPECTED_SERVER_EXPORTS) {
 const sharedCjs = req(resolve(ROOT, 'dist/shared/index.cjs'))
 for (const name of EXPECTED_SHARED_EXPORTS) {
   name in sharedCjs ? pass(`cjs shared ${name}`) : fail(`Missing CJS export (shared): ${name}`)
+}
+// The CJS condition is a separate build output: an ESM-only assertion would let
+// a broken `require('@bymax-one/nest-notification/testing')` through the gate.
+const testingCjs = req(resolve(ROOT, 'dist/testing/index.cjs'))
+for (const name of EXPECTED_TESTING_EXPORTS) {
+  // Read through a descriptor rather than a dynamic index: the value must be
+  // callable, and the lint rule against index sinks is right that a bare
+  // `obj[name]` on external data is the wrong habit to keep.
+  const exported = Object.getOwnPropertyDescriptor(testingCjs, name)?.value
+  typeof exported === 'function'
+    ? pass(`cjs testing ${name}`)
+    : fail(`Missing or non-callable CJS export (testing): ${name}`)
 }
 
 // -- 5. Tarball contents -----------------------------------------------------

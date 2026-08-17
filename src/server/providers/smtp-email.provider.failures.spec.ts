@@ -157,6 +157,51 @@ describe('SmtpEmailProvider failure handling', () => {
     warnSpy.mockRestore()
   })
 
+  // The codes ride as properties on the thrown error, because the message is a
+  // fixed label by then and `EmailService` could not parse them back out.
+  it('should attach the reply codes to the thrown error', async () => {
+    mockSendMail.mockRejectedValue(new Error('550 5.7.1 refused by policy'))
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+    const thrown = (await new SmtpEmailProvider({ host: 'h' })
+      .send({ ...baseOptions, publishProviderText: false })
+      .catch((error: unknown) => error)) as Error & {
+      deliveryStatus?: number
+      deliveryEnhancedStatus?: string
+    }
+
+    expect(thrown.deliveryStatus).toBe(550)
+    expect(thrown.deliveryEnhancedStatus).toBe('5.7.1')
+  })
+
+  // Absent codes must be genuinely absent keys, not `undefined` values — the
+  // service reads them by type and a phantom key is a second thing to audit.
+  it('should attach no code keys when the failure carries none', async () => {
+    mockSendMail.mockRejectedValue(new Error('connection reset'))
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+    const thrown = (await new SmtpEmailProvider({ host: 'h' })
+      .send({ ...baseOptions, publishProviderText: false })
+      .catch((error: unknown) => error)) as Error
+
+    expect('deliveryStatus' in thrown).toBe(false)
+    expect('deliveryEnhancedStatus' in thrown).toBe(false)
+  })
+
+  // Only the basic code present: the basic key is attached, the enhanced one is
+  // not — the two are independently absent.
+  it('should attach only the basic code when no enhanced code is present', async () => {
+    mockSendMail.mockRejectedValue(new Error('421 service not available'))
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+    const thrown = (await new SmtpEmailProvider({ host: 'h' })
+      .send({ ...baseOptions, publishProviderText: false })
+      .catch((error: unknown) => error)) as Error & { deliveryStatus?: number }
+
+    expect(thrown.deliveryStatus).toBe(421)
+    expect('deliveryEnhancedStatus' in thrown).toBe(false)
+  })
+
   // A failure carrying no reply code says so, rather than falling back to the
   // relay's prose to have something to log.
   it('should say so when a withheld failure carries no reply code', async () => {

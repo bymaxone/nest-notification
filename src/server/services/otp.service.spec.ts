@@ -25,7 +25,7 @@ import { EmailService } from './email.service'
 import { OtpService } from './otp.service'
 
 import {
-  auditPayloadWithoutTimestamp,
+  freezeClockAwayFromCodes,
   dummyRepo,
   emailSendTemplate,
   emailServiceStub,
@@ -261,14 +261,16 @@ describe('OtpService.generate', () => {
 
   // SECURITY: the plaintext code must never appear in any audit entry.
   it('should never place the code in audit metadata', async () => {
+    const restoreClock = freezeClockAwayFromCodes()
     const service = new OtpService(makeOptions(), storage, audit)
 
     await service.generate({ ...ref, deliverVia: 'manual' })
     const realCode = (await storage.get(ref.tenantId, ref.recipient, ref.purpose))?.code as string
 
     for (const call of audit.create.mock.calls) {
-      expect(auditPayloadWithoutTimestamp(call[0]).includes(realCode)).toBe(false)
+      expect(JSON.stringify(call[0]).includes(realCode)).toBe(false)
     }
+    restoreClock()
   })
 
   // Audit failures are swallowed by default so generate still succeeds.
