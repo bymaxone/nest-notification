@@ -5,6 +5,31 @@ All notable changes to `@bymax-one/nest-notification` will be documented in this
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - 2026-08-18
+
+### Documentation
+
+Code is unchanged: the built `dist/` is byte-identical to 1.3.0, verified by unpacking the
+published tarball and diffing it against a fresh build. This release exists because the README
+ships inside the package and one of its security claims described the behaviour of 1.2.2.
+
+- **Corrected: what the OTP path writes to its audit entry.** The README said OTP delivery
+  "declares the code via `auditRedactValues`, and `EmailService` redacts it from the entry's
+  `errorMessage`". That was true until 1.3.0, which made the OTP path set
+  `publishProviderText: false` — so the entry now records the fixed label
+  `[provider text withheld]` plus the structured reply codes, and the provider's own words never
+  reach it. The declaration remains, as precision for the paths that do publish text.
+- **`publishProviderText` is now documented rather than mentioned in passing.** It appeared once,
+  inside a paragraph about the ceiling of redaction, despite being the feature 1.3.0 is named
+  after. It has its own section: what the failure carries, the structured fields it publishes, a
+  worked example, and the three properties worth knowing before relying on it — the codes are
+  independent of the secret, ambiguity resolves to silence, and a code colliding with a declared
+  value is dropped.
+- Internal docs caught up with the fourth subpath: the subpath tables in `CLAUDE.md` and
+  `docs/technical_specification.md` listed three, and `AGENTS.md` described neither the storage
+  contract nor the withholding flag. None of these ship, so they did not force this release; they
+  are here because the sweep that found the README claim found them too.
+
 ## [1.3.0] - 2026-08-17
 
 ### Added
@@ -573,7 +598,8 @@ rejected at startup rather than failing on the first send.
 
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.3.1...HEAD
+[1.3.1]: https://github.com/bymaxone/nest-notification/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/bymaxone/nest-notification/compare/v1.2.2...v1.3.0
 [1.2.2]: https://github.com/bymaxone/nest-notification/compare/v1.2.1...v1.2.2
 [1.2.1]: https://github.com/bymaxone/nest-notification/compare/v1.2.0...v1.2.1

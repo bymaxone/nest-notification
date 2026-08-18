@@ -189,6 +189,18 @@ external peer in the published bundle.
 
 - **100% coverage** (statements / branches / functions / lines) per file, enforced by
   `jest.coverage.config.ts` (`pnpm test:cov:all`). A pre-publish gate, not a target.
+- **The `./testing` subpath** ships `otpStorageContract(factory)`: 19 executable cases a consumer
+  runs against their own `IOtpStorage` in any runner (the package depends on none). It covers the
+  obligations a type cannot check — `consumeAttempt` and `tryAcquireCooldown` must be atomic, the
+  TTL must survive `update`, and both entry and cooldown keys must be scoped by tenant, recipient
+  and purpose. Each case is itself pinned by a storage that violates exactly that obligation, one
+  per operand where the check is composite; a contract that cannot fail is decoration.
+- **`publishProviderText: false`** on a send makes the failure carry no provider-authored byte — no
+  `cause`, and `[provider text withheld]` in the audit entry — publishing instead only the SMTP
+  reply codes a fixed grammar can express (`deliveryStatus` / `deliveryEnhancedStatus`). It exists
+  because value redaction is a blacklist: it removes the shapes it predicts and loses to a body
+  quoted in another transfer encoding. The built-in OTP delivery sets it; the default stays `true`
+  so ordinary mail keeps its diagnosis.
 - **Mutation testing** (Stryker, `break: 100`) is the deeper gate against weak tests; the score
   is 100%, with critical paths (`code-generator`, `timing-safe-compare`, `hash`,
   `redis-otp.storage`, `otp.service`) at 100%. Runs automatically post-merge on `main` via the shared reusable (`bymaxone/.github` → node-lib-ci), never on PRs; plus an optional manual `pnpm mutation`.
