@@ -69,14 +69,14 @@ Rewriting this pipeline in each service is wasteful; and each rewrite tends to f
 
 ### 1.4 Distribution model
 
-| Aspect    | Detail                                                                     |
-| --------- | -------------------------------------------------------------------------- |
-| Registry  | public npm (`@bymax-one/nest-notification`)                                |
-| Cost      | Zero — open source                                                         |
-| License   | MIT                                                                        |
-| Runtime   | Node.js 24+                                                                |
-| Framework | NestJS 11+ (server); React 19+ (subpath `./react`, optional)               |
-| Subpaths  | `.` (server), `./shared` (types/constants), `./react` (`useOtpInput` hook) |
+| Aspect    | Detail                                                                                                           |
+| --------- | ---------------------------------------------------------------------------------------------------------------- |
+| Registry  | public npm (`@bymax-one/nest-notification`)                                                                      |
+| Cost      | Zero — open source                                                                                               |
+| License   | MIT                                                                                                              |
+| Runtime   | Node.js 24+                                                                                                      |
+| Framework | NestJS 11+ (server); React 19+ (subpath `./react`, optional)                                                     |
+| Subpaths  | `.` (server), `./shared` (types/constants), `./react` (`useOtpInput` hook), `./testing` (`IOtpStorage` contract) |
 
 ### 1.5 Design principles
 
@@ -447,13 +447,14 @@ in them needs a shared type. A frontend that wants the error codes imports `./sh
 
 ### 3.2 Subpath exports
 
-The lib uses `exports` in `package.json` to expose 3 entry points with automatic tree-shaking:
+The lib uses `exports` in `package.json` to expose 4 entry points with automatic tree-shaking:
 
-| Subpath      | Entry point             | Description                                    | Dependencies                  |
-| ------------ | ----------------------- | ---------------------------------------------- | ----------------------------- |
-| `.` (server) | `dist/server/index.mjs` | NestJS module, services, providers, interfaces | NestJS 11, ioredis (optional) |
-| `./shared`   | `dist/shared/index.mjs` | Types, constants, error codes                  | Zero                          |
-| `./react`    | `dist/react/index.mjs`  | Hooks `useOtpInput`, `useOtpCountdown`         | react ^19                     |
+| Subpath      | Entry point              | Description                                        | Dependencies                  |
+| ------------ | ------------------------ | -------------------------------------------------- | ----------------------------- |
+| `.` (server) | `dist/server/index.mjs`  | NestJS module, services, providers, interfaces     | NestJS 11, ioredis (optional) |
+| `./shared`   | `dist/shared/index.mjs`  | Types, constants, error codes                      | Zero                          |
+| `./react`    | `dist/react/index.mjs`   | Hooks `useOtpInput`, `useOtpCountdown`             | react ^19                     |
+| `./testing`  | `dist/testing/index.mjs` | `otpStorageContract` — executable storage contract | none                          |
 
 `types` is declared **inside each condition** — `import` resolves to `.d.ts`, `require` to
 `.d.cts`. A single `types` key shared by both conditions hands ESM declarations to a CommonJS

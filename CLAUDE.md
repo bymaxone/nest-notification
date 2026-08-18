@@ -61,13 +61,16 @@
 
 ## Subpaths
 
-| Subpath      | Purpose                                          | Peer Deps                              |
-| ------------ | ------------------------------------------------ | -------------------------------------- |
-| `.` (server) | NestJS module — services, providers, interceptor | NestJS 11 (+ your provider/store SDKs) |
-| `./shared`   | Types + constants                                | none                                   |
-| `./react`    | OTP-input + countdown hooks (UX/state only)      | react ^19                              |
+| Subpath      | Purpose                                                        | Peer Deps                              |
+| ------------ | -------------------------------------------------------------- | -------------------------------------- |
+| `.` (server) | NestJS module — services, providers, interceptor               | NestJS 11 (+ your provider/store SDKs) |
+| `./shared`   | Types + constants                                              | none                                   |
+| `./react`    | OTP-input + countdown hooks (UX/state only)                    | react ^19                              |
+| `./testing`  | Executable `IOtpStorage` contract for consumer implementations | none                                   |
 
-`shared` is independent; `react` depends only on `react`; `server` is independent.
+`shared` is independent; `react` depends only on `react`; `server` is independent. `testing` imports
+the server interfaces for types only and no runtime entry imports it, so it never reaches a
+production bundle.
 
 ---
 
@@ -120,5 +123,6 @@ Files outside `files` — `scripts/`, `.github/`, `docs/`, `CLAUDE.md`, config �
 | Interfaces (contracts)      | `src/server/interfaces/`                                      |
 | Error catalog + exception   | `src/server/errors/`                                          |
 | React hooks                 | `src/react/`                                                  |
+| Storage contract (testing)  | `src/testing/`                                                |
 | Full architecture deep-dive | [AGENTS.md](./AGENTS.md) (load on demand)                     |
 | Spec / plan                 | `docs/technical_specification.md`, `docs/development_plan.md` |
