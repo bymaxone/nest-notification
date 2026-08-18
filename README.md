@@ -768,7 +768,7 @@ Failures raised by the library carry the underlying error as the native `Error.c
 
 **Withholding provider text — `publishProviderText: false`.** For a message whose body carries a credential, set it on the send input (`EmailService.send` or `sendTemplate`); the built-in OTP delivery already does. The failure then carries **no byte the provider wrote**: no `cause`, and the audit entry's `errorMessage` is the fixed label `[provider text withheld]`.
 
-What it publishes instead is what a fixed grammar can express — the basic SMTP reply code and, when present, the RFC 3463 enhanced code — as structured fields: `deliveryStatus` and `deliveryEnhancedStatus` on the audit entry, and the same pair in the exception's `details`.
+What it publishes instead is what a fixed grammar can express — the basic SMTP reply code and, when present, the RFC 3463 enhanced code — as structured fields. The two surfaces name them differently, so read the right keys: the audit entry carries `deliveryStatus` and `deliveryEnhancedStatus`, while the exception's `details` carries `status` and `enhanced`.
 
 ```ts
 await emailService.send({
@@ -781,6 +781,8 @@ await emailService.send({
 // On failure: NotificationException('notification.email_send_failed')
 //   details → { providerName: 'smtp', status: 550, enhanced: '5.7.1' }
 //   cause   → absent
+// Audit entry: { verb: 'failed', errorMessage: '[provider text withheld]',
+//                deliveryStatus: 550, deliveryEnhancedStatus: '5.7.1', … }
 ```
 
 Three properties worth knowing before you rely on it. The published codes are **independent of the secret** — the same reply publishes `550 5.7.1` whether the code was `550571`, `123456` or absent — which is why they are safe to log while the prose is not. **Ambiguity resolves to silence**: a text carrying two different replies publishes neither, so a cause chain cannot have `424` and `242` read as one value. And a code that would carry a **declared** secret is dropped, since this library's invariant is that a code's characters never reach an audit entry.

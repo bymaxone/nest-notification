@@ -447,7 +447,7 @@ in them needs a shared type. A frontend that wants the error codes imports `./sh
 
 ### 3.2 Subpath exports
 
-The lib uses `exports` in `package.json` to expose 3 entry points with automatic tree-shaking:
+The lib uses `exports` in `package.json` to expose 4 entry points with automatic tree-shaking:
 
 | Subpath      | Entry point              | Description                                        | Dependencies                  |
 | ------------ | ------------------------ | -------------------------------------------------- | ----------------------------- |

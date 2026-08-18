@@ -25,6 +25,13 @@ ships inside the package and one of its security claims described the behaviour 
   worked example, and the three properties worth knowing before relying on it — the codes are
   independent of the secret, ambiguity resolves to silence, and a code colliding with a declared
   value is dropped.
+- **Documented: the two surfaces name the reply codes differently.** The audit entry carries
+  `deliveryStatus` / `deliveryEnhancedStatus`; the exception's `details` carries `status` /
+  `enhanced`. The README said they were "the same pair", which would have sent a consumer looking
+  for keys that are not there — and it contradicted the worked example three lines below it. Both
+  shapes are now named, and the example shows the audit entry alongside the exception. (The
+  inconsistency itself is API surface shipped in 1.3.0; unifying the names would be a breaking
+  change, so it stays a 1.4.0 question rather than something a patch quietly alters.)
 - Internal docs caught up with the fourth subpath: the subpath tables in `CLAUDE.md` and
   `docs/technical_specification.md` listed three, and `AGENTS.md` described neither the storage
   contract nor the withholding flag. None of these ship, so they did not force this release; they
