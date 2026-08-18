@@ -15,6 +15,7 @@ import {
   makeProvider,
   makeRenderer
 } from './__tests__/email-service.fixtures'
+import { freezeClockAwayFromCodes } from './__tests__/otp-service.fixtures'
 import { EmailService } from './email.service'
 
 describe('EmailService.send redaction', () => {
@@ -185,6 +186,21 @@ describe('EmailService.send redaction', () => {
 })
 
 describe('EmailService.send with publishProviderText: false', () => {
+  // The assertions below search the WHOLE serialized audit entry for a declared
+  // secret, and the entry carries a 13-digit epoch — which contains a short
+  // declared value like `55` most of the time, and can contain a six-digit one
+  // by coincidence. Pinning the clock to a five-digit value removes both
+  // without narrowing what the assertions cover.
+  let restoreClock: () => void
+
+  beforeEach(() => {
+    restoreClock = freezeClockAwayFromCodes()
+  })
+
+  afterEach(() => {
+    restoreClock()
+  })
+
   const body = '<p>Hello Jane, your verification code is 883779. It expires shortly.</p>'
 
   // SECURITY: the case redaction provably cannot cover. The relay quotes the
