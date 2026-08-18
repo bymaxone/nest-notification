@@ -61,7 +61,7 @@ describe('otpStorageContract', () => {
 
     // The count is part of the published promise, so it is asserted exactly:
     // a generic "more than zero" would pass with 12 of the 13 cases removed.
-    expect(cases).toHaveLength(18)
+    expect(cases).toHaveLength(19)
     expect(factory).not.toHaveBeenCalled()
   })
 
@@ -342,6 +342,16 @@ describe('otpStorageContract', () => {
           tryAcquireCooldown: (_t, r, p, s) => inner.tryAcquireCooldown('one', r, p, s),
           getCooldown: (_t, r, p) => inner.getCooldown('one', r, p),
           clearCooldown: (_t, r, p) => inner.clearCooldown('one', r, p)
+        })
+      },
+      {
+        caseName: 'scopes the cooldown by recipient',
+        message:
+          /a cooldown held for one recipient blocked another — one user can suppress another user's resends/,
+        break: (inner) => ({
+          tryAcquireCooldown: (t, _r, p, s) => inner.tryAcquireCooldown(t, 'one', p, s),
+          getCooldown: (t, _r, p) => inner.getCooldown(t, 'one', p),
+          clearCooldown: (t, _r, p) => inner.clearCooldown(t, 'one', p)
         })
       },
       {

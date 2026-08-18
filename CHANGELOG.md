@@ -34,12 +34,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   throws, so the service can publish them without parsing a message that is a fixed label by then.
 
 - **`@bymax-one/nest-notification/testing` — an executable contract for `IOtpStorage`.**
-  `otpStorageContract(factory)` returns 18 cases that a consumer runs against their own storage in
+  `otpStorageContract(factory)` returns 19 cases that a consumer runs against their own storage in
   whatever runner they use; the package depends on none. The obligations it covers cannot be checked
   by a type — `consumeAttempt` and `tryAcquireCooldown` must be **atomic**, the TTL must be applied
   (including across `update`, which must neither reset an expiry nor resurrect a lapsed entry), and
-  both the entry keys and the cooldown keys must be scoped by `(tenantId, recipient, purpose)` in
-  every dimension — and a violation type-checks, passes a casual smoke test, and silently lets the
+  both the entry keys and the cooldown keys must be scoped by `(tenantId, recipient, purpose)` —
+  each of the three dimensions checked separately for both key kinds — and a violation type-checks, passes a casual smoke test, and silently lets the
   brute-force ceiling be bypassed under concurrency or one tenant read another's code. The two
   atomicity cases run 25 concurrent calls and fail when more than the ceiling gets through. Each
   case is itself pinned by a test that points it at a storage violating exactly that obligation —

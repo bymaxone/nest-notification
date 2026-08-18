@@ -149,6 +149,8 @@ async function cleanUp(storage: IOtpStorage, scope: ContractScope): Promise<void
   for (const [tenant, purpose] of keys) {
     await storage.delete(tenant, scope.recipient, purpose)
     await storage.clearCooldown(tenant, scope.recipient, purpose)
+    await storage.delete(tenant, scope.absentRecipient, purpose)
+    await storage.clearCooldown(tenant, scope.absentRecipient, purpose)
   }
 }
 
@@ -480,6 +482,32 @@ function cooldownTenantScopeCase({ scope, withStorage }: ContractContext): OtpSt
   }
 }
 
+function cooldownRecipientScopeCase({
+  scope,
+  withStorage
+}: ContractContext): OtpStorageContractCase {
+  return {
+    name: 'scopes the cooldown by recipient',
+    run: () =>
+      withStorage(async (storage) => {
+        await storage.tryAcquireCooldown(scope.tenantA, scope.recipient, scope.purpose, 60)
+        const other = await storage.tryAcquireCooldown(
+          scope.tenantA,
+          scope.absentRecipient,
+          scope.purpose,
+          60
+        )
+        await storage.clearCooldown(scope.tenantA, scope.absentRecipient, scope.purpose)
+
+        check(
+          other,
+          'a cooldown held for one recipient blocked another — one user can suppress another ' +
+            "user's resends"
+        )
+      })
+  }
+}
+
 function cooldownPurposeScopeCase({ scope, withStorage }: ContractContext): OtpStorageContractCase {
   return {
     name: 'scopes the cooldown by purpose',
@@ -541,6 +569,7 @@ const CASE_BUILDERS = [
   cooldownHoldsCase,
   cooldownZeroCase,
   cooldownTenantScopeCase,
+  cooldownRecipientScopeCase,
   cooldownPurposeScopeCase,
   cooldownAtomicCase
 ] as const
