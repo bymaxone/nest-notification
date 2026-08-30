@@ -1,0 +1,62 @@
+# Keeps the shared half of AGENTS.md in step with the canonical copy in
+# bymaxone/.github. The review rules that must not vary between Bymax
+# repositories are edited there; everything this repository writes for itself
+# lives outside the markers and is never touched.
+#
+# Codex reads AGENTS.md from the file tree of the repository under review — it
+# reads neither CLAUDE.md nor anything under .github/instructions/ — so a shared
+# rule has to exist as a real file here rather than be referenced. That is why
+# this is a sync and not a `uses:` for the rules themselves: the reusable CI this
+# repository calls propagates by reference, this one has to propagate by commit.
+name: agents-sync
+
+on:
+  schedule:
+    # Weekly, off the hour and on an hour no other scheduled workflow here uses,
+    # so the runs do not cluster.
+    - cron: '17 7 * * 1'
+  workflow_dispatch:
+
+# Single-flight across the repository, deliberately NOT keyed by `github.ref`.
+# What two runs contend over is one synchronisation branch and one pull request,
+# so a ref-scoped group would put a dispatch and a scheduled run in different
+# groups and leave the race intact. Queue rather than cancel: the called workflow
+# force-pushes under a lease, so a concurrent run loses the race by failing the
+# job rather than by corrupting the branch — a red run nobody can act on.
+concurrency:
+  group: agents-sync
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    # Referenced by the moving alias rather than pinned, which is the convention
+    # for first-party reusables and the rule the shared block itself states.
+    uses: bymaxone/.github/.github/workflows/agents-sync.yml@v1
+    permissions:
+      contents: write
+      pull-requests: write
+    secrets:
+      # Named rather than `inherit`, so the called workflow receives this one
+      # secret and not every secret this repository holds.
+      #
+      # The mapping is present even while the secret is not, because a reusable
+      # workflow receives no secret it is not passed: adding AGENTS_SYNC_TOKEN
+      # later would otherwise change nothing, and the run would keep using the
+      # default token while looking configured. An unset secret evaluates to the
+      # empty string, which the called workflow already falls back from.
+      #
+      # Why setting it is not optional here. This organisation runs with
+      # `can_approve_pull_request_reviews: false`, which no workflow file can
+      # override: the default GITHUB_TOKEN cannot open a pull request at all, so
+      # an unattended run that finds drift pushes the branch and then fails on
+      # `gh pr create`. Even past that, a pull request opened with the default
+      # token starts no workflow runs, and this repository's ruleset requires
+      # seven checks — so it could not merge unattended either.
+      #
+      # Until the secret exists, treat the weekly run as a drift *alarm*: the
+      # job goes red when the block moved, and the fix is to set the token or
+      # sync by hand.
+      sync-token: ${{ secrets.AGENTS_SYNC_TOKEN }}
