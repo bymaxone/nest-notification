@@ -2,7 +2,8 @@ import js from '@eslint/js'
 import tsPlugin from '@typescript-eslint/eslint-plugin'
 import tsParser from '@typescript-eslint/parser'
 import prettierConfig from 'eslint-config-prettier'
-import importPlugin from 'eslint-plugin-import'
+import { createTypeScriptImportResolver } from 'eslint-import-resolver-typescript'
+import { createNodeResolver, importX } from 'eslint-plugin-import-x'
 import prettier from 'eslint-plugin-prettier'
 import security from 'eslint-plugin-security'
 import globals from 'globals'
@@ -48,20 +49,27 @@ export default [
     },
     plugins: {
       '@typescript-eslint': tsPlugin,
-      import: importPlugin,
+      'import-x': importX,
       prettier,
       security
     },
     settings: {
-      'import/resolver': {
-        typescript: {
+      // The resolver decides WHERE a specifier points; this mapping decides what
+      // the resolved file exports. Without it the dependency parser skips every
+      // extension it cannot map — on a TypeScript project, all of them — and the
+      // graph rules below traverse nothing while still reporting as active.
+      'import-x/parsers': {
+        '@typescript-eslint/parser': ['.ts', '.tsx']
+      },
+      'import-x/resolver-next': [
+        createTypeScriptImportResolver({
           alwaysTryTypes: true,
           project: './tsconfig.json'
-        },
-        node: {
+        }),
+        createNodeResolver({
           extensions: ['.js', '.ts', '.tsx']
-        }
-      }
+        })
+      ]
     },
     rules: {
       // TypeScript — strict (zero `any`; explicit return types on exports)
@@ -108,7 +116,7 @@ export default [
       'security/detect-possible-timing-attacks': 'error',
 
       // Import ordering — node: → external → internal → parent/sibling
-      'import/order': [
+      'import-x/order': [
         'error',
         {
           groups: ['builtin', 'external', 'internal', ['parent', 'sibling'], 'index'],
@@ -127,11 +135,25 @@ export default [
           }
         }
       ],
-      'import/no-cycle': 'error',
-      'import/no-self-import': 'error',
+      'import-x/no-cycle': 'error',
+      'import-x/no-self-import': 'error',
 
       // Prettier — reads from .prettierrc (no inline options to avoid conflicts)
       'prettier/prettier': 'warn'
+    }
+  },
+
+  // The SMTP adapter scrubs a transport error before it publishes anything: the
+  // raw message carries the connection credentials, the caller's declared secrets
+  // and, from a policy relay that quotes what it rejected, the message body. Its
+  // re-throw therefore carries the SCRUBBED text, and attaching the caught error
+  // as `cause` would put the raw one back on the chain — reintroducing exactly
+  // what the scrub removes. Configured off here, with the reason, rather than
+  // silenced per call site.
+  {
+    files: ['src/server/providers/smtp-email.provider.ts'],
+    rules: {
+      'preserve-caught-error': 'off'
     }
   },
 

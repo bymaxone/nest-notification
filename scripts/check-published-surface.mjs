@@ -407,7 +407,7 @@ function checkChangelog() {
   } catch {
     // No network or no remote — the local tags below are then all there is.
   }
-  let released = []
+  let released
   try {
     released = execFileSync('git', ['tag', '--list', 'v*.*.*'], { cwd: ROOT, encoding: 'utf8' })
       .split('\n')

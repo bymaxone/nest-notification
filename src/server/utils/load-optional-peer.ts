@@ -62,9 +62,10 @@ function isModuleNotFound(error: unknown, moduleName: string): boolean {
  *   optional peer may be absent at build time.
  * @returns The imported module namespace.
  * @throws Error `"<name> package is not installed…"` only when the module genuinely
- * could not be resolved. Any other failure is surfaced with its own message and the
- * original error kept as `cause`, because a catch-all that reports one cause turns
- * an unknown failure into a confident wrong answer.
+ * could not be resolved. Any other failure is surfaced with its own message, because
+ * a catch-all that reports one cause turns an unknown failure into a confident wrong
+ * answer. Both keep the original error as `cause`: a resolution failure names the
+ * specifier the runtime actually rejected, which the instruction above does not.
  */
 export async function loadOptionalPeer<T>(moduleName: string): Promise<T> {
   try {
@@ -72,7 +73,8 @@ export async function loadOptionalPeer<T>(moduleName: string): Promise<T> {
   } catch (error) {
     if (isModuleNotFound(error, moduleName)) {
       throw new Error(
-        `\`${moduleName}\` package is not installed. Run \`pnpm add ${moduleName}\` in the consumer app.`
+        `\`${moduleName}\` package is not installed. Run \`pnpm add ${moduleName}\` in the consumer app.`,
+        { cause: error }
       )
     }
     const reason = error instanceof Error ? error.message : String(error)
