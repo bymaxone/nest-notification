@@ -26,6 +26,26 @@ autoInstallPeers: false
 # this map. Without an entry, `pnpm install` exits with ERR_PNPM_IGNORED_BUILDS
 # rather than warning.
 allowBuilds:
+  # jest-haste-map 30.5.0 declares @parcel/watcher as a direct, non-optional
+  # dependency, so a jest bump past 30.4.2 drags it in and `pnpm install` exits
+  # with ERR_PNPM_IGNORED_BUILDS until it is listed. Recorded here before that
+  # bump lands: the entry describes what this repository allows, not what its
+  # lockfile currently contains.
+  #
+  # Denied rather than allowed, and the two are NOT interchangeable. The install
+  # script is `if (process.env.npm_config_build_from_source === 'true') { build() }`
+  # — under an ordinary install it spawns nothing, so `true` would compile nothing
+  # and `false` costs nothing. They diverge only under a deliberate source build,
+  # which is the node-gyp rebuild this entry exists to refuse.
+  #
+  # Nothing here needs the native watcher: `test:watch` is a local convenience and
+  # no workflow runs a watcher. The prebuilt per-platform packages cover the load
+  # path; on a platform outside them the require throws under `true` as well,
+  # because an ordinary install compiled no fallback.
+  #
+  # Positioned where pnpm writes its own placeholder, so a future rewrite is a
+  # no-op rather than a reordering diff.
+  '@parcel/watcher': false
   esbuild: true
   unrs-resolver: true
 
