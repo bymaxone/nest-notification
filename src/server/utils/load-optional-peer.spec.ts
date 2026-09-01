@@ -50,9 +50,16 @@ describe('loadOptionalPeer', () => {
     mockFailure = failWith(message, code)
     jest.resetModules()
 
-    await expect(loadOptionalPeer(MODULE)).rejects.toThrow(
+    const error = (await loadOptionalPeer(MODULE).catch((thrown: unknown) => thrown)) as Error & {
+      cause?: unknown
+    }
+
+    expect(error.message).toBe(
       '`virtual-optional-peer` package is not installed. Run `pnpm add virtual-optional-peer` in the consumer app.'
     )
+    // The instruction names the fix; the cause names the specifier the runtime
+    // actually rejected, which a nested resolution failure does not share with it.
+    expect(error.cause).toBe(mockFailure)
   })
 
   // The trap the code alone walks into. An INSTALLED peer whose own evaluation

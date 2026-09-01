@@ -272,7 +272,7 @@ nest-notification/
 - `jest.config.ts`: `moduleNameMapper` for 3 subpaths; coverage threshold 100% per file
 - `stryker.config.json`: thresholds high 100 / low 95 / break 95 (per the Bymax Code-Craft Standard — only 100% reports green; build breaks below 95)
 - `tsup.config.ts`: **rewrite** — 3 entries; externals = all peer deps
-- `eslint.config.mjs`: remove rules specific to `oauth/`, `crypto/`; keep `eslint-plugin-security` and `eslint-plugin-import`
+- `eslint.config.mjs`: remove rules specific to `oauth/`, `crypto/`; keep `eslint-plugin-security` and `eslint-plugin-import-x`
 - `scripts/check-size.mjs`: **rewrite** with 3 budgets (server 30 KB, shared 4 KB, react 8 KB brotli)
 
 **Detail — `package.json` for this phase:**
