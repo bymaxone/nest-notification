@@ -44,3 +44,12 @@ overrides:
   'esbuild': '^0.28.1'
   'fast-uri': '^3.1.5'
   'qs': '^6.15.2'
+  # GHSA-73wf-gq98-2v4g and GHSA-c83g-rgw3-j3cx (CVSS 7.5 each, published
+  # 2026-09-01) — an uncaught crash with a prototype write, and unbounded memory
+  # growth, both reached through an untrusted browserslist query. Vulnerable at
+  # <= 4.28.6; the lockfile carried 4.28.2, pulled in transitively by
+  # @stryker-mutator through @babel/core. Dev-time only and patched rather than
+  # ignored, for the same reason as the entries above: a scanner told to skip dev
+  # dependencies stays blind after this one is gone. Nothing caps the floor —
+  # @babel/helper-compilation-targets declares ^4.24.0.
+  browserslist: '^4.28.7'
