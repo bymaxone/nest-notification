@@ -39,24 +39,26 @@ jobs:
       contents: write
       pull-requests: write
     secrets:
-      # Named rather than `inherit`, so the called workflow receives this one
-      # secret and not every secret this repository holds.
+      # Named rather than `inherit`, so the called workflow receives these two
+      # and not every secret this repository holds.
       #
-      # The mapping is present even while the secret is not, because a reusable
-      # workflow receives no secret it is not passed: adding AGENTS_SYNC_TOKEN
-      # later would otherwise change nothing, and the run would keep using the
-      # default token while looking configured. An unset secret evaluates to the
-      # empty string, which the called workflow already falls back from.
+      # A GitHub App rather than a token: the installation token is minted per
+      # run and expires within the hour, so there is no long-lived credential to
+      # rotate and none to expire unnoticed. Both secrets are organisation-level
+      # with `all repositories` visibility, and bymax-agents-sync is installed
+      # org-wide, so this repository holds no secret of its own.
       #
-      # Why setting it is not optional here. This organisation runs with
-      # `can_approve_pull_request_reviews: false`, which no workflow file can
-      # override: the default GITHUB_TOKEN cannot open a pull request at all, so
-      # an unattended run that finds drift pushes the branch and then fails on
-      # `gh pr create`. Even past that, a pull request opened with the default
-      # token starts no workflow runs, and this repository's ruleset requires
-      # seven checks — so it could not merge unattended either.
+      # Supplied together or not at all — the called workflow fails a half pair
+      # explicitly rather than falling back, because a silent fallback there is
+      # indistinguishable from having configured nothing.
       #
-      # Until the secret exists, treat the weekly run as a drift *alarm*: the
-      # job goes red when the block moved, and the fix is to set the token or
-      # sync by hand.
-      sync-token: ${{ secrets.AGENTS_SYNC_TOKEN }}
+      # `sync-token` is deliberately left unmapped rather than kept alongside
+      # these. Mapping a secret that does not exist resolves to the empty string,
+      # and the called workflow falls back to the default GITHUB_TOKEN while the
+      # file reads as configured. That fallback cannot work here: this
+      # organisation runs with `can_approve_pull_request_reviews: false`, which
+      # no workflow file overrides, so the default token may not open a pull
+      # request at all — a run that finds drift pushes its branch and then fails.
+      # An App installation token may.
+      app-id: ${{ secrets.AGENTS_SYNC_APP_ID }}
+      app-private-key: ${{ secrets.AGENTS_SYNC_PRIVATE_KEY }}
