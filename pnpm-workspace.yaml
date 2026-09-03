@@ -62,8 +62,18 @@ overrides:
   'brace-expansion@2': '^2.1.4'
   'brace-expansion@5': '^5.0.9'
   'esbuild': '^0.28.1'
-  'fast-uri': '^3.1.5'
-  'qs': '^6.15.2'
+  # Floors raised 2026-09-03, not new entries. Both were already pinned here for
+  # earlier advisories; the carets would have admitted the fixed versions, but
+  # the lockfile held the older resolution, so the range alone protected nothing.
+  #
+  # fast-uri: GHSA-5jgf-p345-68v8 and three siblings (CVSS 7.5, published
+  # 2026-09-02) — host confusion via skipped IDN canonicalisation. Vulnerable at
+  # >= 3.1.3 < 3.1.6; reached through ajv under @stryker-mutator.
+  'fast-uri': '^3.1.6'
+  # qs: GHSA-4mjr-xmp4-gh2g and GHSA-x5fp-wj9c-mxmx (published 2026-09-02) —
+  # denial of service via an attacker-controlled isBuffer. Vulnerable at
+  # >= 2.2.5 < 6.16.0; reached through typed-rest-client under @stryker-mutator.
+  'qs': '^6.16.0'
   # GHSA-73wf-gq98-2v4g and GHSA-c83g-rgw3-j3cx (CVSS 7.5 each, published
   # 2026-09-01) — an uncaught crash with a prototype write, and unbounded memory
   # growth, both reached through an untrusted browserslist query. Vulnerable at
