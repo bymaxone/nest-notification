@@ -71,7 +71,7 @@ pnpm add @bymax-one/nest-notification
 
 ### 🏢 Multi-Tenant & Audit
 
-- ✅ **SHA-256 storage keys** — `sha256(sha256(tenantId):sha256(recipient))`: no recipient PII in a key, and distinct `(tenant, recipient)` pairs never share one
+- ✅ **SHA-256 storage keys** — `sha256(sha256(tenantId):sha256(recipient))`: no recipient PII in a key, and the encoding adds no ambiguity of its own, so two pairs never share one by construction
 - ✅ **`tenantIdResolver`** — the audited tenant comes from a trusted source (a JWT claim, a subdomain, a gateway-checked header), not the payload
 - ✅ **Opt-in audit log** — a fire-and-forget `INotificationLogRepository` plus a `NotificationAuditInterceptor`; audit failures never break delivery
 - ✅ **This library never logs a code** — not to a logger, not to an audit entry, not into an error message it authors, enforced by a regression test. Text a **provider** authors is a separate problem with a documented ceiling: an error quoting the body in another encoding survives every guard, so control whether provider error text reaches your logs at all
@@ -656,7 +656,7 @@ When integrating `@bymax-one/nest-notification` in production, verify each of th
 | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Code Generation    | `crypto.randomInt` per character over the configured alphabet — uniform at every position, no modulo bias                                                                                       |
 | Code Comparison    | `crypto.timingSafeEqual` (constant-time), never `===`                                                                                                                                           |
-| Storage Keys       | `sha256(sha256(tenantId):sha256(recipient))` — no recipient PII; distinct `(tenant, recipient)` pairs never share a key                                                                         |
+| Storage Keys       | `sha256(sha256(tenantId):sha256(recipient))` — no recipient PII; the encoding adds no ambiguity, so no two pairs share a key by construction                                                    |
 | Attempt Ceiling    | Counter spent atomically inside the storage (Redis Lua) — never a service-side read-then-write                                                                                                  |
 | Resend Cooldown    | `SET NX EX` acquire, released only on delivery failure — two concurrent resends cannot both win                                                                                                 |
 | Code Lifetime      | TTL-bound in the store; expiry and absence are reported identically so neither leaks the other                                                                                                  |

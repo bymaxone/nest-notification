@@ -563,7 +563,6 @@ function cooldownAtomicCase({ scope, withStorage }: ContractContext): OtpStorage
   }
 }
 
-/** Every obligation this contract executes, in the order it reports them. */
 function keyBoundaryCase({ scope, withStorage }: ContractContext): OtpStorageContractCase {
   return {
     name: 'keeps the tenant and recipient boundary when composing a key',
@@ -594,7 +593,12 @@ function cooldownKeyBoundaryCase({ scope, withStorage }: ContractContext): OtpSt
         const [leftTenant, leftRecipient] = scope.shiftedLeft
         const [rightTenant, rightRecipient] = scope.shiftedRight
 
-        await storage.tryAcquireCooldown(leftTenant, leftRecipient, scope.purpose, 60)
+        const held = await storage.tryAcquireCooldown(leftTenant, leftRecipient, scope.purpose, 60)
+        check(
+          held,
+          'the first cooldown could not be acquired, so this case proves nothing about ' +
+            'boundary encoding — a case that cannot fail is decoration'
+        )
         const other = await storage.tryAcquireCooldown(
           rightTenant,
           rightRecipient,
@@ -613,6 +617,7 @@ function cooldownKeyBoundaryCase({ scope, withStorage }: ContractContext): OtpSt
   }
 }
 
+/** Every obligation this contract executes, in the order it reports them. */
 const CASE_BUILDERS = [
   roundTripCase,
   absentCase,

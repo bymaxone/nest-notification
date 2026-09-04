@@ -109,7 +109,7 @@ the codes (byte-identical) so the frontend can match without importing the serve
 
 ```
 {namespace}:otp:{purpose}:{sha256(sha256(tenantId):sha256(recipient))}       # the OTP entry (TTL = ttlSeconds)
-{namespace}:cooldown:{purpose}:{sha256(sha256(tenantId):sha256(recipient))}  # the resend lock (TTL = cooldownSeconds)
+{namespace}:otp_cd:{purpose}:{sha256(sha256(tenantId):sha256(recipient))}    # the resend lock (TTL = cooldownSeconds)
 ```
 
 `namespace` defaults to `notification`. The recipient and tenant never appear in plaintext.

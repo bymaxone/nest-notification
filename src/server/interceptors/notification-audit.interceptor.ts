@@ -36,8 +36,12 @@ import type {
 } from '../interfaces/notification-log-repository.interface'
 import type { NotificationRequest } from '../interfaces/notification-module-options.interface'
 import type { DispatchInput } from '../services/notification.service'
+import { assertIdentifies } from '../utils/tenant-scope'
 
 /** Marker `providerName` distinguishing interceptor-level entries from service-level ones. */
+/** Prefix quoted in guard failures raised by this interceptor. */
+const INTERCEPTOR_NAME = 'NotificationAuditInterceptor'
+
 const INTERCEPTOR_PROVIDER_NAME = '__interceptor__'
 
 /** Coerces an unknown thrown value into a safe, message-only string. */
@@ -147,28 +151,27 @@ export class NotificationAuditInterceptor implements NestInterceptor {
    * attributes the event to whichever tenant the caller named. Configure a resolver
    * whenever this interceptor runs on an HTTP boundary.
    *
-   * A resolver that returns an empty string is refused rather than accepted: an
-   * empty scope is not a tenant, and recording one would attribute the event to a
-   * scope shared with every other empty result.
+   * A value that identifies nobody is refused rather than recorded, on BOTH paths:
+   * the resolver's answer and the payload fallback. The fallback is the default path
+   * — most consumers configure no resolver — so guarding only the resolver would
+   * leave the common case unchecked, which is where a blank tenant actually arrives.
    *
-   * @throws Error When the configured resolver returns an empty string.
+   * @throws Error When either the resolved or the fallback tenant id is not a
+   *   string, or is blank.
    */
   private async resolveTenantId(context: ExecutionContext, fallback: string): Promise<string> {
     const resolver = this.options.global.tenantIdResolver
     if (resolver === undefined) {
+      assertIdentifies(INTERCEPTOR_NAME, 'the payload tenant id', fallback)
       return fallback
     }
     const request = this.extractRequest(context)
     if (request === null) {
+      assertIdentifies(INTERCEPTOR_NAME, 'the payload tenant id', fallback)
       return fallback
     }
     const resolved = await resolver(request)
-    if (resolved === '') {
-      throw new Error(
-        '[NotificationAuditInterceptor] tenantIdResolver returned an empty tenant id; ' +
-          'an empty scope cannot identify a tenant.'
-      )
-    }
+    assertIdentifies(INTERCEPTOR_NAME, 'the resolved tenant id', resolved)
     return resolved
   }
 

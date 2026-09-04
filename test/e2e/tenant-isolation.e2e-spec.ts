@@ -5,7 +5,7 @@
  * Two tenants sharing the same recipient must never collide: OTP codes are
  * independent, cooldowns are independent, and one tenant can never verify the
  * other's code. The Redis backend additionally proves that storage keys carry
- * only the `sha256(tenantId:recipient)` digest — never the plaintext recipient
+ * only the `sha256(sha256(tenantId):sha256(recipient))` digest — never the plaintext recipient
  * or tenant id — so an operator with `KEYS` access cannot enumerate recipients
  * and a cross-tenant key collision is computationally infeasible.
  */

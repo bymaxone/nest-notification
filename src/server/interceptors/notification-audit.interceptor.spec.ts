@@ -165,10 +165,23 @@ describe('NotificationAuditInterceptor', () => {
       code: 'notification.audit_log_failed',
       cause: {
         message:
-          '[NotificationAuditInterceptor] tenantIdResolver returned an empty tenant id; ' +
-          'an empty scope cannot identify a tenant.'
+          '[NotificationAuditInterceptor] the resolved tenant id must not be empty or ' +
+          'whitespace-only; a value that names nobody cannot scope anything.'
       }
     })
+    expect(repo.entries).toHaveLength(0)
+  })
+
+  // The fallback is the DEFAULT path — most consumers configure no resolver — so a
+  // blank payload tenant arrives here far more often than through a resolver. Guarding
+  // only the resolver would leave the common case unchecked.
+  it('refuses a blank payload tenant id when no resolver is configured', async () => {
+    const repo = new CapturingRepo()
+    const interceptor = new NotificationAuditInterceptor(buildOptions(), repo)
+    const ctx = buildContext([{ ...otpInput, tenantId: '   ' }])
+
+    await firstValueFrom(interceptor.intercept(ctx, handlerOf(of('ok'))))
+
     expect(repo.entries).toHaveLength(0)
   })
 
