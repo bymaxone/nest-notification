@@ -5,6 +5,66 @@ All notable changes to `@bymax-one/nest-notification` will be documented in this
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-09-04
+
+### Security
+
+- **Storage keys no longer collapse two different `(tenantId, recipient)` pairs onto one key.**
+  The key was `sha256(`${tenantId}:${recipient}`)` — the two fields joined around a delimiter,
+  which does not encode where the boundary falls. `('acme:bob', 'x')` and `('acme', 'bob:x')`
+  produced the same input string and therefore the same key, so under a consumer whose tenant
+  ids or recipient ids can contain a colon, one tenant's `verify` could consume another tenant's
+  OTP. Each component is now hashed to a fixed length before the two are joined:
+  `sha256(sha256(tenantId):sha256(recipient))`.
+
+  This was never a weakness in SHA-256, and the documentation said otherwise — `README.md` and
+  `CLAUDE.md` claimed cross-tenant collision was "computationally infeasible (SHA-256 preimage
+  resistance)". Preimage resistance is irrelevant to it: the two pairs were the same input, and
+  every digest property held perfectly while they collided. Those claims are corrected.
+
+  `InMemoryOtpStorage` composed its map key the same way, with `::`, and had the same defect.
+
+- **A component that identifies nothing is refused rather than hashed** — empty, whitespace-only,
+  or not a string at all. An empty component put every caller that omitted it into one shared
+  namespace, the same isolation failure reached from the other side. Whitespace produced a
+  distinct key and therefore no collision, but named no tenant. The `typeof` check is there
+  because the declared `string` is a contract this library states and a consumer may not honour:
+  a `null` claim or a numeric database id type-checks at their call site and previously failed
+  inside `createHash` with a message naming crypto's `data` argument instead of this rule.
+
+- **`NotificationAuditInterceptor` refuses an empty tenant id from `tenantIdResolver`.** An empty
+  scope does not identify a tenant, and recording it filed the event under a scope shared with
+  every other empty result. The refusal is subject to `audit.swallowErrors` like any other audit
+  failure: the entry is skipped rather than written wrong.
+
+### ⚠️ Apply to a derived backend
+
+**Every OTP storage key changes with this release, and nothing in the type system will tell you.**
+It compiles, the suite passes, and on deploy every OTP and resend cooldown still in flight becomes
+unreachable — the old keys are never read again. Consequences to plan for:
+
+- Users mid-verification get `OTP_NOT_FOUND` and must request a new code.
+- Resend cooldowns reset, so a user who was throttled can request again immediately.
+- Stale entries expire on their own TTL; nothing needs to be purged, but nothing is migrated
+  either. There is no dual-read path, deliberately: reading the old construction back would mean
+  keeping the colliding key alive.
+
+Deploy when a short window of "request your code again" is acceptable, or drain OTP traffic first.
+
+**If you implement `IOtpStorage` yourself,** re-run the contract from `@bymax-one/nest-notification/testing`.
+It has two new cases — `keeps the tenant and recipient boundary when composing a key` and the same
+for a cooldown key — which fail any implementation that concatenates the two fields around a
+delimiter. **Both are needed:** the entry key and the cooldown key are composed separately, so a
+storage that fixes one and not the other passes every case that exercises only the first. 21 cases,
+up from 19. A survey
+of the sibling libraries found 108 composite key constructions and 2 that encode their components,
+so this defect is the default rather than the exception.
+
+### Fixed
+
+- `loadOptionalPeer` attaches the caught error as `cause` on the "package is not installed" path
+  as well, so a resolution failure names the specifier the runtime actually rejected.
+
 ## [1.3.1] - 2026-08-18
 
 ### Documentation
@@ -605,7 +665,8 @@ rejected at startup rather than failing on the first send.
 
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.3.1...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/bymaxone/nest-notification/compare/v1.3.1...v1.4.0
 [1.3.1]: https://github.com/bymaxone/nest-notification/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/bymaxone/nest-notification/compare/v1.2.2...v1.3.0
 [1.2.2]: https://github.com/bymaxone/nest-notification/compare/v1.2.1...v1.2.2

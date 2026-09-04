@@ -63,6 +63,10 @@ interface ContractScope {
   absentRecipient: string
   purpose: string
   otherPurpose: string
+  /** `(tenant, recipient)` pair whose delimiter sits one field to the left. */
+  shiftedLeft: readonly [string, string]
+  /** The same characters with the delimiter one field to the right. */
+  shiftedRight: readonly [string, string]
 }
 
 /**
@@ -81,7 +85,11 @@ function makeScope(): ContractScope {
     recipient: `${run}_${RECIPIENT_LOCAL}`,
     absentRecipient: `${run}_${ABSENT_LOCAL}`,
     purpose: `${KEY_PREFIX}_${run}_${PURPOSE_MAIN}`,
-    otherPurpose: `${KEY_PREFIX}_${run}_${PURPOSE_OTHER}`
+    otherPurpose: `${KEY_PREFIX}_${run}_${PURPOSE_OTHER}`,
+    // Same characters, two different (tenant, recipient) splits. A key built by
+    // joining the raw values around `:` maps both onto one string.
+    shiftedLeft: [`${KEY_PREFIX}_${run}_x:y`, 'z'],
+    shiftedRight: [`${KEY_PREFIX}_${run}_x`, 'y:z']
   }
 }
 // Stryker restore StringLiteral
@@ -151,6 +159,10 @@ async function cleanUp(storage: IOtpStorage, scope: ContractScope): Promise<void
     await storage.clearCooldown(tenant, scope.recipient, purpose)
     await storage.delete(tenant, scope.absentRecipient, purpose)
     await storage.clearCooldown(tenant, scope.absentRecipient, purpose)
+  }
+  for (const [tenant, recipient] of [scope.shiftedLeft, scope.shiftedRight]) {
+    await storage.delete(tenant, recipient, scope.purpose)
+    await storage.clearCooldown(tenant, recipient, scope.purpose)
   }
 }
 
@@ -551,6 +563,60 @@ function cooldownAtomicCase({ scope, withStorage }: ContractContext): OtpStorage
   }
 }
 
+function keyBoundaryCase({ scope, withStorage }: ContractContext): OtpStorageContractCase {
+  return {
+    name: 'keeps the tenant and recipient boundary when composing a key',
+    run: () =>
+      withStorage(async (storage) => {
+        const [leftTenant, leftRecipient] = scope.shiftedLeft
+        const [rightTenant, rightRecipient] = scope.shiftedRight
+
+        await storage.set(leftTenant, leftRecipient, scope.purpose, makeEntry(60_000))
+        const bled = await storage.get(rightTenant, rightRecipient, scope.purpose)
+
+        check(
+          bled === null,
+          'an entry written for one tenant was readable by another whose id and recipient ' +
+            'differ only in where the boundary falls — the key concatenates the two fields ' +
+            'without encoding the split, so one tenant can read and consume another OTP. ' +
+            'Hash or length-prefix each field before joining; no digest strength repairs it'
+        )
+      })
+  }
+}
+
+function cooldownKeyBoundaryCase({ scope, withStorage }: ContractContext): OtpStorageContractCase {
+  return {
+    name: 'keeps the tenant and recipient boundary when composing a cooldown key',
+    run: () =>
+      withStorage(async (storage) => {
+        const [leftTenant, leftRecipient] = scope.shiftedLeft
+        const [rightTenant, rightRecipient] = scope.shiftedRight
+
+        const held = await storage.tryAcquireCooldown(leftTenant, leftRecipient, scope.purpose, 60)
+        check(
+          held,
+          'the first cooldown could not be acquired, so this case proves nothing about ' +
+            'boundary encoding — a case that cannot fail is decoration'
+        )
+        const other = await storage.tryAcquireCooldown(
+          rightTenant,
+          rightRecipient,
+          scope.purpose,
+          60
+        )
+
+        check(
+          other,
+          'a cooldown held for one tenant blocked another whose id and recipient differ only ' +
+            'in where the boundary falls — the cooldown key concatenates the two fields ' +
+            'without encoding the split, so one tenant can suppress another resends. ' +
+            'The entry key and the cooldown key are composed separately and both need this'
+        )
+      })
+  }
+}
+
 /** Every obligation this contract executes, in the order it reports them. */
 const CASE_BUILDERS = [
   roundTripCase,
@@ -571,7 +637,9 @@ const CASE_BUILDERS = [
   cooldownTenantScopeCase,
   cooldownRecipientScopeCase,
   cooldownPurposeScopeCase,
-  cooldownAtomicCase
+  cooldownAtomicCase,
+  keyBoundaryCase,
+  cooldownKeyBoundaryCase
 ] as const
 
 /**

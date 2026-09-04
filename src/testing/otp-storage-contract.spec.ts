@@ -61,7 +61,7 @@ describe('otpStorageContract', () => {
 
     // The count is part of the published promise, so it is asserted exactly:
     // a generic "more than zero" would pass with 12 of the 13 cases removed.
-    expect(cases).toHaveLength(19)
+    expect(cases).toHaveLength(21)
     expect(factory).not.toHaveBeenCalled()
   })
 
@@ -368,6 +368,37 @@ describe('otpStorageContract', () => {
         caseName: 'getCooldown reports zero',
         message: /must report 0 when nothing is held/,
         break: () => ({ getCooldown: async () => 42 })
+      },
+      {
+        caseName: 'keeps the tenant and recipient boundary when composing a cooldown key',
+        message:
+          /a cooldown held for one tenant blocked another whose id and recipient differ only in where the boundary falls/,
+        // Breaks ONLY cooldown-key composition, leaving the entry key correct: a
+        // storage that composes one safely and the other by raw join passes every
+        // case that does not exercise this one.
+        break: (inner) => ({
+          tryAcquireCooldown: (t, r, p, sec) =>
+            inner.tryAcquireCooldown(`${t}:${r}`, 'joined', p, sec),
+          getCooldown: (t, r, p) => inner.getCooldown(`${t}:${r}`, 'joined', p),
+          clearCooldown: (t, r, p) => inner.clearCooldown(`${t}:${r}`, 'joined', p)
+        })
+      },
+      {
+        caseName: 'keeps the tenant and recipient boundary when composing a key',
+        message:
+          /an entry written for one tenant was readable by another whose id and recipient differ only in where the boundary falls/,
+        // The defect this case exists for: composing the key by joining the two
+        // fields around a delimiter, so a boundary shift produces one key. This is
+        // what the storage did before the pair was hashed component-wise.
+        // Composes the key by joining the raw fields, which maps the two shifted
+        // pairs onto one string. The placeholder recipient is a constant rather than
+        // `''`, because a blank component trips the non-blank guard and would fail
+        // the case on a different obligation than the one it pins.
+        break: (inner) => ({
+          set: (t, r, p, e) => inner.set(`${t}:${r}`, 'joined', p, e),
+          get: (t, r, p) => inner.get(`${t}:${r}`, 'joined', p),
+          delete: (t, r, p) => inner.delete(`${t}:${r}`, 'joined', p)
+        })
       }
     ]
 

@@ -108,8 +108,8 @@ the codes (byte-identical) so the frontend can match without importing the serve
 ### OTP store key patterns (RedisOtpStorage)
 
 ```
-{namespace}:otp:{purpose}:{sha256(tenantId:recipient)}        # the OTP entry (TTL = ttlSeconds)
-{namespace}:cooldown:{purpose}:{sha256(tenantId:recipient)}   # the resend lock (TTL = cooldownSeconds)
+{namespace}:otp:{purpose}:{sha256(sha256(tenantId):sha256(recipient))}       # the OTP entry (TTL = ttlSeconds)
+{namespace}:otp_cd:{purpose}:{sha256(sha256(tenantId):sha256(recipient))}    # the resend lock (TTL = cooldownSeconds)
 ```
 
 `namespace` defaults to `notification`. The recipient and tenant never appear in plaintext.
@@ -126,8 +126,12 @@ the codes (byte-identical) so the frontend can match without importing the serve
 
 ## 4. Multi-tenant Security Model
 
-1. **SHA-256 store keys** — `sha256(tenantId:recipient)`. Privacy (no recipient
-   enumeration from `KEYS`) + isolation (cross-tenant collision is preimage-infeasible).
+1. **SHA-256 store keys** — `sha256(sha256(tenantId):sha256(recipient))`. Privacy (no
+   recipient enumeration from `KEYS`) + isolation. The isolation is a property of the
+   **encoding**, not of the digest: each component is hashed to a fixed length before the
+   join, so distinct pairs cannot share an input. Joining the raw values around a delimiter
+   maps `('a:b', 'c')` and `('a', 'b:c')` to one key while every hash property still holds.
+   An empty component is refused for the same reason — it collapses callers into one scope.
 2. **`tenantIdResolver`** — reads the tenant from a trusted source (verified JWT claim,
    subdomain, gateway-checked header). The `NotificationAuditInterceptor` uses it as the
    source of truth, so a `tenantId` forged in the request body cannot operate on another
@@ -195,7 +199,7 @@ external peer in the published bundle.
 
 - **100% coverage** (statements / branches / functions / lines) per file, enforced by
   `jest.coverage.config.ts` (`pnpm test:cov:all`). A pre-publish gate, not a target.
-- **The `./testing` subpath** ships `otpStorageContract(factory)`: 19 executable cases a consumer
+- **The `./testing` subpath** ships `otpStorageContract(factory)`: 21 executable cases a consumer
   runs against their own `IOtpStorage` in any runner (the package depends on none). It covers the
   obligations a type cannot check — `consumeAttempt` and `tryAcquireCooldown` must be atomic, the
   TTL must survive `update`, and both entry and cooldown keys must be scoped by tenant, recipient

@@ -49,7 +49,8 @@ imports an ORM or a provider SDK: persistence lives behind `IOtpStorage` and
   and lets the limits be bypassed under concurrency.
 - **`node:crypto` only** — `randomInt` for codes, `timingSafeEqual` for
   comparisons. No `crypto-js`, `otpauth`, `uuid`, or `nanoid`.
-- **Storage keys stay `sha256(tenantId:recipient)`** — no recipient PII in a key,
+- **Storage keys stay `sha256(sha256(tenantId):sha256(recipient))`** — each component hashed
+  before the join, so the encoding admits no ambiguity; no recipient PII in a key,
   no cross-tenant collision.
 
 ## Verification — run before every PR

@@ -24,4 +24,65 @@ describe('hashTenantRecipient', () => {
       hashTenantRecipient('tenant-b', 'jane@acme.com')
     )
   })
+
+  // The property the isolation rests on, stated as a test rather than as a comment:
+  // the pair must be encoded so no two distinct pairs share an input. Joining the raw
+  // values around a delimiter fails exactly here — every case below produced ONE key
+  // under `sha256(`${tenantId}:${recipient}`)`, whatever the digest's strength.
+  it.each([
+    ['delimiter moved left', 'acme:bob', 'x', 'acme', 'bob:x'],
+    ['delimiter moved right', 'a', 'b:c:d', 'a:b', 'c:d'],
+    ['boundary at the very start', ':x', 'y', '', 'x:y'],
+    ['boundary at the very end', 'x', 'y:', 'x:y', '']
+  ])(
+    'should not collide when the boundary shifts (%s)',
+    (_case, tenantA, recipientA, tenantB, recipientB) => {
+      const keyOf = (tenantId: string, recipient: string): string | symbol => {
+        try {
+          return hashTenantRecipient(tenantId, recipient)
+        } catch {
+          // An empty component is refused outright, which is a stronger answer than a
+          // distinct key. A unique symbol can never equal the other side's digest.
+          return Symbol('refused')
+        }
+      }
+      expect(keyOf(tenantA, recipientA)).not.toBe(keyOf(tenantB, recipientB))
+    }
+  )
+
+  // A component that names nothing is refused on either side: an empty tenant would
+  // share one namespace across every caller omitting one, and an empty recipient
+  // would collapse every recipient of a tenant onto one key. Whitespace names nothing
+  // either — it produces a distinct key, so there is no collision, but there is also
+  // no tenant, and a key filed under `' '` answers no question anyone asked.
+  it.each([
+    ['empty tenant id', '', 'jane@acme.com', 'tenantId'],
+    ['empty recipient', 'tenant-a', '', 'recipient'],
+    ['whitespace-only tenant id', '   ', 'jane@acme.com', 'tenantId'],
+    ['whitespace-only recipient', 'tenant-a', '\t\n ', 'recipient']
+  ])('should refuse a blank component (%s)', (_case, tenantId, recipient, named) => {
+    expect(() => hashTenantRecipient(tenantId, recipient)).toThrow(
+      `${named} must not be empty or whitespace-only`
+    )
+  })
+
+  // The declared `string` is a contract this library states, not one the caller is
+  // forced to honour: a null claim or a numeric database id type-checks at their call
+  // site and arrives here anyway. Without this the value reaches `createHash().update`
+  // and fails with a TypeError naming crypto's `data` argument instead of this rule.
+  it.each([
+    ['null tenant id', null, 'jane@acme.com', 'tenantId', 'object'],
+    ['numeric tenant id', 123, 'jane@acme.com', 'tenantId', 'number'],
+    ['undefined recipient', 'tenant-a', undefined, 'recipient', 'undefined']
+  ])(
+    'should refuse a non-string component naming this contract (%s)',
+    (_case, tenantId, recipient, named, received) => {
+      // Called through `Reflect.apply` rather than cast past the signature: this is
+      // how untyped consumer code reaches the function, and it needs no suppression
+      // to express.
+      expect(() => Reflect.apply(hashTenantRecipient, undefined, [tenantId, recipient])).toThrow(
+        `${named} must be a string; received ${received}`
+      )
+    }
+  )
 })

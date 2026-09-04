@@ -31,7 +31,7 @@ rules from `.github/copilot-instructions.md`.
       cooldown is acquired only in `storage.tryAcquireCooldown` — never a
       service-side `get` + `update`, which races
 - [ ] Cryptography is `node:crypto` only (`randomInt`, `timingSafeEqual`); storage
-      keys are `sha256(tenantId:recipient)` and `tenantId` comes from a trusted
+      keys are `sha256(sha256(tenantId):sha256(recipient))` and `tenantId` comes from a trusted
       source, never the request body
 - [ ] No ORM or provider SDK imported in `src/` — persistence and delivery stay
       behind `IOtpStorage`, `INotificationLogRepository`, and `IEmailProvider`

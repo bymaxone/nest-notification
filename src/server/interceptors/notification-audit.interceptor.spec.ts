@@ -133,6 +133,58 @@ describe('NotificationAuditInterceptor', () => {
     expect(repo.entries[0]?.tenantId).toBe('trusted')
   })
 
+  // A resolver that yields nothing has not identified a tenant. Recording the empty
+  // string would file the event under a scope shared with every other empty result,
+  // so the write is refused instead — swallowed here, per `audit.swallowErrors`.
+  it('refuses an empty tenant id from the resolver instead of recording it', async () => {
+    const repo = new CapturingRepo()
+    const interceptor = new NotificationAuditInterceptor(
+      buildOptions({ tenantIdResolver: () => '' }),
+      repo
+    )
+    const ctx = buildContext([otpInput], { request: { headers: {} } })
+
+    await firstValueFrom(interceptor.intercept(ctx, handlerOf(of('ok'))))
+
+    expect(repo.entries).toHaveLength(0)
+  })
+
+  // The same refusal must surface rather than vanish when the consumer has asked for
+  // audit failures to propagate — otherwise the entry is silently missing.
+  it('surfaces the empty-tenant refusal when swallowErrors is off', async () => {
+    const repo = new CapturingRepo()
+    const interceptor = new NotificationAuditInterceptor(
+      buildOptions({ tenantIdResolver: () => '', swallowErrors: false }),
+      repo
+    )
+    const ctx = buildContext([otpInput], { request: { headers: {} } })
+
+    await expect(
+      firstValueFrom(interceptor.intercept(ctx, handlerOf(of('ok'))))
+    ).rejects.toMatchObject({
+      code: 'notification.audit_log_failed',
+      cause: {
+        message:
+          '[NotificationAuditInterceptor] the resolved tenant id must not be empty or ' +
+          'whitespace-only; a value that names nobody cannot scope anything.'
+      }
+    })
+    expect(repo.entries).toHaveLength(0)
+  })
+
+  // The fallback is the DEFAULT path — most consumers configure no resolver — so a
+  // blank payload tenant arrives here far more often than through a resolver. Guarding
+  // only the resolver would leave the common case unchecked.
+  it('refuses a blank payload tenant id when no resolver is configured', async () => {
+    const repo = new CapturingRepo()
+    const interceptor = new NotificationAuditInterceptor(buildOptions(), repo)
+    const ctx = buildContext([{ ...otpInput, tenantId: '   ' }])
+
+    await firstValueFrom(interceptor.intercept(ctx, handlerOf(of('ok'))))
+
+    expect(repo.entries).toHaveLength(0)
+  })
+
   // With a resolver set but no resolvable request, the payload tenantId is the fallback.
   it('falls back to the payload tenantId when the request is absent', async () => {
     const repo = new CapturingRepo()

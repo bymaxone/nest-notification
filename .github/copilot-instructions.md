@@ -72,7 +72,8 @@ other, so the rules below are additive to the baseline and rank **CRITICAL**.
   `storage.tryAcquireCooldown` (`SET NX EX`) is the sole acquirer of the cooldown.
   A service-side `get` + `update` races, and the race is exactly how `maxAttempts`
   and the anti-resend window get bypassed — flag any such pair.
-- **Storage keys are `sha256(tenantId:recipient)`.** No recipient PII in a key, no
+- **Storage keys are `sha256(sha256(tenantId):sha256(recipient))`.** Each component is
+  hashed before the join, so two pairs cannot share an input. No recipient PII in a key, no
   key shape that lets two tenants collide. `tenantId` is resolved from a trusted
   source (the validated request context), never from the request body.
 - **No ORM or provider SDK import in `src/`.** Persistence lives behind

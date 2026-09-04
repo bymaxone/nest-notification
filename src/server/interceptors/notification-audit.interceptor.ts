@@ -36,8 +36,12 @@ import type {
 } from '../interfaces/notification-log-repository.interface'
 import type { NotificationRequest } from '../interfaces/notification-module-options.interface'
 import type { DispatchInput } from '../services/notification.service'
+import { assertIdentifies } from '../utils/tenant-scope'
 
 /** Marker `providerName` distinguishing interceptor-level entries from service-level ones. */
+/** Prefix quoted in guard failures raised by this interceptor. */
+const INTERCEPTOR_NAME = 'NotificationAuditInterceptor'
+
 const INTERCEPTOR_PROVIDER_NAME = '__interceptor__'
 
 /** Coerces an unknown thrown value into a safe, message-only string. */
@@ -139,19 +143,36 @@ export class NotificationAuditInterceptor implements NestInterceptor {
   }
 
   /**
-   * Resolves the trusted tenant id: `tenantIdResolver(request)` when configured and
-   * a request is available, otherwise the payload-supplied `fallback`.
+   * Resolves the trusted tenant id from `tenantIdResolver(request)`.
+   *
+   * Falls back to the payload-supplied value only when no resolver is configured or
+   * no request is available — the payload reaches the handler from the caller, so
+   * that value is asserted rather than authenticated, and an entry built from it
+   * attributes the event to whichever tenant the caller named. Configure a resolver
+   * whenever this interceptor runs on an HTTP boundary.
+   *
+   * A value that identifies nobody is refused rather than recorded, on BOTH paths:
+   * the resolver's answer and the payload fallback. The fallback is the default path
+   * — most consumers configure no resolver — so guarding only the resolver would
+   * leave the common case unchecked, which is where a blank tenant actually arrives.
+   *
+   * @throws Error When either the resolved or the fallback tenant id is not a
+   *   string, or is blank.
    */
   private async resolveTenantId(context: ExecutionContext, fallback: string): Promise<string> {
     const resolver = this.options.global.tenantIdResolver
     if (resolver === undefined) {
+      assertIdentifies(INTERCEPTOR_NAME, 'the payload tenant id', fallback)
       return fallback
     }
     const request = this.extractRequest(context)
     if (request === null) {
+      assertIdentifies(INTERCEPTOR_NAME, 'the payload tenant id', fallback)
       return fallback
     }
-    return resolver(request)
+    const resolved = await resolver(request)
+    assertIdentifies(INTERCEPTOR_NAME, 'the resolved tenant id', resolved)
+    return resolved
   }
 
   /** Reads the HTTP request from the context, returning `null` outside an HTTP context. */

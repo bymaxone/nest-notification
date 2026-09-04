@@ -40,7 +40,7 @@ Everything that touches the outside world — the email transport, the OTP store
 ### Why nest-notification?
 
 - **🔌 Your database, your provider** — The library defines the contracts (`IEmailProvider`, `IOtpStorage`, `IEmailTemplateRenderer`, `INotificationLogRepository`). You supply the implementations. It **never imports `@prisma/client`** or any other ORM — a CI gate fails the build if one appears — so a cross-cutting concern never hard-wires your schema.
-- **🏢 Multi-tenant from the first line** — Every operation is scoped by `tenantId`, store keys are `sha256(tenantId:recipient)`, and the audit interceptor resolves the trusted tenant from the request rather than the request body.
+- **🏢 Multi-tenant from the first line** — Every operation is scoped by `tenantId`, store keys are `sha256(sha256(tenantId):sha256(recipient))`, and the audit interceptor resolves the trusted tenant from the request rather than the request body when you configure a resolver.
 - **🔒 Native crypto only** — Codes come from `crypto.randomInt` and are compared with `crypto.timingSafeEqual`. No `crypto-js`, no `otpauth`, no `uuid`, no `nanoid` — the most security-sensitive path carries no third-party supply-chain risk.
 - **⚛️ Atomic by construction** — The attempt counter and the resend cooldown are mutated **inside the storage** (Redis Lua / `SET NX EX`), never by a service-side read-then-write. A `get` + `update` pair races, and the race is exactly how a max-attempts ceiling gets bypassed under concurrent requests.
 - **🪶 Pay for what you use** — `"dependencies": {}`. NestJS, your email SDK, your Redis client, and React are all peer dependencies, and only the channels you configure are registered in the container.
@@ -71,7 +71,7 @@ pnpm add @bymax-one/nest-notification
 
 ### 🏢 Multi-Tenant & Audit
 
-- ✅ **SHA-256 storage keys** — `sha256(tenantId:recipient)`: no recipient PII in a key, no cross-tenant collision
+- ✅ **SHA-256 storage keys** — `sha256(sha256(tenantId):sha256(recipient))`: no recipient PII in a key, and the encoding adds no ambiguity of its own, so two pairs never share one by construction
 - ✅ **`tenantIdResolver`** — the audited tenant comes from a trusted source (a JWT claim, a subdomain, a gateway-checked header), not the payload
 - ✅ **Opt-in audit log** — a fire-and-forget `INotificationLogRepository` plus a `NotificationAuditInterceptor`; audit failures never break delivery
 - ✅ **This library never logs a code** — not to a logger, not to an audit entry, not into an error message it authors, enforced by a regression test. Text a **provider** authors is a separate problem with a documented ceiling: an error quoting the body in another encoding survives every guard, so control whether provider error text reaches your logs at all
@@ -582,14 +582,14 @@ OTP codes are bearer secrets with a short life and a wide blast radius: whoever 
 
 ### SHA-256 storage keys
 
-OTP entries and resend cooldowns are stored under a key derived from `sha256(tenantId:recipient)` — never the plaintext recipient or tenant id:
+OTP entries and resend cooldowns are stored under a key derived from `sha256(sha256(tenantId):sha256(recipient))` — never the plaintext recipient or tenant id:
 
 ```
 notification:otp:email_verification:7f3d8c91…  (64 hex chars)
 ```
 
 - **Privacy.** An operator with `KEYS notification:otp:*` access to Redis — or anyone holding a leaked backup — cannot enumerate which addresses have a pending OTP. The recipient never appears in a key.
-- **Isolation.** Two tenants sharing the same recipient produce different keys, so a cross-tenant collision is computationally infeasible (SHA-256 preimage resistance). One tenant's OTP, cooldown, and verification can never touch another's.
+- **Isolation.** Each component is hashed to a fixed length before the two are joined, so distinct `(tenantId, recipient)` pairs cannot produce the same key. This is a property of the encoding rather than of the digest — joining the raw values around a delimiter would map `('acme:bob', 'x')` and `('acme', 'bob:x')` onto one key while SHA-256's preimage and collision resistance held perfectly. Both components must be non-empty; an empty one is refused rather than hashed, because it would place every caller that omits it into a single shared scope.
 
 The trade-off — opaque keys you cannot read back to a recipient — is intentional: keys are an index, not a data source. The recipient lives only inside the TTL-bound value and, optionally masked, in the audit log.
 
@@ -656,7 +656,7 @@ When integrating `@bymax-one/nest-notification` in production, verify each of th
 | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Code Generation    | `crypto.randomInt` per character over the configured alphabet — uniform at every position, no modulo bias                                                                                       |
 | Code Comparison    | `crypto.timingSafeEqual` (constant-time), never `===`                                                                                                                                           |
-| Storage Keys       | `sha256(tenantId:recipient)` — no recipient PII, no cross-tenant collision                                                                                                                      |
+| Storage Keys       | `sha256(sha256(tenantId):sha256(recipient))` — no recipient PII; the encoding adds no ambiguity, so no two pairs share a key by construction                                                    |
 | Attempt Ceiling    | Counter spent atomically inside the storage (Redis Lua) — never a service-side read-then-write                                                                                                  |
 | Resend Cooldown    | `SET NX EX` acquire, released only on delivery failure — two concurrent resends cannot both win                                                                                                 |
 | Code Lifetime      | TTL-bound in the store; expiry and absence are reported identically so neither leaks the other                                                                                                  |
