@@ -163,9 +163,10 @@ describe('NotificationAuditInterceptor', () => {
       firstValueFrom(interceptor.intercept(ctx, handlerOf(of('ok'))))
     ).rejects.toMatchObject({
       code: 'notification.audit_log_failed',
-      // Only `name`, `message` and a nested `cause` survive the exception's cause
-      // sanitizer, so the refusal's own `code` is deliberately not readable here — the
-      // sanitizer exists so a provider object cannot carry a secret into a log.
+      // The exception's cause sanitizer rebuilds an Error carrying `name`, `message`,
+      // `stack` and a nested `cause`, and drops every other property — so the refusal's
+      // own `code` is deliberately not readable here. The sanitizer exists so a
+      // provider object cannot carry a secret into a log.
       cause: expect.objectContaining({ name: 'NotificationException' })
     })
     expect(repo.entries).toHaveLength(0)
