@@ -61,7 +61,7 @@ describe('otpStorageContract', () => {
 
     // The count is part of the published promise, so it is asserted exactly:
     // a generic "more than zero" would pass with 12 of the 13 cases removed.
-    expect(cases).toHaveLength(19)
+    expect(cases).toHaveLength(20)
     expect(factory).not.toHaveBeenCalled()
   })
 
@@ -368,6 +368,22 @@ describe('otpStorageContract', () => {
         caseName: 'getCooldown reports zero',
         message: /must report 0 when nothing is held/,
         break: () => ({ getCooldown: async () => 42 })
+      },
+      {
+        caseName: 'keeps the tenant and recipient boundary when composing a key',
+        message:
+          /an entry written for one tenant was readable by another whose id and recipient differ only in where the boundary falls/,
+        // The defect this case exists for: composing the key by joining the two
+        // fields around a delimiter, so a boundary shift produces one key. This is
+        // what the storage did before the pair was hashed component-wise.
+        // The placeholder recipient is a constant rather than `''`: an empty
+        // component trips the non-empty guard, which would fail the case on a
+        // different obligation than the one it is pinning.
+        break: (inner) => ({
+          set: (t, r, p, e) => inner.set(`${t}:${r}`, 'joined', p, e),
+          get: (t, r, p) => inner.get(`${t}:${r}`, 'joined', p),
+          delete: (t, r, p) => inner.delete(`${t}:${r}`, 'joined', p)
+        })
       }
     ]
 

@@ -31,7 +31,7 @@
 - `node:crypto` only — `randomInt` for codes (built character-by-character; never `10 ** length`), `timingSafeEqual` for comparison. Never `crypto-js`, `otpauth`, `uuid`, or `nanoid`.
 - **Atomic OTP.** The attempt counter is mutated only by `storage.consumeAttempt`; the resend cooldown is acquired only by `storage.tryAcquireCooldown` (`SET NX EX`) and released on delivery failure. Never a service-side `get` + `update` — that races and lets `maxAttempts` / anti-resend be bypassed.
 - **Never log codes.** OTP codes are never written to an audit entry, console/logger line, or `errorMessage` (message only — never a stack trace). Gate: `JSON.stringify(auditEntry).includes(realCode) === false`.
-- **SHA-256 keys.** Store keys are `sha256(tenantId:recipient)` — no recipient PII in keys, no cross-tenant collision.
+- **SHA-256 keys.** Store keys are `sha256(sha256(tenantId):sha256(recipient))` — no recipient PII in keys, and the pair is encoded unambiguously. Each component is hashed to a fixed length **before** the join: concatenating the raw values around a delimiter makes `('a:b', 'c')` and `('a', 'b:c')` one key, which no digest strength repairs. Both components must be non-empty.
 
 **5. NestJS Patterns**
 

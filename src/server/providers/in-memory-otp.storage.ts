@@ -18,6 +18,7 @@ import type {
   IOtpStorage,
   OtpEntry
 } from '../interfaces/otp-storage.interface'
+import { hashTenantRecipient } from '../utils/hash'
 
 /** Number of milliseconds in one second. */
 const MS_PER_SECOND = 1000
@@ -216,8 +217,16 @@ export class InMemoryOtpStorage implements IOtpStorage {
     return { otps: this.store.size, cooldowns: this.cooldowns.size }
   }
 
-  /** Collapses the `(tenantId, recipient, purpose)` tuple into one map key. */
+  /**
+   * Collapses the `(tenantId, recipient, purpose)` tuple into one map key.
+   *
+   * The tenant and recipient go through {@link hashTenantRecipient}, which encodes
+   * the pair unambiguously and rejects an empty component. Joining the raw values
+   * around a delimiter would not: `('a::b', 'c', p)` and `('a', 'b::c', p)` produce
+   * the same string. The digest is fixed-length, so appending the purpose after it
+   * stays unambiguous too.
+   */
   private key(tenantId: string, recipient: string, purpose: string): string {
-    return `${tenantId}::${recipient}::${purpose}`
+    return `${hashTenantRecipient(tenantId, recipient)}::${purpose}`
   }
 }

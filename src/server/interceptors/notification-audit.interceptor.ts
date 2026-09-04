@@ -139,8 +139,19 @@ export class NotificationAuditInterceptor implements NestInterceptor {
   }
 
   /**
-   * Resolves the trusted tenant id: `tenantIdResolver(request)` when configured and
-   * a request is available, otherwise the payload-supplied `fallback`.
+   * Resolves the trusted tenant id from `tenantIdResolver(request)`.
+   *
+   * Falls back to the payload-supplied value only when no resolver is configured or
+   * no request is available — the payload reaches the handler from the caller, so
+   * that value is asserted rather than authenticated, and an entry built from it
+   * attributes the event to whichever tenant the caller named. Configure a resolver
+   * whenever this interceptor runs on an HTTP boundary.
+   *
+   * A resolver that returns an empty string is refused rather than accepted: an
+   * empty scope is not a tenant, and recording one would attribute the event to a
+   * scope shared with every other empty result.
+   *
+   * @throws Error When the configured resolver returns an empty string.
    */
   private async resolveTenantId(context: ExecutionContext, fallback: string): Promise<string> {
     const resolver = this.options.global.tenantIdResolver
@@ -151,7 +162,14 @@ export class NotificationAuditInterceptor implements NestInterceptor {
     if (request === null) {
       return fallback
     }
-    return resolver(request)
+    const resolved = await resolver(request)
+    if (resolved === '') {
+      throw new Error(
+        '[NotificationAuditInterceptor] tenantIdResolver returned an empty tenant id; ' +
+          'an empty scope cannot identify a tenant.'
+      )
+    }
+    return resolved
   }
 
   /** Reads the HTTP request from the context, returning `null` outside an HTTP context. */
