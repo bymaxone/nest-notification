@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.4.0] - 2026-09-04
 
+> ### ⚠️ Read before deploying — the version number does not warn you
+>
+> **Every OTP storage key changes in this release, and nothing in the type system will tell
+> you.** It compiles, the suite passes, and on deploy every OTP and resend cooldown still in
+> flight becomes unreachable. An operator reading `fix(otp)` and a minor version bump will not
+> infer that every code in flight stops working — this paragraph is the only warning there is.
+>
+> **Scope, so this reads as accurate rather than alarming.** The defect it fixes is a
+> cross-tenant key collision that is real in the library and **unreachable in today's only
+> consumer**: `bymax-one` resolves tenants through a host-label guard that rejects both an empty
+> label and a colon, so it provably never emits an identity that could collide. A backend
+> resolving tenants from a database column, a JWT claim or an admin-entered field inherits none
+> of that protection.
+>
+> What to do about it is in [Apply to a derived backend](#-apply-to-a-derived-backend) below.
+
 ### Security
 
 - **Storage keys no longer collapse two different `(tenantId, recipient)` pairs onto one key.**
@@ -23,6 +39,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   every digest property held perfectly while they collided. Those claims are corrected.
 
   `InMemoryOtpStorage` composed its map key the same way, with `::`, and had the same defect.
+
+- **New error code `notification.invalid_scope_identifier`** (23 codes, up from 22). The refusal
+  below is a `NotificationException` rather than a bare `Error`: it reaches a consumer through
+  every `IOtpStorage` method, and this library's contract is that a consumer branches on `code`.
+  A raw throw surfaced as an untyped 500 carrying an internal message, where the condition is a
+  400 the caller can act on. `details` names the boundary, the parameter and the reason — never
+  the value, which is serialized into the response and is exactly what must not be echoed back.
 
 - **A component that identifies nothing is refused rather than hashed** — empty, whitespace-only,
   or not a string at all. An empty component put every caller that omitted it into one shared

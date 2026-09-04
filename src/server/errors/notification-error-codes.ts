@@ -133,6 +133,11 @@ export const NOTIFICATION_ERROR_DEFINITIONS = {
     code: NOTIFICATION_ERROR_CODES.CHANNEL_DISABLED,
     status: HttpStatus.NOT_IMPLEMENTED,
     message: 'Channel not enabled in module config'
+  },
+  INVALID_SCOPE_IDENTIFIER: {
+    code: NOTIFICATION_ERROR_CODES.INVALID_SCOPE_IDENTIFIER,
+    status: HttpStatus.BAD_REQUEST,
+    message: 'Tenant or recipient identifier does not identify anybody'
   }
 } as const satisfies Record<string, NotificationErrorDefinition>
 

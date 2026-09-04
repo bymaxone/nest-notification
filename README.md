@@ -79,7 +79,7 @@ pnpm add @bymax-one/nest-notification
 ### 🧩 Developer Experience
 
 - ✅ **Three subpaths** — server, zero-dependency shared types, and React hooks
-- ✅ **Stable error catalog** — 22 namespaced codes shared byte-for-byte between server and frontend, so you localize on the `code`
+- ✅ **Stable error catalog** — 23 namespaced codes shared byte-for-byte between server and frontend, so you localize on the `code`
 - ✅ **Dual-format output** — ESM + CJS + declarations for both, verified against the packed tarball on every PR
 - ✅ **Typed end to end** — TypeScript `strict` with `exactOptionalPropertyTypes` and `noUncheckedIndexedAccess`; zero `any`
 
@@ -757,7 +757,7 @@ pnpm mutation      # Stryker mutation testing
 | -------------------------------- | -------------------------------------------------------------------------- |
 | `NotificationException`          | `HttpException` carrying a stable `code`, a status, and optional `details` |
 | `NotificationExceptionOptions`   | Constructor options bag: `{ status?, message?, cause? }`                   |
-| `NOTIFICATION_ERROR_CODES`       | The 22 stable `notification.*` codes — branch on these, not on messages    |
+| `NOTIFICATION_ERROR_CODES`       | The 23 stable `notification.*` codes — branch on these, not on messages    |
 | `NOTIFICATION_ERROR_DEFINITIONS` | Server-side code → HTTP status + default English message                   |
 
 Error codes are namespaced (`notification.otp_invalid_code`, `notification.otp_cooldown_active`, `notification.email_send_failed`, …) and never change once published. Default messages are English; localize on the `code`.
