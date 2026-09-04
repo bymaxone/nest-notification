@@ -50,19 +50,39 @@ describe('hashTenantRecipient', () => {
     }
   )
 
-  // An empty tenant is not a tenant: every caller omitting one would otherwise share
-  // a single namespace, which is the isolation failure reached from the other side.
-  it('should refuse an empty tenant id', () => {
-    expect(() => hashTenantRecipient('', 'jane@acme.com')).toThrow(
-      'tenantId and recipient must both be non-empty'
+  // A component that names nothing is refused on either side: an empty tenant would
+  // share one namespace across every caller omitting one, and an empty recipient
+  // would collapse every recipient of a tenant onto one key. Whitespace names nothing
+  // either — it produces a distinct key, so there is no collision, but there is also
+  // no tenant, and a key filed under `' '` answers no question anyone asked.
+  it.each([
+    ['empty tenant id', '', 'jane@acme.com', 'tenantId'],
+    ['empty recipient', 'tenant-a', '', 'recipient'],
+    ['whitespace-only tenant id', '   ', 'jane@acme.com', 'tenantId'],
+    ['whitespace-only recipient', 'tenant-a', '\t\n ', 'recipient']
+  ])('should refuse a blank component (%s)', (_case, tenantId, recipient, named) => {
+    expect(() => hashTenantRecipient(tenantId, recipient)).toThrow(
+      `${named} must not be empty or whitespace-only`
     )
   })
 
-  // Same reasoning on the other component — an empty recipient collapses every
-  // recipient of one tenant onto one key.
-  it('should refuse an empty recipient', () => {
-    expect(() => hashTenantRecipient('tenant-a', '')).toThrow(
-      'tenantId and recipient must both be non-empty'
-    )
-  })
+  // The declared `string` is a contract this library states, not one the caller is
+  // forced to honour: a null claim or a numeric database id type-checks at their call
+  // site and arrives here anyway. Without this the value reaches `createHash().update`
+  // and fails with a TypeError naming crypto's `data` argument instead of this rule.
+  it.each([
+    ['null tenant id', null, 'jane@acme.com', 'tenantId', 'object'],
+    ['numeric tenant id', 123, 'jane@acme.com', 'tenantId', 'number'],
+    ['undefined recipient', 'tenant-a', undefined, 'recipient', 'undefined']
+  ])(
+    'should refuse a non-string component naming this contract (%s)',
+    (_case, tenantId, recipient, named, received) => {
+      // Called through `Reflect.apply` rather than cast past the signature: this is
+      // how untyped consumer code reaches the function, and it needs no suppression
+      // to express.
+      expect(() => Reflect.apply(hashTenantRecipient, undefined, [tenantId, recipient])).toThrow(
+        `${named} must be a string; received ${received}`
+      )
+    }
+  )
 })

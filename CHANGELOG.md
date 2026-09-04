@@ -24,9 +24,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   `InMemoryOtpStorage` composed its map key the same way, with `::`, and had the same defect.
 
-- **An empty `tenantId` or `recipient` is refused rather than hashed.** An empty component put
-  every caller that omitted it into one shared namespace — the same isolation failure reached
-  from the other side.
+- **A component that identifies nothing is refused rather than hashed** — empty, whitespace-only,
+  or not a string at all. An empty component put every caller that omitted it into one shared
+  namespace, the same isolation failure reached from the other side. Whitespace produced a
+  distinct key and therefore no collision, but named no tenant. The `typeof` check is there
+  because the declared `string` is a contract this library states and a consumer may not honour:
+  a `null` claim or a numeric database id type-checks at their call site and previously failed
+  inside `createHash` with a message naming crypto's `data` argument instead of this rule.
 
 - **`NotificationAuditInterceptor` refuses an empty tenant id from `tenantIdResolver`.** An empty
   scope does not identify a tenant, and recording it filed the event under a scope shared with
@@ -48,8 +52,11 @@ unreachable — the old keys are never read again. Consequences to plan for:
 Deploy when a short window of "request your code again" is acceptable, or drain OTP traffic first.
 
 **If you implement `IOtpStorage` yourself,** re-run the contract from `@bymax-one/nest-notification/testing`.
-It has a new case, `keeps the tenant and recipient boundary when composing a key`, which fails any
-implementation that concatenates the two fields around a delimiter — 20 cases, up from 19. A survey
+It has two new cases — `keeps the tenant and recipient boundary when composing a key` and the same
+for a cooldown key — which fail any implementation that concatenates the two fields around a
+delimiter. **Both are needed:** the entry key and the cooldown key are composed separately, so a
+storage that fixes one and not the other passes every case that exercises only the first. 21 cases,
+up from 19. A survey
 of the sibling libraries found 108 composite key constructions and 2 that encode their components,
 so this defect is the default rather than the exception.
 

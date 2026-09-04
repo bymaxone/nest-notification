@@ -9,9 +9,11 @@
  *    read → expiry/max check → increment → write sequence inside ONE Lua script
  *    (`EVAL`), so concurrent verifications cannot interleave and overshoot
  *    `maxAttempts`.
- * 2. **PII-free keys** — every key carries `sha256(tenantId:recipient)`, never the
- *    plaintext email/phone, so an operator with `KEYS` access cannot enumerate
- *    recipients, and a cross-tenant key collision is computationally infeasible.
+ * 2. **PII-free keys** — every key carries `sha256(sha256(tenantId):sha256(recipient))`,
+ *    never the plaintext email/phone, so an operator with `KEYS` access cannot
+ *    enumerate recipients. Each component is hashed before the join so the encoding
+ *    itself admits no ambiguity: joining the raw values would map `('a:b', 'c')` and
+ *    `('a', 'b:c')` onto one key, which no digest strength repairs.
  *
  * `ioredis` is an OPTIONAL peer dependency: this class forward-declares the slim
  * {@link RedisLike} surface it needs (including `eval`/`pttl`) instead of importing
@@ -259,12 +261,12 @@ export class RedisOtpStorage implements IOtpStorage {
     await this.#redis.del(this.cooldownKey(tenantId, recipient, purpose))
   }
 
-  /** Builds the OTP entry key: `{namespace}:otp:{purpose}:{sha256(tenantId:recipient)}`. */
+  /** Builds the OTP entry key: `{namespace}:otp:{purpose}:{hashTenantRecipient(...)}`. */
   private otpKey(tenantId: string, recipient: string, purpose: string): string {
     return `${this.namespace}:otp:${purpose}:${hashTenantRecipient(tenantId, recipient)}`
   }
 
-  /** Builds the cooldown key: `{namespace}:otp_cd:{purpose}:{sha256(tenantId:recipient)}`. */
+  /** Builds the cooldown key: `{namespace}:otp_cd:{purpose}:{hashTenantRecipient(...)}`. */
   private cooldownKey(tenantId: string, recipient: string, purpose: string): string {
     return `${this.namespace}:otp_cd:${purpose}:${hashTenantRecipient(tenantId, recipient)}`
   }

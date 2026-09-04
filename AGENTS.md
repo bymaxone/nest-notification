@@ -199,7 +199,7 @@ external peer in the published bundle.
 
 - **100% coverage** (statements / branches / functions / lines) per file, enforced by
   `jest.coverage.config.ts` (`pnpm test:cov:all`). A pre-publish gate, not a target.
-- **The `./testing` subpath** ships `otpStorageContract(factory)`: 20 executable cases a consumer
+- **The `./testing` subpath** ships `otpStorageContract(factory)`: 21 executable cases a consumer
   runs against their own `IOtpStorage` in any runner (the package depends on none). It covers the
   obligations a type cannot check — `consumeAttempt` and `tryAcquireCooldown` must be atomic, the
   TTL must survive `update`, and both entry and cooldown keys must be scoped by tenant, recipient

@@ -33,7 +33,7 @@ export interface InMemoryStorageSize {
 @Injectable()
 export class InMemoryOtpStorage implements IOtpStorage {
   readonly name = 'memory'
-  /** OTP entries keyed by `${tenantId}::${recipient}::${purpose}`. */
+  /** OTP entries keyed by `${hashTenantRecipient(tenantId, recipient)}::${purpose}`. */
   private readonly store = new Map<string, OtpEntry>()
   /** Cooldown expiries (epoch ms) keyed by the same composite key. */
   private readonly cooldowns = new Map<string, number>()

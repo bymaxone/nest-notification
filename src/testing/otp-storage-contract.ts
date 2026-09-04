@@ -586,6 +586,33 @@ function keyBoundaryCase({ scope, withStorage }: ContractContext): OtpStorageCon
   }
 }
 
+function cooldownKeyBoundaryCase({ scope, withStorage }: ContractContext): OtpStorageContractCase {
+  return {
+    name: 'keeps the tenant and recipient boundary when composing a cooldown key',
+    run: () =>
+      withStorage(async (storage) => {
+        const [leftTenant, leftRecipient] = scope.shiftedLeft
+        const [rightTenant, rightRecipient] = scope.shiftedRight
+
+        await storage.tryAcquireCooldown(leftTenant, leftRecipient, scope.purpose, 60)
+        const other = await storage.tryAcquireCooldown(
+          rightTenant,
+          rightRecipient,
+          scope.purpose,
+          60
+        )
+
+        check(
+          other,
+          'a cooldown held for one tenant blocked another whose id and recipient differ only ' +
+            'in where the boundary falls — the cooldown key concatenates the two fields ' +
+            'without encoding the split, so one tenant can suppress another resends. ' +
+            'The entry key and the cooldown key are composed separately and both need this'
+        )
+      })
+  }
+}
+
 const CASE_BUILDERS = [
   roundTripCase,
   absentCase,
@@ -606,7 +633,8 @@ const CASE_BUILDERS = [
   cooldownRecipientScopeCase,
   cooldownPurposeScopeCase,
   cooldownAtomicCase,
-  keyBoundaryCase
+  keyBoundaryCase,
+  cooldownKeyBoundaryCase
 ] as const
 
 /**
