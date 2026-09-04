@@ -4,8 +4,8 @@ import { NOTIFICATION_ERROR_CODES } from './error-codes'
 describe('NOTIFICATION_ERROR_CODES', () => {
   // The catalog is a fixed public contract; a count drift means a code was
   // added/removed without updating the server definitions or this gate.
-  it('should declare exactly 22 error codes', () => {
-    expect(Object.keys(NOTIFICATION_ERROR_CODES)).toHaveLength(22)
+  it('should declare exactly 23 error codes', () => {
+    expect(Object.keys(NOTIFICATION_ERROR_CODES)).toHaveLength(23)
   })
 
   // Every value must be namespaced under `notification.` so consumer code can

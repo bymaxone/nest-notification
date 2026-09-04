@@ -24,6 +24,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
   `InMemoryOtpStorage` composed its map key the same way, with `::`, and had the same defect.
 
+- **New error code `notification.invalid_scope_identifier`** (23 codes, up from 22). The refusal
+  below is a `NotificationException` rather than a bare `Error`: it reaches a consumer through
+  every `IOtpStorage` method, and this library's contract is that a consumer branches on `code`.
+  A raw throw surfaced as an untyped 500 carrying an internal message, where the condition is a
+  400 the caller can act on. `details` names the boundary, the parameter and the reason — never
+  the value, which is serialized into the response and is exactly what must not be echoed back.
+
 - **A component that identifies nothing is refused rather than hashed** — empty, whitespace-only,
   or not a string at all. An empty component put every caller that omitted it into one shared
   namespace, the same isolation failure reached from the other side. Whitespace produced a

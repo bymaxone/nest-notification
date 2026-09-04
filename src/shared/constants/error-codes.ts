@@ -12,8 +12,8 @@
  * Stable error-code identifiers, keyed by their symbolic name.
  *
  * Values are namespaced under `notification.*` and never change once published —
- * consumers branch on them to localize messages. The 22 entries cover the email,
- * template, OTP, SMS, push, audit, and channel-config failure surfaces.
+ * consumers branch on them to localize messages. The 23 entries cover the email,
+ * template, OTP, SMS, push, audit, channel-config and scoping failure surfaces.
  */
 export const NOTIFICATION_ERROR_CODES = {
   EMAIL_PROVIDER_NOT_CONFIGURED: 'notification.email_provider_not_configured',
@@ -38,7 +38,14 @@ export const NOTIFICATION_ERROR_CODES = {
   PUSH_PROVIDER_NOT_CONFIGURED: 'notification.push_provider_not_configured',
   PUSH_SEND_FAILED: 'notification.push_send_failed',
   AUDIT_LOG_FAILED: 'notification.audit_log_failed',
-  CHANNEL_DISABLED: 'notification.channel_disabled'
+  CHANNEL_DISABLED: 'notification.channel_disabled',
+  /**
+   * A `tenantId` or `recipient` that identifies nobody reached a scoping
+   * boundary — empty, whitespace-only, or not a string at all. Distinct from
+   * {@link EMAIL_INVALID_RECIPIENT}, which is about a malformed address rather
+   * than a value that cannot scope anything.
+   */
+  INVALID_SCOPE_IDENTIFIER: 'notification.invalid_scope_identifier'
 } as const
 
 /**

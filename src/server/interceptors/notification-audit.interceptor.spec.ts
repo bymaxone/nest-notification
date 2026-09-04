@@ -163,11 +163,10 @@ describe('NotificationAuditInterceptor', () => {
       firstValueFrom(interceptor.intercept(ctx, handlerOf(of('ok'))))
     ).rejects.toMatchObject({
       code: 'notification.audit_log_failed',
-      cause: {
-        message:
-          '[NotificationAuditInterceptor] the resolved tenant id must not be empty or ' +
-          'whitespace-only; a value that names nobody cannot scope anything.'
-      }
+      // Only `name`, `message` and a nested `cause` survive the exception's cause
+      // sanitizer, so the refusal's own `code` is deliberately not readable here — the
+      // sanitizer exists so a provider object cannot carry a secret into a log.
+      cause: expect.objectContaining({ name: 'NotificationException' })
     })
     expect(repo.entries).toHaveLength(0)
   })

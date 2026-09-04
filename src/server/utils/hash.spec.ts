@@ -1,3 +1,4 @@
+import { NOTIFICATION_ERROR_CODES } from '../../shared/constants/error-codes'
 import { hashTenantRecipient } from './hash'
 
 describe('hashTenantRecipient', () => {
@@ -62,7 +63,18 @@ describe('hashTenantRecipient', () => {
     ['whitespace-only recipient', 'tenant-a', '\t\n ', 'recipient']
   ])('should refuse a blank component (%s)', (_case, tenantId, recipient, named) => {
     expect(() => hashTenantRecipient(tenantId, recipient)).toThrow(
-      `${named} must not be empty or whitespace-only`
+      expect.objectContaining({
+        code: NOTIFICATION_ERROR_CODES.INVALID_SCOPE_IDENTIFIER,
+        response: {
+          error: expect.objectContaining({
+            details: {
+              boundary: 'hashTenantRecipient',
+              parameter: named,
+              reason: 'empty or whitespace-only'
+            }
+          })
+        }
+      })
     )
   })
 
@@ -81,8 +93,35 @@ describe('hashTenantRecipient', () => {
       // how untyped consumer code reaches the function, and it needs no suppression
       // to express.
       expect(() => Reflect.apply(hashTenantRecipient, undefined, [tenantId, recipient])).toThrow(
-        `${named} must be a string; received ${received}`
+        expect.objectContaining({
+          code: NOTIFICATION_ERROR_CODES.INVALID_SCOPE_IDENTIFIER,
+          response: {
+            error: expect.objectContaining({
+              details: {
+                boundary: 'hashTenantRecipient',
+                parameter: named,
+                reason: `expected a string, received ${received}`
+              }
+            })
+          }
+        })
       )
     }
   )
+
+  // `details` is serialized into the HTTP response, so the refusal must name the
+  // boundary and the reason without echoing the value — a tenant id or a recipient is
+  // exactly what must not come back to the caller in an error body.
+  it('should not echo the offending value in the serialized error', () => {
+    const thrown = (() => {
+      try {
+        hashTenantRecipient('  ', 'jane@acme.com')
+      } catch (error: unknown) {
+        return error
+      }
+      return null
+    })()
+
+    expect(JSON.stringify(thrown)).not.toContain('jane@acme.com')
+  })
 })
