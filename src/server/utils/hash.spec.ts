@@ -109,6 +109,24 @@ describe('hashTenantRecipient', () => {
     }
   )
 
+  // The response message is what an HTTP consumer actually reads, and it carries the
+  // same three facts as `details` — a consumer that never inspects `details` still learns
+  // which boundary refused and why. Asserted because nothing else reads it.
+  it('should name the boundary, parameter and reason in the response message', () => {
+    const thrown = (() => {
+      try {
+        hashTenantRecipient('tenant-a', '   ')
+      } catch (error: unknown) {
+        return error as { getResponse: () => { error: { message: string } } }
+      }
+      return null
+    })()
+
+    expect(thrown?.getResponse().error.message).toBe(
+      '[hashTenantRecipient] recipient empty or whitespace-only'
+    )
+  })
+
   // `details` is serialized into the HTTP response, so the refusal must name the
   // boundary and the reason without echoing the value — a tenant id or a recipient is
   // exactly what must not come back to the caller in an error body.
