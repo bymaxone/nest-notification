@@ -40,9 +40,7 @@ import { assertIdentifies } from '../utils/tenant-scope'
 
 /** Marker `providerName` distinguishing interceptor-level entries from service-level ones. */
 /** Prefix quoted in guard failures raised by this interceptor. */
-// Stryker disable next-line StringLiteral: equivalent — see the call sites; the
-// prefix reaches only `details` and the response message, both dropped by the
-// cause sanitizer before any caller can read them
+// Stryker disable next-line StringLiteral: equivalent — the prefix reaches only `details` and the response message, both of which the cause sanitizer drops before any caller can read them, and every path out of this interceptor wraps the refusal
 const INTERCEPTOR_NAME = 'NotificationAuditInterceptor'
 
 const INTERCEPTOR_PROVIDER_NAME = '__interceptor__'
