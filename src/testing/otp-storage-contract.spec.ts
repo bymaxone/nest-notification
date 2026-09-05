@@ -146,6 +146,18 @@ describe('otpStorageContract', () => {
     await expect(runCase(sticky, 'deletes an entry')).rejects.toThrow(/delete left the entry/)
   })
 
+  // Cleanup is not decoration either: the boundary cases write under identifiers that
+  // no other case touches, so if their cleanup were skipped the keys would outlive the
+  // run. Asserted through the reference storage's own size rather than by inspection.
+  it('should leave nothing behind after the boundary cases run', async () => {
+    const storage = new InMemoryOtpStorage()
+
+    await runCase(storage, 'keeps the tenant and recipient boundary when composing a key')
+    await runCase(storage, 'keeps the tenant and recipient boundary when composing a cooldown key')
+
+    expect(storage.size()).toEqual({ otps: 0, cooldowns: 0 })
+  })
+
   // Every remaining case gets the same treatment: a storage that violates
   // exactly its obligation, and an assertion on the message it reports. A case
   // whose condition can never fail is decoration, and only a violating storage
@@ -372,7 +384,16 @@ describe('otpStorageContract', () => {
       {
         caseName: 'keeps the tenant and recipient boundary when composing a cooldown key',
         message:
-          /a cooldown held for one tenant blocked another whose id and recipient differ only in where the boundary falls/,
+          /the first cooldown could not be acquired, so this case proves nothing about boundary encoding — a case that cannot fail is decoration/,
+        // Not a key-composition defect: a storage that never grants a cooldown makes the
+        // case pass for the wrong reason, since the second acquire also fails. The guard
+        // exists so that reads as a failure rather than as evidence.
+        break: () => ({ tryAcquireCooldown: async () => false })
+      },
+      {
+        caseName: 'keeps the tenant and recipient boundary when composing a cooldown key',
+        message:
+          /a cooldown held for one tenant blocked another whose id and recipient differ only in where the boundary falls — the cooldown key concatenates the two fields without encoding the split, so one tenant can suppress another resends\. The entry key and the cooldown key are composed separately and both need this/,
         // Breaks ONLY cooldown-key composition, leaving the entry key correct: a
         // storage that composes one safely and the other by raw join passes every
         // case that does not exercise this one.
@@ -386,7 +407,7 @@ describe('otpStorageContract', () => {
       {
         caseName: 'keeps the tenant and recipient boundary when composing a key',
         message:
-          /an entry written for one tenant was readable by another whose id and recipient differ only in where the boundary falls/,
+          /an entry written for one tenant was readable by another whose id and recipient differ only in where the boundary falls — the key concatenates the two fields without encoding the split, so one tenant can read and consume another OTP\. Hash or length-prefix each field before joining; no digest strength repairs it/,
         // The defect this case exists for: composing the key by joining the two
         // fields around a delimiter, so a boundary shift produces one key. This is
         // what the storage did before the pair was hashed component-wise.

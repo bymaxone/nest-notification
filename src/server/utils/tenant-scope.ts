@@ -24,6 +24,32 @@
 import { NotificationException } from '../errors/notification-exception'
 
 /**
+ * Builds the refusal, carrying the same facts in `details` and in `message`.
+ *
+ * The duplication is deliberate. `details` is what a consumer branches on, and the
+ * message is what survives when the exception becomes another exception's `cause`:
+ * the cause sanitizer keeps `name`, `message`, `stack` and a nested `cause`, and
+ * drops `details` along with every other property. Without the message the boundary
+ * and the parameter would be unreadable from anywhere the refusal is wrapped — which
+ * is every path through the audit interceptor.
+ *
+ * Neither field carries the offending value, only the boundary, the parameter and the
+ * reason. Both are serialized outward, and the value is the one thing that must not be.
+ *
+ * @param owner - Boundary that refused.
+ * @param label - Parameter that failed.
+ * @param reason - Why it failed, in a fixed vocabulary.
+ * @returns The exception to throw.
+ */
+function refuse(owner: string, label: string, reason: string): NotificationException {
+  return new NotificationException(
+    'INVALID_SCOPE_IDENTIFIER',
+    { boundary: owner, parameter: label, reason },
+    { message: `[${owner}] ${label} ${reason}` }
+  )
+}
+
+/**
  * Asserts that a value can identify a tenant or a recipient.
  *
  * `details` names the boundary and what was wrong with the value, never the value
@@ -38,17 +64,9 @@ import { NotificationException } from '../errors/notification-exception'
  */
 export function assertIdentifies(owner: string, label: string, value: string): void {
   if (typeof value !== 'string') {
-    throw new NotificationException('INVALID_SCOPE_IDENTIFIER', {
-      boundary: owner,
-      parameter: label,
-      reason: `expected a string, received ${typeof value}`
-    })
+    throw refuse(owner, label, `expected a string, received ${typeof value}`)
   }
   if (value.trim() === '') {
-    throw new NotificationException('INVALID_SCOPE_IDENTIFIER', {
-      boundary: owner,
-      parameter: label,
-      reason: 'empty or whitespace-only'
-    })
+    throw refuse(owner, label, 'empty or whitespace-only')
   }
 }

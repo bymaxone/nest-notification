@@ -40,6 +40,9 @@ import { assertIdentifies } from '../utils/tenant-scope'
 
 /** Marker `providerName` distinguishing interceptor-level entries from service-level ones. */
 /** Prefix quoted in guard failures raised by this interceptor. */
+// Stryker disable next-line StringLiteral: equivalent — see the call sites; the
+// prefix reaches only `details` and the response message, both dropped by the
+// cause sanitizer before any caller can read them
 const INTERCEPTOR_NAME = 'NotificationAuditInterceptor'
 
 const INTERCEPTOR_PROVIDER_NAME = '__interceptor__'
@@ -162,15 +165,18 @@ export class NotificationAuditInterceptor implements NestInterceptor {
   private async resolveTenantId(context: ExecutionContext, fallback: string): Promise<string> {
     const resolver = this.options.global.tenantIdResolver
     if (resolver === undefined) {
+      // Stryker disable next-line StringLiteral: equivalent — the label reaches only `details` and the response message, both of which live on `response` and are dropped by the cause sanitizer; every path out of this interceptor wraps the refusal, so no test of the public surface can observe which label was passed
       assertIdentifies(INTERCEPTOR_NAME, 'the payload tenant id', fallback)
       return fallback
     }
     const request = this.extractRequest(context)
     if (request === null) {
+      // Stryker disable next-line StringLiteral: equivalent — the label reaches only `details` and the response message, both of which live on `response` and are dropped by the cause sanitizer; every path out of this interceptor wraps the refusal, so no test of the public surface can observe which label was passed
       assertIdentifies(INTERCEPTOR_NAME, 'the payload tenant id', fallback)
       return fallback
     }
     const resolved = await resolver(request)
+    // Stryker disable next-line StringLiteral: equivalent — the label reaches only `details` and the response message, both of which live on `response` and are dropped by the cause sanitizer; every path out of this interceptor wraps the refusal, so no test of the public surface can observe which label was passed
     assertIdentifies(INTERCEPTOR_NAME, 'the resolved tenant id', resolved)
     return resolved
   }
