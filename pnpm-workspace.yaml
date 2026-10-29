@@ -75,8 +75,9 @@ overrides:
   # advisory is about the copy this repository installs, not the one consumers pick.
   'handlebars@4': '^4.7.10'
   # GHSA-mrhx-c7xc-m3w5 (CVSS 8.2) — fixed in 4.6.6; reached through
-  # mutation-server-protocol under @stryker-mutator. Remove once Stryker's own
-  # range admits it.
+  # mutation-server-protocol under @stryker-mutator. That package's own range
+  # (^4.1.12) already admits the fix, so the floor only keeps the lockfile from
+  # holding an older resolution.
   'zod@4': '^4.6.6'
   # Floors raised 2026-09-03, not new entries. Both were already pinned here for
   # earlier advisories; the carets would have admitted the fixed versions, but
