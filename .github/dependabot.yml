@@ -93,8 +93,8 @@ updates:
         update-types: [version-update:semver-major]
       - dependency-name: react
         update-types: [version-update:semver-major]
-      # TypeScript 6 and ESLint 10 are known to break the lint/typecheck gate and
-      # are intentionally held back until revisited.
+      # TypeScript and ESLint majors are taken deliberately, with the lint and
+      # typecheck gates run against them, not proposed automatically.
       - dependency-name: typescript
         update-types: [version-update:semver-major]
       - dependency-name: eslint

@@ -26,11 +26,10 @@ autoInstallPeers: false
 # this map. Without an entry, `pnpm install` exits with ERR_PNPM_IGNORED_BUILDS
 # rather than warning.
 allowBuilds:
-  # jest-haste-map 30.5.0 declares @parcel/watcher as a direct, non-optional
-  # dependency, so a jest bump past 30.4.2 drags it in and `pnpm install` exits
-  # with ERR_PNPM_IGNORED_BUILDS until it is listed. Recorded here before that
-  # bump lands: the entry describes what this repository allows, not what its
-  # lockfile currently contains.
+  # jest-haste-map 30.5.0 and later declare @parcel/watcher as a direct,
+  # non-optional dependency, so `pnpm install` exits with ERR_PNPM_IGNORED_BUILDS
+  # while it is unlisted. The entry describes what this repository allows, not what
+  # its lockfile currently contains.
   #
   # Denied rather than allowed, and the two are NOT interchangeable. The install
   # script is `if (process.env.npm_config_build_from_source === 'true') { build() }`
@@ -79,9 +78,9 @@ overrides:
   # (^4.1.12) already admits the fix, so the floor only keeps the lockfile from
   # holding an older resolution.
   'zod@4': '^4.6.6'
-  # Floors raised 2026-09-03, not new entries. Both were already pinned here for
-  # earlier advisories; the carets would have admitted the fixed versions, but
-  # the lockfile held the older resolution, so the range alone protected nothing.
+  # Each floor sits at the fixed version rather than relying on the caret: a range
+  # that admits the fix protects nothing while the lockfile holds an older
+  # resolution.
   #
   # fast-uri: GHSA-5jgf-p345-68v8 and three siblings (CVSS 7.5, published
   # 2026-09-02) — host confusion via skipped IDN canonicalisation. Vulnerable at
@@ -101,8 +100,7 @@ overrides:
   # GHSA-73wf-gq98-2v4g and GHSA-c83g-rgw3-j3cx (CVSS 7.5 each, published
   # 2026-09-01) — an uncaught crash with a prototype write, and unbounded memory
   # growth, both reached through an untrusted browserslist query. Vulnerable at
-  # <= 4.28.6; the lockfile carried 4.28.2, pulled in transitively by
-  # @stryker-mutator through @babel/core. Dev-time only and patched rather than
+  # <= 4.28.6; pulled in transitively by @stryker-mutator through @babel/core. Dev-time only and patched rather than
   # ignored, for the same reason as the entries above: a scanner told to skip dev
   # dependencies stays blind after this one is gone. Nothing caps the floor —
   # @babel/helper-compilation-targets declares ^4.24.0.
