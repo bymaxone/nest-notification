@@ -1605,7 +1605,7 @@ export interface OtpEntry {
 1. in `OtpService`, **before** any call to the storage;
 2. in `hashTenantRecipient`, which the reference implementations use to derive keys. A custom storage that does not use that function must apply the same rule.
 
-The reference key is `sha256(sha256(tenantId):sha256(recipient))`: each component is hashed before the join, so `('a:b', 'c')` and `('a', 'b:c')` never produce the same key. The executable contract `otpStorageContract` (`./testing`) checks that boundary on both the OTP and the cooldown keys, with a pair for each delimiter a raw join might use (`:` and `::`).
+The reference key is `sha256(sha256(tenantId):sha256(recipient))`: each component is hashed before the join, so `('a:b', 'c')` and `('a', 'b:c')` never produce the same key. The executable contract `otpStorageContract` (`./testing`) checks that boundary on both the OTP and the cooldown keys.
 
 #### 5.2.1 Default implementation: `RedisOtpStorage`
 
@@ -3034,7 +3034,7 @@ here so the shape of the work is known, not queued against a release:
 3. SECURITY.md (disclosure policy), CONTRIBUTING.md, CODE_OF_CONDUCT.md
 4. CLAUDE.md, AGENTS.md (quick reference for AI agents)
 5. Mutation testing — Stryker dry run + mutation score **100% (`break: 100`)**; document any equivalent mutants inline
-6. `scripts/check-size.mjs` — brotli budget per subpath: server 30 KB, shared 4 KB, react 8 KB, testing 4 KB
+6. `scripts/check-size.mjs` — brotli budget per subpath
 7. `pnpm check:exports` (`attw --pack .`) green on every entrypoint, in ESM and CJS
 8. `scripts/dogfood-smoke-test.mjs` green — the last local gate before the tag
 9. CodeQL clean
