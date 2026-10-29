@@ -81,7 +81,7 @@ jobs:
               fi
             done
           done
-          echo "All three subpaths produced ESM + CJS + .d.ts + .d.cts"
+          echo "Every subpath produced ESM + CJS + .d.ts + .d.cts"
       - name: Verify published type resolution
         # The type-level API tests compile `src`, so they cannot catch a broken
         # `exports` map: a consumer resolving the package through the packed
