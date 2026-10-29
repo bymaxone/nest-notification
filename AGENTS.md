@@ -216,13 +216,13 @@ external peer in the published bundle.
   is 100%, with critical paths (`code-generator`, `timing-safe-compare`, `hash`,
   `redis-otp.storage`, `otp.service`) at 100%. Runs automatically post-merge on `main` via the shared reusable (`bymaxone/.github` → node-lib-ci), never on PRs; plus an optional manual `pnpm mutation`.
 - **Mocking** — never real Redis or a real email API in unit tests (a hand-written
-  `RedisLike` double and in-memory fakes). E2E specs in `test/e2e/` cover tenant isolation and audit behavior.
+  `RedisLike` double and in-memory fakes).
 - **Security gate test** — the never-log-codes invariant is asserted directly against a
   serialized audit entry.
 
 ## 9. Build and Publish
 
-- **tsup** builds 4 subpaths → ESM (`.mjs`) + CJS (`.cjs`) + `.d.ts` + `.d.cts`;
+- **tsup** builds every subpath → ESM (`.mjs`) + CJS (`.cjs`) + `.d.ts` + `.d.cts`;
   `sideEffects: false`; peer deps always external. The `.mjs` ships unminified (readable
   stack traces inside a consumer's `node_modules`).
 - **Exports map** — `types` is declared **inside each condition**: `import` resolves to
@@ -231,7 +231,7 @@ external peer in the published bundle.
   against the packed tarball) catches it. `main` / `module` / `types` at the top level
   cover the legacy `node` resolution algorithm, which ignores `exports` entirely, and
   `typesVersions` covers the subpaths in that same mode.
-- **Bundle budgets** (`pnpm size`, brotli): server < 30 KB, shared < 4 KB, react < 8 KB, testing < 4 KB.
+- **Bundle budgets** (`pnpm size`, brotli): per subpath, in `scripts/check-size.mjs`.
 - **CI** — `ci.yml` is a thin caller of the org-wide `bymaxone/.github` reusable pipeline
   (lint · typecheck · `test:cov:all` · mutation on main), plus a local `verify` job for
   `check:no-prisma` · `test:types` · `check:mutants` · build · build-output integrity ·

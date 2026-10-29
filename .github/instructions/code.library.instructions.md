@@ -48,7 +48,7 @@ Rules for a NestJS/TypeScript library that ships to consumers.
 
 ## This library
 
-- Four subpaths: `.` (NestJS server), `./shared` (types + constants, zero deps,
+- Subpaths: `.` (NestJS server), `./shared` (types + constants, zero deps,
   must stay importable from a browser bundle), `./react` (state/UX-only hooks —
   no HTTP client, no Node builtins), `./testing` (executable `IOtpStorage` contract;
   never imported by a runtime entry).

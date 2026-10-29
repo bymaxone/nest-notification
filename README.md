@@ -78,7 +78,7 @@ pnpm add @bymax-one/nest-notification
 
 ### 🧩 Developer Experience
 
-- ✅ **Four subpaths** — server, zero-dependency shared types, React hooks, and a `testing` storage contract
+- ✅ **Subpaths** — server, zero-dependency shared types, React hooks, and a `testing` storage contract
 - ✅ **Stable error catalog** — 23 namespaced codes shared byte-for-byte between server and frontend, so you localize on the `code`
 - ✅ **Dual-format output** — ESM + CJS + declarations for both, verified against the packed tarball on every PR
 - ✅ **Typed end to end** — TypeScript `strict` with `exactOptionalPropertyTypes` and `noUncheckedIndexedAccess`; zero `any`
@@ -694,7 +694,7 @@ A one-time password is a credential, so the suite is held to a bar beyond "it ru
 
 - ✅ **100% line coverage** — statements, branches, functions, and lines, enforced per file as a release gate across unit + e2e
 - ✅ **100% mutation score** — verified with [Stryker](https://stryker-mutator.io/): every viable seeded fault killed, with **no survivors**, against a `break` threshold of 100. The equivalents that no test can kill carry their reason on the line they apply to, so the number is an accounting rather than a target
-- ✅ **100% coverage** — unit and end-to-end tests spanning all four subpaths
+- ✅ **100% coverage** — unit and end-to-end tests spanning every subpath
 - ✅ **Invariants asserted, not assumed** — the never-log-codes rule is a test (`JSON.stringify(entry).includes(code) === false` on every audit entry, and the thrown exception is serialized recursively — message, stack, response body, every nested `cause` — asserting the code appears at no depth), not a review convention
 - ✅ **Published shape verified** — `attw` resolves every entrypoint against the packed tarball, and a dogfood smoke test installs the package into a scratch consumer before any tag is cut
 - ✅ **Every equivalent mutant documented** — the ones no test can kill carry an inline `// Stryker disable` with the reason, so the score is an accounting rather than a number

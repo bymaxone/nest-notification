@@ -34,7 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Documentation
 
 - README, SECURITY, CONTRIBUTING, CLAUDE.md, AGENTS.md and the specification under `docs/` brought
-  in line with the code: four subpaths including `./testing`, 23 error codes, the supported `1.x`
+  in line with the code: the `./testing` subpath, the error codes, the supported `1.x`
   line, the full verification command, and the key derivation.
 
 ## [1.4.0] - 2026-09-04
