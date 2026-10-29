@@ -5,8 +5,8 @@
 > render [React Email](https://react.email/) components through the custom-renderer
 > interface, so you can author email templates as type-safe React components.
 
-Verified against `@react-email/render@^1` (the `render` function is **async** and
-returns a `Promise<string>`).
+Verified against `@react-email/render@^1` and `^2` (the `render` function is **async** and
+returns a `Promise<string>`; the `{ plainText: true }` option is declared in the `^2` types).
 
 ## Setup
 
@@ -22,10 +22,7 @@ is awaited to produce the HTML; passing `{ plainText: true }` produces the text 
 ```typescript
 import { createElement, type ComponentType } from 'react'
 import { render } from '@react-email/render'
-import type {
-  IEmailTemplateRenderer,
-  RenderedEmail
-} from '@bymax-one/nest-notification'
+import type { IEmailTemplateRenderer, RenderedEmail } from '@bymax-one/nest-notification'
 
 interface ReactTemplate {
   subject: (data: Record<string, unknown>) => string
@@ -51,16 +48,12 @@ export class ReactEmailTemplateRenderer implements IEmailTemplateRenderer {
     locale: string
   ): Promise<RenderedEmail> {
     const template =
-      this.templates[`${templateName}::${locale}`] ??
-      this.templates[`${templateName}::en`]
+      this.templates[`${templateName}::${locale}`] ?? this.templates[`${templateName}::en`]
     if (!template) {
       throw new Error(`Template not found: ${templateName} (locale=${locale})`)
     }
     const element = createElement(template.component, data)
-    const [html, text] = await Promise.all([
-      render(element),
-      render(element, { plainText: true })
-    ])
+    const [html, text] = await Promise.all([render(element), render(element, { plainText: true })])
     return { subject: template.subject(data), html, text }
   }
 }
@@ -80,6 +73,7 @@ export class ReactEmailTemplateRenderer implements IEmailTemplateRenderer {
 ## Module registration
 
 ```typescript
+import { Module } from '@nestjs/common'
 import type { ComponentType } from 'react'
 import { BymaxNotificationModule } from '@bymax-one/nest-notification'
 import { ReactEmailTemplateRenderer } from './react-email-template-renderer'
@@ -96,7 +90,7 @@ const templateRenderer = new ReactEmailTemplateRenderer({
   imports: [
     BymaxNotificationModule.forRoot({
       email: {
-        provider: myEmailProvider,
+        provider: myEmailProvider, // your IEmailProvider implementation
         defaultFrom: 'no-reply@acme.com',
         templateRenderer
       }

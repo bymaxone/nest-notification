@@ -420,6 +420,31 @@ describe('otpStorageContract', () => {
           get: (t, r, p) => inner.get(`${t}:${r}`, 'joined', p),
           delete: (t, r, p) => inner.delete(`${t}:${r}`, 'joined', p)
         })
+      },
+      {
+        caseName: 'keeps the tenant and recipient boundary when composing a key',
+        message:
+          /an entry written for one tenant was readable by another whose id and recipient differ only in where the boundary falls/,
+        // A raw join around `::` keeps the single-colon pair apart (`x:y::z` and `x::y:z`
+        // differ) and only collides on the `::` pair, so it passes a contract that
+        // exercises one delimiter.
+        break: (inner) => ({
+          set: (t, r, p, e) => inner.set(`${t}::${r}`, 'joined', p, e),
+          get: (t, r, p) => inner.get(`${t}::${r}`, 'joined', p),
+          delete: (t, r, p) => inner.delete(`${t}::${r}`, 'joined', p)
+        })
+      },
+      {
+        caseName: 'keeps the tenant and recipient boundary when composing a cooldown key',
+        message:
+          /a cooldown held for one tenant blocked another whose id and recipient differ only in where the boundary falls/,
+        // Same construction for the cooldown key.
+        break: (inner) => ({
+          tryAcquireCooldown: (t, r, p, sec) =>
+            inner.tryAcquireCooldown(`${t}::${r}`, 'joined', p, sec),
+          getCooldown: (t, r, p) => inner.getCooldown(`${t}::${r}`, 'joined', p),
+          clearCooldown: (t, r, p) => inner.clearCooldown(`${t}::${r}`, 'joined', p)
+        })
       }
     ]
 

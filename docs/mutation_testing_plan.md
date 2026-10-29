@@ -8,13 +8,14 @@ the gate, and the iteration workflow. The latest recorded results live in
 
 ## Gate
 
-- **Release gate:** mutation score **≥ 95%** (`stryker.config.json` `break: 95`), driven as
-  close to 100% as achievable; security-critical paths at **100%**.
+- **Release gate:** mutation score **100%** (`stryker.config.json` `break: 100`); every surviving mutant
+  must be provably equivalent, and security-critical paths stay at **100%**.
 - **Critical paths (must be 100%, no surviving non-equivalent mutant):**
   `utils/code-generator.ts`, `utils/timing-safe-compare.ts`, `utils/hash.ts`,
   `providers/redis-otp.storage.ts`, `services/otp.service.ts`.
-- **Not a per-PR gate.** Stryker takes minutes and is a manual / pre-release gate only — it is
-  never added to `prepublishOnly` or `ci.yml`.
+- **Not a per-PR gate.** Stryker runs automatically after merge to `main` (the `ci` job in `ci.yml`,
+  via the org reusable workflow, incrementally) and weekly as a cold run in
+  `mutation-full.yml`; `pnpm mutation` remains available locally. It never runs on PRs or in `prepublishOnly`.
 
 ## Configuration (`stryker.config.json`)
 
@@ -23,7 +24,7 @@ the gate, and the iteration workflow. The latest recorded results live in
   checks from mutated files; the checker still discards mutations that would not compile under
   `strict` mode (reported as `CompileError` and excluded from the score, since non-compiling
   code is never a shippable fault).
-- `thresholds: { high: 100, low: 95, break: 95 }`.
+- `thresholds: { high: 100, low: 100, break: 100 }`.
 - `concurrency: 4` plus `NODE_OPTIONS=--max-old-space-size=4096` when running locally — bounded
   so the run stays within a safe memory envelope (never an unbounded worker fan-out).
 - React `.spec.tsx` files declare `@jest-environment @stryker-mutator/jest-runner/jest-env/jsdom`
@@ -34,7 +35,7 @@ the gate, and the iteration workflow. The latest recorded results live in
 
 ```bash
 pnpm mutation:dry-run   # validate config + the initial test run (no mutants tested)
-pnpm mutation           # incremental — re-tests only what changed (~3 min on this codebase); writes reports/mutation/*
+pnpm mutation           # incremental — re-tests only what changed (minutes; ~7 min cold); writes reports/mutation/*
 ```
 
 The HTML report (`reports/mutation/mutation.html`) lists every surviving mutant with its
