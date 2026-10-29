@@ -385,7 +385,6 @@ export class OtpService {
     await this.audit(this.otpAuditEntry('verified', input, undefined))
   }
 
-  /** Returns the resolved OTP options or throws `OTP_STORAGE_NOT_CONFIGURED`. */
   /**
    * Refuses a tenant id or recipient that identifies nobody, before any storage call.
    *
@@ -400,6 +399,7 @@ export class OtpService {
     assertIdentifies('OtpService', 'recipient', ref.recipient)
   }
 
+  /** Returns the resolved OTP options or throws `OTP_STORAGE_NOT_CONFIGURED`. */
   private requireOtpOptions(): ResolvedOtpOptions {
     if (!this.options.otp) {
       throw new NotificationException('OTP_STORAGE_NOT_CONFIGURED')
