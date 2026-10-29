@@ -7,7 +7,7 @@ seriously and triage them ahead of feature work.
 
 ## Supported versions
 
-Only the most recent minor release (`1.4.x` at the time of writing) receives security fixes.
+Only the most recent minor release receives security fixes.
 Every earlier version is unsupported: if you run one, upgrade to the latest release.
 
 | Version             | Status                              |
