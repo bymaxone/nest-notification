@@ -7,13 +7,13 @@ seriously and triage them ahead of feature work.
 
 ## Supported versions
 
-Security patches are issued for the most recent minor on the active `0.x` line. Older
+Security patches are issued for the most recent minor of the current major (`1.x`). Older
 lines stop receiving fixes when a new minor ships.
 
 | Version | Status                              |
 | ------- | ----------------------------------- |
-| `0.1.x` | ✅ Active — receives security fixes |
-| `< 0.1` | ❌ Pre-release — not supported      |
+| `1.x`   | ✅ Active — receives security fixes |
+| `< 1.0` | ❌ Pre-release — not supported      |
 
 If you are stuck on an older line and need a backport, open a private advisory (see below)
 and we will discuss feasibility on a case-by-case basis.
@@ -36,8 +36,8 @@ A useful report contains:
 
 - A clear description of the vulnerability and its impact (CIA triad — confidentiality,
   integrity, availability)
-- Step-by-step reproduction against the latest `0.1.x` release
-- The affected subpath (`.`, `./shared`, `./react`)
+- Step-by-step reproduction against the latest `1.x` release
+- The affected subpath (`.`, `./shared`, `./react`, `./testing`)
 - A suggested fix or mitigation, if you have one
 - Whether you would like to be credited in the published advisory (and how — name, handle,
   affiliation)
@@ -81,7 +81,7 @@ The following classes are explicitly in scope:
 
 These are not vulnerabilities in `@bymax-one/nest-notification` itself:
 
-- Issues only reproducible in pre-`0.1.0` versions.
+- Issues only reproducible in pre-`1.0.0` versions.
 - Vulnerabilities inside a **consumer-supplied** `IEmailProvider`, `IOtpStorage`,
   `IEmailTemplateRenderer`, or `INotificationLogRepository` implementation — those are the
   consumer's code.

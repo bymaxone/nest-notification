@@ -14,7 +14,7 @@ report, not a bug report.
 ## Prerequisites
 
 - Node.js >= 24
-- pnpm 10.8.1 (`corepack enable`)
+- pnpm 11 (`corepack enable`; the exact version is pinned in `packageManager`)
 
 ## Getting started
 
@@ -56,8 +56,8 @@ imports an ORM or a provider SDK: persistence lives behind `IOtpStorage` and
 ## Verification — run before every PR
 
 ```bash
-pnpm typecheck && pnpm test:types && pnpm lint && pnpm check:no-prisma && \
-  pnpm test:cov:all && pnpm build && pnpm size && pnpm check:exports
+pnpm typecheck && pnpm test:types && pnpm lint && pnpm check:mutants && pnpm check:no-prisma && \
+  pnpm test:cov:all && pnpm build && pnpm size && pnpm check:exports && pnpm check:published
 ```
 
 All of the following must pass:
@@ -65,14 +65,16 @@ All of the following must pass:
 - **Typecheck** — `tsc --noEmit` (strict, zero errors)
 - **Type API** — `test/types/` compiles, locking the published signatures
 - **Lint** — ESLint (zero `any`, import order, security rules)
+- **Mutation directives** — every Stryker disable directive parses and carries a reason
 - **Prisma-free** — no `@prisma/client` import anywhere in `src/`
 - **Coverage** — 100% statements / branches / functions / lines
 - **Build** — tsup produces ESM + CJS + `.d.ts` + `.d.cts` for every subpath
 - **Size** — every subpath stays within the budget in `scripts/check-size.mjs`
 - **Exports** — `attw` resolves every entrypoint correctly in ESM and CJS
+- **Published surface** — README links and snippets resolve against `dist/`, and every release tag has a CHANGELOG section
 
-Mutation testing (`pnpm mutation`) is a **release gate**, run manually before
-tagging a version — never on every PR.
+Mutation testing runs automatically after a merge to `main` (and weekly, cold, in
+`mutation-full.yml`) — never on a PR. Run `pnpm mutation` locally before tagging a version.
 
 ## Commits — Conventional Commits
 
@@ -89,7 +91,7 @@ The `pre-commit` hook runs lint-staged (ESLint + Prettier on staged files).
 
 - Keep PRs focused and small.
 - Record user-facing changes under the `Unreleased` section of `CHANGELOG.md`.
-- All CI checks (`ci`, `codeql`, `scorecard`) must be green.
+- The `CI passed` check must be green; it aggregates the CI, security and build jobs.
 
 ## License
 

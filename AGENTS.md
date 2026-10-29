@@ -49,12 +49,13 @@ src/
 │   ├── providers/                     Resend · SMTP · Redis · InMemory · NoOp · DefaultRenderer
 │   ├── interfaces/                    IEmailProvider · IOtpStorage · IEmailTemplateRenderer · INotificationLogRepository (+ SMS/Push sketches)
 │   ├── interceptors/                  NotificationAuditInterceptor
-│   ├── config/                        validate-options · resolve-options (deep-frozen)
+│   ├── config/                        validate-options · resolved-options (deep-frozen)
 │   ├── errors/                        NotificationException + error catalog
 │   ├── constants/                     purposes · canonical templates · defaults
 │   └── utils/                         hash · code-generator · timing-safe-compare · cooldown-helpers
 ├── shared/                         zero-dep types + constants (importable anywhere)
-└── react/                          useOtpInput · useOtpCountdown (UX/state only)
+├── react/                          useOtpInput · useOtpCountdown (UX/state only)
+└── testing/                        otpStorageContract (executable IOtpStorage contract)
 ```
 
 ### Conditional provider registration
@@ -214,14 +215,14 @@ external peer in the published bundle.
 - **Mutation testing** (Stryker, `break: 100`) is the deeper gate against weak tests; the score
   is 100%, with critical paths (`code-generator`, `timing-safe-compare`, `hash`,
   `redis-otp.storage`, `otp.service`) at 100%. Runs automatically post-merge on `main` via the shared reusable (`bymaxone/.github` → node-lib-ci), never on PRs; plus an optional manual `pnpm mutation`.
-- **Mocking** — never real Redis or a real email API in unit tests (`ioredis-mock` and
-  in-memory fakes). E2E specs in `test/e2e/` cover tenant isolation and audit behavior.
+- **Mocking** — never real Redis or a real email API in unit tests (a hand-written
+  `RedisLike` double and in-memory fakes).
 - **Security gate test** — the never-log-codes invariant is asserted directly against a
   serialized audit entry.
 
 ## 9. Build and Publish
 
-- **tsup** builds 3 subpaths → ESM (`.mjs`) + CJS (`.cjs`) + `.d.ts` + `.d.cts`;
+- **tsup** builds every subpath → ESM (`.mjs`) + CJS (`.cjs`) + `.d.ts` + `.d.cts`;
   `sideEffects: false`; peer deps always external. The `.mjs` ships unminified (readable
   stack traces inside a consumer's `node_modules`).
 - **Exports map** — `types` is declared **inside each condition**: `import` resolves to
@@ -230,17 +231,17 @@ external peer in the published bundle.
   against the packed tarball) catches it. `main` / `module` / `types` at the top level
   cover the legacy `node` resolution algorithm, which ignores `exports` entirely, and
   `typesVersions` covers the subpaths in that same mode.
-- **Bundle budgets** (`pnpm size`, brotli): server < 30 KB, shared < 4 KB, react < 8 KB.
+- **Bundle budgets** (`pnpm size`, brotli): per subpath, in `scripts/check-size.mjs`.
 - **CI** — `ci.yml` is a thin caller of the org-wide `bymaxone/.github` reusable pipeline
   (lint · typecheck · `test:cov:all` · mutation on main), plus a local `verify` job for
-  `check:no-prisma` · `test:types` · build · build-output integrity · `check:exports` ·
-  `size`. `codeql.yml` and `scorecard.yml` run on push + weekly. `release.yml` is
-  **tag-driven only** (`v*.*.*`): it runs `prepublishOnly`, the release-shape gates
-  (`size`, `check:exports`, dogfood smoke), then `pnpm publish --provenance` via OIDC.
+  `check:no-prisma` · `test:types` · `check:mutants` · build · build-output integrity ·
+  `check:exports` · `check:published` · `size`. `codeql.yml` and `scorecard.yml` run on push + weekly. `release.yml` is
+  triggered by a `v*.*.*` tag (or a manual dispatch to re-run an interrupted release): it runs
+  `prepublishOnly`, the release-shape gates (`size`, `check:exports`, dogfood smoke), then
+  `npm publish --provenance` via OIDC.
 - **Provenance** — published with npm provenance so consumers can `npm audit signatures`.
-  npm trusted publishing requires the package to already exist, so the very first release
-  is published from a maintainer's machine without provenance; every release after that
-  is published by CI with a SLSA attestation.
+  CI publishes through OIDC with a SLSA attestation, and the publish step skips a version
+  that is already on npm.
 
 ## 10. Common Pitfalls
 
@@ -477,9 +478,8 @@ keeps its diagnosis; do not report that default as the defect.
 ### The audit entry and the exception name the reply codes differently, and that is settled
 
 The audit entry carries `deliveryStatus` / `deliveryEnhancedStatus`; the exception's `details`
-carries `status` / `enhanced`. Both shipped in 1.3.0 and both are public API, so unifying the
-names is a breaking change — `CHANGELOG.md` records it as an open 1.4.0 question, not an
-oversight for a patch to quietly correct.
+carries `status` / `enhanced`. Both names are public API, so unifying them is a breaking change
+and a release decision, not an oversight for a patch to quietly correct.
 
 **Safe path:** if a document describes the two surfaces as the same pair, the finding is that the
 document is wrong. Renaming a field is a release decision, and it is already taken.
@@ -494,3 +494,7 @@ an omission and asks for the branch.
 
 **Safe path:** treat the rejection as the behaviour under review — that it throws, with a message
 naming the supported form, is what the tests assert. Wiring the form is an API decision, not a fix.
+
+## Session memory (Obsidian vault)
+
+Lessons from earlier sessions live outside the repository, in the owner's Obsidian vault at `~/Documents/MyApps/obsidian/Brain/`, when it is present on this machine. Before a task, find this repository's hub under `02 - Areas/`: the table in `02 - Areas/Bymax/Bymax.md` maps each Bymax repository to its folder; for any other repository, search `02 - Areas/` for the repository name. Read the hub with its `Learnings.md` and `Decisions.md`, and the relevant stack notes under `03 - Resources/`. When the vault and the code disagree, the code wins. Record each non-obvious gotcha, root cause or decision in the hub as the vault's `_meta/conventions.md` describes; a repository without a hub gets one from `_meta/templates/project-hub.md`.
