@@ -1,8 +1,8 @@
 # @bymax-one/nest-notification — Complete Technical Specification
 
-> **Spec revision:** 1.2.0 — target package version `1.0.0`
-> **Last updated:** 2026-07-30
-> **Status:** Implemented — snippets synchronized with the shipped source
+> **Spec revision:** 1.4.0 — current package version `1.4.0`
+> **Last updated:** 2026-10-29
+> **Status:** Implemented — snippets reflect the shipped source; where a snippet would be a long copy of the code, the section points to the file under `src/`
 > **Type:** Public npm package (`@bymax-one/nest-notification`)
 
 > The email and OTP channels described here are implemented and shipped. The SMS and push
@@ -69,14 +69,14 @@ Rewriting this pipeline in each service is wasteful; and each rewrite tends to f
 
 ### 1.4 Distribution model
 
-| Aspect    | Detail                                                                                                           |
-| --------- | ---------------------------------------------------------------------------------------------------------------- |
-| Registry  | public npm (`@bymax-one/nest-notification`)                                                                      |
-| Cost      | Zero — open source                                                                                               |
-| License   | MIT                                                                                                              |
-| Runtime   | Node.js 24+                                                                                                      |
-| Framework | NestJS 11+ (server); React 19+ (subpath `./react`, optional)                                                     |
-| Subpaths  | `.` (server), `./shared` (types/constants), `./react` (`useOtpInput` hook), `./testing` (`IOtpStorage` contract) |
+| Aspect    | Detail                                                                                                                                  |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Registry  | public npm (`@bymax-one/nest-notification`)                                                                                             |
+| Cost      | Zero — open source                                                                                                                      |
+| License   | MIT                                                                                                                                     |
+| Runtime   | Node.js 24+                                                                                                                             |
+| Framework | NestJS 11+ (server); React 19+ (subpath `./react`, optional)                                                                            |
+| Subpaths  | `.` (server), `./shared` (types/constants), `./react` (hooks `useOtpInput` and `useOtpCountdown`), `./testing` (`IOtpStorage` contract) |
 
 ### 1.5 Design principles
 
@@ -96,11 +96,10 @@ The library organizes its functionality into four categories with distinct activ
 
 #### Core (always active)
 
-| Module                     | Responsibility                                                                 |
-| -------------------------- | ------------------------------------------------------------------------------ |
-| `NotificationService`      | Orchestrator — receives generic requests and dispatches to the correct channel |
-| `NotificationRedisService` | Redis wrapper for cooldown and rate limit keys (if `Redis` configured)         |
-| Base configuration         | Option validation, default resolution                                          |
+| Module                | Responsibility                                                                 |
+| --------------------- | ------------------------------------------------------------------------------ |
+| `NotificationService` | Orchestrator — receives generic requests and dispatches to the correct channel |
+| Base configuration    | Option validation, default resolution                                          |
 
 #### Channels (opt-in by configuration)
 
@@ -133,12 +132,12 @@ When a channel is not configured, its services are **not registered** in the Nes
 | OTP channel + `IOtpStorage`                                | Yes            | Needed for email verification and password reset                               |
 | Default `RedisOtpStorage`                                  | Yes            | Multi-instance ready                                                           |
 | `InMemoryOtpStorage` (dev)                                 | Yes            | Useful for tests and local dev without Redis                                   |
-| `ResendProvider` (reference)                               | Yes            | Demonstrates the pattern with a popular provider                               |
+| `ResendEmailProvider` (reference)                          | Yes            | Demonstrates the pattern with a popular provider                               |
 | Resend cooldown (60s)                                      | Yes            | Essential anti-brute-force                                                     |
 | `IEmailTemplateRenderer` + default                         | Yes            | Replaces hardcoded HTML in the consumer                                        |
 | Notification audit log                                     | Yes            | Needed in production from day 1                                                |
 | Multi-tenant scoping                                       | Yes            | Without this the lib does not serve SaaS                                       |
-| `./react` `useOtpInput` hook                               | Yes            | Complete OTP UX is essential                                                   |
+| `./react` hooks `useOtpInput` / `useOtpCountdown`          | Yes            | Complete OTP UX is essential                                                   |
 | **SMS channel + `ISmsProvider`**                           | Interface only | No use case yet — OTP is delivered by email or handed back for manual delivery |
 | **Push channel + `IPushProvider`**                         | Interface only | No push-notification use case yet                                              |
 | Multi-provider fallback (e.g., SES → SendGrid on disaster) | No             | High complexity; "nice to have" feature                                        |
@@ -194,7 +193,7 @@ interface graduates to a channel when a real consumer needs it.
 2. The module resolves options via `ConfigService` or factory
 3. For each configured channel, validates that the provider/storage is present
 4. Registers only the services for the enabled channels
-5. If `audit.repository` is configured, registers `NotificationAuditInterceptor`
+5. `NotificationAuditInterceptor` is exported but **not** registered by the module: the consumer applies it with `@UseInterceptors(NotificationAuditInterceptor)`
 6. Module ready to receive calls
 
 ### 2.3 OTP send flow
@@ -291,7 +290,7 @@ emailService.send({ tenantId, to, template, data, locale })
     ├─ 2. emailProvider.send({ to, subject, html, text, tags, replyTo, cc, bcc })
     │     Throws NotificationException EMAIL_SEND_FAILED on provider failure
     │
-    ├─ 3. (optional) auditLog.create({ channel: 'email', tenantId, recipient: to, status: 'sent', tags })
+    ├─ 3. (optional) auditLog.create({ channel: 'email', verb: 'sent', tenantId, recipient: <masked by audit.maskRecipient>, providerName, messageId })
     │
     ▼
 Returns void
@@ -307,7 +306,7 @@ When `audit: { repository: ... }` is configured, **every successful call and eve
 
 ### 3.1 Complete directory tree
 
-The library is organized into 3 subpaths with distinct responsibilities:
+The library is organized into 4 subpaths with distinct responsibilities (`server`, `shared`, `react` and `testing`):
 
 Unit specs are co-located next to the file they cover (`*.spec.ts` / `*.spec.tsx`) and are
 omitted below for readability.
@@ -346,6 +345,7 @@ omitted below for readability.
 │   │   │   └── otp.service.ts
 │   │   ├── providers/                          # Reference providers (default)
 │   │   │   ├── resend-email.provider.ts       # Resend adapter (reference)
+│   │   │   ├── smtp-email.provider.ts         # SMTP adapter (nodemailer loaded on demand)
 │   │   │   ├── no-op-email.provider.ts        # For dev/test
 │   │   │   ├── redis-otp.storage.ts           # Default Redis storage
 │   │   │   ├── in-memory-otp.storage.ts       # In-memory storage (dev/test)
@@ -363,9 +363,13 @@ omitted below for readability.
 │   │   │   └── notification-exception.ts
 │   │   └── utils/
 │   │       ├── code-generator.ts              # randomInt-based, supports alpha/numeric/alphanumeric
-│   │       ├── hash.ts                        # sha256 wrapper
+│   │       ├── hash.ts                        # sha256(sha256(tenantId):sha256(recipient)); refuses an empty identifier
 │   │       ├── timing-safe-compare.ts         # crypto.timingSafeEqual wrapper
-│   │       └── cooldown-helpers.ts            # Retry-After / countdown presentation helpers
+│   │       ├── cooldown-helpers.ts            # Retry-After / countdown presentation helpers
+│   │       ├── tenant-scope.ts                # Refuses an empty or non-string tenantId/recipient (INVALID_SCOPE_IDENTIFIER)
+│   │       ├── redact.ts                      # Redacts sensitive values from error messages
+│   │       ├── delivery-status.ts             # Extracts SMTP delivery status codes
+│   │       └── load-optional-peer.ts          # Dynamic import() of optional peers
 │   │
 │   ├── shared/                                 # Zero-dep types + constants
 │   │   ├── index.ts
@@ -377,11 +381,15 @@ omitted below for readability.
 │   │       ├── error-codes.ts
 │   │       └── default-ttls.ts
 │   │
-│   └── react/                                  # Hooks for OTP input
+│   ├── react/                                  # Hooks for OTP input
+│   │   ├── index.ts
+│   │   ├── useOtpInput.ts                      # Complete input state
+│   │   ├── useOtpCountdown.ts                  # Countdown timer
+│   │   └── types.ts
+│   │
+│   └── testing/                                # Executable IOtpStorage contract
 │       ├── index.ts
-│       ├── useOtpInput.ts                      # Complete input state
-│       ├── useOtpCountdown.ts                  # Countdown timer
-│       └── types.ts
+│       └── otp-storage-contract.ts             # otpStorageContract(factory, options)
 │
 ├── test/
 │   ├── e2e/                                    # Boots a real Nest application context
@@ -393,12 +401,17 @@ omitted below for readability.
 │   ├── mutation_testing_results.md             # Recorded score — source of truth for the badge
 │   ├── tasks/                                  # Task breakdown — one file per phase (phase-01..06-*.md)
 │   ├── schemas/
-│   │   └── notification-log.prisma             # Prisma fragment (reference)
+│   │   ├── notification-log.prisma             # Prisma fragment (reference)
+│   │   └── prisma-repository.example.md        # INotificationLogRepository example with Prisma
 │   └── templates/                              # Canonical template examples (HTML/MJML, reference only)
 ├── .github/
 │   ├── workflows/
 │   │   ├── ci.yml                              # Thin caller of the org reusable pipeline + local gates
+│   │   ├── mutation-full.yml                   # Full (cold) weekly Stryker run
 │   │   ├── codeql.yml
+│   │   ├── osv-scanner.yml
+│   │   ├── peer-advisory-drift.yml
+│   │   ├── agents-sync.yml
 │   │   ├── release.yml
 │   │   └── scorecard.yml
 │   ├── dependabot.yml
@@ -408,6 +421,8 @@ omitted below for readability.
 │   └── agents/                                 # Reviewer agent definition
 ├── scripts/
 │   ├── check-size.mjs                          # Brotli budget per subpath
+│   ├── check-mutation-directives.mjs           # Validates `Stryker disable` directives (pnpm check:mutants)
+│   ├── check-published-surface.mjs             # README links and snippets against dist/ (pnpm check:published)
 │   └── dogfood-smoke-test.mjs                  # Pre-tag consumer validation
 ├── .husky/                                     # pre-commit (lint-staged), commit-msg (commitlint), pre-push
 ├── commitlint.config.cjs
@@ -422,6 +437,8 @@ omitted below for readability.
 ├── jest.e2e.config.ts
 ├── jest.stryker.config.ts
 ├── stryker.config.json
+├── pnpm-workspace.yaml                         # pnpm configuration, including the overrides
+├── osv-scanner.toml
 ├── AGENTS.md
 ├── CLAUDE.md
 ├── CHANGELOG.md
@@ -440,6 +457,8 @@ omitted below for readability.
    server (re-exports a few shared types + DEFAULT_TTLS for convenience)
 
    react (no dependency on shared — peerDep: react only)
+
+   testing (imports the server interfaces for types only; no runtime entry imports it)
 ```
 
 `react` is deliberately standalone: the hooks are pure input state and a countdown, so nothing
@@ -461,7 +480,7 @@ The lib uses `exports` in `package.json` to expose 4 entry points with automatic
 consumer (`attw` reports it as `👺 Masquerading as ESM`); the runtime keeps working either way,
 so only `pnpm check:exports` catches the difference. `main` / `module` / `types` at the top level
 cover the legacy `node` resolution algorithm, which ignores `exports` entirely, and
-`typesVersions` covers the two subpaths in that same mode.
+`typesVersions` covers the three subpaths (`shared`, `react` and `testing`) in that same mode.
 
 ```json
 {
@@ -482,12 +501,17 @@ cover the legacy `node` resolution algorithm, which ignores `exports` entirely, 
       "import": { "types": "./dist/react/index.d.ts", "default": "./dist/react/index.mjs" },
       "require": { "types": "./dist/react/index.d.cts", "default": "./dist/react/index.cjs" }
     },
+    "./testing": {
+      "import": { "types": "./dist/testing/index.d.ts", "default": "./dist/testing/index.mjs" },
+      "require": { "types": "./dist/testing/index.d.cts", "default": "./dist/testing/index.cjs" }
+    },
     "./package.json": "./package.json"
   },
   "typesVersions": {
     "*": {
       "shared": ["./dist/shared/index.d.cts"],
-      "react": ["./dist/react/index.d.cts"]
+      "react": ["./dist/react/index.d.cts"],
+      "testing": ["./dist/testing/index.d.cts"]
     }
   }
 }
@@ -563,7 +587,9 @@ export type {
 export {
   NotificationService,
   type DispatchInput,
-  type DispatchResult
+  type DispatchResult,
+  type EmailDispatchPayload,
+  type OtpDispatchPayload
 } from './services/notification.service'
 export {
   EmailService,
@@ -584,13 +610,28 @@ export {
 export { NotificationAuditInterceptor } from './interceptors/notification-audit.interceptor'
 
 // Reference providers (consumer can use or extend)
-export { ResendEmailProvider } from './providers/resend-email.provider'
+export {
+  ResendEmailProvider,
+  type ResendEmailProviderOptions
+} from './providers/resend-email.provider'
+export {
+  SmtpEmailProvider,
+  type SmtpEmailProviderOptions,
+  type SmtpCredentials,
+  type SmtpTlsOptions
+} from './providers/smtp-email.provider'
 export { NoOpEmailProvider } from './providers/no-op-email.provider'
-export { RedisOtpStorage, type RedisLike } from './providers/redis-otp.storage'
-export { InMemoryOtpStorage } from './providers/in-memory-otp.storage'
+export {
+  RedisOtpStorage,
+  type RedisOtpStorageOptions,
+  type RedisLike
+} from './providers/redis-otp.storage'
+export { InMemoryOtpStorage, type InMemoryStorageSize } from './providers/in-memory-otp.storage'
 export {
   DefaultTemplateRenderer,
-  type TemplateDefinition
+  type DefaultTemplateRendererOptions,
+  type TemplateDefinition,
+  type MissingVariableMode
 } from './providers/default-template-renderer'
 export { NoOpNotificationLogRepository } from './providers/no-op-notification-log.repository'
 
@@ -598,12 +639,21 @@ export { NoOpNotificationLogRepository } from './providers/no-op-notification-lo
 export {
   NotificationException,
   NOTIFICATION_ERROR_DEFINITIONS,
-  NOTIFICATION_ERROR_CODES
+  NOTIFICATION_ERROR_CODES,
+  type NotificationExceptionOptions,
+  type NotificationErrorKey,
+  type NotificationErrorDefinition
 } from './errors'
 
 // Public constants
-export { NOTIFICATION_PURPOSES } from './constants/notification-purposes'
-export { CANONICAL_EMAIL_TEMPLATES } from './constants/canonical-templates'
+export {
+  NOTIFICATION_PURPOSES,
+  type CanonicalNotificationPurpose
+} from './constants/notification-purposes'
+export {
+  CANONICAL_EMAIL_TEMPLATES,
+  type CanonicalEmailTemplate
+} from './constants/canonical-templates'
 
 // Utilities — for consumers writing a custom storage or provider
 export { hashTenantRecipient } from './utils/hash'
@@ -612,7 +662,12 @@ export { safeCompare } from './utils/timing-safe-compare'
 export { toRetryAfterHeader, cooldownExpiresAt, formatCooldown } from './utils/cooldown-helpers'
 
 // Convenience re-exports from the shared subpath
-export type { OtpPurpose, NotificationChannel, NotificationErrorResponse } from '../shared'
+export type {
+  OtpPurpose,
+  NotificationChannel,
+  NotificationErrorResponse,
+  NotificationErrorCode
+} from '../shared'
 export { DEFAULT_TTLS } from '../shared'
 ```
 
@@ -623,7 +678,7 @@ export { DEFAULT_TTLS } from '../shared'
 export type { OtpPurpose, NotificationChannel, NotificationErrorResponse } from './types'
 
 // Constants
-export { NOTIFICATION_ERROR_CODES } from './constants/error-codes'
+export { NOTIFICATION_ERROR_CODES, type NotificationErrorCode } from './constants/error-codes'
 export { DEFAULT_TTLS } from './constants/default-ttls'
 ```
 
@@ -696,7 +751,7 @@ export interface BymaxNotificationModuleOptions {
      * Email send provider — IEmailProvider implementation.
      * REQUIRED if `email` is present.
      */
-    provider: IEmailProvider | (new (...args: unknown[]) => IEmailProvider)
+    provider: IEmailProvider | (new (...args: never[]) => IEmailProvider)
 
     /**
      * Default "from" address (e.g., 'noreply@example.com').
@@ -706,7 +761,7 @@ export interface BymaxNotificationModuleOptions {
 
     /**
      * Default sender name (e.g., 'My App').
-     * Recommended. Default: derived from defaultFrom.
+     * Recommended. Default: `undefined` (no sender name).
      */
     defaultFromName?: string
 
@@ -715,7 +770,7 @@ export interface BymaxNotificationModuleOptions {
      * ({{var}} string interpolation). Consumer can plug in
      * Handlebars/MJML/React Email by implementing IEmailTemplateRenderer.
      */
-    templateRenderer?: IEmailTemplateRenderer | (new (...args: unknown[]) => IEmailTemplateRenderer)
+    templateRenderer?: IEmailTemplateRenderer | (new (...args: never[]) => IEmailTemplateRenderer)
 
     /**
      * Default reply-to address. Optional.
@@ -726,7 +781,7 @@ export interface BymaxNotificationModuleOptions {
      * Default tags attached to all emails (for tracking/analytics
      * on the provider). Optional.
      */
-    defaultTags?: Array<{ name: string; value: string }>
+    defaultTags?: ReadonlyArray<{ name: string; value: string }>
 
     /**
      * Maximum total attachment size in bytes. EmailService sums attachment byte lengths before
@@ -745,7 +800,7 @@ export interface BymaxNotificationModuleOptions {
      * Storage backend for OTP — IOtpStorage implementation.
      * REQUIRED if `otp` is present. Recommended default: RedisOtpStorage.
      */
-    storage: IOtpStorage | (new (...args: unknown[]) => IOtpStorage)
+    storage: IOtpStorage | (new (...args: never[]) => IOtpStorage)
 
     /**
      * Default OTP code length. Default: 6
@@ -804,20 +859,20 @@ export interface BymaxNotificationModuleOptions {
 
   /**
    * SMS channel configuration — declared, no service behind it.
-   * If omitted, SmsService is not registered.
+   * If omitted, the channel is not registered (there is no SmsService).
    */
   sms?: {
-    provider: ISmsProvider | (new (...args: unknown[]) => ISmsProvider)
+    provider: ISmsProvider | (new (...args: never[]) => ISmsProvider)
     defaultFrom?: string // E.164 or alphanumeric sender ID
     resendCooldownSeconds?: number // Default: 60
   }
 
   /**
    * Push channel configuration — declared, no service behind it.
-   * If omitted, PushService is not registered.
+   * If omitted, the channel is not registered (there is no PushService).
    */
   push?: {
-    provider: IPushProvider | (new (...args: unknown[]) => IPushProvider)
+    provider: IPushProvider | (new (...args: never[]) => IPushProvider)
     defaultTtlSeconds?: number // Default: 86400 (24h)
   }
 
@@ -830,8 +885,7 @@ export interface BymaxNotificationModuleOptions {
      * Log repository — INotificationLogRepository implementation.
      * REQUIRED if `audit` is present.
      */
-    repository:
-      INotificationLogRepository | (new (...args: unknown[]) => INotificationLogRepository)
+    repository: INotificationLogRepository | (new (...args: never[]) => INotificationLogRepository)
 
     /**
      * If true, audit log failures do NOT propagate error to the caller.
@@ -880,7 +934,7 @@ export interface NotificationRequest {
 | `global.tenantIdResolver`   | `function`                               | No                       | `undefined`               | tenantId resolver from Request           |
 | `email.provider`            | `IEmailProvider`                         | Yes (if `email` defined) | —                         | Email send adapter                       |
 | `email.defaultFrom`         | `string`                                 | Yes (if `email` defined) | —                         | Default from address                     |
-| `email.defaultFromName`     | `string`                                 | No                       | derived                   | Sender name                              |
+| `email.defaultFromName`     | `string`                                 | No                       | `undefined`               | Sender name                              |
 | `email.templateRenderer`    | `IEmailTemplateRenderer`                 | No                       | `DefaultTemplateRenderer` | Template renderer                        |
 | `email.defaultReplyTo`      | `string`                                 | No                       | `undefined`               | Default reply-to                         |
 | `email.defaultTags`         | `Array<{...}>`                           | No                       | `[]`                      | Default tags                             |
@@ -1022,7 +1076,7 @@ export interface ResolvedNotificationOptions {
     defaultFrom: string
     defaultFromName?: string
     defaultReplyTo?: string
-    defaultTags: Array<{ name: string; value: string }>
+    defaultTags: ReadonlyArray<{ name: string; value: string }>
     maxAttachmentBytes: number
   }
   otp?: {
@@ -1037,8 +1091,6 @@ export interface ResolvedNotificationOptions {
     /** Effective config for a purpose: perPurpose[purpose] ?? the otp defaults above. */
     resolveForPurpose(purpose: string): OtpPurposeConfig
   }
-  sms?: { defaultFrom?: string; resendCooldownSeconds: number } // not implemented
-  push?: { defaultTtlSeconds: number } // not implemented
   audit: { swallowErrors: boolean; maskRecipient: (recipient: string) => string }
 }
 ```
@@ -1058,7 +1110,7 @@ static forRootAsync(options: BymaxNotificationModuleAsyncOptions): DynamicModule
 export interface BymaxNotificationModuleAsyncOptions {
   imports?: ModuleMetadata['imports']
   inject?: FactoryProvider['inject']
-  useFactory: (...args: any[]) => BymaxNotificationModuleOptions | Promise<BymaxNotificationModuleOptions>
+  useFactory: (...args: never[]) => BymaxNotificationModuleOptions | Promise<BymaxNotificationModuleOptions>
 }
 ```
 
@@ -1067,13 +1119,16 @@ common path — it resolves Redis / `ConfigService` through DI (used in §4.3 an
 
 **`provider` / `storage` accept either an instance or a class — the rule:**
 
-| Form                                                 | When to use                                                                           | How the module wires it           |
-| ---------------------------------------------------- | ------------------------------------------------------------------------------------- | --------------------------------- |
-| **Instance** (`new ResendEmailProvider({ apiKey })`) | Any adapter that needs runtime config (API keys, clients). **All examples use this.** | `useValue` — used as-is           |
-| **Class** (`InMemoryOtpStorage`)                     | Only zero-config adapters with a no-arg or fully DI-resolvable constructor            | `useClass` — Nest instantiates it |
+| Form                                                 | When to use                                                                           | How the module wires it                             |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| **Instance** (`new ResendEmailProvider({ apiKey })`) | Any adapter that needs runtime config (API keys, clients). **All examples use this.** | `useValue` — used as-is                             |
+| **Class** (`InMemoryOtpStorage`)                     | Only zero-config adapters; in `forRootAsync`, only a no-arg constructor               | `forRoot`: `useClass`; `forRootAsync`: `new ctor()` |
 
-> A class whose constructor needs values Nest cannot resolve (an API key, a Redis client) MUST be
-> passed as an instance — otherwise initialization fails. When in doubt, pass an instance.
+> A class whose constructor needs values Nest cannot resolve (an API key, a Redis client) MUST
+> be passed as an instance. In `forRootAsync`, a class whose constructor declares any parameter is rejected
+> at startup (`src/server/bymax-notification.module.ts`, function `instantiate`), and only the
+> `useFactory` form is accepted (`useClass` / `useExisting` are rejected). When in doubt, pass an instance.
+> The module is registered as global (`global: true`) in both modes.
 
 ---
 
@@ -1145,17 +1200,34 @@ export interface EmailSendOptions {
   bcc?: string | string[]
 
   /** Tags for tracking on the provider (e.g., Resend tags, SES tags) */
-  tags?: Array<{ name: string; value: string }>
+  tags?: ReadonlyArray<{ name: string; value: string }>
 
   /** Custom headers */
   headers?: Record<string, string>
 
   /** Attachments (base64 or Buffer) */
-  attachments?: Array<{
-    filename: string
-    content: Buffer | string // Buffer or base64 string
-    contentType?: string
-  }>
+  attachments?: ReadonlyArray<EmailAttachment>
+
+  /**
+   * Secret values (for example, the OTP code the body carries) that the adapter must
+   * scrub from any error text it logs or throws — a relay that echoes the rejected
+   * content puts the body into the transport error.
+   */
+  redactValues?: readonly string[]
+
+  /**
+   * Whether this send's failures may surface the text the provider authored. `false` means
+   * the adapter must publish none of it (not in a log line, not in the thrown error's message),
+   * because the body carries a credential and redaction is not a reliable barrier.
+   */
+  publishProviderText?: boolean
+}
+
+/** Attachment: `content` is a `Buffer` or a base64 string. */
+export interface EmailAttachment {
+  filename: string
+  content: Buffer | string
+  contentType?: string
 }
 
 /**
@@ -1167,64 +1239,15 @@ export interface EmailSendResult {
 }
 ```
 
-#### 5.1.1 Reference implementation: `ResendProvider`
+#### 5.1.1 Reference implementation: `ResendEmailProvider`
 
-```typescript
-import { Injectable } from '@nestjs/common'
-import { Resend } from 'resend'
-import type {
-  IEmailProvider,
-  EmailSendOptions,
-  EmailSendResult
-} from '@bymax-one/nest-notification'
+Implemented in `src/server/providers/resend-email.provider.ts`. What the contract guarantees:
 
-export interface ResendProviderOptions {
-  apiKey: string
-}
-
-@Injectable()
-export class ResendEmailProvider implements IEmailProvider {
-  readonly name = 'resend'
-  private readonly client: Resend | null
-
-  constructor(options: ResendProviderOptions) {
-    // Lazy-load Resend so the lib does not require it as a direct dep
-    this.client = options.apiKey ? new Resend(options.apiKey) : null
-  }
-
-  isConfigured(): boolean {
-    return this.client !== null
-  }
-
-  async send(options: EmailSendOptions): Promise<EmailSendResult> {
-    if (!this.client) {
-      throw new Error('ResendEmailProvider: missing API key')
-    }
-
-    const from = options.fromName ? `${options.fromName} <${options.from}>` : (options.from ?? '')
-
-    const result = await this.client.emails.send({
-      from,
-      to: options.to,
-      subject: options.subject,
-      html: options.html,
-      text: options.text,
-      replyTo: options.replyTo,
-      cc: options.cc,
-      bcc: options.bcc,
-      tags: options.tags,
-      headers: options.headers,
-      attachments: options.attachments
-    })
-
-    if (result.error) {
-      throw new Error(`Resend send failed: ${result.error.message}`)
-    }
-
-    return { messageId: result.data?.id ?? '' }
-  }
-}
-```
+- The constructor takes `ResendEmailProviderOptions` (`{ apiKey?: string }`); `isConfigured()` answers `Boolean(apiKey)`.
+- The `resend` SDK is loaded on demand (`import()` via `loadOptionalPeer`) on the first `send()`. A load failure is not cached: the next send tries again.
+- The sender is sent as `Name <address>` when both `fromName` and `from` are present.
+- A failure becomes `Error('Resend send failed: <reason>')`, and the reason is redacted (body excerpts echoed by the provider, `redactValues` and the API key). With `publishProviderText: false`, the error is just `Resend send failed` and no provider text is published.
+- A response without `data.id` throws `Resend returned no message ID`.
 
 > **Note:** `resend` is an **optional** peer dep — only needed if the consumer instantiates `ResendEmailProvider`. Whoever uses another provider does not need to install it.
 
@@ -1444,37 +1467,7 @@ Design decisions worth recording, since each one has a plausible alternative:
 
 #### 5.1.6 Development provider: `NoOpEmailProvider`
 
-```typescript
-import { Logger } from '@nestjs/common'
-import type {
-  IEmailProvider,
-  EmailSendOptions,
-  EmailSendResult
-} from '@bymax-one/nest-notification'
-
-/**
- * Provider that does not send emails — only logs.
- * Useful for local development without SMTP credentials.
- *
- * DO NOT USE IN PRODUCTION.
- */
-export class NoOpEmailProvider implements IEmailProvider {
-  readonly name = 'noop'
-  private readonly logger = new Logger(NoOpEmailProvider.name)
-
-  isConfigured(): boolean {
-    return true
-  }
-
-  async send(options: EmailSendOptions): Promise<EmailSendResult> {
-    // Logs subject and to — but NEVER the body (may contain PII/OTP)
-    this.logger.debug(
-      `[NoOpEmail] to=${Array.isArray(options.to) ? options.to.join(',') : options.to} subject="${options.subject}"`
-    )
-    return { messageId: `noop-${Date.now()}` }
-  }
-}
-```
+Implemented in `src/server/providers/no-op-email.provider.ts`. It does not send email: it logs (`debug` level) only the **masked** recipients (`j***@acme.com`) — never the subject or the body, which may contain PII or the OTP code. `isConfigured()` always answers `true`, `name` is `'noop'` and the returned `messageId` is `noop-<uuid>`. **Do not use in production.**
 
 ### 5.2 `IOtpStorage`
 
@@ -1491,7 +1484,9 @@ The key interface to solve the **Prisma coupling** a hand-rolled OTP store would
  * - Make `tryAcquireCooldown` atomic — check-and-set in one step (Redis: `SET NX EX`), so two
  *   concurrent generate/resend calls cannot both pass the cooldown gate.
  * - Apply TTL — expired entries must not be returned by `get`/`consumeAttempt`.
- * - Scope keys by (tenantId, recipient, purpose) without collision across tenants.
+ * - Scope keys by (tenantId, recipient, purpose) without collision across tenants — including pairs
+ *   that differ only in where the tenant/recipient boundary falls (`('a:b', 'c')` vs `('a', 'b:c')`).
+ * - Refuse an empty, whitespace-only or non-string tenantId/recipient (INVALID_SCOPE_IDENTIFIER).
  * - Never expose OTP codes in plaintext logs.
  *
  * Note on recipient normalization: the lib does NOT normalize `recipient`. Callers must pass a
@@ -1605,270 +1600,27 @@ export interface OtpEntry {
 }
 ```
 
+**Scope boundary.** `tenantId` and `recipient` must identify somebody: a value that is not a string, is empty or is whitespace-only is refused with `NotificationException('INVALID_SCOPE_IDENTIFIER')`. The refusal happens in two layers:
+
+1. in `OtpService` — `generate`, `resend` (which delegates to `generate`), `verify`, `consume` and `getStatus` —, **before** any call to the storage;
+2. in `hashTenantRecipient`, which the reference implementations use to derive keys. A custom storage that does not use that function must apply the same rule.
+
+The reference key is `sha256(sha256(tenantId):sha256(recipient))`: each component is hashed before the join, so `('a:b', 'c')` and `('a', 'b:c')` — as well as `('a::b', 'c')` and `('a', 'b::c')` — never produce the same key. The executable contract `otpStorageContract` (`./testing`) checks that boundary on both the OTP and the cooldown keys, with both pairs (the `:` one and the `::` one).
+
 #### 5.2.1 Default implementation: `RedisOtpStorage`
 
-```typescript
-import type { Redis } from 'ioredis'
-import { createHash } from 'node:crypto'
-import type { IOtpStorage, OtpEntry } from '@bymax-one/nest-notification'
+Implemented in `src/server/providers/redis-otp.storage.ts`.
 
-export interface RedisOtpStorageOptions {
-  /** ioredis client provided by the consumer */
-  redisClient: Redis
-  /** Key namespace. Default: 'notification' */
-  namespace?: string
-}
-
-/**
- * Redis-based OTP storage.
- *
- * Key structure:
- * - {ns}:otp:{purpose}:{sha256(tenantId+':'+recipient)} → JSON of OtpEntry
- * - {ns}:otp_cd:{purpose}:{sha256(tenantId+':'+recipient)} → '1' with TTL = cooldown
- *
- * We hash (tenantId, recipient) to avoid leaking email/phone via Redis key inspection.
- */
-export class RedisOtpStorage implements IOtpStorage {
-  readonly name = 'redis'
-  private readonly redis: Redis
-  private readonly namespace: string
-
-  constructor(options: RedisOtpStorageOptions) {
-    this.redis = options.redisClient
-    this.namespace = options.namespace ?? 'notification'
-  }
-
-  isConfigured(): boolean {
-    return Boolean(this.redis)
-  }
-
-  private otpKey(tenantId: string, recipient: string, purpose: string): string {
-    const h = createHash('sha256').update(`${tenantId}:${recipient}`).digest('hex')
-    return `${this.namespace}:otp:${purpose}:${h}`
-  }
-
-  private cooldownKey(tenantId: string, recipient: string, purpose: string): string {
-    const h = createHash('sha256').update(`${tenantId}:${recipient}`).digest('hex')
-    return `${this.namespace}:otp_cd:${purpose}:${h}`
-  }
-
-  async set(tenantId: string, recipient: string, purpose: string, entry: OtpEntry): Promise<void> {
-    const ttlSec = Math.max(1, Math.ceil((entry.expiresAt - Date.now()) / 1000))
-    await this.redis.setex(this.otpKey(tenantId, recipient, purpose), ttlSec, JSON.stringify(entry))
-  }
-
-  async get(tenantId: string, recipient: string, purpose: string): Promise<OtpEntry | null> {
-    const raw = await this.redis.get(this.otpKey(tenantId, recipient, purpose))
-    if (!raw) return null
-    try {
-      return JSON.parse(raw) as OtpEntry
-    } catch {
-      await this.delete(tenantId, recipient, purpose)
-      return null
-    }
-  }
-
-  /**
-   * Atomic verify primitive. The whole "read → expiry/max check → increment → write" sequence
-   * runs inside a single Lua script, so concurrent verify calls cannot interleave and overshoot
-   * `maxAttempts`. PTTL is read inside the script to preserve the original expiry on rewrite.
-   */
-  private static readonly CONSUME_ATTEMPT_LUA = `
-    local raw = redis.call('GET', KEYS[1])
-    if not raw then return cjson.encode({ status = 'not_found' }) end
-    local entry = cjson.decode(raw)
-    if entry.expiresAt and tonumber(entry.expiresAt) < tonumber(ARGV[1]) then
-      redis.call('DEL', KEYS[1])
-      return cjson.encode({ status = 'not_found' })
-    end
-    if entry.attempts >= entry.maxAttempts then
-      redis.call('DEL', KEYS[1])
-      return cjson.encode({ status = 'max_attempts' })
-    end
-    entry.attempts = entry.attempts + 1
-    local ttl = redis.call('PTTL', KEYS[1])
-    if ttl and ttl > 0 then
-      redis.call('SET', KEYS[1], cjson.encode(entry), 'PX', ttl)
-    else
-      redis.call('SET', KEYS[1], cjson.encode(entry))
-    end
-    return cjson.encode({ status = 'ok', entry = entry })
-  `
-
-  async consumeAttempt(
-    tenantId: string,
-    recipient: string,
-    purpose: string
-  ): Promise<
-    { status: 'not_found' } | { status: 'max_attempts' } | { status: 'ok'; entry: OtpEntry }
-  > {
-    const raw = (await this.redis.eval(
-      RedisOtpStorage.CONSUME_ATTEMPT_LUA,
-      1,
-      this.otpKey(tenantId, recipient, purpose),
-      Date.now().toString()
-    )) as string
-    return JSON.parse(raw)
-  }
-
-  async update(
-    tenantId: string,
-    recipient: string,
-    purpose: string,
-    entry: OtpEntry
-  ): Promise<void> {
-    // KEEPTTL preserves the original expiry; XX avoids resurrecting an entry that already expired.
-    await this.redis.set(
-      this.otpKey(tenantId, recipient, purpose),
-      JSON.stringify(entry),
-      'KEEPTTL',
-      'XX'
-    )
-  }
-
-  async delete(tenantId: string, recipient: string, purpose: string): Promise<void> {
-    await this.redis.del(this.otpKey(tenantId, recipient, purpose))
-  }
-
-  async tryAcquireCooldown(
-    tenantId: string,
-    recipient: string,
-    purpose: string,
-    ttlSeconds: number
-  ): Promise<boolean> {
-    // SET NX EX is a single atomic check-and-set: only the first concurrent caller wins.
-    const res = await this.redis.set(
-      this.cooldownKey(tenantId, recipient, purpose),
-      '1',
-      'EX',
-      ttlSeconds,
-      'NX'
-    )
-    return res === 'OK'
-  }
-
-  async getCooldown(tenantId: string, recipient: string, purpose: string): Promise<number> {
-    const ttl = await this.redis.ttl(this.cooldownKey(tenantId, recipient, purpose))
-    return ttl > 0 ? ttl : 0
-  }
-
-  async clearCooldown(tenantId: string, recipient: string, purpose: string): Promise<void> {
-    await this.redis.del(this.cooldownKey(tenantId, recipient, purpose))
-  }
-}
-```
+- Constructor: `RedisOtpStorageOptions` — `redisClient: RedisLike` (a structural subset of an `ioredis` client: `get`, `set`, `setex`, `del`, `ttl`, `pttl`, `eval`; the library does not import `ioredis`) and `namespace?` (default `'notification'`).
+- Keys: `{ns}:otp:{purpose}:{hash}` (JSON of `OtpEntry`) and `{ns}:otp_cd:{purpose}:{hash}` (`'1'` with TTL = cooldown), where `hash = hashTenantRecipient(tenantId, recipient)` (§10.2).
+- `set`: `SETEX` with a TTL derived from `expiresAt` (minimum 1 s). `get`: unparsable JSON removes the key and returns `null`.
+- `consumeAttempt`: a single Lua script — reads the entry, handles expiry (`not_found`), handles `attempts >= maxAttempts` (deletes the key, `max_attempts`) and otherwise increments `attempts`, rewriting with the remaining `PTTL`. This atomicity is what upholds the `maxAttempts` limit under concurrency.
+- `update`: `SET … KEEPTTL XX` — preserves the TTL and does not resurrect an already expired entry.
+- `tryAcquireCooldown`: `SET … EX <ttl> NX`; with `ttlSeconds <= 0` it deletes the key and returns `true`. `getCooldown` reads the `TTL` (0 if absent) and `clearCooldown` deletes the key.
 
 #### 5.2.2 Alternative implementation: `InMemoryOtpStorage`
 
-```typescript
-import type { IOtpStorage, OtpEntry } from '@bymax-one/nest-notification'
-
-/**
- * In-memory OTP storage (native Map).
- *
- * Useful for:
- * - Unit tests
- * - Local development without Redis
- *
- * DO NOT USE IN MULTI-INSTANCE PRODUCTION — entries are local to the process.
- */
-export class InMemoryOtpStorage implements IOtpStorage {
-  readonly name = 'memory'
-  private readonly store = new Map<string, OtpEntry>()
-  private readonly cooldowns = new Map<string, number>()
-
-  isConfigured(): boolean {
-    return true
-  }
-
-  private key(tenantId: string, recipient: string, purpose: string): string {
-    return `${tenantId}::${recipient}::${purpose}`
-  }
-
-  async set(tenantId: string, recipient: string, purpose: string, entry: OtpEntry): Promise<void> {
-    this.store.set(this.key(tenantId, recipient, purpose), entry)
-  }
-
-  async get(tenantId: string, recipient: string, purpose: string): Promise<OtpEntry | null> {
-    const entry = this.store.get(this.key(tenantId, recipient, purpose))
-    if (!entry) return null
-    if (entry.expiresAt < Date.now()) {
-      this.store.delete(this.key(tenantId, recipient, purpose))
-      return null
-    }
-    return entry
-  }
-
-  // Atomic by construction: no `await` between read and write, so the single-threaded event loop
-  // cannot interleave two consumeAttempt calls.
-  async consumeAttempt(
-    tenantId: string,
-    recipient: string,
-    purpose: string
-  ): Promise<
-    { status: 'not_found' } | { status: 'max_attempts' } | { status: 'ok'; entry: OtpEntry }
-  > {
-    const key = this.key(tenantId, recipient, purpose)
-    const entry = this.store.get(key)
-    if (!entry) return { status: 'not_found' }
-    if (entry.expiresAt < Date.now()) {
-      this.store.delete(key)
-      return { status: 'not_found' }
-    }
-    if (entry.attempts >= entry.maxAttempts) {
-      this.store.delete(key)
-      return { status: 'max_attempts' }
-    }
-    entry.attempts += 1
-    this.store.set(key, entry)
-    return { status: 'ok', entry }
-  }
-
-  async update(
-    tenantId: string,
-    recipient: string,
-    purpose: string,
-    entry: OtpEntry
-  ): Promise<void> {
-    const key = this.key(tenantId, recipient, purpose)
-    if (this.store.has(key)) {
-      this.store.set(key, entry)
-    }
-  }
-
-  async delete(tenantId: string, recipient: string, purpose: string): Promise<void> {
-    this.store.delete(this.key(tenantId, recipient, purpose))
-  }
-
-  async tryAcquireCooldown(
-    tenantId: string,
-    recipient: string,
-    purpose: string,
-    ttlSeconds: number
-  ): Promise<boolean> {
-    const key = this.key(tenantId, recipient, purpose)
-    const existing = this.cooldowns.get(key)
-    if (existing && existing > Date.now()) return false
-    this.cooldowns.set(key, Date.now() + ttlSeconds * 1000)
-    return true
-  }
-
-  async getCooldown(tenantId: string, recipient: string, purpose: string): Promise<number> {
-    const expiry = this.cooldowns.get(this.key(tenantId, recipient, purpose))
-    if (!expiry) return 0
-    const remaining = Math.ceil((expiry - Date.now()) / 1000)
-    if (remaining <= 0) {
-      this.cooldowns.delete(this.key(tenantId, recipient, purpose))
-      return 0
-    }
-    return remaining
-  }
-
-  async clearCooldown(tenantId: string, recipient: string, purpose: string): Promise<void> {
-    this.cooldowns.delete(this.key(tenantId, recipient, purpose))
-  }
-}
-```
+Implemented in `src/server/providers/in-memory-otp.storage.ts`: two `Map`s (entries and cooldowns) keyed by `` `${hashTenantRecipient(tenantId, recipient)}::${purpose}` ``. `consumeAttempt` is atomic by construction (no `await` between the read and the write) and entries expire on read. Beyond the contract it exposes `clear()` and `size(): InMemoryStorageSize` (`{ otps, cooldowns }`), useful in tests. **Do not use in multi-instance production** — entries are local to the process.
 
 #### 5.2.3 Example adapter: DynamoDB
 
@@ -1880,7 +1632,7 @@ import {
   DeleteItemCommand
 } from '@aws-sdk/client-dynamodb'
 import { marshall, unmarshall } from '@aws-sdk/util-dynamodb'
-import type { IOtpStorage, OtpEntry } from '@bymax-one/nest-notification'
+import { hashTenantRecipient, type IOtpStorage, type OtpEntry } from '@bymax-one/nest-notification'
 
 export class DynamoDbOtpStorage implements IOtpStorage {
   readonly name = 'dynamodb'
@@ -1895,7 +1647,9 @@ export class DynamoDbOtpStorage implements IOtpStorage {
   }
 
   private pk(tenantId: string, recipient: string, purpose: string): string {
-    return `${tenantId}#${recipient}#${purpose}`
+    // Hash the components before joining: concatenating the raw values around a delimiter
+    // makes ('a#b', 'c') and ('a', 'b#c') collide.
+    return `${hashTenantRecipient(tenantId, recipient)}#${purpose}`
   }
 
   async set(tenantId: string, recipient: string, purpose: string, entry: OtpEntry): Promise<void> {
@@ -2036,7 +1790,7 @@ export interface SmsSendOptions {
   body: string
 
   /** Tags for tracking (not supported by all providers) */
-  tags?: Array<{ name: string; value: string }>
+  tags?: ReadonlyArray<{ name: string; value: string }>
 }
 
 export interface SmsSendResult {
@@ -2146,79 +1900,12 @@ export interface RenderedEmail {
 
 #### 5.5.1 Default implementation: `DefaultTemplateRenderer`
 
-```typescript
-import type { IEmailTemplateRenderer, RenderedEmail } from '@bymax-one/nest-notification'
+Implemented in `src/server/providers/default-template-renderer.ts`: plain `{{var}}` interpolation, with no conditionals, helpers or partials. For anything more elaborate, implement `IEmailTemplateRenderer` with Handlebars/MJML/React Email.
 
-export interface DefaultTemplateRendererOptions {
-  /**
-   * Registered templates. Keyed by `${templateName}::${locale}`.
-   * Value is the template with `{{varName}}` placeholders.
-   */
-  templates: Record<string, { subject: string; html: string; text?: string }>
-}
-
-/**
- * Simple renderer based on `{{var}}` interpolation.
- * No conditional logic, no helpers, no partials.
- *
- * For something more elaborate, plug in Handlebars/MJML/React Email
- * by implementing IEmailTemplateRenderer.
- */
-export class DefaultTemplateRenderer implements IEmailTemplateRenderer {
-  readonly name = 'default-interpolation'
-  private readonly templates: DefaultTemplateRendererOptions['templates']
-
-  constructor(options: DefaultTemplateRendererOptions) {
-    this.templates = options.templates
-  }
-
-  private key(templateName: string, locale: string): string {
-    return `${templateName}::${locale}`
-  }
-
-  async hasTemplate(templateName: string, locale: string): Promise<boolean> {
-    return Boolean(this.templates[this.key(templateName, locale)])
-  }
-
-  async render(
-    templateName: string,
-    data: Record<string, unknown>,
-    locale: string
-  ): Promise<RenderedEmail> {
-    const tpl =
-      this.templates[this.key(templateName, locale)] ??
-      this.templates[this.key(templateName, 'en')] ??
-      null
-
-    if (!tpl) {
-      throw new Error(`Template not found: ${templateName} (locale=${locale})`)
-    }
-
-    // HTML-escape substituted variables ONLY in the html body (prevents XSS). The subject line and
-    // the plain-text body are not HTML contexts — escaping them would surface literal "&amp;"/"&lt;".
-    const fill = (str: string, escape: boolean): string =>
-      str.replace(/\{\{\s*(\w+)\s*\}\}/g, (_, varName) => {
-        const value = String(data[varName] ?? '')
-        return escape ? this.escapeHtml(value) : value
-      })
-
-    return {
-      subject: fill(tpl.subject, false),
-      html: fill(tpl.html, true),
-      text: tpl.text ? fill(tpl.text, false) : undefined
-    }
-  }
-
-  private escapeHtml(str: string): string {
-    return str
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;')
-  }
-}
-```
+- Options (`DefaultTemplateRendererOptions`, all optional): `templates` (`Record<string, TemplateDefinition>`, keyed by `${templateName}::${locale}`, value `{ subject, html, text? }`); `fallbackLocales` (default `['en']`, tried after the requested locale); `onMissingVar` (`'empty'` — the default — or `'throw'`); `enableNestedPaths` (default `false`; enables `{{ user.name }}`).
+- The constructor validates each template (`subject` and `html` are strings; `text` is a string when present) and throws `Invalid template "<key>"` when something is missing.
+- `render` resolves the template through the chain `[locale, ...fallbackLocales]` and throws `Template not found: … (locale=…, tried=…)` if none exists.
+- The variable is `{{ name }}` with optional whitespace and `[\w.]` characters. Values are escaped (`& < > " '`) **only** in the `html`; `subject` and `text` are not HTML contexts.
 
 #### 5.5.2 Example adapter: Handlebars
 
@@ -2242,7 +1929,7 @@ export class HandlebarsTemplateRenderer implements IEmailTemplateRenderer {
       this.compiledTemplates[key] = {
         subject: Handlebars.compile(tpl.subject),
         html: Handlebars.compile(tpl.html),
-        text: tpl.text ? Handlebars.compile(tpl.text) : undefined
+        ...(tpl.text !== undefined ? { text: Handlebars.compile(tpl.text) } : {})
       }
     }
   }
@@ -2263,7 +1950,7 @@ export class HandlebarsTemplateRenderer implements IEmailTemplateRenderer {
     return {
       subject: tpl.subject(data),
       html: tpl.html(data),
-      text: tpl.text?.(data)
+      ...(tpl.text !== undefined ? { text: tpl.text(data) } : {})
     }
   }
 }
@@ -2340,6 +2027,12 @@ export interface NotificationLogEntry {
   /** Unix timestamp (ms) of the event */
   timestamp: number
 
+  /** Basic SMTP delivery status (e.g. 550), when available */
+  deliveryStatus?: number
+
+  /** Enhanced SMTP delivery status (e.g. '5.1.1'), when available */
+  deliveryEnhancedStatus?: string
+
   /** Tenant ID */
   tenantId: string
 
@@ -2406,6 +2099,8 @@ model NotificationLog {
   purpose       String?
   providerName  String
   messageId     String?
+  deliveryStatus         Int?
+  deliveryEnhancedStatus String?
   errorMessage  String?  @db.Text
   userId        String?
   metadata      Json?
@@ -2445,21 +2140,7 @@ export class EmailService {
    * @throws NotificationException EMAIL_SEND_FAILED on provider failure
    * @throws NotificationException EMAIL_ATTACHMENTS_TOO_LARGE if total attachment bytes exceed email.maxAttachmentBytes
    */
-  async send(input: {
-    tenantId: string
-    to: string | string[]
-    subject: string
-    html: string
-    text?: string
-    from?: string
-    fromName?: string
-    replyTo?: string
-    cc?: string | string[]
-    bcc?: string | string[]
-    tags?: Array<{ name: string; value: string }>
-    attachments?: EmailSendOptions['attachments']
-    userId?: string // For audit log
-  }): Promise<{ messageId: string }>
+  async send(input: EmailSendInput): Promise<{ messageId: string }>
 
   /**
    * Sends an email rendering a template.
@@ -2468,18 +2149,7 @@ export class EmailService {
    * @param input.data - Variables for interpolation
    * @param input.locale - Template locale (default: options.global.defaultLocale)
    */
-  async sendTemplate(input: {
-    tenantId: string
-    to: string | string[]
-    template: string
-    data: Record<string, unknown>
-    locale?: string
-    from?: string
-    fromName?: string
-    replyTo?: string
-    tags?: Array<{ name: string; value: string }>
-    userId?: string
-  }): Promise<{ messageId: string }>
+  async sendTemplate(input: EmailSendTemplateInput): Promise<{ messageId: string }>
 
   /**
    * Indicates whether the email channel is configured.
@@ -2487,6 +2157,8 @@ export class EmailService {
   isConfigured(): boolean
 }
 ```
+
+`EmailSendInput` and `EmailSendTemplateInput` live in `src/server/services/email.service.ts`. `EmailSendInput` carries `tenantId`, `to`, `subject`, `html`, `text?`, `from?`, `fromName?`, `replyTo?`, `cc?`, `bcc?`, `tags?` (read-only), `attachments?` and `userId?`; `EmailSendTemplateInput` replaces the body with `template` + `data` (+ `locale?`) and does not accept `cc`, `bcc` or `attachments`. Both accept `auditRedactValues?` (values removed from `errorMessage` in the audit entry when the provider echoes the content) and `publishProviderText?` (`false` keeps the text authored by the provider out of the error and the audit entry).
 
 ### 6.2 `OtpService`
 
@@ -2524,19 +2196,11 @@ export class OtpService {
    *
    * @throws NotificationException OTP_COOLDOWN_ACTIVE — if cooldown active
    * @throws NotificationException OTP_EMAIL_DELIVERY_NOT_CONFIGURED — `deliverVia: 'email'` but no email channel configured
+   * @throws NotificationException INVALID_SCOPE_IDENTIFIER — `tenantId` or `recipient` that is empty, whitespace-only or not a string (refused before touching the storage; also applies to `verify`, `consume`, `resend` and `getStatus`)
    *
    * @returns { expiresAt: number, cooldownSeconds: number }
    */
-  async generate(input: {
-    tenantId: string
-    recipient: string
-    purpose: string
-    deliverVia?: 'email' | 'manual'
-    emailTemplate?: string
-    emailData?: Record<string, unknown>
-    locale?: string
-    userId?: string
-  }): Promise<{ expiresAt: number; cooldownSeconds: number }>
+  async generate(input: OtpGenerateInput): Promise<OtpGenerateResult>
 
   /**
    * Verifies an OTP code.
@@ -2547,25 +2211,14 @@ export class OtpService {
    *
    * @returns OtpVerifyResult — discriminated union
    */
-  async verify(input: {
-    tenantId: string
-    recipient: string
-    purpose: string
-    code: string
-    userId?: string
-  }): Promise<OtpVerifyResult>
+  async verify(input: OtpVerifyInput): Promise<OtpVerifyResult>
 
   /**
    * Consumes (deletes) an OTP and clears its resend cooldown. Idempotent.
    * Call after the dependent operation completes (e.g. right after the password is changed),
    * or to cancel an in-flight OTP so the user can restart immediately with a different recipient.
    */
-  async consume(input: {
-    tenantId: string
-    recipient: string
-    purpose: string
-    userId?: string
-  }): Promise<void>
+  async consume(input: OtpConsumeInput): Promise<void>
 
   /**
    * Explicit resend (generates new code, replaces the previous one).
@@ -2573,29 +2226,13 @@ export class OtpService {
    *
    * Convenient shortcut for `generate(...)` with clear "resend" semantics.
    */
-  async resend(input: {
-    tenantId: string
-    recipient: string
-    purpose: string
-    deliverVia?: 'email' | 'manual'
-    emailTemplate?: string
-    emailData?: Record<string, unknown>
-    locale?: string
-    userId?: string
-  }): Promise<{ expiresAt: number; cooldownSeconds: number }>
+  async resend(input: OtpGenerateInput): Promise<OtpGenerateResult>
 
   /**
    * Returns information about active OTP (if exists).
    * Does NOT return the code in plaintext.
    */
-  async getStatus(input: { tenantId: string; recipient: string; purpose: string }): Promise<{
-    exists: boolean
-    expiresAt?: number
-    attempts?: number
-    maxAttempts?: number
-    cooldownSeconds: number
-    validated?: boolean
-  }>
+  async getStatus(input: OtpStatusInput): Promise<OtpStatusResult>
 
   /**
    * Indicates whether the OTP channel is configured.
@@ -2604,11 +2241,11 @@ export class OtpService {
 }
 
 /**
- * OTP verification result — discriminated union.
+ * OTP verification result — discriminated union (`interfaces/otp-storage.interface.ts`).
  *
  * Note: an expired entry is reported as `not_found`. Once a code's TTL lapses the entry is gone, so
- * "missing" and "expired" are indistinguishable at the storage layer — and §11.5 recommends not
- * leaking the difference to the client anyway.
+ * "missing" and "expired" are indistinguishable at the storage layer — and §11.5 recommends not leaking
+ * the difference to the client anyway.
  */
 export type OtpVerifyResult =
   | { valid: true }
@@ -2616,25 +2253,34 @@ export type OtpVerifyResult =
   | { valid: false; reason: 'max_attempts' }
   | { valid: false; reason: 'invalid_code'; remainingAttempts: number }
 
-/** Input accepted by OtpService.generate() and .resend(). */
-export interface OtpGenerateOptions {
-  tenantId: string
-  recipient: string
-  purpose: string
+// OtpService input and result types (src/server/services/otp.service.ts).
+// `OtpRecipientRef` is internal: { tenantId, recipient, purpose, userId? }.
+export interface OtpGenerateInput extends OtpRecipientRef {
   deliverVia?: 'email' | 'manual' // default 'email' when the email channel is configured, else 'manual'
   emailTemplate?: string // default 'otp_code'
   emailData?: Record<string, unknown>
   locale?: string
-  userId?: string
 }
-
-/** Input accepted by OtpService.verify(). */
-export interface OtpVerifyOptions {
+export interface OtpVerifyInput extends OtpRecipientRef {
+  code: string
+}
+export type OtpConsumeInput = OtpRecipientRef
+export interface OtpStatusInput {
   tenantId: string
   recipient: string
   purpose: string
-  code: string
-  userId?: string
+}
+export interface OtpGenerateResult {
+  expiresAt: number
+  cooldownSeconds: number
+}
+export interface OtpStatusResult {
+  exists: boolean
+  expiresAt?: number
+  attempts?: number
+  maxAttempts?: number
+  cooldownSeconds: number
+  validated?: boolean
 }
 ```
 
@@ -2697,55 +2343,11 @@ export function safeCompare(expected: string, actual: string): boolean {
 
 ### 6.3 `SmsService` (not implemented)
 
-```typescript
-@Injectable()
-export class SmsService {
-  constructor(
-    @Inject(BYMAX_NOTIFICATION_OPTIONS) private readonly options: ResolvedNotificationOptions,
-    @Inject(BYMAX_NOTIFICATION_SMS_PROVIDER) private readonly provider: ISmsProvider,
-    @Inject(BYMAX_NOTIFICATION_LOG_REPOSITORY) private readonly auditLog: INotificationLogRepository
-  ) {}
-
-  async send(input: {
-    tenantId: string
-    to: string
-    body: string
-    from?: string
-    tags?: Array<{ name: string; value: string }>
-    userId?: string
-  }): Promise<{ messageId: string }>
-
-  isConfigured(): boolean
-}
-```
+There is no `SmsService`. The SMS channel has only the `ISmsProvider` contract (§5.4); configuring `sms` in `forRoot` / `forRootAsync` is rejected at startup (`src/server/config/validate-options.ts`).
 
 ### 6.4 `PushService` (not implemented)
 
-```typescript
-@Injectable()
-export class PushService {
-  constructor(
-    @Inject(BYMAX_NOTIFICATION_OPTIONS) private readonly options: ResolvedNotificationOptions,
-    @Inject(BYMAX_NOTIFICATION_PUSH_PROVIDER) private readonly provider: IPushProvider,
-    @Inject(BYMAX_NOTIFICATION_LOG_REPOSITORY) private readonly auditLog: INotificationLogRepository
-  ) {}
-
-  async send(input: {
-    tenantId: string
-    tokens: string | string[]
-    title: string
-    body: string
-    data?: Record<string, string>
-    imageUrl?: string
-    sound?: string
-    badge?: number
-    priority?: 'high' | 'normal'
-    userId?: string
-  }): Promise<PushSendResult>
-
-  isConfigured(): boolean
-}
-```
+There is no `PushService`. The push channel has only the `IPushProvider` contract (§5.3); configuring `push` is rejected at startup.
 
 ### 6.5 `NotificationService` (orchestrator)
 
@@ -2755,10 +2357,8 @@ Unified service for consumers who want a uniform API across channels.
 @Injectable()
 export class NotificationService {
   constructor(
-    @Optional() private readonly email?: EmailService,
-    @Optional() private readonly otp?: OtpService,
-    @Optional() private readonly sms?: SmsService, // not implemented
-    @Optional() private readonly push?: PushService // not implemented
+    @Optional() @Inject(EmailService) private readonly emailService?: EmailService,
+    @Optional() @Inject(OtpService) private readonly otpService?: OtpService
   ) {}
 
   /**
@@ -2796,15 +2396,11 @@ export class NotificationService {
    * Shortcut to OtpService.
    */
   getOtp(): OtpService
-
-  // ...sms, push once those channels are implemented
 }
 
 export type DispatchInput =
   | { channel: 'email'; tenantId: string; payload: EmailDispatchPayload }
   | { channel: 'otp'; tenantId: string; payload: OtpDispatchPayload }
-  | { channel: 'sms'; tenantId: string; payload: SmsDispatchPayload } // not implemented
-  | { channel: 'push'; tenantId: string; payload: PushDispatchPayload } // not implemented
 
 export interface EmailDispatchPayload {
   to: string | string[]
@@ -2819,7 +2415,7 @@ export interface EmailDispatchPayload {
   from?: string
   fromName?: string
   replyTo?: string
-  tags?: Array<{ name: string; value: string }>
+  tags?: ReadonlyArray<{ name: string; value: string }>
   userId?: string
 }
 
@@ -2836,39 +2432,12 @@ export interface OtpDispatchPayload {
   userId?: string
 }
 
-export interface SmsDispatchPayload {
-  // not implemented
-  to: string
-  body: string
-  from?: string
-  tags?: Array<{ name: string; value: string }>
-  userId?: string
-}
-
-export interface PushDispatchPayload {
-  // not implemented
-  tokens: string | string[]
-  title: string
-  body: string
-  data?: Record<string, string>
-  imageUrl?: string
-  sound?: string
-  badge?: number
-  priority?: 'high' | 'normal'
-  userId?: string
-}
-
 /**
  * Result of dispatch(), discriminated by channel.
  */
 export type DispatchResult =
   | { channel: 'email'; messageId: string }
-  | {
-      channel: 'otp'
-      result: { expiresAt: number; cooldownSeconds: number } | OtpVerifyResult | void
-    }
-  | { channel: 'sms'; messageId: string } // not implemented
-  | { channel: 'push'; result: PushSendResult } // not implemented
+  | { channel: 'otp'; result: OtpGenerateResult | OtpVerifyResult | void }
 ````
 
 ---
@@ -2877,16 +2446,16 @@ export type DispatchResult =
 
 ### 7.1 Model
 
-All methods of `EmailService`, `OtpService`, `SmsService`, `PushService`, and `NotificationService` **require `tenantId`**. Without `tenantId`, the call is rejected (single-tenant consumers pass a constant such as `'default'`).
+All methods of `EmailService`, `OtpService` and `NotificationService` **require `tenantId`**. `OtpService` refuses a blank, whitespace-only or non-string `tenantId` or `recipient` with `INVALID_SCOPE_IDENTIFIER` before touching the storage (single-tenant consumers pass a constant such as `'default'`).
 
 ### 7.2 Isolation
 
-| Resource        | How it is isolated                                                                                                                                               |
-| --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **OTP entries** | Redis key includes sha256(`{tenantId}:{recipient}:{purpose}`) — in the collision between tenants                                                                 |
-| **Cooldown**    | Same key scope — one tenant's cooldown does not block another                                                                                                    |
-| **Audit log**   | Indexed `tenantId` column — queries filter by tenant                                                                                                             |
-| **Templates**   | Templates are **not** isolated by tenant in the lib — if you need per-tenant templates, do this in your `IEmailTemplateRenderer` (use `data.tenantId` if passed) |
+| Resource        | How it is isolated                                                                                                                                                      |
+| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **OTP entries** | The Redis key includes `sha256(sha256(tenantId):sha256(recipient))` and the `purpose` — the tenant/recipient boundary is unambiguous, so distinct tenants never collide |
+| **Cooldown**    | Same key scope — one tenant's cooldown does not block another                                                                                                           |
+| **Audit log**   | Indexed `tenantId` column — queries filter by tenant                                                                                                                    |
+| **Templates**   | Templates are **not** isolated by tenant in the lib — if you need per-tenant templates, do this in your `IEmailTemplateRenderer` (use `data.tenantId` if passed)        |
 
 ### 7.3 tenantId resolver (anti-spoofing)
 
@@ -2939,7 +2508,7 @@ Returns { expiresAt, cooldownSeconds }
 ### 8.4 Redis keys (summary — see §10 for the full table)
 
 ```
-{namespace}:otp_cd:{purpose}:{sha256(tenantId+':'+recipient)} → '1' with TTL = cooldown
+{namespace}:otp_cd:{purpose}:{hashTenantRecipient(tenantId, recipient)} → '1' with TTL = cooldown
 ```
 
 ### 8.5 UX trade-off
@@ -3034,16 +2603,18 @@ Where:
 - `{namespace}` is `global.redisNamespace` (default: `notification`)
 - `{prefix}` indicates the type (`otp` or `otp_cd`)
 - `{purpose}` is the purpose (`email_verification`, `password_reset`, etc.)
-- `{identifier}` is sha256(`{tenantId}:{recipient}`)
+- `{identifier}` is `hashTenantRecipient(tenantId, recipient)` = `sha256(sha256(tenantId):sha256(recipient))`; both components must be non-empty (§5.2)
 
-> **Why hash `{tenantId}:{recipient}`?** Avoids PII (emails, phones) leakage via Redis key inspection. Whoever can list `KEYS notification:otp:*` cannot identify who has pending OTPs.
+> **Why hash the pair?** Avoids PII (emails, phones) leakage via Redis key inspection, and hashing each component before the join makes the boundary unambiguous (`('a:b', 'c')` and `('a', 'b:c')` never yield the same key). Whoever can list `KEYS notification:otp:*` cannot identify who has pending OTPs.
 
 ### 10.3 Complete Redis key table
 
-| Prefix   | Key pattern                                            | Value                                                                     | TTL                                              | Purpose                                                                                                            |
-| -------- | ------------------------------------------------------ | ------------------------------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
-| `otp`    | `notification:otp:{purpose}:{sha256(tid+':'+rcpt)}`    | JSON: `{ code, expiresAt, attempts, maxAttempts, validated?, metadata? }` | `ttlSeconds` resolved per purpose (default 600s) | OTP entry. Stores plaintext code, attempt counter, and validation flag. We hash (tenantId, recipient) for privacy. |
-| `otp_cd` | `notification:otp_cd:{purpose}:{sha256(tid+':'+rcpt)}` | `'1'`                                                                     | `resendCooldownSeconds` (default 60s)            | Cooldown between resends. Key existence indicates active cooldown. TTL determines remaining time.                  |
+| Prefix   | Key pattern                            | Value                                                                     | TTL                                              | Purpose                                                                                                            |
+| -------- | -------------------------------------- | ------------------------------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| `otp`    | `notification:otp:{purpose}:{hash}`    | JSON: `{ code, expiresAt, attempts, maxAttempts, validated?, metadata? }` | `ttlSeconds` resolved per purpose (default 600s) | OTP entry. Stores plaintext code, attempt counter, and validation flag. We hash (tenantId, recipient) for privacy. |
+| `otp_cd` | `notification:otp_cd:{purpose}:{hash}` | `'1'`                                                                     | `resendCooldownSeconds` (default 60s)            | Cooldown between resends. Key existence indicates active cooldown. TTL determines remaining time.                  |
+
+> `{hash}` = `hashTenantRecipient(tenantId, recipient)`.
 
 > **Why JSON and not Hash?** Hash would have write cost per field via HSET — but for this pattern (we always read and write the entire entry) JSON is simpler and has equivalent cost. In very high volumes, consider migrating to Hash (does not change public API).
 
@@ -3099,59 +2670,58 @@ If the consumer needs extreme performance with 10k+ ops/s, they can implement `I
 
 ### 11.1 `NotificationException` class
 
-```typescript
-import { HttpException, HttpStatus } from '@nestjs/common'
+Implemented in `src/server/errors/notification-exception.ts`. It extends `HttpException`; the status and default message come from the catalog (`NOTIFICATION_ERROR_DEFINITIONS`).
 
-/**
- * Standardized exception of the notification module.
- * All exceptions follow the same response format.
- */
+```typescript
 export class NotificationException extends HttpException {
+  readonly code: string
+
   constructor(
-    code: string,
-    statusCode: HttpStatus = HttpStatus.INTERNAL_SERVER_ERROR,
-    details?: Record<string, unknown>
-  ) {
-    super(
-      {
-        error: {
-          code,
-          message: NOTIFICATION_ERROR_MESSAGES[code] || 'Notification error',
-          details: details || null
-        }
-      },
-      statusCode
-    )
-  }
+    key: NotificationErrorKey, // catalog key (e.g. 'OTP_INVALID_CODE'), not the 'notification.*' value
+    details?: Record<string, unknown>,
+    optionsOrStatus?: HttpStatus | NotificationExceptionOptions,
+    overrideMessage?: string
+  )
+}
+
+export interface NotificationExceptionOptions {
+  status?: HttpStatus // overrides the catalog status
+  message?: string // overrides the catalog message
+  cause?: unknown // underlying cause, exposed as Error.cause in a log-safe copy
 }
 ```
 
+- Response body: `{ error: { code, message, details } }`, with `details` equal to `null` when absent. The `cause` never enters the body.
+- The `cause` is copied into an `Error` that keeps only `name`, `message` and `stack` (nested chain bounded to 5 levels; a non-`Error` object becomes a string). This way payloads retained by SDKs — for example `config.data` holding the body of an OTP email — do not leak into logs.
+- An unknown key produces `notification.unknown_error` (500).
+
 ### 11.2 Complete codes table
 
-| Code                                             | HTTP Status | Message                                                             | Context                                                                                                                                                                                                                                                        |
-| ------------------------------------------------ | ----------- | ------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `notification.email_provider_not_configured`     | 500         | Email provider not configured                                       | Call to EmailService without having configured `email.provider`                                                                                                                                                                                                |
-| `notification.email_send_failed`                 | 502         | Failed to send email                                                | Provider returned error (network, credential, quota)                                                                                                                                                                                                           |
-| `notification.email_attachments_too_large`       | 413         | Email attachments exceed size limit                                 | Attachments total > provider's limit                                                                                                                                                                                                                           |
-| `notification.email_invalid_recipient`           | 400         | Invalid recipient email                                             | Invalid format (client-side validation recommended)                                                                                                                                                                                                            |
-| `notification.email_missing_body`                | 400         | Email payload requires either a template or a subject and html body | Neither a `template` nor a `subject` + `html` body source was supplied                                                                                                                                                                                         |
-| `notification.template_not_found`                | 500         | Email template not found                                            | Template name/locale not registered in the renderer                                                                                                                                                                                                            |
-| `notification.template_render_failed`            | 500         | Failed to render email template                                     | Renderer threw error (Handlebars syntax, etc.)                                                                                                                                                                                                                 |
-| `notification.otp_storage_not_configured`        | 500         | OTP storage not configured                                          | Call to OtpService without having configured `otp.storage`                                                                                                                                                                                                     |
-| `notification.otp_email_delivery_not_configured` | 500         | OTP email delivery requested but email channel not configured       | `generate({ deliverVia: 'email' })` while no `email` channel is configured                                                                                                                                                                                     |
-| `notification.otp_cooldown_active`               | 429         | Resend cooldown is active                                           | `getCooldown()` returned > 0; response should include `Retry-After`                                                                                                                                                                                            |
-| `notification.otp_not_found`                     | 404         | OTP not found or expired                                            | `storage.get()` returned null                                                                                                                                                                                                                                  |
-| `notification.otp_expired`                       | 410         | OTP code expired                                                    | Entry found but `expiresAt < Date.now()`                                                                                                                                                                                                                       |
-| `notification.otp_max_attempts_exceeded`         | 429         | Maximum OTP attempts exceeded                                       | `entry.attempts >= entry.maxAttempts`                                                                                                                                                                                                                          |
-| `notification.otp_invalid_code`                  | 401         | Invalid OTP code                                                    | Code does not match; but attempts still remaining                                                                                                                                                                                                              |
-| `notification.otp_invalid_length`                | 400         | Invalid OTP length config                                           | Initialization error — `defaultLength` outside [1, 32]                                                                                                                                                                                                         |
-| `notification.sms_provider_not_configured`       | 500         | SMS provider not configured                                         | Not implemented                                                                                                                                                                                                                                                |
-| `notification.sms_send_failed`                   | 502         | Failed to send SMS                                                  | Not implemented                                                                                                                                                                                                                                                |
-| `notification.sms_invalid_recipient`             | 400         | Invalid phone number                                                | Not implemented — non-E.164 format                                                                                                                                                                                                                             |
-| `notification.push_provider_not_configured`      | 500         | Push provider not configured                                        | Not implemented                                                                                                                                                                                                                                                |
-| `notification.push_send_failed`                  | 502         | Failed to send push notification                                    | Not implemented                                                                                                                                                                                                                                                |
-| `notification.audit_log_failed`                  | 500         | Audit log write failed                                              | Only propagated if `audit.swallowErrors: false`                                                                                                                                                                                                                |
-| `notification.channel_disabled`                  | 501         | Channel not enabled in module config                                | Reaching a channel that was never configured — `dispatch({ channel: 'email', … })`, `getEmail()` or `getOtp()` on a module registered with only the other channel. An _unimplemented_ channel (`sms` / `push`) never gets this far: it is rejected at startup. |
+| Code                                             | HTTP Status | Message                                                             | Context                                                                                                                                                                                                                                                                                                                                                                  |
+| ------------------------------------------------ | ----------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `notification.email_provider_not_configured`     | 500         | Email provider not configured                                       | Call to EmailService without having configured `email.provider`                                                                                                                                                                                                                                                                                                          |
+| `notification.email_send_failed`                 | 502         | Failed to send email                                                | Provider returned error (network, credential, quota)                                                                                                                                                                                                                                                                                                                     |
+| `notification.email_attachments_too_large`       | 413         | Email attachments exceed size limit                                 | Attachment total > `email.maxAttachmentBytes`                                                                                                                                                                                                                                                                                                                            |
+| `notification.email_invalid_recipient`           | 400         | Invalid recipient email                                             | Reserved: no library service throws it; format validation is the consumer's job (`class-validator`)                                                                                                                                                                                                                                                                      |
+| `notification.email_missing_body`                | 400         | Email payload requires either a template or a subject and html body | Neither a `template` nor a `subject` + `html` body source was supplied                                                                                                                                                                                                                                                                                                   |
+| `notification.template_not_found`                | 500         | Email template not found                                            | Template name/locale not registered in the renderer                                                                                                                                                                                                                                                                                                                      |
+| `notification.template_render_failed`            | 500         | Failed to render email template                                     | Renderer threw error (Handlebars syntax, etc.)                                                                                                                                                                                                                                                                                                                           |
+| `notification.otp_storage_not_configured`        | 500         | OTP storage not configured                                          | Call to OtpService without having configured `otp.storage`                                                                                                                                                                                                                                                                                                               |
+| `notification.otp_email_delivery_not_configured` | 500         | OTP email delivery requested but email channel not configured       | `generate({ deliverVia: 'email' })` while no `email` channel is configured                                                                                                                                                                                                                                                                                               |
+| `notification.otp_cooldown_active`               | 429         | Resend cooldown is active                                           | `tryAcquireCooldown()` returned `false`; `details`: `remainingSeconds`, `retryAfter`, `expiresAt`; the response should include `Retry-After`                                                                                                                                                                                                                             |
+| `notification.otp_not_found`                     | 404         | OTP not found or expired                                            | Reserved for the consumer: `verify()` does not throw, it returns `{ valid: false, reason: 'not_found' }` (entry missing or expired)                                                                                                                                                                                                                                      |
+| `notification.otp_expired`                       | 410         | OTP code expired                                                    | Reserved for the consumer: an expired entry is reported as `not_found`                                                                                                                                                                                                                                                                                                   |
+| `notification.otp_max_attempts_exceeded`         | 429         | Maximum OTP attempts exceeded                                       | Reserved for the consumer: `verify()` returns `{ valid: false, reason: 'max_attempts' }`                                                                                                                                                                                                                                                                                 |
+| `notification.otp_invalid_code`                  | 401         | Invalid OTP code                                                    | Reserved for the consumer: `verify()` returns `{ valid: false, reason: 'invalid_code', remainingAttempts }`                                                                                                                                                                                                                                                              |
+| `notification.otp_invalid_length`                | 400         | Invalid OTP length config                                           | Initialization error — `defaultLength` outside [1, 32]                                                                                                                                                                                                                                                                                                                   |
+| `notification.sms_provider_not_configured`       | 500         | SMS provider not configured                                         | Not implemented                                                                                                                                                                                                                                                                                                                                                          |
+| `notification.sms_send_failed`                   | 502         | Failed to send SMS                                                  | Not implemented                                                                                                                                                                                                                                                                                                                                                          |
+| `notification.sms_invalid_recipient`             | 400         | Invalid phone number                                                | Not implemented — non-E.164 format                                                                                                                                                                                                                                                                                                                                       |
+| `notification.push_provider_not_configured`      | 500         | Push provider not configured                                        | Not implemented                                                                                                                                                                                                                                                                                                                                                          |
+| `notification.push_send_failed`                  | 502         | Failed to send push notification                                    | Not implemented                                                                                                                                                                                                                                                                                                                                                          |
+| `notification.audit_log_failed`                  | 500         | Audit log write failed                                              | Only propagated if `audit.swallowErrors: false`                                                                                                                                                                                                                                                                                                                          |
+| `notification.channel_disabled`                  | 501         | Channel not enabled in module config                                | Reaching a channel that was never configured — `dispatch({ channel: 'email', … })`, `getEmail()` or `getOtp()` on a module registered with only the other channel. An _unimplemented_ channel (`sms` / `push`) never gets this far: it is rejected at startup.                                                                                                           |
+| `notification.invalid_scope_identifier`          | 400         | Tenant or recipient identifier does not identify anybody            | `tenantId` or `recipient` that is not a string, is empty, or is whitespace-only. Thrown by `OtpService` (`generate`, `resend`, `verify`, `consume`, `getStatus`) **before touching the storage**, by `hashTenantRecipient` when deriving the storage key, and by `NotificationAuditInterceptor` when resolving the tenant. `details`: `{ boundary, parameter, reason }`. |
 
 ### 11.3 Error response format
 
@@ -3195,7 +2765,9 @@ export const NOTIFICATION_ERROR_CODES = {
   PUSH_PROVIDER_NOT_CONFIGURED: 'notification.push_provider_not_configured',
   PUSH_SEND_FAILED: 'notification.push_send_failed',
   AUDIT_LOG_FAILED: 'notification.audit_log_failed',
-  CHANNEL_DISABLED: 'notification.channel_disabled'
+  CHANNEL_DISABLED: 'notification.channel_disabled',
+  /** `tenantId` or `recipient` that is empty, whitespace-only or not a string — refused before a key is derived. */
+  INVALID_SCOPE_IDENTIFIER: 'notification.invalid_scope_identifier'
 } as const
 ```
 
@@ -3237,7 +2809,7 @@ Clear limits to avoid feature creep:
 
 | Package            | Version    | Reason                                                                           |
 | ------------------ | ---------- | -------------------------------------------------------------------------------- |
-| `@nestjs/common`   | `^11.0.0`  | Framework core — decorators, providers, exceptions                               |
+| `@nestjs/common`   | `^11.0.16` | Framework core — decorators, providers, exceptions                               |
 | `@nestjs/core`     | `^11.1.18` | DI container, module system                                                      |
 | `reflect-metadata` | `^0.2.0`   | Metadata for decorators                                                          |
 | `rxjs`             | `^7.8.0`   | Required peer of `@nestjs/common`; the audit interceptor returns an `Observable` |
@@ -3254,11 +2826,11 @@ Needed only if the consumer uses the corresponding reference provider:
 | `@aws-sdk/client-ses`      | `^3.0.0`                            | If using SesProvider                                     |
 | `@aws-sdk/client-sns`      | `^3.0.0`                            | If using SnsSmsProvider (once the SMS channel exists)    |
 | `mailgun.js`               | `^11.0.0 \|\| ^12.0.0 \|\| ^13.0.0` | If using MailgunProvider                                 |
-| `nodemailer`               | `^9.0.1`                            | If using NodemailerSmtpProvider                          |
+| `nodemailer`               | `^9.0.1`                            | If using SmtpEmailProvider                               |
 | `twilio`                   | `^5.0.0 \|\| ^6.0.0`                | If using TwilioSmsProvider (once the SMS channel exists) |
 | `firebase-admin`           | `^13.0.0 \|\| ^14.0.0`              | If using FcmPushProvider (once the push channel exists)  |
 | `@aws-sdk/client-dynamodb` | `^3.0.0`                            | If using DynamoDbOtpStorage                              |
-| `handlebars`               | `^4.7.7`                            | If using HandlebarsTemplateRenderer                      |
+| `handlebars`               | `^4.7.9`                            | If using HandlebarsTemplateRenderer                      |
 | `@react-email/render`      | `^1.0.0 \|\| ^2.0.0`                | If using ReactEmailTemplateRenderer                      |
 | `mjml`                     | `^5.0.0`                            | If using MjmlTemplateRenderer                            |
 | `class-validator`          | `^0.14.0 \|\| ^0.15.0`              | If using distributed DTOs (optional — consumer decides)  |
@@ -3284,170 +2856,25 @@ The lib has **zero direct dependencies** (`"dependencies": {}`). All external fu
 | `.` (server) | `@nestjs/common`, `@nestjs/core`, `reflect-metadata`, `rxjs` | All listed in §13.2 (as per chosen provider) |
 | `./shared`   | none                                                         | none                                         |
 | `./react`    | `react ^19`                                                  | none                                         |
+| `./testing`  | none                                                         | none                                         |
 
-### 13.5 `package.json` example
+### 13.5 `package.json`
 
-```json
-{
-  "name": "@bymax-one/nest-notification",
-  "version": "1.0.0",
-  "description": "Multi-channel notification library for NestJS — email, OTP, SMS, push — with pluggable providers and storage, multi-tenant by design, zero runtime dependencies.",
-  "author": "Bymax One <support@bymax.one>",
-  "license": "MIT",
-  "homepage": "https://github.com/bymaxone/nest-notification#readme",
-  "repository": { "type": "git", "url": "https://github.com/bymaxone/nest-notification.git" },
-  "bugs": { "url": "https://github.com/bymaxone/nest-notification/issues" },
-  "type": "module",
-  "sideEffects": false,
-  "files": ["dist", "LICENSE", "README.md", "CHANGELOG.md"],
-  "main": "./dist/server/index.cjs",
-  "module": "./dist/server/index.mjs",
-  "types": "./dist/server/index.d.cts",
-  "exports": {
-    ".": {
-      "import": { "types": "./dist/server/index.d.ts", "default": "./dist/server/index.mjs" },
-      "require": { "types": "./dist/server/index.d.cts", "default": "./dist/server/index.cjs" }
-    },
-    "./shared": {
-      "import": { "types": "./dist/shared/index.d.ts", "default": "./dist/shared/index.mjs" },
-      "require": { "types": "./dist/shared/index.d.cts", "default": "./dist/shared/index.cjs" }
-    },
-    "./react": {
-      "import": { "types": "./dist/react/index.d.ts", "default": "./dist/react/index.mjs" },
-      "require": { "types": "./dist/react/index.d.cts", "default": "./dist/react/index.cjs" }
-    },
-    "./package.json": "./package.json"
-  },
-  "typesVersions": {
-    "*": {
-      "shared": ["./dist/shared/index.d.cts"],
-      "react": ["./dist/react/index.d.cts"]
-    }
-  },
-  "scripts": {
-    "build": "pnpm clean && tsup",
-    "lint": "eslint src scripts test",
-    "lint:fix": "eslint src scripts test --fix",
-    "test": "jest",
-    "test:cov": "jest --coverage",
-    "test:watch": "jest --watch",
-    "test:e2e": "jest --config jest.e2e.config.ts --runInBand",
-    "test:all": "pnpm test && pnpm test:e2e",
-    "test:cov:all": "jest --config jest.coverage.config.ts --coverage",
-    "mutation": "stryker run",
-    "mutation:incremental": "stryker run --incremental",
-    "mutation:dry-run": "stryker run --dryRunOnly",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.server.json",
-    "test:types": "tsc --noEmit -p tsconfig.typetest.json",
-    "size": "node scripts/check-size.mjs",
-    "smoke": "node scripts/dogfood-smoke-test.mjs",
-    "check:exports": "attw --pack .",
-    "clean": "rm -rf dist coverage",
-    "check:no-prisma": "grep -r '@prisma/client' src && exit 1 || exit 0",
-    "prepublishOnly": "pnpm clean && pnpm typecheck && pnpm test:types && pnpm lint && pnpm check:no-prisma && pnpm test:cov:all && pnpm build",
-    "release": "pnpm publish --provenance",
-    "prepare": "husky"
-  },
-  "dependencies": {},
-  "peerDependencies": {
-    "@nestjs/common": "^11.0.16",
-    "@nestjs/core": "^11.1.18",
-    "reflect-metadata": "^0.2.0",
-    "rxjs": "^7.8.0",
-    "ioredis": "^6.0.0",
-    "resend": "^4.0.0 || ^5.0.0 || ^6.0.0",
-    "@sendgrid/mail": "^8.0.0",
-    "@aws-sdk/client-ses": "^3.0.0",
-    "@aws-sdk/client-sns": "^3.0.0",
-    "mailgun.js": "^11.0.0 || ^12.0.0 || ^13.0.0",
-    "nodemailer": "^9.0.1",
-    "twilio": "^5.0.0 || ^6.0.0",
-    "firebase-admin": "^13.0.0 || ^14.0.0",
-    "@aws-sdk/client-dynamodb": "^3.0.0",
-    "handlebars": "^4.7.9",
-    "@react-email/render": "^1.0.0 || ^2.0.0",
-    "mjml": "^5.0.0",
-    "class-validator": "^0.14.0 || ^0.15.0",
-    "class-transformer": "^0.5.0",
-    "express": "^5.0.0",
-    "@types/express": "^5.0.0",
-    "react": "^19.0.0"
-  },
-  "peerDependenciesMeta": {
-    "ioredis": { "optional": true },
-    "resend": { "optional": true },
-    "@sendgrid/mail": { "optional": true },
-    "@aws-sdk/client-ses": { "optional": true },
-    "@aws-sdk/client-sns": { "optional": true },
-    "mailgun.js": { "optional": true },
-    "nodemailer": { "optional": true },
-    "twilio": { "optional": true },
-    "firebase-admin": { "optional": true },
-    "@aws-sdk/client-dynamodb": { "optional": true },
-    "handlebars": { "optional": true },
-    "@react-email/render": { "optional": true },
-    "mjml": { "optional": true },
-    "class-validator": { "optional": true },
-    "class-transformer": { "optional": true },
-    "express": { "optional": true },
-    "@types/express": { "optional": true },
-    "react": { "optional": true }
-  },
-  "keywords": [
-    "nestjs",
-    "notification",
-    "email",
-    "otp",
-    "sms",
-    "push",
-    "resend",
-    "sendgrid",
-    "ses",
-    "twilio",
-    "fcm",
-    "multi-tenant",
-    "redis",
-    "transactional",
-    "saas"
-  ],
-  "lint-staged": {
-    "*.{ts,tsx,js,mjs,cjs}": ["eslint --fix", "prettier --write"],
-    "*.{json,md,yml,yaml}": ["prettier --write"]
-  },
-  "packageManager": "pnpm@10.8.1",
-  "engines": { "node": ">=24.0.0" },
-  "publishConfig": { "access": "public", "registry": "https://registry.npmjs.org/" },
-  "pnpm": {
-    "overrides": {
-      "brace-expansion": "^5.0.8",
-      "fast-uri": "^3.1.4",
-      "fast-xml-parser": "^5.10.1",
-      "js-yaml@3": "^3.15.0",
-      "js-yaml@4": "^4.3.0",
-      "protobufjs": "^7.6.5",
-      "qs": "^6.15.2",
-      "uuid": "^11.1.1"
-    }
-  }
-}
-```
+The source of truth is the `package.json` at the repository root — see it instead of a copy here. In short: `"dependencies": {}`; required `peerDependencies` (`@nestjs/common`, `@nestjs/core`, `reflect-metadata`, `rxjs`) and optional ones (those in §13.2, marked in `peerDependenciesMeta`); `exports` with the four subpaths (§3.2); `engines.node` `>=24.0.0`; `files`: `dist`, `LICENSE`, `README.md` and `CHANGELOG.md`.
 
-`devDependencies` are omitted above — they are an implementation detail of the repository, not of
-the published contract. The `pnpm.overrides` block pins transitive dependencies flagged by the
-supply-chain audit; it affects only this repo's lockfile and never reaches a consumer, because the
-package publishes `"dependencies": {}`.
+The pnpm settings — including the `overrides` that pin transitive dependencies flagged by the supply-chain audit — live in `pnpm-workspace.yaml`, not in `package.json`. They affect only this repository's lockfile and never reach a consumer, because the package publishes `"dependencies": {}`.
 
 ---
 
 ## 14. Implementation Phases
 
-> **Strategy:** Unit tests written alongside each phase (TDD), not accumulated. Per the Bymax testing standard, each implemented file reaches **100% line/branch coverage** before advancing, with mutation score **≥ 95% (Stryker break 95), targeting 100%**, gating the release (§14.6).
+> **Strategy:** Unit tests written alongside each phase (TDD), not accumulated. Per the Bymax testing standard, each implemented file reaches **100% line/branch coverage** before advancing, with mutation score **100% (Stryker `break: 100`)**, gating the release (§14.6).
 
 ### 14.1 Overview
 
 | Phase | Complexity | Focus                                          | Deliverables                                                                                                        |
 | ----- | ---------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| 1     | MEDIUM     | Foundation: Email channel + reference provider | Scaffold, interfaces, ResendProvider, NoOpEmailProvider, EmailService, DefaultTemplateRenderer + tests              |
+| 1     | MEDIUM     | Foundation: Email channel + reference provider | Scaffold, interfaces, ResendEmailProvider, NoOpEmailProvider, EmailService, DefaultTemplateRenderer + tests         |
 | 2     | MEDIUM     | OTP channel + storage                          | OtpService, RedisOtpStorage, InMemoryOtpStorage, code-generator, cooldown, audit log integration + tests            |
 | 3     | MEDIUM     | Templating + audit log                         | Refinement of DefaultTemplateRenderer (i18n, escape), audit interceptor, NotificationLogRepository contract + tests |
 | 4     | LOW        | Subpath shared + React                         | Public types/constants, useOtpInput hook, useOtpCountdown + RTL tests                                               |
@@ -3517,7 +2944,7 @@ here so the shape of the work is known, not queued against a release:
 **Deliverables:**
 
 1. **Interfaces**
-   - `otp-storage.interface.ts` (OtpEntry, OtpVerifyResult, OtpGenerateOptions)
+   - `otp-storage.interface.ts` (`OtpEntry`, `ConsumeAttemptResult`, `OtpVerifyResult`, `IOtpStorage`)
 
 2. **Providers**
    - `providers/redis-otp.storage.ts` (with identifier hashing)
@@ -3606,7 +3033,7 @@ here so the shape of the work is known, not queued against a release:
 2. CHANGELOG `1.0.0` entry
 3. SECURITY.md (disclosure policy), CONTRIBUTING.md, CODE_OF_CONDUCT.md
 4. CLAUDE.md, AGENTS.md (quick reference for AI agents)
-5. Mutation testing — Stryker dry run + mutation score **≥ 95% (break 95), as close to 100% as achievable**; document any equivalent mutants inline
+5. Mutation testing — Stryker dry run + mutation score **100% (`break: 100`)**; document any equivalent mutants inline
 6. `scripts/check-size.mjs` — brotli budget per subpath: server 30 KB, shared 4 KB, react 8 KB
 7. `pnpm check:exports` (`attw --pack .`) green on every entrypoint, in ESM and CJS
 8. `scripts/dogfood-smoke-test.mjs` green — the last local gate before the tag
@@ -3943,12 +3370,7 @@ export class AppModule {}
 
 ```typescript
 import { Controller, Post, Body, BadRequestException } from '@nestjs/common'
-import {
-  OtpService,
-  EmailService,
-  NotificationException,
-  NOTIFICATION_ERROR_CODES
-} from '@bymax-one/nest-notification'
+import { OtpService, EmailService, NotificationException } from '@bymax-one/nest-notification'
 import { AuthService } from '@bymax-one/nest-auth'
 
 @Controller('auth')
@@ -4002,11 +3424,11 @@ export class RegistrationController {
       // Maps reason to HTTP status / message (not_found also covers expired — see §11.5)
       switch (result.reason) {
         case 'not_found':
-          throw new NotificationException(NOTIFICATION_ERROR_CODES.OTP_NOT_FOUND, 404)
+          throw new NotificationException('OTP_NOT_FOUND')
         case 'max_attempts':
-          throw new NotificationException(NOTIFICATION_ERROR_CODES.OTP_MAX_ATTEMPTS_EXCEEDED, 429)
+          throw new NotificationException('OTP_MAX_ATTEMPTS_EXCEEDED')
         case 'invalid_code':
-          throw new NotificationException(NOTIFICATION_ERROR_CODES.OTP_INVALID_CODE, 401, {
+          throw new NotificationException('OTP_INVALID_CODE', {
             remainingAttempts: result.remainingAttempts
           })
       }
