@@ -466,6 +466,22 @@ describe('NotificationAuditInterceptor', () => {
       expect(repo.entries).toHaveLength(0)
     })
 
+    // The `ignores %s` cases above run with swallowErrors on, where a wrongly accepted
+    // argument is refused downstream by the tenant-id guard, swallowed, and leaves no
+    // entry — indistinguishable from being ignored. With swallowErrors off a wrongly
+    // accepted argument surfaces as AUDIT_LOG_FAILED, so the rule is observable: a
+    // non-string tenantId is never treated as a dispatch input at all.
+    it('lets the call through untouched when the only candidate has a non-string tenantId', async () => {
+      const repo = new CapturingRepo()
+      const local = new NotificationAuditInterceptor(buildOptions({ swallowErrors: false }), repo)
+      const arg = { channel: 'otp', tenantId: 5, payload: {} }
+
+      const result = await firstValueFrom(local.intercept(buildContext([arg]), handlerOf(of('ok'))))
+
+      expect(result).toBe('ok')
+      expect(repo.entries).toHaveLength(0)
+    })
+
     // A well-formed otp argument among others is detected and recorded.
     it('detects a valid dispatch argument among unrelated ones', async () => {
       const repo = new CapturingRepo()
