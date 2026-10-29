@@ -22,10 +22,7 @@ is cached by Handlebars) and resolves the requested locale with a hard fallback 
 
 ```typescript
 import Handlebars from 'handlebars'
-import type {
-  IEmailTemplateRenderer,
-  RenderedEmail
-} from '@bymax-one/nest-notification'
+import type { IEmailTemplateRenderer, RenderedEmail } from '@bymax-one/nest-notification'
 
 interface RawTemplate {
   subject: string
@@ -52,9 +49,7 @@ export class HandlebarsTemplateRenderer implements IEmailTemplateRenderer {
       this.compiled.set(key, {
         subject: Handlebars.compile(template.subject),
         html: Handlebars.compile(template.html),
-        ...(template.text !== undefined
-          ? { text: Handlebars.compile(template.text) }
-          : {})
+        ...(template.text !== undefined ? { text: Handlebars.compile(template.text) } : {})
       })
     }
   }
@@ -69,8 +64,7 @@ export class HandlebarsTemplateRenderer implements IEmailTemplateRenderer {
     locale: string
   ): Promise<RenderedEmail> {
     const template =
-      this.compiled.get(`${templateName}::${locale}`) ??
-      this.compiled.get(`${templateName}::en`)
+      this.compiled.get(`${templateName}::${locale}`) ?? this.compiled.get(`${templateName}::en`)
     if (!template) {
       throw new Error(`Template not found: ${templateName} (locale=${locale})`)
     }
@@ -99,6 +93,7 @@ export class HandlebarsTemplateRenderer implements IEmailTemplateRenderer {
 ## Module registration
 
 ```typescript
+import { Module } from '@nestjs/common'
 import { BymaxNotificationModule } from '@bymax-one/nest-notification'
 import { HandlebarsTemplateRenderer } from './handlebars-template-renderer'
 
@@ -114,7 +109,7 @@ const templateRenderer = new HandlebarsTemplateRenderer({
   imports: [
     BymaxNotificationModule.forRoot({
       email: {
-        provider: myEmailProvider,
+        provider: myEmailProvider, // your IEmailProvider implementation
         defaultFrom: 'no-reply@acme.com',
         templateRenderer
       }
