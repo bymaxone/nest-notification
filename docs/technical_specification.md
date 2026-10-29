@@ -1605,7 +1605,7 @@ export interface OtpEntry {
 1. in `OtpService`, **before** any call to the storage;
 2. in `hashTenantRecipient`, which the reference implementations use to derive keys. A custom storage that does not use that function must apply the same rule.
 
-The reference key is `sha256(sha256(tenantId):sha256(recipient))`: each component is hashed before the join, so `('a:b', 'c')` and `('a', 'b:c')` never produce the same key, and neither does any other pair that differs only in where a delimiter falls, whatever the delimiter. The executable contract `otpStorageContract` (`./testing`) checks that boundary on both the OTP and the cooldown keys.
+The reference key is `sha256(sha256(tenantId):sha256(recipient))`: each component is hashed before the join, so `('a:b', 'c')` and `('a', 'b:c')` never produce the same key. The executable contract `otpStorageContract` (`./testing`) exercises raw joins around `:` and `::` on both the OTP and the cooldown keys. It cannot try every delimiter, so passing it does not prove the property: a custom storage must encode the boundary itself, by hashing or length-prefixing each component, whatever character it would otherwise join on.
 
 #### 5.2.1 Default implementation: `RedisOtpStorage`
 
