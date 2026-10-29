@@ -53,7 +53,7 @@
 
 **8. Build & package shape**
 
-- tsup builds 3 subpaths → ESM (`.mjs`) + CJS (`.cjs`) + `.d.ts` + `.d.cts`. `sideEffects: false`. Peer deps always external.
+- tsup builds 4 subpaths → ESM (`.mjs`) + CJS (`.cjs`) + `.d.ts` + `.d.cts`. `sideEffects: false`. Peer deps always external.
 - `exports` declares `types` **inside each condition** (`import` → `.d.ts`, `require` → `.d.cts`). A single shared `types` key hands ESM declarations to a CommonJS consumer — the runtime still works, so only `pnpm check:exports` (attw against the packed tarball) catches it.
 - A new subpath must be added to `exports`, `typesVersions`, the build-integrity loop in `ci.yml`, the budgets in `scripts/check-size.mjs`, `scripts/dogfood-smoke-test.mjs`, and `test/types/`.
 
@@ -77,8 +77,8 @@ production bundle.
 ## Verification — Run Before Completing Any Task
 
 ```bash
-pnpm typecheck && pnpm test:types && pnpm lint && pnpm check:no-prisma && \
-  pnpm test:cov:all && pnpm build && pnpm size && pnpm check:exports
+pnpm typecheck && pnpm test:types && pnpm lint && pnpm check:mutants && pnpm check:no-prisma && \
+  pnpm test:cov:all && pnpm build && pnpm size && pnpm check:exports && pnpm check:published
 ```
 
 `pnpm smoke` (the dogfood smoke test) is the last local gate before cutting a tag.

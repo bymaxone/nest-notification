@@ -35,7 +35,7 @@
 
 `@bymax-one/nest-notification` is a **transactional notification library for NestJS 11** that ships two channels — **email** and **OTP** (one-time passwords) — behind a single dynamic module, plus a React subpath for the OTP input box.
 
-Everything that touches the outside world — the email transport, the OTP store, the template renderer, the audit sink — is an **interface** you implement or pick from the bundled reference adapters. The same module runs on Resend or SendGrid, on Redis or an in-memory map, with a Prisma audit log or none at all, without changing a single call site.
+Everything that touches the outside world — the email transport, the OTP store, the template renderer, the audit sink — is an **interface** you implement or pick from the bundled reference adapters. The same module runs on Resend or SMTP out of the box (or any provider you implement, SendGrid for example), on Redis or an in-memory map, with a Prisma audit log or none at all, without changing a single call site.
 
 ### Why nest-notification?
 
@@ -55,7 +55,7 @@ pnpm add @bymax-one/nest-notification
 
 ### 📧 Email
 
-- ✅ **Pluggable transport** — `IEmailProvider` with a bundled `ResendEmailProvider`, an `SmtpEmailProvider` that speaks the protocol every relay and mail-capture server understands, and a `NoOpEmailProvider` for dev/test that logs subject and recipient only, never the body
+- ✅ **Pluggable transport** — `IEmailProvider` with a bundled `ResendEmailProvider`, an `SmtpEmailProvider` that speaks the protocol every relay and mail-capture server understands, and a `NoOpEmailProvider` for dev/test that logs a masked recipient only, never the body
 - ✅ **Template rendering** — `IEmailTemplateRenderer` with a bundled `{{var}}` renderer that **HTML-escapes** interpolated values in the HTML body
 - ✅ **Canonical template names** — `CANONICAL_EMAIL_TEMPLATES` so providers and templates agree on the wire
 - ✅ **Attachment guard** — a configurable total size ceiling (10 MiB by default) rejected before the provider is called
@@ -78,7 +78,7 @@ pnpm add @bymax-one/nest-notification
 
 ### 🧩 Developer Experience
 
-- ✅ **Three subpaths** — server, zero-dependency shared types, and React hooks
+- ✅ **Four subpaths** — server, zero-dependency shared types, React hooks, and a `testing` storage contract
 - ✅ **Stable error catalog** — 23 namespaced codes shared byte-for-byte between server and frontend, so you localize on the `code`
 - ✅ **Dual-format output** — ESM + CJS + declarations for both, verified against the packed tarball on every PR
 - ✅ **Typed end to end** — TypeScript `strict` with `exactOptionalPropertyTypes` and `noUncheckedIndexedAccess`; zero `any`
@@ -146,7 +146,7 @@ pnpm add react
 
 ### 2. Development — `NoOpEmailProvider` + `InMemoryOtpStorage`
 
-No external services. Emails are logged (subject and recipient only, never the body), and OTP state lives in process memory. Ideal for local dev and tests.
+No external services. Emails are logged (a masked recipient only, never the subject or the body), and OTP state lives in process memory. Ideal for local dev and tests.
 
 ```typescript
 import { Module } from '@nestjs/common'
@@ -608,7 +608,7 @@ BymaxNotificationModule.forRoot({
   // …channels
 })
 
-// JWT-claim based (the request is augmented by your auth middleware):
+// Header based (set by a gateway you trust):
 const tenantIdResolver = (req: NotificationRequest): string =>
   String(req.headers['x-tenant-id'] ?? 'default')
 ```
@@ -694,21 +694,21 @@ A one-time password is a credential, so the suite is held to a bar beyond "it ru
 
 - ✅ **100% line coverage** — statements, branches, functions, and lines, enforced per file as a release gate across unit + e2e
 - ✅ **100% mutation score** — verified with [Stryker](https://stryker-mutator.io/): every viable seeded fault killed, with **no survivors**, against a `break` threshold of 100. The equivalents that no test can kill carry their reason on the line they apply to, so the number is an accounting rather than a target
-- ✅ **680 tests** — unit and end-to-end, spanning all four subpaths
+- ✅ **100% coverage** — unit and end-to-end tests spanning all four subpaths
 - ✅ **Invariants asserted, not assumed** — the never-log-codes rule is a test (`JSON.stringify(entry).includes(code) === false` on every audit entry, and the thrown exception is serialized recursively — message, stack, response body, every nested `cause` — asserting the code appears at no depth), not a review convention
 - ✅ **Published shape verified** — `attw` resolves every entrypoint against the packed tarball, and a dogfood smoke test installs the package into a scratch consumer before any tag is cut
 - ✅ **Every equivalent mutant documented** — the ones no test can kill carry an inline `// Stryker disable` with the reason, so the score is an accounting rather than a number
 
-| Gate           | Standard                                                               |
-| -------------- | ---------------------------------------------------------------------- |
-| Type safety    | TypeScript `strict`, zero `any`                                        |
-| Coverage       | **100%** line/branch/function/statement per file (`pnpm test:cov:all`) |
-| Mutation       | Stryker score **100%** (`break: 100`), no survivors                    |
-| Lint           | ESLint flat config + `eslint-plugin-security`, zero warnings           |
-| Bundle budgets | server < 30 KB · shared < 4 KB · react < 8 KB brotli (`pnpm size`)     |
-| Prisma-free    | `pnpm check:no-prisma` — the library never imports `@prisma/client`    |
-| Export map     | `pnpm check:exports` — `attw` against the packed tarball, ESM and CJS  |
-| Supply chain   | published with npm provenance (OIDC), CodeQL + OpenSSF Scorecard       |
+| Gate           | Standard                                                                            |
+| -------------- | ----------------------------------------------------------------------------------- |
+| Type safety    | TypeScript `strict`, zero `any`                                                     |
+| Coverage       | **100%** line/branch/function/statement per file (`pnpm test:cov:all`)              |
+| Mutation       | Stryker score **100%** (`break: 100`), no survivors                                 |
+| Lint           | ESLint flat config + `eslint-plugin-security`, zero warnings                        |
+| Bundle budgets | server < 30 KB · shared < 4 KB · react < 8 KB · testing < 4 KB brotli (`pnpm size`) |
+| Prisma-free    | `pnpm check:no-prisma` — the library never imports `@prisma/client`                 |
+| Export map     | `pnpm check:exports` — `attw` against the packed tarball, ESM and CJS               |
+| Supply chain   | published with npm provenance (OIDC), CodeQL + OpenSSF Scorecard                    |
 
 ```bash
 pnpm test          # unit suite
@@ -797,7 +797,7 @@ The default is `true`, and deliberately so: for a receipt or a marketing send th
 | ------------------------------- | ---------------------------- | -------------------------------------------- |
 | `ResendEmailProvider`           | `IEmailProvider`             | Production email via Resend                  |
 | `SmtpEmailProvider`             | `IEmailProvider`             | Any SMTP relay, and Mailpit/MailHog in tests |
-| `NoOpEmailProvider`             | `IEmailProvider`             | Dev/test — logs subject and recipient only   |
+| `NoOpEmailProvider`             | `IEmailProvider`             | Dev/test — logs a masked recipient only      |
 | `RedisOtpStorage`               | `IOtpStorage`                | Production OTP state (atomic via Lua)        |
 | `InMemoryOtpStorage`            | `IOtpStorage`                | Dev/test — single-process only               |
 | `DefaultTemplateRenderer`       | `IEmailTemplateRenderer`     | `{{var}}` interpolation with HTML escaping   |
@@ -825,7 +825,7 @@ The default is `true`, and deliberately so: for a receipt or a marketing send th
 
 | Export                      | Subpath                     | Purpose                                                        |
 | --------------------------- | --------------------------- | -------------------------------------------------------------- |
-| `NOTIFICATION_ERROR_CODES`  | `./shared` (and the server) | The 22 stable codes, with zero dependencies on the shared side |
+| `NOTIFICATION_ERROR_CODES`  | `./shared` (and the server) | The stable codes, with zero dependencies on the shared side    |
 | `DEFAULT_TTLS`              | `./shared` (and the server) | Default lifetimes, so a frontend countdown matches the backend |
 | `NOTIFICATION_PURPOSES`     | server                      | Canonical purposes (`email_verification`, `password_reset`, …) |
 | `CANONICAL_EMAIL_TEMPLATES` | server                      | Canonical template names (`otp_code`, `welcome`, …)            |
@@ -861,7 +861,7 @@ pnpm typecheck
 
 ## 🔒 Security Policy
 
-If you discover a security vulnerability, please **do not** open a public issue. Instead, email us at **support@bymax.one** with details. We take security seriously and will respond promptly. The full policy is in [SECURITY.md](./SECURITY.md).
+If you discover a security vulnerability, please **do not** open a public issue. Instead, use GitHub Private Vulnerability Reporting (or email **support@bymax.one** if you cannot) with details. We take security seriously and will respond promptly. The full policy is in [SECURITY.md](./SECURITY.md).
 
 ---
 

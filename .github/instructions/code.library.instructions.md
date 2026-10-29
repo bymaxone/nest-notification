@@ -16,11 +16,12 @@ Rules for a NestJS/TypeScript library that ships to consumers.
 
 ## NestJS shape
 
-- Dynamic module via `forRoot` + `forRootAsync({ useFactory, useClass, useExisting })`.
+- Dynamic module via `forRoot` + `forRootAsync({ useFactory, inject })`; `useClass` and
+  `useExisting` are reserved and rejected at registration.
 - **DI injection tokens are `Symbol()`**, never string literals — string tokens
   collide silently across modules.
 - Ports are `interface` (the `I` prefix is reserved for these); unions are `type`.
-- Singletons only; no `console.*` in `src/` — log through the injected logger port.
+- Singletons only; no `console.*` in `src/` — use Nest's `Logger`, and never log a code.
 
 ## TypeScript
 
@@ -47,9 +48,10 @@ Rules for a NestJS/TypeScript library that ships to consumers.
 
 ## This library
 
-- Three subpaths: `.` (NestJS server), `./shared` (types + constants, zero deps,
+- Four subpaths: `.` (NestJS server), `./shared` (types + constants, zero deps,
   must stay importable from a browser bundle), `./react` (state/UX-only hooks —
-  no HTTP client, no Node builtins).
+  no HTTP client, no Node builtins), `./testing` (executable `IOtpStorage` contract;
+  never imported by a runtime entry).
 - Reference adapters (`ResendEmailProvider`, `RedisOtpStorage`,
   `InMemoryOtpStorage`, `DefaultTemplateRenderer`) are examples of the contract,
   not the contract: a consumer must be able to replace any of them without

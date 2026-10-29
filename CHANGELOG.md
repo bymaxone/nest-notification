@@ -5,6 +5,38 @@ All notable changes to `@bymax-one/nest-notification` will be documented in this
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Security
+
+- **`OtpService` refuses a blank scope before it reaches the storage.** `generate`, `resend`,
+  `verify`, `consume` and `getStatus` now throw `NotificationException` with code
+  `INVALID_SCOPE_IDENTIFIER` when `tenantId` or `recipient` is empty, whitespace-only or not a
+  string. `details` carries `{ boundary: 'OtpService', parameter, reason }` and never the value.
+  When the OTP channel is not configured, `generate`, `resend`, `verify` and `consume` still throw
+  `OTP_STORAGE_NOT_CONFIGURED` first; `getStatus` has no such check and validates the scope first.
+  - **Reference storages** (`InMemoryOtpStorage`, `RedisOtpStorage`): no change, they already
+    threw through `hashTenantRecipient`.
+  - **A custom `IOtpStorage` that accepted a blank tenant or recipient:** those calls now throw
+    instead of reaching the adapter. Before, such an adapter could share one scope between every
+    caller that sent a blank value.
+- **`otpStorageContract` checks the tenant/recipient boundary with a second delimiter.** The
+  entry-key and cooldown-key cases now also use a pair that collides when the key is built by
+  joining the raw values around `::`. A storage that did so passed the contract before and now
+  fails it.
+
+### Changed
+
+- Development and CI tooling only, with no effect on the published package: pnpm override floors
+  raised; the dev dependency group refreshed; `osv-scanner.toml` time-boxes the one advisory (`deepmerge`) that has
+  no patched release.
+
+### Documentation
+
+- README, SECURITY, CONTRIBUTING, CLAUDE.md, AGENTS.md and the specification under `docs/` brought
+  in line with the code: four subpaths including `./testing`, 23 error codes, the supported `1.x`
+  line, the full verification command, and the key derivation.
+
 ## [1.4.0] - 2026-09-04
 
 > ### ⚠️ Read before deploying — the version number does not warn you

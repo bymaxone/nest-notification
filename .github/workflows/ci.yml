@@ -3,7 +3,7 @@
 # The generic library jobs (lint, typecheck, unit + e2e coverage, mutation) run
 # via node-lib-ci.yml so every repo shares one definition. This library's
 # no-Prisma source guard, type-level API tests, build-output integrity across
-# its three subpaths, published type resolution, and bundle-size budget stay
+# its four subpaths, published type resolution, and bundle-size budget stay
 # here. Mutation runs only on a push to main / manual dispatch, never on PRs.
 name: CI
 
