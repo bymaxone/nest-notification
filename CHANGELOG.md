@@ -27,15 +27,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Bundler `tsup` 9.** The published JavaScript (`.mjs` and `.cjs`, every subpath) is byte-identical
+  to what `tsup` 8 produced from the same source. The declaration files (`.d.ts`, `.d.cts`) differ
+  only in how the export list is written: values in one `export { }`, types in a separate
+  `export type { }`. Nothing about the exported names or their types changes.
 - Development and CI tooling only, with no effect on the published package: pnpm override floors
-  raised; the dev dependency group refreshed; `osv-scanner.toml` time-boxes the one advisory (`deepmerge`) that has
-  no patched release.
+  raised; the dev dependency group refreshed; `osv-scanner.toml` time-boxes the one advisory
+  (`deepmerge`) that has no patched release.
 
 ### Documentation
 
 - README, SECURITY, CONTRIBUTING, CLAUDE.md, AGENTS.md and the specification under `docs/` brought
-  in line with the code: the `./testing` subpath, the error codes, the supported `1.x`
-  line, the full verification command, and the key derivation.
+  in line with the code: the `./testing` subpath, the error codes, the support policy,
+  the full verification command, and the key derivation.
 
 ## [1.4.0] - 2026-09-04
 
