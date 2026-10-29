@@ -232,3 +232,29 @@ dropped). All new mutants die without a single new suppression:
   that must terminate — a mutant dropping the `visited` bookkeeping loops forever and dies by
   timeout; a frozen link is pinned as best-effort (no throw, children still scrubbed) because
   writes go through `Reflect.set`.
+
+---
+
+## Re-run — 2026-10-29 (1.4.0 plus unreleased `main`)
+
+Full cold run of the `Mutation (full)` workflow on `main`
+([run 40950404293](https://github.com/bymaxone/nest-notification/actions/runs/40950404293)).
+
+| Metric             | Value         |
+| ------------------ | ------------- |
+| **Mutation score** | **100.00 %**  |
+| Viable mutants     | 1492          |
+| Killed / timeout   | 1462 / 30     |
+| Surviving mutants  | 0             |
+| No coverage        | 0             |
+| Break threshold    | 100 % -> PASS |
+
+The score counts mutants that ran. Mutants that ended in a runtime error are
+reported separately by Stryker as errors; they are outside the score.
+
+The run before it failed the break threshold with survivors in the audit interceptor's
+dispatch-shape guard (`notification-audit.interceptor.ts`, the non-string `tenantId` check).
+The existing cases ran with `swallowErrors` on, where a wrongly accepted argument is refused by
+the tenant-id guard, swallowed, and leaves no entry — the same observable result as being
+ignored. A case with `swallowErrors` off, where the wrong acceptance surfaces as
+`AUDIT_LOG_FAILED`, kills them without a new suppression.

@@ -5,7 +5,7 @@
 > [MJML](https://mjml.io/) for responsive layout while keeping variable interpolation
 > safe.
 
-Verified against `mjml@^4` — `mjml2html(markup, options)` returns `{ html, errors }`.
+Verified against `mjml@^5` — `mjml2html(markup, options)` is **async** and resolves to `{ html, errors }`.
 
 ## Setup
 
@@ -23,10 +23,7 @@ is plain text and is interpolated without escaping.
 
 ```typescript
 import mjml2html from 'mjml'
-import type {
-  IEmailTemplateRenderer,
-  RenderedEmail
-} from '@bymax-one/nest-notification'
+import type { IEmailTemplateRenderer, RenderedEmail } from '@bymax-one/nest-notification'
 
 interface RawTemplate {
   subject: string
@@ -50,11 +47,7 @@ const escapeHtml = (value: string): string =>
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;')
 
-const fill = (
-  source: string,
-  data: Record<string, unknown>,
-  escape: boolean
-): string =>
+const fill = (source: string, data: Record<string, unknown>, escape: boolean): string =>
   source.replace(TEMPLATE_VAR, (_match, name: string) => {
     const raw = String(data[name] ?? '')
     return escape ? escapeHtml(raw) : raw
@@ -66,20 +59,24 @@ const fill = (
  */
 export class MjmlTemplateRenderer implements IEmailTemplateRenderer {
   readonly name = 'mjml'
-  private readonly compiled = new Map<string, CompiledTemplate>()
 
-  constructor(templates: Record<string, RawTemplate>) {
+  private constructor(private readonly compiled: ReadonlyMap<string, CompiledTemplate>) {}
+
+  /** Compiles every template once, because `mjml2html` is async and a constructor cannot await. */
+  static async create(templates: Record<string, RawTemplate>): Promise<MjmlTemplateRenderer> {
+    const compiled = new Map<string, CompiledTemplate>()
     for (const [key, template] of Object.entries(templates)) {
-      const { html, errors } = mjml2html(template.mjml, { validationLevel: 'strict' })
+      const { html, errors } = await mjml2html(template.mjml, { validationLevel: 'strict' })
       if (errors.length > 0) {
         throw new Error(`Invalid MJML for "${key}": ${errors[0]?.message}`)
       }
-      this.compiled.set(key, {
+      compiled.set(key, {
         subject: template.subject,
         html,
         ...(template.text !== undefined ? { text: template.text } : {})
       })
     }
+    return new MjmlTemplateRenderer(compiled)
   }
 
   async hasTemplate(templateName: string, locale: string): Promise<boolean> {
@@ -92,17 +89,14 @@ export class MjmlTemplateRenderer implements IEmailTemplateRenderer {
     locale: string
   ): Promise<RenderedEmail> {
     const template =
-      this.compiled.get(`${templateName}::${locale}`) ??
-      this.compiled.get(`${templateName}::en`)
+      this.compiled.get(`${templateName}::${locale}`) ?? this.compiled.get(`${templateName}::en`)
     if (!template) {
       throw new Error(`Template not found: ${templateName} (locale=${locale})`)
     }
     return {
       subject: fill(template.subject, data, false),
       html: fill(template.html, data, true),
-      ...(template.text !== undefined
-        ? { text: fill(template.text, data, false) }
-        : {})
+      ...(template.text !== undefined ? { text: fill(template.text, data, false) } : {})
     }
   }
 }
@@ -116,18 +110,19 @@ export class MjmlTemplateRenderer implements IEmailTemplateRenderer {
   keep that escaping if you adapt the code.
 - **Escape the html body only.** The `subject`/`text` outputs are not HTML contexts;
   escaping them would surface literal `&amp;`/`&lt;`.
-- **Compile once, render many.** `mjml2html` is comparatively expensive; do it in the
-  constructor, never per send.
+- **Compile once, render many.** `mjml2html` is comparatively expensive; do it once in
+  `MjmlTemplateRenderer.create`, never per send.
 - **Validate at build time.** `validationLevel: 'strict'` throws on malformed MJML so a
   broken template fails fast instead of shipping degraded HTML.
 
 ## Module registration
 
 ```typescript
+import { Module } from '@nestjs/common'
 import { BymaxNotificationModule } from '@bymax-one/nest-notification'
 import { MjmlTemplateRenderer } from './mjml-template-renderer'
 
-const templateRenderer = new MjmlTemplateRenderer({
+const welcome = {
   'welcome::en': {
     subject: 'Welcome to {{appName}}',
     mjml: `
@@ -142,16 +137,19 @@ const templateRenderer = new MjmlTemplateRenderer({
       </mjml>
     `
   }
-})
+}
 
 @Module({
   imports: [
-    BymaxNotificationModule.forRoot({
-      email: {
-        provider: myEmailProvider,
-        defaultFrom: 'no-reply@acme.com',
-        templateRenderer
-      }
+    // Compilation is async, so the renderer is built in an async factory.
+    BymaxNotificationModule.forRootAsync({
+      useFactory: async () => ({
+        email: {
+          provider: myEmailProvider, // your IEmailProvider implementation
+          defaultFrom: 'no-reply@acme.com',
+          templateRenderer: await MjmlTemplateRenderer.create(welcome)
+        }
+      })
     })
   ]
 })

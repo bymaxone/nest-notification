@@ -10,7 +10,7 @@
 // `@bymax-one/nest-notification` NEVER imports `@prisma/client` — all persistence
 // flows through the `INotificationLogRepository` interface that YOU implement, so
 // the library stays database-agnostic (Prisma, TypeORM, Drizzle, Mongo, ClickHouse,
-// BigQuery, …). The `pnpm check:no-prisma` CI gate enforces this on every commit.
+// BigQuery, …). The `pnpm check:no-prisma` gate runs in CI (push and PR to `main`) and before every publish.
 //
 // Field mapping — every field mirrors `NotificationLogEntry`:
 //   timestamp     -> entry.timestamp (Unix ms; stored as DateTime)
@@ -23,6 +23,8 @@
 //   purpose       -> entry.purpose      (OTP purpose or email template name)
 //   providerName  -> entry.providerName ('resend', 'twilio', '__interceptor__', …)
 //   messageId     -> entry.messageId    (provider correlation id)
+//   deliveryStatus         -> entry.deliveryStatus         (basic SMTP delivery status, e.g. 550)
+//   deliveryEnhancedStatus -> entry.deliveryEnhancedStatus (enhanced SMTP status, e.g. '5.1.1')
 //   errorMessage  -> entry.errorMessage (message only — NEVER a stack trace; OTP
 //                                         codes are NEVER recorded here)
 //   userId        -> entry.userId
@@ -38,6 +40,9 @@ model NotificationLog {
   purpose      String?
   providerName String
   messageId    String?
+  // SMTP delivery status codes, when the provider reports them.
+  deliveryStatus         Int?
+  deliveryEnhancedStatus String?
   errorMessage String?  @db.Text
   userId       String?
   metadata     Json?

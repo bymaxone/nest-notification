@@ -21,10 +21,8 @@ The repository is **consumer code**. It depends on your `PrismaService` (or
 
 ```typescript
 import { Injectable } from '@nestjs/common'
-import type {
-  INotificationLogRepository,
-  NotificationLogEntry
-} from '@bymax-one/nest-notification'
+import type { Prisma } from '@prisma/client'
+import type { INotificationLogRepository, NotificationLogEntry } from '@bymax-one/nest-notification'
 
 // CONSUMER CODE — your application's PrismaService.
 import { PrismaService } from '../prisma/prisma.service'
@@ -52,9 +50,12 @@ export class PrismaNotificationLogRepository implements INotificationLogReposito
         purpose: entry.purpose ?? null,
         providerName: entry.providerName,
         messageId: entry.messageId ?? null,
+        deliveryStatus: entry.deliveryStatus ?? null,
+        deliveryEnhancedStatus: entry.deliveryEnhancedStatus ?? null,
         errorMessage: entry.errorMessage ?? null,
         userId: entry.userId ?? null,
-        metadata: entry.metadata ?? undefined
+        // `Record<string, unknown>` is not assignable to Prisma's JSON input type, hence the cast.
+        metadata: (entry.metadata ?? undefined) as Prisma.InputJsonValue | undefined
       }
     })
   }
