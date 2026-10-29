@@ -43,10 +43,12 @@ jobs:
       # and not every secret this repository holds.
       #
       # A GitHub App rather than a token: the installation token is minted per
-      # run and expires within the hour, so there is no long-lived credential to
-      # rotate and none to expire unnoticed. Both secrets are organisation-level
-      # with `all repositories` visibility, and bymax-agents-sync is installed
-      # org-wide, so this repository holds no secret of its own.
+      # run and expires within the hour, so no personal access token exists to
+      # expire unnoticed. The App private key is the long-lived credential here
+      # and belongs in the organisation's secret rotation. Both secrets are
+      # organisation-level with `all repositories` visibility, and
+      # bymax-agents-sync is installed org-wide, so this repository holds no secret
+      # of its own.
       #
       # Supplied together or not at all — the called workflow fails a half pair
       # explicitly rather than falling back, because a silent fallback there is
