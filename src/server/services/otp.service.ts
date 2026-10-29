@@ -45,6 +45,7 @@ import {
   readRedactedMessage,
   scrubValuesFromErrorChain
 } from '../utils/redact'
+import { assertIdentifies } from '../utils/tenant-scope'
 import { safeCompare } from '../utils/timing-safe-compare'
 
 /** Milliseconds in one second. */
@@ -146,6 +147,7 @@ export class OtpService {
    */
   async generate(input: OtpGenerateInput): Promise<OtpGenerateResult> {
     const otp = this.requireOtpOptions()
+    this.assertScope(input)
     const cfg = otp.resolveForPurpose(input.purpose)
     await this.acquireCooldownOrThrow(input, cfg.resendCooldownSeconds)
     const code = generateOtpCode(cfg.length, cfg.codeType)
@@ -164,6 +166,7 @@ export class OtpService {
    */
   async verify(input: OtpVerifyInput): Promise<OtpVerifyResult> {
     const otp = this.requireOtpOptions()
+    this.assertScope(input)
     const result = await this.storage.consumeAttempt(input.tenantId, input.recipient, input.purpose)
     if (result.status === 'not_found') {
       await this.audit(this.otpAuditEntry('failed', input, { reason: 'not_found' }))
@@ -196,6 +199,7 @@ export class OtpService {
    */
   async consume(input: OtpConsumeInput): Promise<void> {
     this.requireOtpOptions()
+    this.assertScope(input)
     await this.storage.delete(input.tenantId, input.recipient, input.purpose)
     await this.storage.clearCooldown(input.tenantId, input.recipient, input.purpose)
   }
@@ -217,6 +221,7 @@ export class OtpService {
    * @returns Existence, expiry, attempt counters, validation flag, and cooldown.
    */
   async getStatus(input: OtpStatusInput): Promise<OtpStatusResult> {
+    this.assertScope(input)
     const [entry, cooldownSeconds] = await Promise.all([
       this.storage.get(input.tenantId, input.recipient, input.purpose),
       this.storage.getCooldown(input.tenantId, input.recipient, input.purpose)
@@ -381,6 +386,20 @@ export class OtpService {
   }
 
   /** Returns the resolved OTP options or throws `OTP_STORAGE_NOT_CONFIGURED`. */
+  /**
+   * Refuses a tenant id or recipient that identifies nobody, before any storage call.
+   *
+   * The reference storage already refuses these through `hashTenantRecipient`, but a
+   * consumer-supplied {@link IOtpStorage} is not required to, and a blank scope would
+   * then be shared by every caller that sent one.
+   *
+   * @throws NotificationException `INVALID_SCOPE_IDENTIFIER` when either is blank.
+   */
+  private assertScope(ref: OtpRecipientRef): void {
+    assertIdentifies('OtpService', 'tenantId', ref.tenantId)
+    assertIdentifies('OtpService', 'recipient', ref.recipient)
+  }
+
   private requireOtpOptions(): ResolvedOtpOptions {
     if (!this.options.otp) {
       throw new NotificationException('OTP_STORAGE_NOT_CONFIGURED')

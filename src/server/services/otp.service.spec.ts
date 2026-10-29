@@ -18,6 +18,7 @@ import type {
   IEmailTemplateRenderer,
   RenderedEmail
 } from '../interfaces/email-template-renderer.interface'
+import type { IOtpStorage } from '../interfaces/otp-storage.interface'
 import { InMemoryOtpStorage } from '../providers/in-memory-otp.storage'
 import { toRetryAfterHeader } from '../utils/cooldown-helpers'
 
@@ -554,5 +555,73 @@ describe('OtpService not-configured + audit propagation', () => {
       code: 'notification.audit_log_failed',
       cause: 'weird'
     })
+  })
+})
+
+// A consumer-supplied storage that never calls `hashTenantRecipient` is not obliged by
+// its contract to refuse a blank scope, so the service has to: otherwise a blank tenant
+// reaches the adapter and shares one scope with every other caller that sent a blank one.
+describe('OtpService scope validation at the service boundary', () => {
+  /** A storage that accepts anything and records that it was reached. */
+  function permissiveStorage(): { storage: IOtpStorage; reached: jest.Mock } {
+    const reached = jest.fn()
+    const storage: IOtpStorage = {
+      name: 'permissive-test-storage',
+      set: async (...args) => void reached('set', args),
+      get: async (...args) => (reached('get', args), null),
+      consumeAttempt: async (...args) => (reached('consumeAttempt', args), { status: 'not_found' }),
+      update: async (...args) => void reached('update', args),
+      delete: async (...args) => void reached('delete', args),
+      tryAcquireCooldown: async (...args) => (reached('tryAcquireCooldown', args), true),
+      getCooldown: async (...args) => (reached('getCooldown', args), 0),
+      clearCooldown: async (...args) => void reached('clearCooldown', args),
+      isConfigured: () => true
+    }
+    return { storage, reached }
+  }
+
+  const operations: ReadonlyArray<
+    [
+      string,
+      (service: OtpService, scope: { tenantId: string; recipient: string }) => Promise<unknown>
+    ]
+  > = [
+    ['generate', (s, scope) => s.generate({ ...ref, ...scope, deliverVia: 'manual' })],
+    ['resend', (s, scope) => s.resend({ ...ref, ...scope, deliverVia: 'manual' })],
+    ['verify', (s, scope) => s.verify({ ...ref, ...scope, code: '123456' })],
+    ['consume', (s, scope) => s.consume({ ...ref, ...scope })],
+    ['getStatus', (s, scope) => s.getStatus({ ...ref, ...scope })]
+  ]
+  const blanks: ReadonlyArray<[string, { tenantId: string; recipient: string }, string]> = [
+    ['an empty tenant', { tenantId: '', recipient: ref.recipient }, 'tenantId'],
+    ['a whitespace-only tenant', { tenantId: '   ', recipient: ref.recipient }, 'tenantId'],
+    ['an empty recipient', { tenantId: ref.tenantId, recipient: '' }, 'recipient'],
+    ['a whitespace-only recipient', { tenantId: ref.tenantId, recipient: '  ' }, 'recipient']
+  ]
+
+  describe.each(operations)('%s', (_name, call) => {
+    // The refusal must come before any storage call: a refusal after the adapter was
+    // reached would already have read or written under the shared blank scope.
+    it.each(blanks)(
+      'should refuse %s before reaching the storage',
+      async (_label, scope, named) => {
+        const { storage, reached } = permissiveStorage()
+        const service = new OtpService(makeOptions(), storage, makeAudit())
+
+        await expect(call(service, scope)).rejects.toMatchObject({
+          code: 'notification.invalid_scope_identifier',
+          response: {
+            error: expect.objectContaining({
+              details: {
+                boundary: 'OtpService',
+                parameter: named,
+                reason: 'empty or whitespace-only'
+              }
+            })
+          }
+        })
+        expect(reached).not.toHaveBeenCalled()
+      }
+    )
   })
 })
