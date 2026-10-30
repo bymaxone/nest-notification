@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-10-30
+
 ### Security
 
 - **Peer ranges raised past published advisories.** `nodemailer` `^9.0.1` → `^10.1.4` (13
@@ -30,14 +32,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   joining the raw values around `::`. A storage that did so passed the contract before and now
   fails it.
 
-### ⚠️ Apply to a consumer on `nodemailer` 9
+### ⚠️ Apply before upgrading
 
-The optional peer range of `nodemailer` moves from `^9.0.1` to `^10.1.4`, so a consumer on
-`nodemailer` 9 has to upgrade to 10.1.4 or later. The only breaking change between the two
-majors is that `nodemailer` 10 requires Node.js 20 or newer ([its changelog](https://github.com/nodemailer/nodemailer/blob/master/CHANGELOG.md),
-10.0.0); this package already requires Node.js 24. `SmtpEmailProvider` works with both the ESM and
-CommonJS builds of `nodemailer` 10. No 9.x release fixes these advisories: 9.1.1 is the last 9.x and
-still falls inside the vulnerable range of nine of them.
+- **A consumer on `nodemailer` 9.** The optional peer range of `nodemailer` moves from `^9.0.1` to `^10.1.4`, so a consumer on
+  `nodemailer` 9 has to upgrade to 10.1.4 or later. The only breaking change between the two
+  majors is that `nodemailer` 10 requires Node.js 20 or newer ([its changelog](https://github.com/nodemailer/nodemailer/blob/master/CHANGELOG.md),
+  10.0.0); this package already requires Node.js 24. `SmtpEmailProvider` works with both the ESM and
+  CommonJS builds of `nodemailer` 10. No 9.x release fixes these advisories: 9.1.1 is the last 9.x and
+  still falls inside the vulnerable range of nine of them.
+- **A consumer that brings `handlebars`.** The optional peer range moves from `^4.7.9` to
+  `^4.7.10`, so a consumer that uses `handlebars` for a template renderer has to be on 4.7.10 or
+  later. This package never imports `handlebars` itself; the range states which versions are
+  supported when you provide it.
+- **A consumer with a custom `IOtpStorage`.** `OtpService` now refuses a blank, whitespace-only or
+  non-string `tenantId` or `recipient` with `INVALID_SCOPE_IDENTIFIER` before it calls your
+  storage. If your callers can pass such a value, validate it before the call, because those calls
+  used to reach the adapter. The reference storages already refused them.
 
 ### Changed
 
@@ -762,7 +772,8 @@ rejected at startup rather than failing on the first send.
 
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.4.1...HEAD
+[1.4.1]: https://github.com/bymaxone/nest-notification/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/bymaxone/nest-notification/compare/v1.3.1...v1.4.0
 [1.3.1]: https://github.com/bymaxone/nest-notification/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/bymaxone/nest-notification/compare/v1.2.2...v1.3.0
