@@ -72,8 +72,8 @@ still falls inside the vulnerable range of nine of them.
   - The package has four subpaths, including `./testing`. One README line said three.
   - The multi-tenant example is a header-based resolver, not a JWT claim, and the README now says
     what the audit interceptor does with a tenant id that identifies nobody.
-  - The bundle-budget table lists the `testing` budget. The fixed test count and the fixed
-    error-code count (it said 22) are gone.
+  - The bundle-budget table lists the `testing` budget. The fixed test count and the stale
+    error-code count in the exports table (it said 22) are gone.
   - Vulnerability reporting points to GitHub Private Vulnerability Reporting, with email as the
     fallback.
 - Documents that are not part of the package (SECURITY, CONTRIBUTING, CLAUDE.md, AGENTS.md, the
