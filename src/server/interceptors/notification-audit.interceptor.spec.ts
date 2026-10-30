@@ -185,6 +185,73 @@ describe('NotificationAuditInterceptor', () => {
     expect(repo.entries).toHaveLength(0)
   })
 
+  // These run with swallowErrors off on purpose: with it on, a wrongly accepted value is
+  // also swallowed downstream and leaves no entry, so acceptance and refusal look the same.
+  // Here a refusal surfaces as AUDIT_LOG_FAILED and an acceptance records an entry.
+  describe('refuses a tenant id that identifies nobody, whichever path it arrives on', () => {
+    const refused = {
+      code: 'notification.audit_log_failed',
+      cause: expect.objectContaining({ name: 'NotificationException' })
+    }
+
+    // The resolver is consumer code and may return anything at runtime, not only a string.
+    it.each([
+      ['a whitespace-only string', '   '],
+      ['a tab and newline', '\t\n'],
+      ['a number', 42],
+      ['null', null],
+      ['undefined', undefined]
+    ])('refuses %s from the resolver', async (_label, resolved) => {
+      const repo = new CapturingRepo()
+      const interceptor = new NotificationAuditInterceptor(
+        buildOptions({
+          tenantIdResolver: jest.fn().mockReturnValue(resolved),
+          swallowErrors: false
+        }),
+        repo
+      )
+      const ctx = buildContext([otpInput], { request: { headers: {} } })
+
+      await expect(
+        firstValueFrom(interceptor.intercept(ctx, handlerOf(of('ok'))))
+      ).rejects.toMatchObject(refused)
+      expect(repo.entries).toHaveLength(0)
+    })
+
+    it('refuses a blank payload tenant id when no resolver is configured', async () => {
+      const repo = new CapturingRepo()
+      const interceptor = new NotificationAuditInterceptor(
+        buildOptions({ swallowErrors: false }),
+        repo
+      )
+      const ctx = buildContext([{ ...otpInput, tenantId: '   ' }])
+
+      await expect(
+        firstValueFrom(interceptor.intercept(ctx, handlerOf(of('ok'))))
+      ).rejects.toMatchObject(refused)
+      expect(repo.entries).toHaveLength(0)
+    })
+
+    // A resolver is configured but there is no request to read, so the payload tenant id
+    // is the fallback — and it is held to the same rule as every other path.
+    it.each([
+      ['the request is absent', { request: undefined }],
+      ['the context is not HTTP', { throwOnHttp: true }]
+    ])('refuses a blank payload tenant id when %s', async (_label, contextOptions) => {
+      const repo = new CapturingRepo()
+      const interceptor = new NotificationAuditInterceptor(
+        buildOptions({ tenantIdResolver: () => 'never_used', swallowErrors: false }),
+        repo
+      )
+      const ctx = buildContext([{ ...otpInput, tenantId: '   ' }], contextOptions)
+
+      await expect(
+        firstValueFrom(interceptor.intercept(ctx, handlerOf(of('ok'))))
+      ).rejects.toMatchObject(refused)
+      expect(repo.entries).toHaveLength(0)
+    })
+  })
+
   // With a resolver set but no resolvable request, the payload tenantId is the fallback.
   it('falls back to the payload tenantId when the request is absent', async () => {
     const repo = new CapturingRepo()

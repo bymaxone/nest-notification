@@ -7,6 +7,10 @@
  * tenant id is taken from `global.tenantIdResolver(request)` when configured,
  * which OVERRIDES any `tenantId` carried in the dispatch payload — closing the
  * tenant-spoofing vector where a caller forges another tenant's id in the body.
+ * A tenant id that is not a string, is empty or is whitespace-only is refused on every
+ * path that produces it (the resolver, the payload with no resolver, the payload when
+ * there is no HTTP request) instead of being recorded; a dispatch-shaped argument whose
+ * payload `tenantId` is not a string is not recognised as a dispatch and is skipped.
  *
  * The entry NEVER carries the dispatched payload (an OTP `verify` payload holds a
  * guessed code) — only the channel, the masked recipient, the purpose/template,

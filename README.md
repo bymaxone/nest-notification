@@ -615,6 +615,8 @@ const tenantIdResolver = (req: NotificationRequest): string =>
 
 `NotificationRequest` is a minimal, framework-agnostic request shape declared by the library itself, so a public signature never drags in a framework's types. When a resolver is set, the `NotificationAuditInterceptor` uses it as the **source of truth** for the audited tenant id — any `tenantId` in the payload becomes a suggestion the resolver overrides.
 
+A tenant id that identifies nobody is never recorded. The interceptor refuses a value that is not a string, is empty, or is whitespace-only, on every path that produces the id: what `tenantIdResolver` returns, the payload's `tenantId` when no resolver is configured, and the payload's `tenantId` when a resolver is configured but there is no HTTP request to read it from (a non-HTTP context). Your caller never sees the refusal itself. With `audit.swallowErrors: true` (the default) it is swallowed and no audit entry is written; with `false` it surfaces as `AUDIT_LOG_FAILED`, whose `cause` is a sanitized copy of the refusal. One input is ignored, not refused: an argument whose payload `tenantId` is not a string is not recognised as a dispatch at all, so it produces no audit entry and no error.
+
 > [!NOTE]
 > The resolver governs what the audit interceptor trusts. Service methods still take an explicit `tenantId`: resolve the tenant in your controller and pass it down — there is no hidden override of a method argument.
 
