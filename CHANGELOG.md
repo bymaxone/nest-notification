@@ -37,6 +37,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 
+- **What the audit interceptor does with a tenant id that identifies nobody (behaviour since 1.4.0).**
+  `NotificationAuditInterceptor` refuses a tenant id that is not a string, is empty, or is
+  whitespace-only, on every path that produces it: the value `tenantIdResolver` returns, the
+  payload's `tenantId` when no resolver is configured, and the payload's `tenantId` when a resolver
+  is configured but there is no HTTP request. The 1.4.0 entry only named an empty value from the
+  resolver. The refusal does not reach the caller: with `audit.swallowErrors: true` (the default) it
+  is swallowed and no audit entry is written; with `false` it surfaces as `AUDIT_LOG_FAILED` with a
+  sanitized copy of the refusal as its `cause`. A payload whose `tenantId` is not a string is
+  ignored instead: the argument is not recognised as a dispatch, so there is no entry and no error.
 - README, SECURITY, CONTRIBUTING, CLAUDE.md, AGENTS.md and the specification under `docs/` brought
   in line with the code.
 

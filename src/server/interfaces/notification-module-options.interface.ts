@@ -45,6 +45,10 @@ export interface GlobalOptions {
    * Resolves the tenant id from the request. When provided, the module prefers
    * this source over a tenant id passed in the body/argument — preventing tenant
    * spoofing.
+   *
+   * What it returns must identify a tenant: a value that is not a string, is empty or
+   * is whitespace-only is refused by the audit interceptor rather than recorded (see
+   * `audit.swallowErrors` for what the caller then sees).
    */
   tenantIdResolver?: (req: NotificationRequest) => string | Promise<string>
 }

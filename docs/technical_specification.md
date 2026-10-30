@@ -2463,6 +2463,8 @@ When the lib is exposed via custom HTTP controllers of the consumer, the consume
 
 The lib offers `global.tenantIdResolver` so the application can centralize tenantId resolution from the Request (e.g., extract from JWT, subdomain, etc.). When configured, the `NotificationAuditInterceptor` (if active) uses this resolver as the source of truth.
 
+A tenant id that identifies nobody is never recorded. The interceptor refuses a value that is not a string, is empty, or is whitespace-only on every path that produces the id: the value `tenantIdResolver` returns, the payload's `tenantId` when no resolver is configured, and the payload's `tenantId` when a resolver is configured but there is no HTTP request to read (a non-HTTP context). The refusal never reaches the caller: with `audit.swallowErrors: true` (the default) it is swallowed and no entry is written, and with `false` it surfaces as `AUDIT_LOG_FAILED` with a sanitized copy of the refusal as its `cause`. A payload whose `tenantId` is not a string is ignored rather than refused: the argument is not recognised as a dispatch (`isDispatchInput`), so it produces no entry and no error.
+
 > **Important:** The `tenantIdResolver` is a convenience for the audit interceptor. The service methods still require explicit `tenantId` — there is no magic that overrides the parameter behind the scenes. Use the resolver to extract the tenantId in the controller and pass it explicitly to the service.
 
 ---
