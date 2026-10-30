@@ -41,6 +41,10 @@ still falls inside the vulnerable range of nine of them.
 
 ### Changed
 
+- **The published `dist/` changes in this release; it is not a documentation-only release.**
+  `OtpService` gains the scope validation above, `otpStorageContract` gains the second boundary
+  pair, and the declaration files carry new doc comments on `NotificationAuditInterceptor` and on
+  `GlobalOptions.tenantIdResolver`, plus the export-statement form described next.
 - **Bundler `tsup` 9.** The published JavaScript (`.mjs` and `.cjs`, every subpath) is byte-identical
   to what `tsup` 8 produced from the same source. The declaration files (`.d.ts`, `.d.cts`) differ
   only in how the export list is written: values in one `export { }`, types in a separate
@@ -60,8 +64,20 @@ still falls inside the vulnerable range of nine of them.
   is swallowed and no audit entry is written; with `false` it surfaces as `AUDIT_LOG_FAILED` with a
   sanitized copy of the refusal as its `cause`. A payload whose `tenantId` is not a string is
   ignored instead: the argument is not recognised as a dispatch, so there is no entry and no error.
-- README, SECURITY, CONTRIBUTING, CLAUDE.md, AGENTS.md and the specification under `docs/` brought
-  in line with the code.
+- **README corrections a consumer reads.**
+  - `NoOpEmailProvider` logs a masked recipient only, never the subject or the body. The README
+    said it logged the subject and the recipient.
+  - The module is described as running on Resend or SMTP out of the box, or on any provider you
+    implement. The README named SendGrid as if it were bundled.
+  - The package has four subpaths, including `./testing`. One README line said three.
+  - The multi-tenant example is a header-based resolver, not a JWT claim, and the README now says
+    what the audit interceptor does with a tenant id that identifies nobody.
+  - The bundle-budget table lists the `testing` budget. The fixed test count and the stale
+    error-code count in the exports table (it said 22) are gone.
+  - Vulnerability reporting points to GitHub Private Vulnerability Reporting, with email as the
+    fallback.
+- Documents that are not part of the package (SECURITY, CONTRIBUTING, CLAUDE.md, AGENTS.md, the
+  specification and guides under `docs/`) were brought in line with the code as well.
 
 ## [1.4.0] - 2026-09-04
 
