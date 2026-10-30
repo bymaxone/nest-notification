@@ -35,9 +35,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 The optional peer range of `nodemailer` moves from `^9.0.1` to `^10.1.4`, so a consumer on
 `nodemailer` 9 has to upgrade to 10.1.4 or later. The only breaking change between the two
 majors is that `nodemailer` 10 requires Node.js 20 or newer ([its changelog](https://github.com/nodemailer/nodemailer/blob/master/CHANGELOG.md),
-10.0.0); this package already requires Node.js 24. `SmtpEmailProvider` calls only `createTransport`
-and works with both the ESM and CommonJS builds of `nodemailer` 10. No 9.x release fixes the
-advisories below: 9.1.1 is the last 9.x and still falls inside the vulnerable range of nine of them.
+10.0.0); this package already requires Node.js 24. `SmtpEmailProvider` works with both the ESM and
+CommonJS builds of `nodemailer` 10. No 9.x release fixes these advisories: 9.1.1 is the last 9.x and
+still falls inside the vulnerable range of nine of them.
 
 ### Changed
 
