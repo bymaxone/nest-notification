@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **Peer ranges raised past published advisories.** `nodemailer` `^9.0.1` → `^10.1.4` (13
+  advisories, the highest severity "high", fixed from 10.1.4) and `handlebars` `^4.7.9` →
+  `^4.7.10` (3 advisories, the highest "critical", fixed in 4.7.10). A declared peer range states
+  which versions this package supports, so the floor no longer admits a version with a known
+  advisory. See the note below for what a `nodemailer` 9 consumer has to do.
 - **`OtpService` refuses a blank scope before it reaches the storage.** `generate`, `resend`,
   `verify`, `consume` and `getStatus` now throw `NotificationException` with code
   `INVALID_SCOPE_IDENTIFIER` when `tenantId` or `recipient` is empty, whitespace-only or not a
@@ -24,6 +29,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   entry-key and cooldown-key cases now also use a pair that collides when the key is built by
   joining the raw values around `::`. A storage that did so passed the contract before and now
   fails it.
+
+### ⚠️ Apply to a consumer on `nodemailer` 9
+
+The optional peer range of `nodemailer` moves from `^9.0.1` to `^10.1.4`, so a consumer on
+`nodemailer` 9 has to upgrade to 10.1.4 or later. The only breaking change between the two
+majors is that `nodemailer` 10 requires Node.js 20 or newer ([its changelog](https://github.com/nodemailer/nodemailer/blob/master/CHANGELOG.md),
+10.0.0); this package already requires Node.js 24. `SmtpEmailProvider` calls only `createTransport`
+and works with both the ESM and CommonJS builds of `nodemailer` 10. No 9.x release fixes the
+advisories below: 9.1.1 is the last 9.x and still falls inside the vulnerable range of nine of them.
 
 ### Changed
 

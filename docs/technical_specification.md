@@ -2828,11 +2828,11 @@ Needed only if the consumer uses the corresponding reference provider:
 | `@aws-sdk/client-ses`      | `^3.0.0`                            | If using SesProvider                                     |
 | `@aws-sdk/client-sns`      | `^3.0.0`                            | If using SnsSmsProvider (once the SMS channel exists)    |
 | `mailgun.js`               | `^11.0.0 \|\| ^12.0.0 \|\| ^13.0.0` | If using MailgunProvider                                 |
-| `nodemailer`               | `^9.0.1`                            | If using SmtpEmailProvider                               |
+| `nodemailer`               | `^10.1.4`                           | If using SmtpEmailProvider                               |
 | `twilio`                   | `^5.0.0 \|\| ^6.0.0`                | If using TwilioSmsProvider (once the SMS channel exists) |
 | `firebase-admin`           | `^13.0.0 \|\| ^14.0.0`              | If using FcmPushProvider (once the push channel exists)  |
 | `@aws-sdk/client-dynamodb` | `^3.0.0`                            | If using DynamoDbOtpStorage                              |
-| `handlebars`               | `^4.7.9`                            | If using HandlebarsTemplateRenderer                      |
+| `handlebars`               | `^4.7.10`                           | If using HandlebarsTemplateRenderer                      |
 | `@react-email/render`      | `^1.0.0 \|\| ^2.0.0`                | If using ReactEmailTemplateRenderer                      |
 | `mjml`                     | `^5.0.0`                            | If using MjmlTemplateRenderer                            |
 | `class-validator`          | `^0.14.0 \|\| ^0.15.0`              | If using distributed DTOs (optional — consumer decides)  |
