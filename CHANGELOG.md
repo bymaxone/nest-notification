@@ -38,6 +38,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   warning that codes are stored in plaintext. The delivered email still carries the plaintext
   code, the audit entry carries neither form, and the secret is not a property of the resolved
   options.
+- **Failed verifications now survive a re-issue.** NIST SP 800-63B-4 §3.1.3.2 says generating a new
+  authentication secret "SHALL NOT reset the failed authentication count", yet every new code got a
+  fresh `defaultMaxAttempts`: with 3 attempts, three wrong guesses, a re-issue after the cooldown
+  and three more were all accepted, so the limit only bounded guesses per cooldown. A
+  `(tenant, recipient, purpose)` now has a failure counter in the storage: every verification attempt against a
+  live code adds one and restarts its lifetime to the purpose's code lifetime, `verify()` counts each attempt before
+  comparing the code and refuses once the count passes the ceiling whichever code is live, and a successful verification or `consume()` clears it.
+  `RedisOtpStorage` keeps it under `{namespace}:otp_fail:{purpose}:{hash}` with one atomic script.
+  A custom `IOtpStorage` opts in with three optional methods, `getFailures`, `recordFailure` and
+  `clearFailures`; one without them behaves as before and the module logs one
+  `BYMAX_NOTIFICATION_OTP_FAILURES_NOT_CARRIED` warning at startup. The executable contract in
+  `./testing` checks the three methods when they are present and passes trivially when they are
+  absent.
 - **New error code `notification.otp_manual_delivery_unavailable`** (400; 24 codes, up from 23).
   `generate()` never returns the code, so a manual delivery reads it back from the store, and a
   store that holds a digest has nothing to hand over. With `otp.codeSecret` set, a manual
@@ -53,6 +66,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   codes must be requested again. A custom `IOtpStorage` is unaffected, since `OtpEntry.code` is an
   opaque string. Set the secret from a secret store, not from the place the Redis credentials come
   from, or a reader of Redis gets both.
+- **A recipient at the failure ceiling stays locked out until the counter lapses.** With a
+  storage that carries failures (the bundled ones), a recipient at the ceiling gets
+  `{ valid: false, reason: 'max_attempts' }` for any code, a freshly issued one included, until the
+  counter has not been touched for the purpose's code lifetime. Someone who sends wrong
+  guesses for another person's address can keep that address locked out; rate-limit the OTP
+  endpoints by IP in your controller, as the security checklist says.
+- **If you implement `IOtpStorage` yourself,** add `getFailures`, `recordFailure` and `clearFailures`
+  and re-run the contract from `@bymax-one/nest-notification/testing`. Until you do, a re-issued
+  code gets a fresh attempt budget and the startup warning says so. Redis users: the new key
+  `{namespace}:otp_fail:*` is created on the first wrong guess; nothing is migrated.
+- **One extra storage write in `verify()`.** The stored failure count is the only thing that
+  outlives a code, so `verify()` increments it before comparing the code, while a code is live (one atomic script on Redis)
+  and refuses once the number passes the ceiling; a code is issued with its own full attempt count and
+  the lockout ends exactly when the counter lapses. Storages without the failure methods skip the
+  write. A refused verification now reports `max_attempts` where it used to report `not_found` after
+  the code was spent.
 - **`otp.codeSecret` and manual delivery do not combine.** Where a flow delivers the code itself
   (`deliverVia: 'manual'`, or no email channel), leave the secret unset or move that flow to email
   delivery; a development setup that reads the code from the store keeps `codeSecret` unset.

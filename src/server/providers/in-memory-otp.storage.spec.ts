@@ -200,6 +200,14 @@ describe('InMemoryOtpStorage — time boundaries', () => {
     expect(await storage.tryAcquireCooldown(T, R, P, 10)).toBe(true)
   })
 
+  // A failure counter whose lifetime ends exactly now has lapsed — pins `<=` against `<`.
+  it('should treat a failure counter that expires exactly now as lapsed', async () => {
+    await storage.recordFailure(T, R, P, 10)
+    jest.setSystemTime(1_000_000 + 10_000) // the exact expiry instant
+
+    expect(await storage.getFailures(T, R, P)).toBe(0)
+  })
+
   // getCooldown returns the remaining whole seconds — pins the `ttl * 1000` (acquire)
   // and `(expiry - now) / 1000` (read) arithmetic so a swapped operator (which would
   // yield a near-zero or huge number) is caught by the exact value.

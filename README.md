@@ -650,6 +650,16 @@ This is defence in depth, not a standards requirement: NIST SP 800-63B-4 require
 
 `consumeAttempt` is the only writer of the attempt counter, and `tryAcquireCooldown` (`SET NX EX`) is the only acquirer of the resend window — both inside the storage, in one indivisible step. A service-side `get` followed by an `update` looks equivalent and passes every sequential test, but two concurrent verifies read the same count and each writes back the same increment: five attempts become unbounded. The same shape lets two concurrent resends both pass the cooldown check.
 
+### Failed attempts survive a re-issue
+
+NIST SP 800-63B-4 §3.1.3.2: "Generating a new authentication secret SHALL NOT reset the failed authentication count." A per-code counter alone breaks that rule: three wrong guesses, a re-issue after the resend cooldown, and three more were accepted, so the attempt limit was only a rate limit of `defaultMaxAttempts` guesses per cooldown. The failed verifications of a `(tenant, recipient, purpose)` are now counted in the storage, and `verify()` refuses once that count passes the purpose's attempt ceiling, whichever code is live.
+
+- Every verification attempt against a live code adds one to the count, before its code is compared, and restarts the counter's lifetime to the purpose's code lifetime (`ttlSeconds`); a counter that is not touched for that long lapses, which starts the count again from zero.
+- A successful verification and `consume()` clear it (the attempt that succeeded included), so the next flow starts with a full budget.
+- Once the count passes the ceiling, `verify()` returns `{ valid: false, reason: 'max_attempts' }` for any code, a freshly issued one included, until the counter lapses. The stored count alone decides, so the lockout ends exactly when the counter lapses. Because the increment is atomic and happens first, guesses that arrive together each get their own number and only those within the ceiling are compared. `remainingAttempts` reports the nearer of the code's own budget and the count's. This also means that someone who keeps sending wrong guesses for a recipient keeps that recipient locked out, so rate-limit the OTP endpoints by IP in your controller.
+- `RedisOtpStorage` keeps the counter under `{namespace}:otp_fail:{purpose}:{hash}`, incremented by one script; `InMemoryOtpStorage` does the same in memory.
+- A custom `IOtpStorage` opts in by implementing three **optional** methods, `getFailures`, `recordFailure` and `clearFailures`; the executable contract in `./testing` checks them when they are present. Without them each code keeps a fresh budget, and one warning, `BYMAX_NOTIFICATION_OTP_FAILURES_NOT_CARRIED`, is logged at startup naming the deviation.
+
 ### Security Checklist
 
 When integrating `@bymax-one/nest-notification` in production, verify each of the following:
@@ -660,7 +670,7 @@ When integrating `@bymax-one/nest-notification` in production, verify each of th
 - `OtpService` keys its state on the recipient with surrounding whitespace trimmed and an email address lower-cased, so `Jane@Acme.com`, `jane@acme.com` and ` jane@acme.com` share one cooldown and one attempt counter; the message is still delivered to the address exactly as you pass it (RFC 5321 §2.4). A recipient that is not an email is only trimmed. Store and compare the same canonical form on your side
 - `otp.codeSecret` is set, from a secret store and not from the same place as the Redis credentials, so a reader of the store cannot test a guess against a stored code
 - `resendCooldownSeconds` and `defaultMaxAttempts` are tuned per purpose, not left at the defaults for high-value flows
-- Your own controller rate-limits the OTP endpoints — the library bounds attempts per code, not requests per IP
+- Your own controller rate-limits the OTP endpoints — the library bounds failed attempts per recipient and purpose, not requests per IP
 
 ---
 
