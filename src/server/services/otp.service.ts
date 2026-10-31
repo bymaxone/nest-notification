@@ -185,9 +185,17 @@ export class OtpService implements OnModuleInit {
     this.assertScope(input)
     const scope = this.keyed(input)
     const cfg = otp.resolveForPurpose(scope.purpose)
-    // The stored failure count is the only thing that outlives a code, so it alone decides
-    // whether the recipient is locked out, and the lockout ends when the counter lapses.
-    if (await this.failuresSpent(scope, cfg.maxAttempts)) {
+    // The stored count is the only thing that outlives a code, so it alone decides whether the
+    // recipient is locked out, and the lockout ends when the counter lapses. The attempt is
+    // counted before the code is compared: the increment is atomic, so guesses that arrive
+    // together each get their own number and only those within the ceiling are compared.
+    const attempt = await this.storage.recordFailure?.(
+      scope.tenantId,
+      scope.recipient,
+      scope.purpose,
+      cfg.ttlSeconds
+    )
+    if (attempt !== undefined && attempt > cfg.maxAttempts) {
       await this.audit(
         this.otpAuditEntry('max_attempts_exceeded', scope, { reason: 'max_attempts' })
       )
@@ -206,12 +214,6 @@ export class OtpService implements OnModuleInit {
     }
     const { entry } = result
     if (!this.matchesStoredCode(entry.code, scope.code, otp.digestCode)) {
-      const failures = await this.storage.recordFailure?.(
-        scope.tenantId,
-        scope.recipient,
-        scope.purpose,
-        cfg.ttlSeconds
-      )
       await this.audit(this.otpAuditEntry('failed', scope, { reason: 'invalid_code' }))
       const ofCode = entry.maxAttempts - entry.attempts
       return {
@@ -219,9 +221,7 @@ export class OtpService implements OnModuleInit {
         reason: 'invalid_code',
         // The code's own budget and the recipient's failure budget both run out; the nearer wins.
         remainingAttempts:
-          failures === undefined
-            ? ofCode
-            : Math.min(ofCode, Math.max(0, cfg.maxAttempts - failures))
+          attempt === undefined ? ofCode : Math.min(ofCode, cfg.maxAttempts - attempt)
       }
     }
     await this.storage.clearFailures?.(scope.tenantId, scope.recipient, scope.purpose)
@@ -390,16 +390,6 @@ export class OtpService implements OnModuleInit {
         'NIST SP 800-63B-4 §3.1.3.2 says generating a new secret SHALL NOT reset the failed authentication count. ' +
         'Implement the three optional methods to carry the count across re-issues.'
     )
-  }
-
-  /** True when the failures recorded for this recipient and purpose have reached the ceiling. */
-  private async failuresSpent(scope: OtpRecipientRef, maxAttempts: number): Promise<boolean> {
-    const failures = await this.storage.getFailures?.(
-      scope.tenantId,
-      scope.recipient,
-      scope.purpose
-    )
-    return (failures ?? 0) >= maxAttempts
   }
 
   /** How a generated code reaches the recipient: by email when asked or when an email channel exists. */

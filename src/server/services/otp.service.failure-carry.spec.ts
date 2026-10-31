@@ -187,21 +187,25 @@ describe('OtpService failed attempts across re-issues', () => {
     }
   })
 
+  // Parallel wrong guesses share one budget: each is counted before its code is compared.
+  it('should let only the guesses within the ceiling be compared when they arrive together', async () => {
+    await service.generate(base)
+    await fail(2)
+    await service.generate(base)
+
+    const results = await Promise.all(
+      Array.from({ length: 3 }, () => service.verify({ ...base, code: WRONG }))
+    )
+
+    expect(results.filter((r) => !r.valid && r.reason === 'invalid_code')).toHaveLength(1)
+    expect(results.filter((r) => !r.valid && r.reason === 'max_attempts')).toHaveLength(2)
+  })
+
   // Both budgets run out; the nearer one is reported.
   it('should report the attempts left by the failure count when it is the nearer', async () => {
     await service.generate(base)
     await fail(2)
     await service.generate(base)
-
-    expect(await service.verify({ ...base, code: WRONG })).toMatchObject({
-      reason: 'invalid_code',
-      remainingAttempts: 0
-    })
-  })
-
-  it('should never report fewer than zero attempts left', async () => {
-    await service.generate(base)
-    jest.spyOn(storage, 'recordFailure').mockResolvedValueOnce(9)
 
     expect(await service.verify({ ...base, code: WRONG })).toMatchObject({
       reason: 'invalid_code',
