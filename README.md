@@ -670,7 +670,7 @@ When integrating `@bymax-one/nest-notification` in production, verify each of th
 - `OtpService` keys its state on the recipient with surrounding whitespace trimmed and an email address lower-cased, so `Jane@Acme.com`, `jane@acme.com` and ` jane@acme.com` share one cooldown and one attempt counter; the message is still delivered to the address exactly as you pass it (RFC 5321 §2.4). A recipient that is not an email is only trimmed. Store and compare the same canonical form on your side
 - `otp.codeSecret` is set, from a secret store and not from the same place as the Redis credentials, so a reader of the store cannot test a guess against a stored code
 - `resendCooldownSeconds` and `defaultMaxAttempts` are tuned per purpose, not left at the defaults for high-value flows
-- Your own controller rate-limits the OTP endpoints — the library bounds attempts per code, not requests per IP
+- Your own controller rate-limits the OTP endpoints — the library bounds failed attempts per recipient and purpose, not requests per IP
 
 ---
 
