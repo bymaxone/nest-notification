@@ -105,6 +105,18 @@ export class RedisOtpStorage implements IOtpStorage {
     return cjson.encode({ status = 'ok', entry = entry })
   `
 
+  /**
+   * Atomic failure-counter primitive: one `INCR` and the lifetime refresh in a single script, so
+   * concurrent failures each receive a distinct count and the counter never outlives its window
+   * by a gap between the two commands.
+   */
+  // Stryker disable next-line StringLiteral: the Lua body executes only on a real Redis server; unit tests drive a JS fake whose `eval` recognises the script by its command, so an emptied-string mutant is unkillable without a live Redis integration run.
+  private static readonly RECORD_FAILURE_LUA = `
+    local count = redis.call('INCR', KEYS[1])
+    redis.call('EXPIRE', KEYS[1], tonumber(ARGV[1]))
+    return count
+  `
+
   /** Whether a Redis client was supplied.
    *
    * @returns `true` when a client is present.
@@ -261,9 +273,62 @@ export class RedisOtpStorage implements IOtpStorage {
     await this.#redis.del(this.cooldownKey(tenantId, recipient, purpose))
   }
 
+  /**
+   * Failed verifications recorded for the scope.
+   *
+   * @param tenantId - Tenant isolation scope.
+   * @param recipient - Pre-normalized recipient identifier.
+   * @param purpose - OTP purpose.
+   * @returns The count, or `0` when there is no counter.
+   */
+  async getFailures(tenantId: string, recipient: string, purpose: string): Promise<number> {
+    const raw = await this.#redis.get(this.failureKey(tenantId, recipient, purpose))
+    return raw === null ? 0 : Number.parseInt(raw, 10)
+  }
+
+  /**
+   * Adds one failed verification and restarts the counter's lifetime, atomically.
+   *
+   * @param tenantId - Tenant isolation scope.
+   * @param recipient - Pre-normalized recipient identifier.
+   * @param purpose - OTP purpose.
+   * @param ttlSeconds - How long the counter lives without another failure.
+   * @returns The new count.
+   */
+  async recordFailure(
+    tenantId: string,
+    recipient: string,
+    purpose: string,
+    ttlSeconds: number
+  ): Promise<number> {
+    const result = await this.#redis.eval(
+      RedisOtpStorage.RECORD_FAILURE_LUA,
+      1,
+      this.failureKey(tenantId, recipient, purpose),
+      Math.max(1, Math.ceil(ttlSeconds))
+    )
+    return Number(result)
+  }
+
+  /**
+   * Removes the failure counter. Idempotent.
+   *
+   * @param tenantId - Tenant isolation scope.
+   * @param recipient - Pre-normalized recipient identifier.
+   * @param purpose - OTP purpose.
+   */
+  async clearFailures(tenantId: string, recipient: string, purpose: string): Promise<void> {
+    await this.#redis.del(this.failureKey(tenantId, recipient, purpose))
+  }
+
   /** Builds the OTP entry key: `{namespace}:otp:{purpose}:{hashTenantRecipient(...)}`. */
   private otpKey(tenantId: string, recipient: string, purpose: string): string {
     return `${this.namespace}:otp:${purpose}:${hashTenantRecipient(tenantId, recipient)}`
+  }
+
+  /** Builds the failure-counter key: `{namespace}:otp_fail:{purpose}:{hashTenantRecipient(...)}`. */
+  private failureKey(tenantId: string, recipient: string, purpose: string): string {
+    return `${this.namespace}:otp_fail:${purpose}:${hashTenantRecipient(tenantId, recipient)}`
   }
 
   /** Builds the cooldown key: `{namespace}:otp_cd:{purpose}:{hashTenantRecipient(...)}`. */

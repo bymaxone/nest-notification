@@ -650,6 +650,16 @@ This is defence in depth, not a standards requirement: NIST SP 800-63B-4 require
 
 `consumeAttempt` is the only writer of the attempt counter, and `tryAcquireCooldown` (`SET NX EX`) is the only acquirer of the resend window — both inside the storage, in one indivisible step. A service-side `get` followed by an `update` looks equivalent and passes every sequential test, but two concurrent verifies read the same count and each writes back the same increment: five attempts become unbounded. The same shape lets two concurrent resends both pass the cooldown check.
 
+### Failed attempts survive a re-issue
+
+NIST SP 800-63B-4 §3.1.3.2: "Generating a new authentication secret SHALL NOT reset the failed authentication count." A per-code counter alone breaks that rule: three wrong guesses, a re-issue after the resend cooldown, and three more were accepted, so the attempt limit was only a rate limit of `defaultMaxAttempts` guesses per cooldown. The failed verifications of a `(tenant, recipient, purpose)` are now counted in the storage and a newly issued code starts with that count, capped at `defaultMaxAttempts`.
+
+- A wrong guess adds one failure and restarts the counter's lifetime to the purpose's code lifetime (`ttlSeconds`); a counter that is not touched for that long lapses, which starts the count again from zero.
+- A successful verification and `consume()` clear it, so the next flow starts with a full budget.
+- Once the count reaches the ceiling, a re-issued code is locked out at once: `verify()` returns `{ valid: false, reason: 'max_attempts' }` until the counter lapses. This also means that someone who keeps sending wrong guesses for a recipient keeps that recipient locked out, so rate-limit the OTP endpoints by IP in your controller.
+- `RedisOtpStorage` keeps the counter under `{namespace}:otp_fail:{purpose}:{hash}`, incremented by one script; `InMemoryOtpStorage` does the same in memory.
+- A custom `IOtpStorage` opts in by implementing three **optional** methods, `getFailures`, `recordFailure` and `clearFailures`; the executable contract in `./testing` checks them when they are present. Without them each code keeps a fresh budget, and one warning, `BYMAX_NOTIFICATION_OTP_FAILURES_NOT_CARRIED`, is logged at startup naming the deviation.
+
 ### Security Checklist
 
 When integrating `@bymax-one/nest-notification` in production, verify each of the following:

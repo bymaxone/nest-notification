@@ -1569,6 +1569,23 @@ export interface IOtpStorage {
   clearCooldown(tenantId: string, recipient: string, purpose: string): Promise<void>
 
   /**
+   * Optional trio — failed verifications that outlive a code (NIST SP 800-63B-4 §3.1.3.2:
+   * generating a new secret SHALL NOT reset the failed authentication count). `OtpService`
+   * seeds a newly issued code's `attempts` with `getFailures`, calls `recordFailure` on every
+   * wrong guess (atomic increment, lifetime reset to `ttlSeconds`), and `clearFailures` on a
+   * successful verification and on `consume()`. A storage that omits them keeps a fresh budget
+   * per code and a startup warning names the deviation.
+   */
+  getFailures?(tenantId: string, recipient: string, purpose: string): Promise<number>
+  recordFailure?(
+    tenantId: string,
+    recipient: string,
+    purpose: string,
+    ttlSeconds: number
+  ): Promise<number>
+  clearFailures?(tenantId: string, recipient: string, purpose: string): Promise<void>
+
+  /**
    * Indicates whether the storage is configured and ready to use.
    * Used in module initialization for validation.
    */

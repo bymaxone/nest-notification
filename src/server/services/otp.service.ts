@@ -18,7 +18,8 @@
  * time via `safeCompare`.
  */
 
-import { Inject, Injectable, Optional } from '@nestjs/common'
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common'
+import type { OnModuleInit } from '@nestjs/common'
 
 import {
   BYMAX_NOTIFICATION_LOG_REPOSITORY,
@@ -110,7 +111,10 @@ export interface OtpStatusResult {
 
 /** OTP generation, verification, consumption, and status. */
 @Injectable()
-export class OtpService {
+export class OtpService implements OnModuleInit {
+  private readonly logger = new Logger(OtpService.name)
+  private warnedFailuresNotCarried = false
+
   /**
    * @param options - The resolved, frozen module options.
    * @param storage - The configured OTP storage.
@@ -156,7 +160,16 @@ export class OtpService {
     await this.acquireCooldownOrThrow(scope, cfg.resendCooldownSeconds)
     const code = generateOtpCode(cfg.length, cfg.codeType)
     const expiresAt = Date.now() + cfg.ttlSeconds * MS_PER_SECOND
-    await this.persistAndDeliver(input, scope, code, expiresAt, cfg, otp.digestCode)
+    const entry: OtpEntry = {
+      // What the store holds is the digest when a secret is configured; the delivery
+      // carries the plaintext code the recipient has to type.
+      code: otp.digestCode ? otp.digestCode(code) : code,
+      expiresAt,
+      // The failures recorded for this recipient and purpose carry over to the new code.
+      attempts: await this.carriedFailures(scope, cfg.maxAttempts),
+      maxAttempts: cfg.maxAttempts
+    }
+    await this.persistAndDeliver(input, scope, code, entry, cfg)
     await this.audit(this.otpAuditEntry('generated', scope, undefined))
     return { expiresAt, cooldownSeconds: cfg.resendCooldownSeconds }
   }
@@ -185,6 +198,12 @@ export class OtpService {
     }
     const { entry } = result
     if (!this.matchesStoredCode(entry.code, scope.code, otp.digestCode)) {
+      await this.storage.recordFailure?.(
+        scope.tenantId,
+        scope.recipient,
+        scope.purpose,
+        otp.resolveForPurpose(scope.purpose).ttlSeconds
+      )
       await this.audit(this.otpAuditEntry('failed', scope, { reason: 'invalid_code' }))
       return {
         valid: false,
@@ -192,6 +211,7 @@ export class OtpService {
         remainingAttempts: entry.maxAttempts - entry.attempts
       }
     }
+    await this.storage.clearFailures?.(scope.tenantId, scope.recipient, scope.purpose)
     await this.finalizeVerifySuccess(scope, entry, otp.consumeOnVerify)
     return { valid: true }
   }
@@ -208,6 +228,7 @@ export class OtpService {
     const scope = this.keyed(input)
     await this.storage.delete(scope.tenantId, scope.recipient, scope.purpose)
     await this.storage.clearCooldown(scope.tenantId, scope.recipient, scope.purpose)
+    await this.storage.clearFailures?.(scope.tenantId, scope.recipient, scope.purpose)
   }
 
   /**
@@ -284,19 +305,11 @@ export class OtpService {
     input: OtpGenerateInput,
     scope: OtpGenerateInput,
     code: string,
-    expiresAt: number,
-    cfg: OtpPurposeConfig,
-    digestCode: ((code: string) => string) | undefined
+    entry: OtpEntry,
+    cfg: OtpPurposeConfig
   ): Promise<void> {
     try {
-      await this.storage.set(scope.tenantId, scope.recipient, scope.purpose, {
-        // What the store holds is the digest when a secret is configured; the delivery
-        // below carries the plaintext code the recipient has to type.
-        code: digestCode ? digestCode(code) : code,
-        expiresAt,
-        attempts: 0,
-        maxAttempts: cfg.maxAttempts
-      })
+      await this.storage.set(scope.tenantId, scope.recipient, scope.purpose, entry)
       await this.deliverOtp(input, code, cfg)
     } catch (error) {
       throw await this.failedOutgoing(scope, error, code)
@@ -342,6 +355,35 @@ export class OtpService {
       })
     )
     return outgoing
+  }
+
+  /**
+   * Warns once when the storage cannot carry failed attempts across a re-issue, naming the
+   * deviation from NIST SP 800-63B-4 §3.1.3.2 and the methods that remove it.
+   */
+  onModuleInit(): void {
+    const storage = this.storage
+    const carries =
+      storage.getFailures !== undefined &&
+      storage.recordFailure !== undefined &&
+      storage.clearFailures !== undefined
+    if (carries || this.warnedFailuresNotCarried) {
+      return
+    }
+    this.warnedFailuresNotCarried = true
+    this.logger.warn(
+      `[BYMAX_NOTIFICATION_OTP_FAILURES_NOT_CARRIED] The ${storage.name} OTP storage does not implement ` +
+        'getFailures, recordFailure and clearFailures, so issuing a new code gives it a fresh attempt budget; ' +
+        'NIST SP 800-63B-4 §3.1.3.2 says generating a new secret SHALL NOT reset the failed authentication count. ' +
+        'Implement the three optional methods to carry the count across re-issues.'
+    )
+  }
+
+  /** The failures already recorded for the scope, capped at what one code allows. */
+  private async carriedFailures(scope: OtpRecipientRef, maxAttempts: number): Promise<number> {
+    const failures =
+      (await this.storage.getFailures?.(scope.tenantId, scope.recipient, scope.purpose)) ?? 0
+    return Math.min(failures, maxAttempts)
   }
 
   /** How a generated code reaches the recipient: by email when asked or when an email channel exists. */

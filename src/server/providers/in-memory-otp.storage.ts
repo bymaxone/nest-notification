@@ -37,6 +37,54 @@ export class InMemoryOtpStorage implements IOtpStorage {
   private readonly store = new Map<string, OtpEntry>()
   /** Cooldown expiries (epoch ms) keyed by the same composite key. */
   private readonly cooldowns = new Map<string, number>()
+  /** Failed-verification counters and their expiry (epoch ms), keyed the same way. */
+  private readonly failures = new Map<string, { count: number; expiresAt: number }>()
+
+  /**
+   * Failed verifications recorded for the scope, or `0` once the counter has lapsed.
+   *
+   * @param tenantId - Tenant isolation scope.
+   * @param recipient - Pre-normalized recipient identifier.
+   * @param purpose - OTP purpose.
+   * @returns The count.
+   */
+  async getFailures(tenantId: string, recipient: string, purpose: string): Promise<number> {
+    return this.liveFailures(this.key(tenantId, recipient, purpose))
+  }
+
+  /**
+   * Adds one failed verification and restarts the counter's lifetime. Synchronous
+   * read-modify-write, so concurrent calls each see a distinct count.
+   *
+   * @param tenantId - Tenant isolation scope.
+   * @param recipient - Pre-normalized recipient identifier.
+   * @param purpose - OTP purpose.
+   * @param ttlSeconds - How long the counter lives without another failure.
+   * @returns The new count.
+   */
+  async recordFailure(
+    tenantId: string,
+    recipient: string,
+    purpose: string,
+    ttlSeconds: number
+  ): Promise<number> {
+    const key = this.key(tenantId, recipient, purpose)
+    // No await between the read and the write: that is what makes the increment atomic.
+    const count = this.liveFailures(key) + 1
+    this.failures.set(key, { count, expiresAt: Date.now() + ttlSeconds * MS_PER_SECOND })
+    return count
+  }
+
+  /**
+   * Removes the failure counter. Idempotent.
+   *
+   * @param tenantId - Tenant isolation scope.
+   * @param recipient - Pre-normalized recipient identifier.
+   * @param purpose - OTP purpose.
+   */
+  async clearFailures(tenantId: string, recipient: string, purpose: string): Promise<void> {
+    this.failures.delete(this.key(tenantId, recipient, purpose))
+  }
 
   /** Always ready — there is nothing to configure.
    *
@@ -206,6 +254,7 @@ export class InMemoryOtpStorage implements IOtpStorage {
   clear(): void {
     this.store.clear()
     this.cooldowns.clear()
+    this.failures.clear()
   }
 
   /**
@@ -226,6 +275,19 @@ export class InMemoryOtpStorage implements IOtpStorage {
    * the same string. The digest is fixed-length, so appending the purpose after it
    * stays unambiguous too.
    */
+  /** The unexpired failure count for a key, dropping a lapsed counter. Synchronous. */
+  private liveFailures(key: string): number {
+    const found = this.failures.get(key)
+    if (!found) {
+      return 0
+    }
+    if (found.expiresAt <= Date.now()) {
+      this.failures.delete(key)
+      return 0
+    }
+    return found.count
+  }
+
   private key(tenantId: string, recipient: string, purpose: string): string {
     return `${hashTenantRecipient(tenantId, recipient)}::${purpose}`
   }

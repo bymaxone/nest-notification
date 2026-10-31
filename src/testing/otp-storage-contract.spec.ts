@@ -29,6 +29,9 @@ const delegating = (inner: IOtpStorage, overrides: Partial<IOtpStorage>): IOtpSt
   tryAcquireCooldown: (...args) => inner.tryAcquireCooldown(...args),
   getCooldown: (...args) => inner.getCooldown(...args),
   clearCooldown: (...args) => inner.clearCooldown(...args),
+  ...(inner.getFailures ? { getFailures: inner.getFailures.bind(inner) } : {}),
+  ...(inner.recordFailure ? { recordFailure: inner.recordFailure.bind(inner) } : {}),
+  ...(inner.clearFailures ? { clearFailures: inner.clearFailures.bind(inner) } : {}),
   ...overrides
 })
 
@@ -61,7 +64,7 @@ describe('otpStorageContract', () => {
 
     // The count is part of the published promise, so it is asserted exactly:
     // a generic "more than zero" would pass with 12 of the 13 cases removed.
-    expect(cases).toHaveLength(21)
+    expect(cases).toHaveLength(27)
     expect(factory).not.toHaveBeenCalled()
   })
 
@@ -457,6 +460,168 @@ describe('otpStorageContract', () => {
         ).rejects.toThrow(violation.message)
       })
     }
+  })
+
+  // The failure-counter cases: each is pointed at a storage that violates exactly one obligation.
+  describe('the optional failure-counter cases', () => {
+    it('should catch a counter that does not count', async () => {
+      const inner = new InMemoryOtpStorage()
+      const flat = delegating(inner, { recordFailure: async (): Promise<number> => 1 })
+
+      await expect(runCase(flat, 'counts failures per scope')).rejects.toThrow(
+        /recordFailure returned 1,1,1 for three failures instead of 1,2,3/
+      )
+    })
+
+    it('should catch a tenant-blind failure counter', async () => {
+      const inner = new InMemoryOtpStorage()
+      const blind = delegating(inner, {
+        getFailures: (_t, r, p) => inner.getFailures('one', r, p),
+        recordFailure: (_t, r, p, ttl) => inner.recordFailure('one', r, p, ttl),
+        clearFailures: (_t, r, p) => inner.clearFailures('one', r, p)
+      })
+
+      await expect(runCase(blind, 'scopes the failure counter')).rejects.toThrow(
+        /a failure recorded for one tenant counted against another/
+      )
+    })
+
+    it('should catch a recipient-blind failure counter', async () => {
+      const inner = new InMemoryOtpStorage()
+      const blind = delegating(inner, {
+        getFailures: (t, _r, p) => inner.getFailures(t, 'one', p),
+        recordFailure: (t, _r, p, ttl) => inner.recordFailure(t, 'one', p, ttl),
+        clearFailures: (t, _r, p) => inner.clearFailures(t, 'one', p)
+      })
+
+      await expect(runCase(blind, 'scopes the failure counter')).rejects.toThrow(
+        /a failure recorded for one recipient counted against another/
+      )
+    })
+
+    it('should catch a purpose-blind failure counter', async () => {
+      const inner = new InMemoryOtpStorage()
+      const blind = delegating(inner, {
+        getFailures: (t, r) => inner.getFailures(t, r, 'one'),
+        recordFailure: (t, r, _p, ttl) => inner.recordFailure(t, r, 'one', ttl),
+        clearFailures: (t, r) => inner.clearFailures(t, r, 'one')
+      })
+
+      await expect(runCase(blind, 'scopes the failure counter')).rejects.toThrow(
+        /a failure recorded for one purpose counted against another/
+      )
+    })
+
+    it.each([':', '::'])('should catch a failure key joined around %s', async (delimiter) => {
+      const inner = new InMemoryOtpStorage()
+      const joined = delegating(inner, {
+        getFailures: (t, r, p) => inner.getFailures(`${t}${delimiter}${r}`, 'joined', p),
+        recordFailure: (t, r, p, ttl) =>
+          inner.recordFailure(`${t}${delimiter}${r}`, 'joined', p, ttl),
+        clearFailures: (t, r, p) => inner.clearFailures(`${t}${delimiter}${r}`, 'joined', p)
+      })
+
+      await expect(runCase(joined, 'composing a failure-counter key')).rejects.toThrow(
+        /a failure recorded for one tenant counted against another whose id and recipient differ only in where the boundary falls/
+      )
+    })
+
+    it('should catch a clear that does nothing', async () => {
+      const inner = new InMemoryOtpStorage()
+      const stuck = delegating(inner, { clearFailures: async (): Promise<void> => undefined })
+
+      await expect(runCase(stuck, 'clearFailures removes only its own')).rejects.toThrow(
+        /getFailures still counted failures after clearFailures/
+      )
+    })
+
+    it('should catch a clear that removes every counter', async () => {
+      class ClearsAll extends InMemoryOtpStorage {
+        override async clearFailures(): Promise<void> {
+          this['failures'].clear()
+        }
+      }
+
+      await expect(runCase(new ClearsAll(), 'clearFailures removes only its own')).rejects.toThrow(
+        /clearFailures removed the counter of another recipient/
+      )
+    })
+
+    it('should catch a counter that never lapses', async () => {
+      const inner = new InMemoryOtpStorage()
+      const everlasting = delegating(inner, {
+        recordFailure: (t, r, p) => inner.recordFailure(t, r, p, 60)
+      })
+
+      await expect(runCase(everlasting, 'a failure counter lapses')).rejects.toThrow(
+        /getFailures counted a failure whose lifetime had passed/
+      )
+    })
+
+    it('should catch a counter that does not start again after it lapses', async () => {
+      const inner = new InMemoryOtpStorage()
+      let calls = 0
+      const resuming = delegating(inner, {
+        // Reports a lapsed counter as empty but keeps counting from where it was.
+        getFailures: async (): Promise<number> => 0,
+        recordFailure: async (t, r, p, ttl): Promise<number> => {
+          calls += 1
+          return calls === 1 ? inner.recordFailure(t, r, p, ttl) : 7
+        }
+      })
+
+      await expect(runCase(resuming, 'a failure counter lapses')).rejects.toThrow(
+        /a lapsed counter did not start again from one/
+      )
+    })
+
+    it('should catch a non-atomic failure counter', async () => {
+      const inner = new InMemoryOtpStorage()
+      const racy = delegating(inner, {
+        // Read, then write after an await: concurrent failures all read the same count.
+        recordFailure: async (t, r, p, ttl): Promise<number> => {
+          const next = (await inner.getFailures(t, r, p)) + 1
+          await inner.clearFailures(t, r, p)
+          for (let i = 0; i < next; i += 1) {
+            await inner.recordFailure(t, r, p, ttl)
+          }
+          return next
+        }
+      })
+
+      await expect(runCase(racy, 'recordFailure is ATOMIC')).rejects.toThrow(
+        /concurrent failures produced only \d+ distinct counts/
+      )
+    })
+
+    // A storage that does not implement the optional methods is not failed by these cases:
+    // the deviation is reported by the service at startup, not by the contract.
+    it('should pass the cases vacuously for a storage without the methods', async () => {
+      const plain = delegating(new InMemoryOtpStorage(), {})
+      const without: IOtpStorage = {
+        name: plain.name,
+        isConfigured: () => plain.isConfigured(),
+        set: (...args) => plain.set(...args),
+        get: (...args) => plain.get(...args),
+        consumeAttempt: (...args) => plain.consumeAttempt(...args),
+        update: (...args) => plain.update(...args),
+        delete: (...args) => plain.delete(...args),
+        tryAcquireCooldown: (...args) => plain.tryAcquireCooldown(...args),
+        getCooldown: (...args) => plain.getCooldown(...args),
+        clearCooldown: (...args) => plain.clearCooldown(...args)
+      }
+
+      for (const name of [
+        'counts failures per scope',
+        'scopes the failure counter',
+        'composing a failure-counter key',
+        'clearFailures removes only its own',
+        'a failure counter lapses',
+        'recordFailure is ATOMIC'
+      ]) {
+        await expect(runCase(without, name)).resolves.toBeUndefined()
+      }
+    })
   })
 
   // The cleanup runs even when a case fails, so a violation in one case cannot
