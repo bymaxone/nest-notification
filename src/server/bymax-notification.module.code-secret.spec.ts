@@ -41,6 +41,9 @@ describe('plaintext OTP code storage warning', () => {
     const messages = warned().filter((m) => m.includes('otp.codeSecret'))
     expect(messages).toHaveLength(1)
     expect(messages[0]).toContain('plaintext')
+    // The remedy is part of the message: what to set, how long, and what it stores instead.
+    expect(messages[0]).toContain('at least 32 bytes')
+    expect(messages[0]).toContain('HMAC-SHA-256')
   })
 
   // With the secret the warning has nothing to say.
