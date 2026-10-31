@@ -49,8 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   A custom `IOtpStorage` opts in with three optional methods, `getFailures`, `recordFailure` and
   `clearFailures`; one without them behaves as before and the module logs one
   `BYMAX_NOTIFICATION_OTP_FAILURES_NOT_CARRIED` warning at startup. The executable contract in
-  `./testing` grew to 27 cases: six check the three methods when they are present (atomic
-  increment, scope and boundary of the key, lifetime, clearing) and pass trivially when they are
+  `./testing` checks the three methods when they are present and passes trivially when they are
   absent.
 - **New error code `notification.otp_manual_delivery_unavailable`** (400; 24 codes, up from 23).
   `generate()` never returns the code, so a manual delivery reads it back from the store, and a
@@ -67,7 +66,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   codes must be requested again. A custom `IOtpStorage` is unaffected, since `OtpEntry.code` is an
   opaque string. Set the secret from a secret store, not from the place the Redis credentials come
   from, or a reader of Redis gets both.
-- **A recipient who keeps failing stays locked out for as long as the failures keep coming.** With a
+- **A recipient at the failure ceiling stays locked out until the counter lapses.** With a
   storage that carries failures (the bundled ones), a recipient at the ceiling gets
   `{ valid: false, reason: 'max_attempts' }` for a re-issued code too, until the counter has not
   been touched for the purpose's code lifetime (10 minutes by default). Someone who sends wrong
