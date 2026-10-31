@@ -2850,7 +2850,7 @@ specification import `@sendgrid/mail`, `@aws-sdk/*`, `mailgun.js`, `handlebars`,
 
 ### 13.3 Dependencies
 
-The lib has **zero direct dependencies** (`"dependencies": {}`). The external functionality it loads is an optional peer dep (§13.2); an adapter you write brings its own SDK. Crypto comes from `node:crypto` (native, Node 24+).
+The lib has **zero direct dependencies** (`"dependencies": {}`). The external functionality it loads is a peer dep (§13.2), and the SDK of each bundled adapter is an optional one; an adapter you write brings its own SDK. Crypto comes from `node:crypto` (native, Node 24+).
 
 ### 13.4 Peer deps per subpath
 
