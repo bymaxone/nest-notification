@@ -133,6 +133,36 @@ export interface IOtpStorage {
    */
   clearCooldown(tenantId: string, recipient: string, purpose: string): Promise<void>
 
+  /**
+   * Optional. Verification attempts counted for `(tenant, recipient, purpose)`, or `0`.
+   *
+   * Together with {@link IOtpStorage.recordFailure} and {@link IOtpStorage.clearFailures} this
+   * makes the failed-attempt count outlive a code: NIST SP 800-63B-4 §3.1.3.2 says generating a
+   * new authentication secret "SHALL NOT reset the failed authentication count". `OtpService`
+   * counts each verification attempt against a live code with `recordFailure` before comparing it and refuses
+   * once the number it returns passes the attempt ceiling; this method is the read side of the
+   * same counter. A storage that omits the three keeps a fresh budget per code, and a warning at
+   * startup names the deviation.
+   */
+  getFailures?(tenantId: string, recipient: string, purpose: string): Promise<number>
+
+  /**
+   * Optional. Atomically adds one verification attempt and (re)sets the counter's lifetime to
+   * `ttlSeconds`, returning the new count. A counter that is not touched for `ttlSeconds`
+   * lapses, which starts the count again from zero.
+   *
+   * MUST be atomic (Redis: `INCR` and `EXPIRE` in one script).
+   */
+  recordFailure?(
+    tenantId: string,
+    recipient: string,
+    purpose: string,
+    ttlSeconds: number
+  ): Promise<number>
+
+  /** Optional. Removes the failure counter. Idempotent. Called on success and on `consume()`. */
+  clearFailures?(tenantId: string, recipient: string, purpose: string): Promise<void>
+
   /** Whether the storage is configured and ready. Used during module initialization. */
   isConfigured(): boolean
 

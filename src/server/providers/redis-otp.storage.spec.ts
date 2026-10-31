@@ -81,7 +81,19 @@ class FakeRedis implements RedisLike {
   }
 
   // Synchronous body → atomic, exactly like a real Redis EVAL.
-  async eval(_script: string, _numKeys: number, ...args: Array<string | number>): Promise<unknown> {
+  /** `INCR` plus `EXPIRE`, synchronous like the script on a real server. */
+  private incrWithExpiry(key: string, ttlSeconds: number): number {
+    this.evict(key)
+    const count = Number(this.data.get(key) ?? '0') + 1
+    this.data.set(key, String(count))
+    this.expiries.set(key, Date.now() + ttlSeconds * MS)
+    return count
+  }
+
+  async eval(script: string, _numKeys: number, ...args: Array<string | number>): Promise<unknown> {
+    if (script.includes("'INCR'")) {
+      return this.incrWithExpiry(String(args[0]), Number(args[1]))
+    }
     const key = String(args[0])
     const now = Number(args[1])
     this.evict(key)
@@ -336,6 +348,67 @@ describe('RedisOtpStorage', () => {
   it('should treat delete as idempotent', async () => {
     await expect(storage.delete(T, R, P)).resolves.toBeUndefined()
   })
+  // The failure counter is atomic: concurrent failures each see a distinct count.
+  it('should count concurrent failures without losing one', async () => {
+    const counts = await Promise.all(
+      Array.from({ length: 6 }, () => storage.recordFailure(T, R, P, 600))
+    )
+
+    expect([...counts].sort((x, y) => x - y)).toEqual([1, 2, 3, 4, 5, 6])
+    expect(await storage.getFailures(T, R, P)).toBe(6)
+  })
+
+  // The counter lives under its own namespaced key, apart from the entry and the cooldown.
+  it('should keep the counter under an otp_fail key in the namespace', async () => {
+    await storage.recordFailure(T, R, P, 600)
+
+    const keys = redis.dump()
+    expect(keys).toHaveLength(1)
+    expect(keys[0]).toMatch(new RegExp(`^notification:otp_fail:${P}:[0-9a-f]{64}$`))
+    expect(keys[0]).toBe(`notification:otp_fail:${P}:${hashTenantRecipient(T, R)}`)
+  })
+
+  // Each failure restarts the lifetime, and a lapsed counter reads as zero.
+  it('should refresh the counter lifetime and read zero once it lapses', async () => {
+    jest.useFakeTimers()
+    try {
+      await storage.recordFailure(T, R, P, 10)
+      jest.advanceTimersByTime(8 * MS)
+      await storage.recordFailure(T, R, P, 10)
+      jest.advanceTimersByTime(8 * MS)
+
+      expect(await storage.getFailures(T, R, P)).toBe(2)
+
+      jest.advanceTimersByTime(3 * MS)
+
+      expect(await storage.getFailures(T, R, P)).toBe(0)
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  // The script receives a whole, positive number of seconds.
+  it('should round a fractional or non-positive lifetime up to a whole second', async () => {
+    const spy = jest.spyOn(redis, 'eval')
+
+    await storage.recordFailure(T, R, P, 0.2)
+    await storage.recordFailure(T, R, P, -5)
+
+    expect(spy.mock.calls.map((call) => call[3])).toEqual([1, 1])
+  })
+
+  // Clearing removes only this scope's counter and is idempotent.
+  it('should clear only its own counter and tolerate a missing one', async () => {
+    await storage.recordFailure(T, R, P, 600)
+    await storage.recordFailure(T, 'other@acme.com', P, 600)
+
+    await storage.clearFailures(T, R, P)
+    await expect(storage.clearFailures(T, R, P)).resolves.toBeUndefined()
+
+    expect(await storage.getFailures(T, R, P)).toBe(0)
+    expect(await storage.getFailures(T, 'other@acme.com', P)).toBe(1)
+  })
+
   it('keeps the Redis client out of every serialization path', () => {
     // An ioredis instance carries `options.password` as a plain field, so a
     // storage that exposes its client leads a logger or an error reporter

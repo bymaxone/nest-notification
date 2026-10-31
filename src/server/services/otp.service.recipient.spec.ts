@@ -64,13 +64,13 @@ describe('OtpService recipient normalization', () => {
       if (!result.valid) reasons.push(result.reason)
     }
 
-    // Three guesses in total, then the entry is locked out and removed.
+    // Three guesses in total; after that the recipient is locked out, whatever the spelling.
     expect(reasons).toEqual([
       'invalid_code',
       'invalid_code',
       'invalid_code',
       'max_attempts',
-      'not_found'
+      'max_attempts'
     ])
   })
 

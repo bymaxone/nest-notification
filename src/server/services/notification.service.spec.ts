@@ -1,23 +1,18 @@
-import type {
-  EmailSendInput,
-  EmailSendTemplateInput,
-  EmailService
-} from './email.service'
+import type { EmailSendInput, EmailSendTemplateInput, EmailService } from './email.service'
 import { NotificationService } from './notification.service'
-import type {
-  OtpConsumeInput,
-  OtpGenerateInput,
-  OtpService,
-  OtpVerifyInput
-} from './otp.service'
+import type { OtpConsumeInput, OtpGenerateInput, OtpService, OtpVerifyInput } from './otp.service'
 
-const makeEmail = (): jest.Mocked<Pick<EmailService, 'send' | 'sendTemplate' | 'isConfigured'>> => ({
+const makeEmail = (): jest.Mocked<
+  Pick<EmailService, 'send' | 'sendTemplate' | 'isConfigured'>
+> => ({
   send: jest.fn(async (_input: EmailSendInput) => ({ messageId: 'raw_1' })),
   sendTemplate: jest.fn(async (_input: EmailSendTemplateInput) => ({ messageId: 'tpl_1' })),
   isConfigured: jest.fn((): boolean => true)
 })
 
-const makeOtp = (): jest.Mocked<Pick<OtpService, 'generate' | 'verify' | 'consume' | 'isConfigured'>> => ({
+const makeOtp = (): jest.Mocked<
+  Pick<OtpService, 'generate' | 'verify' | 'consume' | 'isConfigured'>
+> => ({
   generate: jest.fn(async (_input: OtpGenerateInput) => ({ expiresAt: 1, cooldownSeconds: 60 })),
   verify: jest.fn(async (_input: OtpVerifyInput) => ({ valid: true as const })),
   consume: jest.fn(async (_input: OtpConsumeInput): Promise<void> => undefined),
@@ -151,7 +146,11 @@ describe('NotificationService.dispatch — email', () => {
   it('should throw EMAIL_MISSING_BODY when the payload has no body source', async () => {
     expect.assertions(2)
     try {
-      await build(makeEmail()).dispatch({ channel: 'email', tenantId: 't', payload: { to: 'a@x.com' } })
+      await build(makeEmail()).dispatch({
+        channel: 'email',
+        tenantId: 't',
+        payload: { to: 'a@x.com' }
+      })
     } catch (error) {
       expect((error as { code: string }).code).toBe('notification.email_missing_body')
       const details = (
@@ -164,7 +163,11 @@ describe('NotificationService.dispatch — email', () => {
   // A subject without html is still a missing body source.
   it('should throw EMAIL_MISSING_BODY when only subject is provided', async () => {
     await expect(
-      build(makeEmail()).dispatch({ channel: 'email', tenantId: 't', payload: { to: 'a@x.com', subject: 'S' } })
+      build(makeEmail()).dispatch({
+        channel: 'email',
+        tenantId: 't',
+        payload: { to: 'a@x.com', subject: 'S' }
+      })
     ).rejects.toMatchObject({ code: 'notification.email_missing_body' })
   })
 

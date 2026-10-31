@@ -27,7 +27,22 @@
 
 import { randomUUID } from 'node:crypto'
 
+import {
+  failureAtomicCase,
+  failureBoundaryCase,
+  failureClearCase,
+  failureCountCase,
+  failureScopeCase,
+  failureTtlCase
+} from './otp-storage-contract.failures'
+import { RACERS, check, wait } from './otp-storage-contract.shared'
+import type {
+  ContractContext,
+  ContractScope,
+  OtpStorageContractCase
+} from './otp-storage-contract.shared'
 import type { IOtpStorage, OtpEntry } from '../server/interfaces/otp-storage.interface'
+export type { OtpStorageContractCase } from './otp-storage-contract.shared'
 
 // The identifiers below are arbitrary fixtures: every case reads and writes
 // through the same values, so their SPELLING cannot change an outcome — only
@@ -46,39 +61,6 @@ const ANY_CODE = '111111'
 /** A second, distinct code, for the cases that must tell two entries apart. */
 const OTHER_CODE = '222222'
 // Stryker restore StringLiteral
-
-/**
- * Names the keys one contract run owns.
- *
- * Two suites running in parallel against one backend — a runner executing test
- * files concurrently is the ordinary case — would otherwise write and clean up
- * the same keys, and each would see the other's state as a violation. A random
- * scope per invocation keeps runs independent without asking the caller to
- * arrange it.
- */
-interface ContractScope {
-  tenantA: string
-  tenantB: string
-  recipient: string
-  absentRecipient: string
-  purpose: string
-  otherPurpose: string
-  /**
-   * Two `(tenant, recipient)` splits of the same characters, one per delimiter a
-   * raw join might use. A key built as `${tenant}${delimiter}${recipient}` maps both
-   * members of a shift onto one string, and a single delimiter only catches the
-   * joins that use exactly it.
-   */
-  boundaryShifts: readonly BoundaryShift[]
-}
-
-/** The same characters split at two different positions. */
-interface BoundaryShift {
-  /** The pair whose delimiter sits one field to the left. */
-  left: readonly [string, string]
-  /** The pair with the delimiter one field to the right. */
-  right: readonly [string, string]
-}
 
 /**
  * Builds a fresh, collision-free scope for one `otpStorageContract()` call.
@@ -108,14 +90,6 @@ function makeScope(): ContractScope {
 }
 // Stryker restore StringLiteral
 
-/** One executable obligation. `run` throws when the storage violates it. */
-export interface OtpStorageContractCase {
-  /** What the case checks, suitable as a test title. */
-  name: string
-  /** Runs the case against a fresh storage; throws on violation. */
-  run: () => Promise<void>
-}
-
 /** How the contract obtains a storage to exercise. */
 export type OtpStorageFactory = () => IOtpStorage | Promise<IOtpStorage>
 
@@ -132,33 +106,9 @@ export interface OtpStorageContractOptions {
 /** Default wait for the TTL cases: past Redis's one-second expiry granularity. */
 const DEFAULT_EXPIRY_WAIT_MS = 1_500
 
-/** Concurrency used by the atomicity cases — enough to lose a race that exists. */
-const RACERS = 25
-
-/** What every case is handed: the keys it owns and how to obtain a storage. */
-interface ContractContext {
-  scope: ContractScope
-  expiryWaitMs: number
-  withStorage: (body: (storage: IOtpStorage) => Promise<void>) => Promise<void>
-}
-
 /** Builds an entry that expires `ttlMs` from now. */
 function makeEntry(ttlMs: number, maxAttempts = 3, code: string = ANY_CODE): OtpEntry {
   return { code, expiresAt: Date.now() + ttlMs, attempts: 0, maxAttempts }
-}
-
-/** Throws with `message` when `condition` does not hold. */
-function check(condition: boolean, message: string): void {
-  if (!condition) {
-    throw new Error(`IOtpStorage contract violated: ${message}`)
-  }
-}
-
-/** Resolves after `ms`, used only by the TTL cases. */
-function wait(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms)
-  })
 }
 
 /** Removes every key a case may have written, whether or not it threw. */
@@ -173,10 +123,13 @@ async function cleanUp(storage: IOtpStorage, scope: ContractScope): Promise<void
     await storage.clearCooldown(tenant, scope.recipient, purpose)
     await storage.delete(tenant, scope.absentRecipient, purpose)
     await storage.clearCooldown(tenant, scope.absentRecipient, purpose)
+    await storage.clearFailures?.(tenant, scope.recipient, purpose)
+    await storage.clearFailures?.(tenant, scope.absentRecipient, purpose)
   }
   for (const [tenant, recipient] of scope.boundaryShifts.flatMap((s) => [s.left, s.right])) {
     await storage.delete(tenant, recipient, scope.purpose)
     await storage.clearCooldown(tenant, recipient, scope.purpose)
+    await storage.clearFailures?.(tenant, recipient, scope.purpose)
   }
 }
 
@@ -646,7 +599,13 @@ const CASE_BUILDERS = [
   cooldownPurposeScopeCase,
   cooldownAtomicCase,
   keyBoundaryCase,
-  cooldownKeyBoundaryCase
+  cooldownKeyBoundaryCase,
+  failureCountCase,
+  failureScopeCase,
+  failureBoundaryCase,
+  failureClearCase,
+  failureTtlCase,
+  failureAtomicCase
 ] as const
 
 /**
