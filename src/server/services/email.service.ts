@@ -42,6 +42,7 @@ import {
   readRedactedMessage,
   scrubValuesFromErrorChain
 } from '../utils/redact'
+import { assertIdentifies } from '../utils/tenant-scope'
 
 /** Locale used as the fallback when the requested locale has no template. */
 const FALLBACK_LOCALE = 'en'
@@ -202,11 +203,13 @@ export class EmailService {
    *
    * @param input - The message envelope and rendered body.
    * @returns The provider's message id.
-   * @throws NotificationException `EMAIL_PROVIDER_NOT_CONFIGURED`, `EMAIL_ATTACHMENTS_TOO_LARGE`,
+   * @throws NotificationException `EMAIL_PROVIDER_NOT_CONFIGURED`, `INVALID_SCOPE_IDENTIFIER`
+   * (a blank tenant or one with a control character), `EMAIL_ATTACHMENTS_TOO_LARGE`,
    * `EMAIL_SEND_FAILED`, or `AUDIT_LOG_FAILED` (only when `audit.swallowErrors` is `false`).
    */
   async send(input: EmailSendInput): Promise<{ messageId: string }> {
     const email = this.requireEmailOptions()
+    assertIdentifies('EmailService', 'tenantId', input.tenantId)
     this.guardAttachmentSize(input.attachments, email.maxAttachmentBytes)
     const sendOptions = this.buildSendOptions(input, email)
     const recipient = this.maskRecipients(input.to)
@@ -275,6 +278,7 @@ export class EmailService {
    * `TEMPLATE_RENDER_FAILED` (the renderer threw), plus anything {@link EmailService.send} throws.
    */
   async sendTemplate(input: EmailSendTemplateInput): Promise<{ messageId: string }> {
+    assertIdentifies('EmailService', 'tenantId', input.tenantId)
     const requestedLocale = input.locale ?? this.options.global.defaultLocale
     const locale = await this.resolveTemplateLocale(input.template, requestedLocale)
     const rendered = await this.renderTemplate(
