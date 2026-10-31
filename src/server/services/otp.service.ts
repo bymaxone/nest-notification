@@ -157,6 +157,9 @@ export class OtpService implements OnModuleInit {
     const scope = this.keyed(input)
     this.assertDeliverable(input, otp.digestCode)
     const cfg = otp.resolveForPurpose(input.purpose)
+    // Read before the cooldown is taken: a failed read must not leave it held with no live code.
+    // The failures recorded for this recipient and purpose carry over to the new code.
+    const attempts = await this.carriedFailures(scope, cfg.maxAttempts)
     await this.acquireCooldownOrThrow(scope, cfg.resendCooldownSeconds)
     const code = generateOtpCode(cfg.length, cfg.codeType)
     const expiresAt = Date.now() + cfg.ttlSeconds * MS_PER_SECOND
@@ -165,8 +168,7 @@ export class OtpService implements OnModuleInit {
       // carries the plaintext code the recipient has to type.
       code: otp.digestCode ? otp.digestCode(code) : code,
       expiresAt,
-      // The failures recorded for this recipient and purpose carry over to the new code.
-      attempts: await this.carriedFailures(scope, cfg.maxAttempts),
+      attempts,
       maxAttempts: cfg.maxAttempts
     }
     await this.persistAndDeliver(input, scope, code, entry, cfg)

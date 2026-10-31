@@ -137,6 +137,20 @@ describe('OtpService failed attempts across re-issues', () => {
     }
   })
 
+  // A failing counter read must not leave the recipient behind a cooldown with no live code.
+  it('should not hold the resend cooldown when the failure count cannot be read', async () => {
+    const cooled = new OtpService(
+      makeOptions({ defaultMaxAttempts: 3, resendCooldownSeconds: 60 }),
+      storage,
+      audit
+    )
+    jest.spyOn(storage, 'getFailures').mockRejectedValueOnce(new Error('store unavailable'))
+
+    await expect(cooled.generate(base)).rejects.toThrow('store unavailable')
+
+    await expect(cooled.generate(base)).resolves.toMatchObject({ cooldownSeconds: 60 })
+  })
+
   describe('a storage without the failure methods', () => {
     /** A storage that implements the required contract only. */
     class PlainStorage extends InMemoryOtpStorage {
