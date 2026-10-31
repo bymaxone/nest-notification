@@ -62,8 +62,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A live OTP issued to a recipient with uppercase letters or surrounding whitespace is re-keyed.**
   The code was stored under the old key, so verifying it after the upgrade reports `not_found`
   until the user asks for a new code. The window is the code's TTL (10 minutes by default).
+- **`getEmail()`, `getOtp()` and `dispatch` refuse a configured-but-unusable channel with 501.** Code
+  that branched on `notification.email_provider_not_configured` (500) from a `dispatch` or from a
+  send made through `getEmail()` now sees `notification.channel_disabled` (501) there; a send made
+  on an injected `EmailService` still raises the former.
 - **A caller that passed a blank `tenantId` to `EmailService` now gets a 400.** Pass the tenant the
   email belongs to.
+
+### Changed
+
+- **A channel that is configured but unusable is refused the way `getEnabledChannels()` omits it.**
+  When the email provider or the OTP storage reports `isConfigured() === false` (a Resend client
+  without its key, an SMTP relay without a host), `getEnabledChannels()` already left the channel
+  out, yet `getEmail()` and `getOtp()` still returned the service and the first send failed later.
+  They now throw `notification.channel_disabled` (501) with `details.reason`
+  (`provider_not_configured` or `storage_not_configured`), and a `dispatch` to that channel is
+  refused the same way. The module also logs one `BYMAX_NOTIFICATION_CHANNEL_NOT_USABLE` warning
+  per such channel at startup, from `forRoot` and `forRootAsync`. Failing the boot instead is not
+  done: an application that starts without its secrets (a preview, a CI job) keeps starting.
 
 ### Documentation
 
@@ -77,6 +93,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `BymaxNotificationModule.forRoot` after importing only a type, so pasted as written it did not
   compile.
 
+- **README: every error code, who raises it, and which are reserved.** A table lists the 24 codes with
+  their HTTP status and the component that throws them. Eleven are marked reserved because the
+  library never throws them: the four OTP verify outcomes (`verify()` returns the reason instead),
+  `email_invalid_recipient` (the recipient is not validated), and the SMS and push codes.
+- **README: the options and members that were only in the technical specification.**
+  `consumeOnVerify`, `defaultFromName`, `defaultReplyTo` and `defaultTags` join the Configuration
+  table; the `DefaultTemplateRenderer` options, the `EmailService.send` and `OtpService.generate`
+  inputs, the `useOtpInput` and `useOtpCountdown` options, the injection tokens,
+  `InMemoryOtpStorage.size()` and the `otpStorageContract` usage example are documented.
+
 ### Tests
 
 - **The README's option-default tables are held to the code.** Two specs parse the Configuration
@@ -88,6 +114,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   others; compiles snippets that do not import the package too; and types the names
   the prose introduces in `scripts/readme-prelude.d.ts`, so a wrong method, option or destructured
   field is an error instead of a call through `any`.
+- **The error table and the renderer options are held to the code.** One spec compares the README
+  error table with the catalog and with the source: a code is reserved exactly when no file
+  constructs a `NotificationException` with it. Another builds a `DefaultTemplateRenderer` without
+  each option and checks the documented default.
 
 ## [1.4.1] - 2026-10-30
 
