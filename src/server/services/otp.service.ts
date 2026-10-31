@@ -99,6 +99,23 @@ export interface OtpGenerateResult {
   cooldownSeconds: number
 }
 
+/** A storage that implements all three optional failure methods, which only work together. */
+type FailureCarryingStorage = IOtpStorage &
+  Required<Pick<IOtpStorage, 'getFailures' | 'recordFailure' | 'clearFailures'>>
+
+/**
+ * Whether the storage carries failed attempts across a re-issue. Counting without the means to
+ * read and clear the count would lock a recipient out for good, so a storage with only some of
+ * the methods is treated as having none.
+ */
+function carriesFailures(storage: IOtpStorage): storage is FailureCarryingStorage {
+  return (
+    storage.getFailures !== undefined &&
+    storage.recordFailure !== undefined &&
+    storage.clearFailures !== undefined
+  )
+}
+
 /** Result of {@link OtpService.getStatus} — never carries the plaintext code. */
 export interface OtpStatusResult {
   exists: boolean
@@ -376,11 +393,7 @@ export class OtpService implements OnModuleInit {
    */
   onModuleInit(): void {
     const storage = this.storage
-    const carries =
-      storage.getFailures !== undefined &&
-      storage.recordFailure !== undefined &&
-      storage.clearFailures !== undefined
-    if (carries || this.warnedFailuresNotCarried) {
+    if (carriesFailures(storage) || this.warnedFailuresNotCarried) {
       return
     }
     this.warnedFailuresNotCarried = true
@@ -402,14 +415,15 @@ export class OtpService implements OnModuleInit {
     scope: OtpRecipientRef,
     ttlSeconds: number
   ): Promise<number | null | undefined> {
-    if (this.storage.recordFailure === undefined) {
+    const storage = this.storage
+    if (!carriesFailures(storage)) {
       return undefined
     }
-    const live = await this.storage.get(scope.tenantId, scope.recipient, scope.purpose)
+    const live = await storage.get(scope.tenantId, scope.recipient, scope.purpose)
     if (live === null) {
       return null
     }
-    return this.storage.recordFailure(scope.tenantId, scope.recipient, scope.purpose, ttlSeconds)
+    return storage.recordFailure(scope.tenantId, scope.recipient, scope.purpose, ttlSeconds)
   }
 
   /** How a generated code reaches the recipient: by email when asked or when an email channel exists. */

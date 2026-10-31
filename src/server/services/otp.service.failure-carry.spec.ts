@@ -324,6 +324,29 @@ describe('OtpService failed attempts across re-issues', () => {
       expect(messages[0]).toContain('800-63B')
     })
 
+    // Counting without the means to clear would lock a recipient out for good after enough
+    // successes, so a storage with only some of the methods is not counted at all.
+    it('should not count attempts against a storage that cannot clear them', async () => {
+      const partial = new InMemoryOtpStorage()
+      Object.defineProperty(partial, 'clearFailures', { value: undefined })
+      const legacy = new OtpService(
+        makeOptions({ defaultMaxAttempts: 3, resendCooldownSeconds: 0 }),
+        partial,
+        audit
+      )
+      await legacy.generate(base)
+      await legacy.verify({ ...base, code: WRONG })
+      await legacy.verify({ ...base, code: WRONG })
+      const stored = await partial.get('acme', ref.recipient, ref.purpose)
+      await legacy.verify({ ...base, code: stored?.code ?? '' })
+
+      await legacy.generate(base)
+      const next = await partial.get('acme', ref.recipient, ref.purpose)
+
+      expect(await legacy.verify({ ...base, code: next?.code ?? '' })).toEqual({ valid: true })
+      expect(await partial.getFailures('acme', ref.recipient, ref.purpose)).toBe(0)
+    })
+
     // The three methods are one obligation: a storage with only some of them still deviates.
     it.each([['getFailures'], ['recordFailure'], ['clearFailures']] as const)(
       'should warn when only %s is missing',
