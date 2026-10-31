@@ -69,6 +69,11 @@ export const NOTIFICATION_ERROR_DEFINITIONS = {
     status: HttpStatus.INTERNAL_SERVER_ERROR,
     message: 'OTP email delivery requested but email channel not configured'
   },
+  OTP_MANUAL_DELIVERY_UNAVAILABLE: {
+    code: NOTIFICATION_ERROR_CODES.OTP_MANUAL_DELIVERY_UNAVAILABLE,
+    status: HttpStatus.BAD_REQUEST,
+    message: 'OTP manual delivery is unavailable while otp.codeSecret is set'
+  },
   OTP_COOLDOWN_ACTIVE: {
     code: NOTIFICATION_ERROR_CODES.OTP_COOLDOWN_ACTIVE,
     status: HttpStatus.TOO_MANY_REQUESTS,

@@ -27,8 +27,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   identifier reaches the consumer's audit sink and log lines verbatim and forges a second record;
   no legitimate identifier contains one. The refusal never echoes the value.
 
+- **An OTP code can be stored as a keyed digest instead of in plaintext.** `OtpEntry.code` held the
+  code itself, so anyone able to read Redis saw every live code. The new optional
+  `otp.codeSecret` (a string of at least 32 UTF-8 bytes, validated at startup, kept with the
+  application and not in the store) makes `OtpService` store `hmac-sha256:v1:<hex>`, an HMAC-SHA-256
+  of the code, and compare a guess in constant time. It is defence in depth: NIST SP 800-63B-4
+  requires hashing for look-up secrets and a separately stored key for password verifiers, and
+  says nothing about an out-of-band code. A plain hash would not do, since a six-digit code is
+  recovered by trying a million values. Without the option nothing changes except one startup
+  warning that codes are stored in plaintext. The delivered email still carries the plaintext
+  code, the audit entry carries neither form, and the secret is not a property of the resolved
+  options.
+- **New error code `notification.otp_manual_delivery_unavailable`** (400; 24 codes, up from 23).
+  `generate()` never returns the code, so a manual delivery reads it back from the store, and a
+  store that holds a digest has nothing to hand over. With `otp.codeSecret` set, a manual
+  delivery (`deliverVia: 'manual'`, or the default when no email channel is configured) is refused
+  before the cooldown is taken or anything is stored, instead of succeeding with a code nobody can
+  deliver.
+
 ### ⚠️ Apply before upgrading
 
+- **`otp.codeSecret` is opt-in and loses no live code.** An entry stored in plaintext before the
+  secret was set still verifies until it expires. Changing the secret, removing it, or
+  downgrading below this version leaves the stored digests unverifiable (`invalid_code`): those
+  codes must be requested again. A custom `IOtpStorage` is unaffected, since `OtpEntry.code` is an
+  opaque string. Set the secret from a secret store, not from the place the Redis credentials come
+  from, or a reader of Redis gets both.
+- **`otp.codeSecret` and manual delivery do not combine.** Where a flow delivers the code itself
+  (`deliverVia: 'manual'`, or no email channel), leave the secret unset or move that flow to email
+  delivery; a development setup that reads the code from the store keeps `codeSecret` unset.
+- **A module with the OTP channel and no `otp.codeSecret` logs one warning at startup** (from
+  `forRoot` and `forRootAsync`). Set the option, or filter the log line
+  `BYMAX_NOTIFICATION_PLAINTEXT_OTP_CODES` if plaintext storage is a decision you have made.
 - **A live OTP issued to a recipient with uppercase letters or surrounding whitespace is re-keyed.**
   The code was stored under the old key, so verifying it after the upgrade reports `not_found`
   until the user asks for a new code. The window is the code's TTL (10 minutes by default).

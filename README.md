@@ -79,7 +79,7 @@ pnpm add @bymax-one/nest-notification
 ### 🧩 Developer Experience
 
 - ✅ **Subpaths** — server, zero-dependency shared types, React hooks, and a `testing` storage contract
-- ✅ **Stable error catalog** — 23 namespaced codes shared byte-for-byte between server and frontend, so you localize on the `code`
+- ✅ **Stable error catalog** — 24 namespaced codes shared byte-for-byte between server and frontend, so you localize on the `code`
 - ✅ **Dual-format output** — ESM + CJS + declarations for both, verified against the packed tarball on every PR
 - ✅ **Typed end to end** — TypeScript `strict` with `exactOptionalPropertyTypes` and `noUncheckedIndexedAccess`; zero `any`
 
@@ -502,25 +502,26 @@ if (error.code === NOTIFICATION_ERROR_CODES.OTP_MAX_ATTEMPTS_EXCEEDED) {
 
 Configure via `forRoot(options)` or `forRootAsync({ useFactory })`. **At least one channel must be configured**, and configuring a channel the library does not implement throws at startup rather than failing on the first send. The full reference is in [`docs/technical_specification.md` §4](./docs/technical_specification.md); the most-used options:
 
-| Section  | Option                  | Default          | Notes                                            |
-| -------- | ----------------------- | ---------------- | ------------------------------------------------ |
-| `global` | `redisNamespace`        | `'notification'` | Prefix for store keys.                           |
-| `global` | `defaultLocale`         | `'en'`           | Template locale fallback.                        |
-| `global` | `tenantIdResolver`      | —                | `(req) => tenantId`; the audit source of truth.  |
-| `email`  | `provider`              | — (required)     | Instance or class implementing `IEmailProvider`. |
-| `email`  | `defaultFrom`           | — (required)     | Must look like an email address.                 |
-| `email`  | `templateRenderer`      | default renderer | Any `IEmailTemplateRenderer`.                    |
-| `email`  | `maxAttachmentBytes`    | `10485760`       | 10 MiB attachment guard.                         |
-| `otp`    | `storage`               | — (required)     | Instance or class implementing `IOtpStorage`.    |
-| `otp`    | `defaultLength`         | `6`              | 1–32.                                            |
-| `otp`    | `defaultCodeType`       | `'numeric'`      | `numeric` \| `alpha` \| `alphanumeric`.          |
-| `otp`    | `defaultTtlSeconds`     | `600`            | Code lifetime.                                   |
-| `otp`    | `defaultMaxAttempts`    | `5`              | Verify attempts before lock-out.                 |
-| `otp`    | `resendCooldownSeconds` | `60`             | Anti-resend window (atomic `SET NX EX`).         |
-| `otp`    | `perPurpose`            | `{}`             | Per-purpose overrides of the above.              |
-| `audit`  | `repository`            | — (required)     | Any `INotificationLogRepository`.                |
-| `audit`  | `swallowErrors`         | `true`           | Keep audit failures out of the delivery path.    |
-| `audit`  | `maskRecipient`         | identity         | Minimize recipient PII before persisting.        |
+| Section  | Option                  | Default          | Notes                                                |
+| -------- | ----------------------- | ---------------- | ---------------------------------------------------- |
+| `global` | `redisNamespace`        | `'notification'` | Prefix for store keys.                               |
+| `global` | `defaultLocale`         | `'en'`           | Template locale fallback.                            |
+| `global` | `tenantIdResolver`      | —                | `(req) => tenantId`; the audit source of truth.      |
+| `email`  | `provider`              | — (required)     | Instance or class implementing `IEmailProvider`.     |
+| `email`  | `defaultFrom`           | — (required)     | Must look like an email address.                     |
+| `email`  | `templateRenderer`      | default renderer | Any `IEmailTemplateRenderer`.                        |
+| `email`  | `maxAttachmentBytes`    | `10485760`       | 10 MiB attachment guard.                             |
+| `otp`    | `storage`               | — (required)     | Instance or class implementing `IOtpStorage`.        |
+| `otp`    | `defaultLength`         | `6`              | 1–32.                                                |
+| `otp`    | `defaultCodeType`       | `'numeric'`      | `numeric` \| `alpha` \| `alphanumeric`.              |
+| `otp`    | `defaultTtlSeconds`     | `600`            | Code lifetime.                                       |
+| `otp`    | `defaultMaxAttempts`    | `5`              | Verify attempts before lock-out.                     |
+| `otp`    | `codeSecret`            | —                | Secret (>= 32 bytes) the stored code is keyed under. |
+| `otp`    | `resendCooldownSeconds` | `60`             | Anti-resend window (atomic `SET NX EX`).             |
+| `otp`    | `perPurpose`            | `{}`             | Per-purpose overrides of the above.                  |
+| `audit`  | `repository`            | — (required)     | Any `INotificationLogRepository`.                    |
+| `audit`  | `swallowErrors`         | `true`           | Keep audit failures out of the delivery path.        |
+| `audit`  | `maskRecipient`         | identity         | Minimize recipient PII before persisting.            |
 
 ---
 
@@ -631,7 +632,19 @@ The library **never** writes a code to a sink that can be read back:
 - Not inside an `errorMessage`, which carries the message only — never a stack trace.
 - Not inside a rethrown delivery error: the renderer and the provider both receive the code (template `data`, rendered body), so on a failed delivery every **literal** occurrence of the code — the form it was issued in, which is the form this library's own text carries — is scrubbed to `[redacted]` across the outgoing error chain — message **and** stack at every link, cycle-safe with no depth limit — before the audit write and the rethrow, and a non-`Error` rejection is flattened to a redacted string. The email channel's own `failed` audit entry goes further than redaction: OTP delivery sets `publishProviderText: false`, so that entry records the fixed label `[provider text withheld]` plus the SMTP reply codes a fixed grammar can express — never the provider's own words. It also declares the code via `auditRedactValues`, which stays as precision for the paths that do publish text. Default V8 stack frames carry only function names and source locations, never argument values; the header line (`Error: <message>`) is where a code could ride a stack, and the scrub covers it.
 
-Within this library, codes exist only inside the OTP store, under a TTL, and in process memory for the duration of the request — a provider that quotes the body back is outside that boundary, and its ceiling is documented under [Errors](#errors). `audit.maskRecipient` minimizes the recipient before it is persisted (`jane@acme.com` → `j***@acme.com`). A regression test asserts the invariant directly rather than trusting review: `JSON.stringify(auditEntry).includes(code) === false`.
+Within this library, codes exist only inside the OTP store, under a TTL (as a keyed digest when `otp.codeSecret` is set, see below), and in process memory for the duration of the request — a provider that quotes the body back is outside that boundary, and its ceiling is documented under [Errors](#errors). `audit.maskRecipient` minimizes the recipient before it is persisted (`jane@acme.com` → `j***@acme.com`). A regression test asserts the invariant directly rather than trusting review: `JSON.stringify(auditEntry).includes(code) === false`.
+
+### Stored codes are keyed digests when you set `otp.codeSecret`
+
+A code is short: a six-digit code has a million values, so a plain hash of it is recovered by trying all of them, in a fraction of a second, by anyone who can read the store. With `otp.codeSecret` set (a string of at least 32 bytes, kept with the application and never in Redis), the store holds `hmac-sha256:v1:<hex>`, an HMAC-SHA-256 of the code under that secret, and `verify()` recomputes it and compares in constant time. A reader of the store alone then holds nothing to test a guess against. The delivered email still carries the plaintext code, and the audit entry never carries either form.
+
+This is defence in depth, not a standards requirement: NIST SP 800-63B-4 requires hashed storage for look-up secrets (§3.1.2.2) and a keyed hash with the key "stored separately" for password verifiers (§3.1.1.2), and says nothing about hashing an out-of-band code (§3.1.3.2). The OWASP Password Storage Cheat Sheet describes the same shape for a low-entropy secret: an HMAC whose key is kept separately from the data.
+
+- **Unset** (the default): codes are stored in plaintext, and a warning is logged once at startup.
+- **Manual delivery is refused while it is set.** `generate()` never returns the code, so a manual delivery reads it back from the store, and a store that holds a digest has nothing to hand over. `generate({ deliverVia: 'manual' })`, or the default delivery when no email channel is configured, fails with `notification.otp_manual_delivery_unavailable` (400) before the cooldown is taken or anything is stored. Deliver by email, or leave `codeSecret` unset where you read the code from the store (a local development flow, for instance).
+- **Turning it on loses no live code.** An entry written in plaintext before the secret was set still verifies until it expires.
+- **Changing or removing the secret** makes the digests already stored unverifiable (`invalid_code`); those codes must be requested again. Downgrading the library below the version that introduced the option does the same.
+- A custom `IOtpStorage` is unaffected: `OtpEntry.code` is an opaque string to it.
 
 ### Attempt ceilings and cooldowns are atomic
 
@@ -645,6 +658,7 @@ When integrating `@bymax-one/nest-notification` in production, verify each of th
 - `audit.maskRecipient` is configured if audit rows are retained beyond the operational minimum
 - A custom `IOtpStorage` implements `consumeAttempt` and `tryAcquireCooldown` atomically
 - `OtpService` keys its state on the recipient with surrounding whitespace trimmed and an email address lower-cased, so `Jane@Acme.com`, `jane@acme.com` and ` jane@acme.com` share one cooldown and one attempt counter; the message is still delivered to the address exactly as you pass it (RFC 5321 §2.4). A recipient that is not an email is only trimmed. Store and compare the same canonical form on your side
+- `otp.codeSecret` is set, from a secret store and not from the same place as the Redis credentials, so a reader of the store cannot test a guess against a stored code
 - `resendCooldownSeconds` and `defaultMaxAttempts` are tuned per purpose, not left at the defaults for high-value flows
 - Your own controller rate-limits the OTP endpoints — the library bounds attempts per code, not requests per IP
 
@@ -757,7 +771,7 @@ pnpm mutation      # Stryker mutation testing
 | -------------------------------- | -------------------------------------------------------------------------- |
 | `NotificationException`          | `HttpException` carrying a stable `code`, a status, and optional `details` |
 | `NotificationExceptionOptions`   | Constructor options bag: `{ status?, message?, cause? }`                   |
-| `NOTIFICATION_ERROR_CODES`       | The 23 stable `notification.*` codes — branch on these, not on messages    |
+| `NOTIFICATION_ERROR_CODES`       | The 24 stable `notification.*` codes — branch on these, not on messages    |
 | `NOTIFICATION_ERROR_DEFINITIONS` | Server-side code → HTTP status + default English message                   |
 
 Error codes are namespaced (`notification.otp_invalid_code`, `notification.otp_cooldown_active`, `notification.email_send_failed`, …) and never change once published. Default messages are English; localize on the `code`.

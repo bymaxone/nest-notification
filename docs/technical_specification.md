@@ -839,6 +839,8 @@ export interface BymaxNotificationModuleOptions {
      * Default: false (caller calls `consume()` explicitly).
      */
     consumeOnVerify?: boolean
+    /** Secret (>= 32 UTF-8 bytes) under which the stored code is an HMAC-SHA-256 digest. Unset: plaintext + startup warning. */
+    codeSecret?: string
 
     /**
      * Per-purpose configurations. Each purpose can override
@@ -927,31 +929,32 @@ export interface NotificationRequest {
 
 ### 4.2 Options table with defaults
 
-| Option                      | Type                                     | Required                 | Default                   | Description                              |
-| --------------------------- | ---------------------------------------- | ------------------------ | ------------------------- | ---------------------------------------- |
-| `global.redisNamespace`     | `string`                                 | No                       | `'notification'`          | Redis key prefix                         |
-| `global.defaultLocale`      | `string`                                 | No                       | `'en'`                    | Default locale for templates             |
-| `global.tenantIdResolver`   | `function`                               | No                       | `undefined`               | tenantId resolver from Request           |
-| `email.provider`            | `IEmailProvider`                         | Yes (if `email` defined) | —                         | Email send adapter                       |
-| `email.defaultFrom`         | `string`                                 | Yes (if `email` defined) | —                         | Default from address                     |
-| `email.defaultFromName`     | `string`                                 | No                       | `undefined`               | Sender name                              |
-| `email.templateRenderer`    | `IEmailTemplateRenderer`                 | No                       | `DefaultTemplateRenderer` | Template renderer                        |
-| `email.defaultReplyTo`      | `string`                                 | No                       | `undefined`               | Default reply-to                         |
-| `email.defaultTags`         | `Array<{...}>`                           | No                       | `[]`                      | Default tags                             |
-| `email.maxAttachmentBytes`  | `number`                                 | No                       | `10485760`                | Max total attachment size (10 MiB)       |
-| `otp.storage`               | `IOtpStorage`                            | Yes (if `otp` defined)   | —                         | Storage backend                          |
-| `otp.defaultLength`         | `number`                                 | No                       | `6`                       | Default code length                      |
-| `otp.defaultCodeType`       | `'numeric' \| 'alpha' \| 'alphanumeric'` | No                       | `'numeric'`               | Code type                                |
-| `otp.defaultTtlSeconds`     | `number`                                 | No                       | `600`                     | OTP TTL (10 min)                         |
-| `otp.defaultMaxAttempts`    | `number`                                 | No                       | `5`                       | Maximum attempts                         |
-| `otp.resendCooldownSeconds` | `number`                                 | No                       | `60`                      | Cooldown between resends                 |
-| `otp.consumeOnVerify`       | `boolean`                                | No                       | `false`                   | Auto-consumes OTP on verify              |
-| `otp.perPurpose`            | `Record<...>`                            | No                       | `{}`                      | Overrides per purpose                    |
-| `sms.provider`              | `ISmsProvider`                           | Not implemented          | —                         | SMS adapter                              |
-| `push.provider`             | `IPushProvider`                          | Not implemented          | —                         | Push adapter                             |
-| `audit.repository`          | `INotificationLogRepository`             | Yes (if `audit` defined) | —                         | Log repository                           |
-| `audit.swallowErrors`       | `boolean`                                | No                       | `true`                    | Does not propagate audit errors          |
-| `audit.maskRecipient`       | `(s: string) => string`                  | No                       | identity                  | Masks recipient before audit write (PII) |
+| Option                      | Type                                     | Required                 | Default                   | Description                                    |
+| --------------------------- | ---------------------------------------- | ------------------------ | ------------------------- | ---------------------------------------------- |
+| `global.redisNamespace`     | `string`                                 | No                       | `'notification'`          | Redis key prefix                               |
+| `global.defaultLocale`      | `string`                                 | No                       | `'en'`                    | Default locale for templates                   |
+| `global.tenantIdResolver`   | `function`                               | No                       | `undefined`               | tenantId resolver from Request                 |
+| `email.provider`            | `IEmailProvider`                         | Yes (if `email` defined) | —                         | Email send adapter                             |
+| `email.defaultFrom`         | `string`                                 | Yes (if `email` defined) | —                         | Default from address                           |
+| `email.defaultFromName`     | `string`                                 | No                       | `undefined`               | Sender name                                    |
+| `email.templateRenderer`    | `IEmailTemplateRenderer`                 | No                       | `DefaultTemplateRenderer` | Template renderer                              |
+| `email.defaultReplyTo`      | `string`                                 | No                       | `undefined`               | Default reply-to                               |
+| `email.defaultTags`         | `Array<{...}>`                           | No                       | `[]`                      | Default tags                                   |
+| `email.maxAttachmentBytes`  | `number`                                 | No                       | `10485760`                | Max total attachment size (10 MiB)             |
+| `otp.storage`               | `IOtpStorage`                            | Yes (if `otp` defined)   | —                         | Storage backend                                |
+| `otp.defaultLength`         | `number`                                 | No                       | `6`                       | Default code length                            |
+| `otp.defaultCodeType`       | `'numeric' \| 'alpha' \| 'alphanumeric'` | No                       | `'numeric'`               | Code type                                      |
+| `otp.defaultTtlSeconds`     | `number`                                 | No                       | `600`                     | OTP TTL (10 min)                               |
+| `otp.defaultMaxAttempts`    | `number`                                 | No                       | `5`                       | Maximum attempts                               |
+| `otp.resendCooldownSeconds` | `number`                                 | No                       | `60`                      | Cooldown between resends                       |
+| `otp.consumeOnVerify`       | `boolean`                                | No                       | `false`                   | Auto-consumes OTP on verify                    |
+| `otp.codeSecret`            | `string` (>= 32 bytes)                   | No                       | — (plaintext + warning)   | Keys the stored code as `hmac-sha256:v1:<hex>` |
+| `otp.perPurpose`            | `Record<...>`                            | No                       | `{}`                      | Overrides per purpose                          |
+| `sms.provider`              | `ISmsProvider`                           | Not implemented          | —                         | SMS adapter                                    |
+| `push.provider`             | `IPushProvider`                          | Not implemented          | —                         | Push adapter                                   |
+| `audit.repository`          | `INotificationLogRepository`             | Yes (if `audit` defined) | —                         | Log repository                                 |
+| `audit.swallowErrors`       | `boolean`                                | No                       | `true`                    | Does not propagate audit errors                |
+| `audit.maskRecipient`       | `(s: string) => string`                  | No                       | identity                  | Masks recipient before audit write (PII)       |
 
 ### 4.3 Registration example with `forRootAsync`
 
@@ -2197,6 +2200,7 @@ export class OtpService {
    *
    * @throws NotificationException OTP_COOLDOWN_ACTIVE — if cooldown active
    * @throws NotificationException OTP_EMAIL_DELIVERY_NOT_CONFIGURED — `deliverVia: 'email'` but no email channel configured
+   * @throws NotificationException OTP_MANUAL_DELIVERY_UNAVAILABLE — manual delivery while `otp.codeSecret` is set
    * @throws NotificationException INVALID_SCOPE_IDENTIFIER — `tenantId` or `recipient` that is empty, whitespace-only or not a string (refused before touching the storage; also applies to `verify`, `consume`, `resend` and `getStatus`)
    *
    * @returns { expiresAt: number, cooldownSeconds: number }
@@ -2711,6 +2715,7 @@ export interface NotificationExceptionOptions {
 | `notification.template_render_failed`            | 500         | Failed to render email template                                     | Renderer threw error (Handlebars syntax, etc.)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `notification.otp_storage_not_configured`        | 500         | OTP storage not configured                                          | Call to OtpService without having configured `otp.storage`                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | `notification.otp_email_delivery_not_configured` | 500         | OTP email delivery requested but email channel not configured       | `generate({ deliverVia: 'email' })` while no `email` channel is configured                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `notification.otp_manual_delivery_unavailable`   | 400         | OTP manual delivery is unavailable while otp.codeSecret is set      | `generate({ deliverVia: 'manual' })`, or the default delivery with no email channel, while `otp.codeSecret` is set; refused before the cooldown and the store                                                                                                                                                                                                                                                                                                                                                                    |
 | `notification.otp_cooldown_active`               | 429         | Resend cooldown is active                                           | `tryAcquireCooldown()` returned `false`; `details`: `remainingSeconds`, `retryAfter`, `expiresAt`; the response should include `Retry-After`                                                                                                                                                                                                                                                                                                                                                                                     |
 | `notification.otp_not_found`                     | 404         | OTP not found or expired                                            | Reserved for the consumer: `verify()` does not throw, it returns `{ valid: false, reason: 'not_found' }` (entry missing or expired)                                                                                                                                                                                                                                                                                                                                                                                              |
 | `notification.otp_expired`                       | 410         | OTP code expired                                                    | Reserved for the consumer: an expired entry is reported as `not_found`                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
@@ -2756,6 +2761,7 @@ export const NOTIFICATION_ERROR_CODES = {
   TEMPLATE_RENDER_FAILED: 'notification.template_render_failed',
   OTP_STORAGE_NOT_CONFIGURED: 'notification.otp_storage_not_configured',
   OTP_EMAIL_DELIVERY_NOT_CONFIGURED: 'notification.otp_email_delivery_not_configured',
+  OTP_MANUAL_DELIVERY_UNAVAILABLE: 'notification.otp_manual_delivery_unavailable',
   OTP_COOLDOWN_ACTIVE: 'notification.otp_cooldown_active',
   OTP_NOT_FOUND: 'notification.otp_not_found',
   OTP_EXPIRED: 'notification.otp_expired',

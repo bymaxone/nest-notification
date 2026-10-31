@@ -36,6 +36,7 @@ import type {
 } from '../interfaces/notification-log-repository.interface'
 import type { OtpPurposeConfig } from '../interfaces/notification-module-options.interface'
 import type { IOtpStorage, OtpEntry, OtpVerifyResult } from '../interfaces/otp-storage.interface'
+import { isCodeDigest } from '../utils/code-digest'
 import { generateOtpCode } from '../utils/code-generator'
 import { cooldownExpiresAt, toRetryAfterHeader } from '../utils/cooldown-helpers'
 import { normalizeRecipient } from '../utils/recipient'
@@ -150,11 +151,12 @@ export class OtpService {
     const otp = this.requireOtpOptions()
     this.assertScope(input)
     const scope = this.keyed(input)
+    this.assertDeliverable(input, otp.digestCode)
     const cfg = otp.resolveForPurpose(input.purpose)
     await this.acquireCooldownOrThrow(scope, cfg.resendCooldownSeconds)
     const code = generateOtpCode(cfg.length, cfg.codeType)
     const expiresAt = Date.now() + cfg.ttlSeconds * MS_PER_SECOND
-    await this.persistAndDeliver(input, scope, code, expiresAt, cfg)
+    await this.persistAndDeliver(input, scope, code, expiresAt, cfg, otp.digestCode)
     await this.audit(this.otpAuditEntry('generated', scope, undefined))
     return { expiresAt, cooldownSeconds: cfg.resendCooldownSeconds }
   }
@@ -182,7 +184,7 @@ export class OtpService {
       return { valid: false, reason: 'max_attempts' }
     }
     const { entry } = result
-    if (!safeCompare(entry.code, scope.code)) {
+    if (!this.matchesStoredCode(entry.code, scope.code, otp.digestCode)) {
       await this.audit(this.otpAuditEntry('failed', scope, { reason: 'invalid_code' }))
       return {
         valid: false,
@@ -283,47 +285,87 @@ export class OtpService {
     scope: OtpGenerateInput,
     code: string,
     expiresAt: number,
-    cfg: OtpPurposeConfig
+    cfg: OtpPurposeConfig,
+    digestCode: ((code: string) => string) | undefined
   ): Promise<void> {
     try {
       await this.storage.set(scope.tenantId, scope.recipient, scope.purpose, {
-        code,
+        // What the store holds is the digest when a secret is configured; the delivery
+        // below carries the plaintext code the recipient has to type.
+        code: digestCode ? digestCode(code) : code,
         expiresAt,
         attempts: 0,
         maxAttempts: cfg.maxAttempts
       })
       await this.deliverOtp(input, code, cfg)
     } catch (error) {
-      let failure: unknown = error
-      try {
-        await this.releaseOtp(scope)
-      } catch (cleanupError) {
-        // A failed cleanup supersedes the delivery error — the cooldown/OTP may
-        // now be orphaned, which the caller must see — and it must NOT bypass
-        // the scrub below. The delivery error is preserved as its cause when
-        // the cleanup error can verifiably carry one; a hostile trap inside
-        // the attachment is contained by the helper.
-        attachCauseIfAbsent(cleanupError, error)
-        failure = cleanupError
-      }
-      // Scrub BEFORE the audit write and the rethrow, so neither the entry's
-      // `errorMessage` nor the outgoing chain can carry the plaintext code. An
-      // Error chain is scrubbed (in place, or via redacted copies when a node
-      // resists mutation); ANY other rejection (string, object from a custom
-      // storage, number) is flattened to a redacted string, because a raw
-      // object could carry the code in its properties and a primitive cannot
-      // be mutated.
-      const outgoing: unknown = isSafeError(failure)
-        ? scrubValuesFromErrorChain(failure, [code])
-        : coerceRedacted(failure, [code])
-      await this.audit(
-        this.otpAuditEntry('failed', scope, {
-          // `outgoing` is already fully redacted by the scrub above; this read
-          // only needs the fail-closed guard, not a second redaction pass.
-          errorMessage: readRedactedMessage(outgoing)
-        })
-      )
-      throw outgoing
+      throw await this.failedOutgoing(scope, error, code)
+    }
+  }
+
+  /**
+   * Releases the cooldown and the orphan entry after a failed persist or delivery, audits the
+   * failure, and returns what the caller must throw.
+   *
+   * A failed cleanup supersedes the delivery error — the cooldown/OTP may now be orphaned,
+   * which the caller must see — and it must NOT bypass the scrub below. The delivery error is
+   * preserved as its cause when the cleanup error can verifiably carry one; a hostile trap
+   * inside the attachment is contained by the helper.
+   *
+   * The scrub runs BEFORE the audit write and the rethrow, so neither the entry's
+   * `errorMessage` nor the outgoing chain can carry the plaintext code. An Error chain is
+   * scrubbed (in place, or via redacted copies when a node resists mutation); ANY other
+   * rejection (string, object from a custom storage, number) is flattened to a redacted
+   * string, because a raw object could carry the code in its properties and a primitive
+   * cannot be mutated.
+   */
+  private async failedOutgoing(
+    scope: OtpGenerateInput,
+    error: unknown,
+    code: string
+  ): Promise<unknown> {
+    let failure: unknown = error
+    try {
+      await this.releaseOtp(scope)
+    } catch (cleanupError) {
+      attachCauseIfAbsent(cleanupError, error)
+      failure = cleanupError
+    }
+    const outgoing: unknown = isSafeError(failure)
+      ? scrubValuesFromErrorChain(failure, [code])
+      : coerceRedacted(failure, [code])
+    await this.audit(
+      this.otpAuditEntry('failed', scope, {
+        // `outgoing` is already fully redacted by the scrub above; this read
+        // only needs the fail-closed guard, not a second redaction pass.
+        errorMessage: readRedactedMessage(outgoing)
+      })
+    )
+    return outgoing
+  }
+
+  /** How a generated code reaches the recipient: by email when asked or when an email channel exists. */
+  private deliveryOf(input: OtpGenerateInput): 'email' | 'manual' {
+    // Stryker disable next-line StringLiteral: when no email service is present the default is any non-'email' value; both 'manual' and an emptied string fall into the `!== 'email'` early return, so the literal is equivalent.
+    return input.deliverVia ?? (this.emailService ? 'email' : 'manual')
+  }
+
+  /**
+   * Refuses a manual delivery while codes are stored as digests, before the cooldown is taken
+   * or anything is stored. `generate` never returns the code and a digest cannot be handed to
+   * a person, so the call would otherwise succeed with nothing deliverable.
+   *
+   * @throws NotificationException `OTP_MANUAL_DELIVERY_UNAVAILABLE`.
+   */
+  private assertDeliverable(
+    input: OtpGenerateInput,
+    digestCode: ((code: string) => string) | undefined
+  ): void {
+    if (digestCode && this.deliveryOf(input) !== 'email') {
+      throw new NotificationException('OTP_MANUAL_DELIVERY_UNAVAILABLE', {
+        remedy:
+          'unset otp.codeSecret to read the code from the store, or configure an email channel and deliver by email'
+      })
     }
   }
 
@@ -333,9 +375,7 @@ export class OtpService {
     code: string,
     cfg: OtpPurposeConfig
   ): Promise<void> {
-    // Stryker disable next-line StringLiteral: when no email service is present the default is any non-'email' value; both 'manual' and an emptied string fall into the `!== 'email'` early return, so the literal is equivalent.
-    const deliverVia = input.deliverVia ?? (this.emailService ? 'email' : 'manual')
-    if (deliverVia !== 'email') {
+    if (this.deliveryOf(input) !== 'email') {
       return
     }
     if (!this.emailService) {
@@ -414,6 +454,25 @@ export class OtpService {
    */
   private keyed<T extends OtpRecipientRef>(input: T): T {
     return { ...input, recipient: normalizeRecipient(input.recipient) }
+  }
+
+  /**
+   * Compares a guessed code with the stored value in constant time.
+   *
+   * A stored digest is recomputed from the guess. A digest that cannot be recomputed (no
+   * secret configured, or a different one) never matches, and the digest string itself is
+   * not accepted as a code. A stored value that is not a digest is a plaintext code written
+   * while no secret was set; it is compared directly and ages out with its TTL.
+   */
+  private matchesStoredCode(
+    stored: string,
+    guess: string,
+    digestCode: ((code: string) => string) | undefined
+  ): boolean {
+    if (!isCodeDigest(stored)) {
+      return safeCompare(stored, guess)
+    }
+    return digestCode !== undefined && safeCompare(stored, digestCode(guess))
   }
 
   /** Returns the resolved OTP options or throws `OTP_STORAGE_NOT_CONFIGURED`. */

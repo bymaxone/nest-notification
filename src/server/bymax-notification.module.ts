@@ -71,6 +71,19 @@ export class BymaxNotificationModule {
   private static readonly logger = new Logger(BymaxNotificationModule.name)
 
   /**
+   * Logs one warning when the OTP channel stores codes in plaintext, i.e. `otp.codeSecret`
+   * is not configured. A reader of the store would see every live code.
+   */
+  private static warnPlaintextCodes(resolved: Readonly<ResolvedNotificationOptions>): void {
+    if (resolved.otp && !resolved.otp.digestCode) {
+      BymaxNotificationModule.logger.warn(
+        '[BYMAX_NOTIFICATION_PLAINTEXT_OTP_CODES] otp.codeSecret is not set: OTP codes are stored in plaintext. ' +
+          'Set otp.codeSecret (at least 32 bytes) to store an HMAC-SHA-256 digest instead.'
+      )
+    }
+  }
+
+  /**
    * Registers the module synchronously from static options.
    *
    * @param options - The channel configuration; at least one channel is required.
@@ -80,6 +93,7 @@ export class BymaxNotificationModule {
   static forRoot(options: BymaxNotificationModuleOptions): DynamicModule {
     validateOptions(options)
     const resolved = resolveOptions(options)
+    this.warnPlaintextCodes(resolved)
     const tokenProviders = this.buildProviders(options, resolved)
     const serviceProviders = this.buildServiceProviders(resolved)
     this.logger.log(
@@ -195,8 +209,13 @@ export class BymaxNotificationModule {
     return [
       {
         provide: BYMAX_NOTIFICATION_OPTIONS,
-        useFactory: (raw: BymaxNotificationModuleOptions): Readonly<ResolvedNotificationOptions> =>
-          resolveOptions(raw),
+        useFactory: (
+          raw: BymaxNotificationModuleOptions
+        ): Readonly<ResolvedNotificationOptions> => {
+          const resolved = resolveOptions(raw)
+          BymaxNotificationModule.warnPlaintextCodes(resolved)
+          return resolved
+        },
         inject: [RAW_NOTIFICATION_OPTIONS]
       },
       {

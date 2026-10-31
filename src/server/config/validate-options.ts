@@ -14,6 +14,7 @@ import type {
   EmailChannelOptions,
   OtpChannelOptions
 } from '../interfaces/notification-module-options.interface'
+import { MIN_CODE_SECRET_BYTES } from '../utils/code-digest'
 
 /**
  * Validates module options, throwing on the first problem found.
@@ -76,6 +77,18 @@ function validateEmailOptions(email: EmailChannelOptions): void {
   }
 }
 
+/**
+ * Validates `otp.codeSecret`. A weak secret would let a reader of the store test a guess
+ * against a stored digest, so it is refused at startup. The message never echoes the value.
+ */
+function validateCodeSecret(secret: unknown): void {
+  if (typeof secret !== 'string' || Buffer.byteLength(secret, 'utf8') < MIN_CODE_SECRET_BYTES) {
+    throw new Error(
+      `[BymaxNotificationModule] options.otp.codeSecret must be a string of at least ${String(MIN_CODE_SECRET_BYTES)} bytes`
+    )
+  }
+}
+
 /** Validates the OTP channel section. */
 function validateOtpOptions(otp: OtpChannelOptions): void {
   if (!otp.storage) {
@@ -91,6 +104,9 @@ function validateOtpOptions(otp: OtpChannelOptions): void {
         allowed: `${OTP_MIN_LENGTH}-${OTP_MAX_LENGTH}`
       })
     }
+  }
+  if (otp.codeSecret !== undefined) {
+    validateCodeSecret(otp.codeSecret)
   }
   if (otp.defaultCodeType !== undefined && !VALID_CODE_TYPES.includes(otp.defaultCodeType)) {
     throw new Error(
