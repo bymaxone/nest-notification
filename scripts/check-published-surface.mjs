@@ -15,9 +15,9 @@
  *   which silently turns the release notes into the generic fallback.
  * - README examples are checked against the types a consumer sees, so the snippet
  *   compile keeps three constraints:
- *   1. Syntactic and semantic diagnostics are collected together. The `tsc` command
- *      stops after syntax errors, and a snippet that elides code has one, so the
- *      project is compiled through the TypeScript API.
+ *   1. Syntactic and semantic diagnostics are collected together, and every syntax
+ *      error fails. The `tsc` command stops after syntax errors, so the project is
+ *      compiled through the TypeScript API.
  *   2. Every snippet is compiled, with the package's public names imported for those
  *      that do not import it.
  *   3. The names a snippet takes from the surrounding prose are typed in
@@ -575,8 +575,10 @@ function scaffoldConsumer() {
     )}\n`
   )
   // The names a snippet uses without introducing them, typed for real so a call made
-  // through one is checked instead of silently resolving to `any`.
-  copyFileSync(join(ROOT, 'scripts', 'readme-prelude.d.ts'), join(GATE_DIR, 'prelude.d.ts'))
+  // through one is checked instead of silently resolving to `any`. Copied as a `.ts`
+  // file: the repository's `skipLibCheck` skips declaration files, so an import in a
+  // `.d.ts` prelude that stops resolving would turn its types into `any` unreported.
+  copyFileSync(join(ROOT, 'scripts', 'readme-prelude.d.ts'), join(GATE_DIR, 'prelude.ts'))
 }
 
 // ---------------------------------------------------------------------------
@@ -619,15 +621,11 @@ function checkSnippets() {
 
   // The names a snippet uses without introducing them are declared, typed, in
   // `readme-prelude.d.ts`, so a call through one of them is checked and an undeclared
-  // name is an error. What is still not held against a snippet is a parse-level
-  // elision and a peer package the fixture does not install; those are counted and
-  // reported, never dropped silently.
-  const CONTEXT_ONLY = new Set([
-    // Parse-level: a snippet that elides code with `…` or shows a bare `return`
-    // is prose, not a program.
-    'TS1108',
-    'TS1109'
-  ])
+  // name is an error. Every syntax error fails, including a parse-level elision: one
+  // tolerated diagnostic would let a real syntax error hide in the same snippet. What
+  // is not held against a snippet is a peer package the fixture does not install and a
+  // property missing on a class the snippet declares and abbreviates; those are counted
+  // and reported, never dropped silently.
   /** `Property 'x' does not exist on type 'Y'` is an API defect when `Y` comes
    * from the package, and snippet noise when `Y` is a class the snippet declares
    * itself and abbreviates — a README example routinely writes `this.repo`
@@ -664,12 +662,7 @@ function checkSnippets() {
     if (lines.length === 0) {
       console.log(`  snippets: ${subjects.length} README snippets compile against dist/`)
     }
-    const real = lines.filter(
-      (l) =>
-        !CONTEXT_ONLY.has((/error (TS\d+)/.exec(l) ?? [])[1]) &&
-        !isForeignModule(l) &&
-        !isAbbreviatedLocalType(l, sources)
-    )
+    const real = lines.filter((l) => !isForeignModule(l) && !isAbbreviatedLocalType(l, sources))
     const context = lines.length - real.length
     if (real.length > 0) {
       fail(
@@ -681,7 +674,7 @@ function checkSnippets() {
       console.log(
         `  snippets: ${subjects.length} compiled against dist/` +
           (context > 0
-            ? ` (${context} diagnostic(s) ignored: a peer the fixture does not install, or a parse-level elision)`
+            ? ` (${context} diagnostic(s) ignored: a peer the fixture does not install, or an abbreviated local type)`
             : '')
       )
     }
