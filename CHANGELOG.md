@@ -42,8 +42,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   authentication secret "SHALL NOT reset the failed authentication count", yet every new code got a
   fresh `defaultMaxAttempts`: with 3 attempts, three wrong guesses, a re-issue after the cooldown
   and three more were all accepted, so the limit only bounded guesses per cooldown. A
-  `(tenant, recipient, purpose)` now has a failure counter in the storage: every verification attempt adds
-  one and restarts its lifetime to the purpose's code lifetime, `verify()` counts each attempt before
+  `(tenant, recipient, purpose)` now has a failure counter in the storage: every verification attempt against a
+  live code adds one and restarts its lifetime to the purpose's code lifetime, `verify()` counts each attempt before
   comparing the code and refuses once the count passes the ceiling whichever code is live, and a successful verification or `consume()` clears it.
   `RedisOtpStorage` keeps it under `{namespace}:otp_fail:{purpose}:{hash}` with one atomic script.
   A custom `IOtpStorage` opts in with three optional methods, `getFailures`, `recordFailure` and
@@ -77,7 +77,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   code gets a fresh attempt budget and the startup warning says so. Redis users: the new key
   `{namespace}:otp_fail:*` is created on the first wrong guess; nothing is migrated.
 - **One extra storage write in `verify()`.** The stored failure count is the only thing that
-  outlives a code, so `verify()` increments it before comparing the code (one atomic script on Redis)
+  outlives a code, so `verify()` increments it before comparing the code, while a code is live (one atomic script on Redis)
   and refuses once the number passes the ceiling; a code is issued with its own full attempt count and
   the lockout ends exactly when the counter lapses. Storages without the failure methods skip the
   write. A refused verification now reports `max_attempts` where it used to report `not_found` after

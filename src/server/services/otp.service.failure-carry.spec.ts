@@ -201,6 +201,29 @@ describe('OtpService failed attempts across re-issues', () => {
     expect(results.filter((r) => !r.valid && r.reason === 'max_attempts')).toHaveLength(2)
   })
 
+  // A verification with no live code is not a guess at anything, so it spends no budget.
+  it('should not count verifications made while no code is pending', async () => {
+    expect(await fail(5)).toEqual(Array(5).fill('not_found'))
+
+    await service.generate(base)
+
+    expect(await service.verify({ ...base, code: await codeOf() })).toEqual({ valid: true })
+  })
+
+  it('should not count verifications made after the code has expired', async () => {
+    jest.useFakeTimers()
+    try {
+      jest.setSystemTime(0)
+      await service.generate(base)
+      jest.setSystemTime(601_000)
+
+      expect(await fail(5)).toEqual(Array(5).fill('not_found'))
+      expect(await storage.getFailures('acme', ref.recipient, ref.purpose)).toBe(0)
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
   // Both budgets run out; the nearer one is reported.
   it('should report the attempts left by the failure count when it is the nearer', async () => {
     await service.generate(base)

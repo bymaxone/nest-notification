@@ -188,13 +188,9 @@ export class OtpService implements OnModuleInit {
     // The stored count is the only thing that outlives a code, so it alone decides whether the
     // recipient is locked out, and the lockout ends when the counter lapses. The attempt is
     // counted before the code is compared: the increment is atomic, so guesses that arrive
-    // together each get their own number and only those within the ceiling are compared.
-    const attempt = await this.storage.recordFailure?.(
-      scope.tenantId,
-      scope.recipient,
-      scope.purpose,
-      cfg.ttlSeconds
-    )
+    // together each get their own number and only those within the ceiling are compared. An
+    // attempt is counted only while a code is live.
+    const attempt = await this.countAttempt(scope, cfg.ttlSeconds)
     if (attempt !== undefined && attempt > cfg.maxAttempts) {
       await this.audit(
         this.otpAuditEntry('max_attempts_exceeded', scope, { reason: 'max_attempts' })
@@ -390,6 +386,25 @@ export class OtpService implements OnModuleInit {
         'NIST SP 800-63B-4 §3.1.3.2 says generating a new secret SHALL NOT reset the failed authentication count. ' +
         'Implement the three optional methods to carry the count across re-issues.'
     )
+  }
+
+  /**
+   * Counts one verification attempt against the recipient, or returns `undefined` when there is
+   * nothing to count: the storage does not carry failures, or no code is live. A verification
+   * with no code guesses at nothing, so it must not spend the budget a later code will need.
+   */
+  private async countAttempt(
+    scope: OtpRecipientRef,
+    ttlSeconds: number
+  ): Promise<number | undefined> {
+    if (this.storage.recordFailure === undefined) {
+      return undefined
+    }
+    const live = await this.storage.get(scope.tenantId, scope.recipient, scope.purpose)
+    if (live === null) {
+      return undefined
+    }
+    return this.storage.recordFailure(scope.tenantId, scope.recipient, scope.purpose, ttlSeconds)
   }
 
   /** How a generated code reaches the recipient: by email when asked or when an email channel exists. */

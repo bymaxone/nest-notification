@@ -139,7 +139,7 @@ export interface IOtpStorage {
    * Together with {@link IOtpStorage.recordFailure} and {@link IOtpStorage.clearFailures} this
    * makes the failed-attempt count outlive a code: NIST SP 800-63B-4 §3.1.3.2 says generating a
    * new authentication secret "SHALL NOT reset the failed authentication count". `OtpService`
-   * counts each verification attempt with `recordFailure` before comparing the code and refuses
+   * counts each verification attempt against a live code with `recordFailure` before comparing it and refuses
    * once the number it returns passes the attempt ceiling; this method is the read side of the
    * same counter. A storage that omits the three keeps a fresh budget per code, and a warning at
    * startup names the deviation.

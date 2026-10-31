@@ -1571,7 +1571,7 @@ export interface IOtpStorage {
   /**
    * Optional trio — failed verifications that outlive a code (NIST SP 800-63B-4 §3.1.3.2:
    * generating a new secret SHALL NOT reset the failed authentication count). `OtpService`
-   * counts each verification attempt with `recordFailure` before comparing the code (atomic
+   * counts each verification attempt against a live code with `recordFailure` before comparing it (atomic
    * increment, lifetime reset to `ttlSeconds`) and refuses once the number it returns passes the
    * ceiling; `getFailures` is the read side, and `clearFailures` is called on a
    * successful verification and on `consume()`. A storage that omits them keeps a fresh budget
