@@ -41,7 +41,12 @@ describe('EmailService tenant scope', () => {
         const service = new EmailService(makeOptions(), provider, renderer, audit)
 
         await expect(call(service, tenantId)).rejects.toMatchObject({
-          code: 'notification.invalid_scope_identifier'
+          code: 'notification.invalid_scope_identifier',
+          response: {
+            error: expect.objectContaining({
+              details: expect.objectContaining({ boundary: 'EmailService', parameter: 'tenantId' })
+            })
+          }
         })
         expect(provider.send).not.toHaveBeenCalled()
         expect(renderer.render).not.toHaveBeenCalled()
