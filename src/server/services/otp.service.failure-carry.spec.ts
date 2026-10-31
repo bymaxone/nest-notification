@@ -44,14 +44,14 @@ describe('OtpService failed attempts across re-issues', () => {
     )
   })
 
-  // The measured defect: three wrong guesses, a re-issue, and three more were accepted.
+  // Re-issuing a code must not replenish the failed-attempt budget.
   it('should not refresh the attempt budget when a new code is issued', async () => {
     await service.generate(base)
     expect(await fail(3)).toEqual(['invalid_code', 'invalid_code', 'invalid_code'])
 
     await service.generate(base)
 
-    // The budget is spent: the new code is locked out at once, not given three fresh guesses.
+    // The budget is spent, so the new code is locked out at once.
     expect(await fail(2)).toEqual(['max_attempts', 'not_found'])
   })
 
@@ -151,8 +151,8 @@ describe('OtpService failed attempts across re-issues', () => {
     await expect(cooled.generate(base)).resolves.toMatchObject({ cooldownSeconds: 60 })
   })
 
-  // A wrong guess recorded between the count being read and the new entry being stored leaves
-  // the entry seeded short; the persistent count stays the authority.
+  // The stored count decides, whatever the entry was seeded with: a failure recorded while a
+  // code is being re-issued still counts.
   it('should refuse a guess once the persistent count is spent, whatever the entry holds', async () => {
     await service.generate(base)
     await fail(2)
@@ -166,7 +166,7 @@ describe('OtpService failed attempts across re-issues', () => {
     await service.generate(base)
 
     expect((await storage.get('acme', ref.recipient, ref.purpose))?.attempts).toBe(2)
-    // Without the check the right code would be accepted as the third attempt.
+    // The right code is refused too: the ceiling is already reached.
     expect(await service.verify({ ...base, code: await codeOf() })).toEqual({
       valid: false,
       reason: 'max_attempts'
