@@ -171,6 +171,12 @@ describe('OtpService failed attempts across re-issues', () => {
       valid: false,
       reason: 'max_attempts'
     })
+    expect(audit.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        verb: 'max_attempts_exceeded',
+        metadata: { reason: 'max_attempts' }
+      })
+    )
   })
 
   describe('a storage without the failure methods', () => {
@@ -215,6 +221,30 @@ describe('OtpService failed attempts across re-issues', () => {
       expect(messages[0]).toContain('BYMAX_NOTIFICATION_OTP_FAILURES_NOT_CARRIED')
       expect(messages[0]).toContain('recordFailure')
       expect(messages[0]).toContain('800-63B')
+    })
+
+    // The three methods are one obligation: a storage with only some of them still deviates.
+    it.each([['getFailures'], ['recordFailure'], ['clearFailures']] as const)(
+      'should warn when only %s is missing',
+      (missing) => {
+        const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+        const partial = new InMemoryOtpStorage()
+        Object.defineProperty(partial, missing, { value: undefined })
+
+        new OtpService(makeOptions({}), partial, audit).onModuleInit()
+
+        expect(warn).toHaveBeenCalledTimes(1)
+      }
+    )
+
+    it('should name the remedy in the startup warning', () => {
+      const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+      new OtpService(makeOptions({}), new PlainStorage(), audit).onModuleInit()
+
+      expect(String(warn.mock.calls[0]?.[0])).toContain(
+        'Implement the three optional methods to carry the count across re-issues.'
+      )
     })
 
     it('should stay silent for a storage that implements them', () => {

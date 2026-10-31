@@ -522,7 +522,7 @@ describe('otpStorageContract', () => {
       })
 
       await expect(runCase(joined, 'composing a failure-counter key')).rejects.toThrow(
-        /a failure recorded for one tenant counted against another whose id and recipient differ only in where the boundary falls/
+        /a failure recorded for one tenant counted against another whose id and recipient differ only in where the boundary falls.*fields without encoding the split, so one tenant can lock another out\. The entry key, the cooldown key and the counter key are composed separately and all need this/
       )
     })
 
@@ -554,7 +554,7 @@ describe('otpStorageContract', () => {
       })
 
       await expect(runCase(everlasting, 'a failure counter lapses')).rejects.toThrow(
-        /getFailures counted a failure whose lifetime had passed/
+        /getFailures counted a failure whose lifetime had passed.*locks a recipient out for good/
       )
     })
 
@@ -590,7 +590,32 @@ describe('otpStorageContract', () => {
       })
 
       await expect(runCase(racy, 'recordFailure is ATOMIC')).rejects.toThrow(
-        /concurrent failures produced only \d+ distinct counts/
+        /concurrent failures produced only \d+ distinct counts.*read and the write are not one step, so concurrent wrong guesses are lost and the attempt ceiling can be exceeded/
+      )
+    })
+
+    it('should catch a getFailures that misreports a counted scope', async () => {
+      const inner = new InMemoryOtpStorage()
+      const off = delegating(inner, {
+        getFailures: async (t, r, p): Promise<number> => (await inner.getFailures(t, r, p)) + 1
+      })
+
+      await expect(runCase(off, 'counts failures per scope')).rejects.toThrow(
+        /getFailures returned 4 after three failures/
+      )
+    })
+
+    it('should catch a getFailures that counts a scope that never failed', async () => {
+      const inner = new InMemoryOtpStorage()
+      const ghost = delegating(inner, {
+        getFailures: async (t, r, p): Promise<number> => {
+          const count = await inner.getFailures(t, r, p)
+          return count === 0 ? 1 : count
+        }
+      })
+
+      await expect(runCase(ghost, 'counts failures per scope')).rejects.toThrow(
+        /getFailures returned a count for a scope that never failed/
       )
     })
 
@@ -620,6 +645,57 @@ describe('otpStorageContract', () => {
         'recordFailure is ATOMIC'
       ]) {
         await expect(runCase(without, name)).resolves.toBeUndefined()
+      }
+    })
+
+    // The three methods are one obligation: a storage with only some of them is not asked to
+    // carry failures, and none of the cases may reach for a method it lacks.
+    it.each([
+      ['getFailures', ['recordFailure', 'clearFailures']],
+      ['recordFailure', ['getFailures', 'clearFailures']],
+      ['clearFailures', ['getFailures', 'recordFailure']]
+    ] as const)('should pass the cases vacuously when %s is missing', async (_missing, present) => {
+      const plain = new InMemoryOtpStorage()
+      const partial: IOtpStorage = {
+        name: plain.name,
+        isConfigured: () => plain.isConfigured(),
+        set: (...args) => plain.set(...args),
+        get: (...args) => plain.get(...args),
+        consumeAttempt: (...args) => plain.consumeAttempt(...args),
+        update: (...args) => plain.update(...args),
+        delete: (...args) => plain.delete(...args),
+        tryAcquireCooldown: (...args) => plain.tryAcquireCooldown(...args),
+        getCooldown: (...args) => plain.getCooldown(...args),
+        clearCooldown: (...args) => plain.clearCooldown(...args),
+        ...(present.includes('getFailures' as never)
+          ? {
+              getFailures: (...args: Parameters<NonNullable<IOtpStorage['getFailures']>>) =>
+                plain.getFailures(...args)
+            }
+          : {}),
+        ...(present.includes('recordFailure' as never)
+          ? {
+              recordFailure: (...args: Parameters<NonNullable<IOtpStorage['recordFailure']>>) =>
+                plain.recordFailure(...args)
+            }
+          : {}),
+        ...(present.includes('clearFailures' as never)
+          ? {
+              clearFailures: (...args: Parameters<NonNullable<IOtpStorage['clearFailures']>>) =>
+                plain.clearFailures(...args)
+            }
+          : {})
+      }
+
+      for (const name of [
+        'counts failures per scope',
+        'scopes the failure counter',
+        'composing a failure-counter key',
+        'clearFailures removes only its own',
+        'a failure counter lapses',
+        'recordFailure is ATOMIC'
+      ]) {
+        await expect(runCase(partial, name)).resolves.toBeUndefined()
       }
     })
   })
