@@ -100,7 +100,7 @@ One package, four entry points — import only what your app needs:
 shared (zero deps) ← server        react
 ```
 
-`shared` has no dependencies, `server` builds on it (the error codes and TTLs), and `react` imports nothing but `react` — importing one never drags in another's peers. Every subpath ships ESM (`.mjs`), CJS (`.cjs`), and declarations for both formats (`.d.ts` + `.d.cts`).
+`shared` has no dependencies, `server` builds on it and re-exports its error codes and TTLs, and `react` imports nothing but `react` — importing one never drags in another's peers. Every subpath ships ESM (`.mjs`), CJS (`.cjs`), and declarations for both formats (`.d.ts` + `.d.cts`).
 
 ---
 
