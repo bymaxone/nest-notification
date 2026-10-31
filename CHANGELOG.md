@@ -76,8 +76,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and re-run the contract from `@bymax-one/nest-notification/testing`. Until you do, a re-issued
   code gets a fresh attempt budget and the startup warning says so. Redis users: the new key
   `{namespace}:otp_fail:*` is created on the first wrong guess; nothing is migrated.
-- **One extra storage read per `verify()`.** The stored failure count is the authority, so `verify()`
-  reads it (one `GET` on Redis) before comparing the code; a wrong guess recorded while a code was
+- **An extra storage read in `verify()`.** The stored failure count is the authority, so `verify()`
+  reads it once a live code is found, before comparing the code; a wrong guess recorded while a code was
   being re-issued cannot buy a guess. Storages without the failure methods skip the read.
 - **`otp.codeSecret` and manual delivery do not combine.** Where a flow delivers the code itself
   (`deliverVia: 'manual'`, or no email channel), leave the secret unset or move that flow to email
