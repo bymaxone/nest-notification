@@ -11,20 +11,7 @@ const PEER_EXTERNALS = [
   /^rxjs\//,
   'ioredis',
   'resend',
-  '@sendgrid/mail',
-  '@aws-sdk/client-ses',
-  '@aws-sdk/client-sns',
-  'mailgun.js',
-  'nodemailer',
-  'twilio',
-  'firebase-admin',
-  '@aws-sdk/client-dynamodb',
-  'handlebars',
-  '@react-email/render',
-  'mjml',
-  'class-validator',
-  'class-transformer',
-  'express'
+  'nodemailer'
 ]
 
 export default defineConfig([

@@ -82,7 +82,7 @@ Rewriting this pipeline in each service is wasteful; and each rewrite tends to f
 
 1. **Channel abstraction** — each channel (email, OTP, SMS, push) has its own `IXxxProvider` or `IXxxStorage` interface. Adding a new channel does not affect existing ones.
 2. **Zero opinion on persistence** — all persistence (OTP, audit log) goes through TypeScript interfaces. The lib never imports Prisma, TypeORM, Drizzle, ioredis (directly), or Mongoose.
-3. **Zero opinion on providers** — Resend, Twilio, FCM, etc. are reference adapters. The lib does not have `resend`/`twilio`/`firebase-admin` as a direct dependency — everything is an optional peer dep, provided by the consumer.
+3. **Zero opinion on providers** — Resend and SMTP are the reference adapters; Twilio, FCM and the like are what a consumer writes behind the interfaces. The lib has no provider SDK as a direct dependency: the SDK of a bundled adapter (`resend`, `nodemailer`, `ioredis`) is an optional peer, and the SDK of an adapter you write is a dependency of your application.
 4. **Configuration over convention** — everything configurable via `forRoot()`/`forRootAsync()`. Sensible defaults where applicable (e.g., 6-digit OTP, 10-minute TTL, 60s cooldown).
 5. **Opt-in features** — only configured channels are registered as providers in the NestJS container. Enabling SMS without configuring `ISmsProvider` is an initialization error.
 6. **Native multi-tenant** — every operation accepts `tenantId` and scopes rate limits, logs, and counters per tenant. No tenant can read or interfere with another tenant's OTPs, cooldowns, or logs.
@@ -2845,36 +2845,30 @@ Clear limits to avoid feature creep:
 
 Needed only if the consumer uses the corresponding reference provider:
 
-| Package                    | Version                             | When required                                            |
-| -------------------------- | ----------------------------------- | -------------------------------------------------------- |
-| `ioredis`                  | `^6.0.0`                            | If using `RedisOtpStorage` (default OTP storage)         |
-| `resend`                   | `^4.0.0 \|\| ^5.0.0 \|\| ^6.0.0`    | If using `ResendEmailProvider`                           |
-| `@sendgrid/mail`           | `^8.0.0`                            | If using SendGridProvider (custom adapter)               |
-| `@aws-sdk/client-ses`      | `^3.0.0`                            | If using SesProvider                                     |
-| `@aws-sdk/client-sns`      | `^3.0.0`                            | If using SnsSmsProvider (once the SMS channel exists)    |
-| `mailgun.js`               | `^11.0.0 \|\| ^12.0.0 \|\| ^13.0.0` | If using MailgunProvider                                 |
-| `nodemailer`               | `^10.1.4`                           | If using SmtpEmailProvider                               |
-| `twilio`                   | `^5.0.0 \|\| ^6.0.0`                | If using TwilioSmsProvider (once the SMS channel exists) |
-| `firebase-admin`           | `^13.0.0 \|\| ^14.0.0`              | If using FcmPushProvider (once the push channel exists)  |
-| `@aws-sdk/client-dynamodb` | `^3.0.0`                            | If using DynamoDbOtpStorage                              |
-| `handlebars`               | `^4.7.10`                           | If using HandlebarsTemplateRenderer                      |
-| `@react-email/render`      | `^1.0.0 \|\| ^2.0.0`                | If using ReactEmailTemplateRenderer                      |
-| `mjml`                     | `^5.0.0`                            | If using MjmlTemplateRenderer                            |
-| `class-validator`          | `^0.14.0 \|\| ^0.15.0`              | If using distributed DTOs (optional — consumer decides)  |
-| `class-transformer`        | `^0.5.0`                            | Idem                                                     |
-| `express`                  | `^5.0.0`                            | Only if your own code needs it — see the note below      |
-| `@types/express`           | `^5.0.0`                            | Idem                                                     |
+| Package      | Version                          | When required                                    |
+| ------------ | -------------------------------- | ------------------------------------------------ |
+| `ioredis`    | `^6.0.0`                         | If using `RedisOtpStorage` (default OTP storage) |
+| `resend`     | `^4.0.0 \|\| ^5.0.0 \|\| ^6.0.0` | If using `ResendEmailProvider`                   |
+| `nodemailer` | `^10.1.4`                        | If using `SmtpEmailProvider`                     |
+
+`react` (`^19.0.0`) is the optional peer of the `./react` subpath.
+
+The package declares only the peers it loads. An adapter you write for another provider, a
+template engine, a validation library or a web framework brings its own SDK as a dependency of
+your application: the examples under `docs/templates/` and `docs/schemas/` and the sketches in this
+specification import `@sendgrid/mail`, `@aws-sdk/*`, `mailgun.js`, `handlebars`, `mjml`,
+`@react-email/render` and the like, and none of them is a peer of this package.
 
 > **`tenantIdResolver` does not require express.** It receives `NotificationRequest`, a minimal
 > request shape declared by this package (Express- and Fastify-compatible). A public signature
 > that named `express.Request` would put an `express` import into the emitted `.d.ts`, and any
 > consumer compiling with `skipLibCheck: false` would then need the package installed even
-> without using it. The two entries stay declared as optional peers only for consumers who pass
-> a real Express request through.
+> without using it. Neither `express` nor `@types/express` is a peer of this package; a consumer
+> who passes a real Express request through has them already.
 
 ### 13.3 Dependencies
 
-The lib has **zero direct dependencies** (`"dependencies": {}`). All external functionality is an optional peer dep. Crypto comes from `node:crypto` (native, Node 24+).
+The lib has **zero direct dependencies** (`"dependencies": {}`). The external functionality it loads is a peer dep (§13.2), and the SDK of each bundled adapter is an optional one; an adapter you write brings its own SDK. Crypto comes from `node:crypto` (native, Node 24+).
 
 ### 13.4 Peer deps per subpath
 
