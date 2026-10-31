@@ -26,6 +26,7 @@ import type {
   OtpChannelOptions,
   OtpPurposeConfig
 } from '../interfaces/notification-module-options.interface'
+import { createCodeDigester } from '../utils/code-digest'
 
 /** Resolved global section — always present. */
 export interface ResolvedGlobalOptions {
@@ -51,6 +52,12 @@ export interface ResolvedOtpOptions {
   defaultMaxAttempts: number
   resendCooldownSeconds: number
   consumeOnVerify: boolean
+  /**
+   * Turns a plaintext code into the value that is stored; present only when `codeSecret`
+   * is configured. A function rather than the secret, so the secret is not a property of
+   * an object that is injected under a public token and can be logged or serialized.
+   */
+  digestCode?: (code: string) => string
   /** Per-purpose overrides, each fully resolved against the OTP defaults. */
   perPurpose: Record<string, OtpPurposeConfig>
   /** Effective config for a purpose: the resolved `perPurpose[purpose]`, or the OTP defaults. */
@@ -130,6 +137,7 @@ function resolveOtp(otp: OtpChannelOptions): ResolvedOtpOptions {
     defaultMaxAttempts: base.maxAttempts,
     resendCooldownSeconds: base.resendCooldownSeconds,
     consumeOnVerify: otp.consumeOnVerify ?? DEFAULT_OTP_OPTIONS.consumeOnVerify,
+    ...(otp.codeSecret !== undefined ? { digestCode: createCodeDigester(otp.codeSecret) } : {}),
     perPurpose,
     resolveForPurpose: (purpose: string): OtpPurposeConfig => perPurposeMap.get(purpose) ?? base
   }

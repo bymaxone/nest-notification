@@ -36,6 +36,7 @@ import type {
 } from '../interfaces/notification-log-repository.interface'
 import type { OtpPurposeConfig } from '../interfaces/notification-module-options.interface'
 import type { IOtpStorage, OtpEntry, OtpVerifyResult } from '../interfaces/otp-storage.interface'
+import { isCodeDigest } from '../utils/code-digest'
 import { generateOtpCode } from '../utils/code-generator'
 import { cooldownExpiresAt, toRetryAfterHeader } from '../utils/cooldown-helpers'
 import { normalizeRecipient } from '../utils/recipient'
@@ -154,7 +155,7 @@ export class OtpService {
     await this.acquireCooldownOrThrow(scope, cfg.resendCooldownSeconds)
     const code = generateOtpCode(cfg.length, cfg.codeType)
     const expiresAt = Date.now() + cfg.ttlSeconds * MS_PER_SECOND
-    await this.persistAndDeliver(input, scope, code, expiresAt, cfg)
+    await this.persistAndDeliver(input, scope, code, expiresAt, cfg, otp.digestCode)
     await this.audit(this.otpAuditEntry('generated', scope, undefined))
     return { expiresAt, cooldownSeconds: cfg.resendCooldownSeconds }
   }
@@ -182,7 +183,7 @@ export class OtpService {
       return { valid: false, reason: 'max_attempts' }
     }
     const { entry } = result
-    if (!safeCompare(entry.code, scope.code)) {
+    if (!this.matchesStoredCode(entry.code, scope.code, otp.digestCode)) {
       await this.audit(this.otpAuditEntry('failed', scope, { reason: 'invalid_code' }))
       return {
         valid: false,
@@ -283,11 +284,14 @@ export class OtpService {
     scope: OtpGenerateInput,
     code: string,
     expiresAt: number,
-    cfg: OtpPurposeConfig
+    cfg: OtpPurposeConfig,
+    digestCode: ((code: string) => string) | undefined
   ): Promise<void> {
     try {
       await this.storage.set(scope.tenantId, scope.recipient, scope.purpose, {
-        code,
+        // What the store holds is the digest when a secret is configured; the delivery
+        // below still carries the plaintext code the recipient has to type.
+        code: digestCode ? digestCode(code) : code,
         expiresAt,
         attempts: 0,
         maxAttempts: cfg.maxAttempts
@@ -414,6 +418,25 @@ export class OtpService {
    */
   private keyed<T extends OtpRecipientRef>(input: T): T {
     return { ...input, recipient: normalizeRecipient(input.recipient) }
+  }
+
+  /**
+   * Compares a guessed code with the stored value in constant time.
+   *
+   * A stored digest is recomputed from the guess. A digest that cannot be recomputed (no
+   * secret configured, or a different one) never matches, and the digest string itself is
+   * not accepted as a code. A stored value that is not a digest is a plaintext code written
+   * before the secret was configured; it is compared as it always was and ages out with its TTL.
+   */
+  private matchesStoredCode(
+    stored: string,
+    guess: string,
+    digestCode: ((code: string) => string) | undefined
+  ): boolean {
+    if (!isCodeDigest(stored)) {
+      return safeCompare(stored, guess)
+    }
+    return digestCode !== undefined && safeCompare(stored, digestCode(guess))
   }
 
   /** Returns the resolved OTP options or throws `OTP_STORAGE_NOT_CONFIGURED`. */
