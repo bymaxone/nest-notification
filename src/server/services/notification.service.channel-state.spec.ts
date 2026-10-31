@@ -7,18 +7,40 @@
  */
 import { Logger } from '@nestjs/common'
 
-import type { EmailService } from './email.service'
-import { NotificationService } from './notification.service'
-import type { OtpService } from './otp.service'
+import { InMemoryOtpStorage } from '../providers/in-memory-otp.storage'
 
-const email = (configured: boolean): EmailService =>
-  ({
-    isConfigured: () => configured,
-    send: jest.fn(),
-    sendTemplate: jest.fn()
-  }) as unknown as EmailService
+import {
+  makeAudit,
+  makeOptions as emailOptions,
+  makeProvider,
+  makeRenderer
+} from './__tests__/email-service.fixtures'
+import { makeOptions as otpOptions } from './__tests__/otp-service.fixtures'
+import { EmailService } from './email.service'
+import { NotificationService } from './notification.service'
+import { OtpService } from './otp.service'
+
+/** An email service over a provider that does, or does not, report itself configured. */
+const email = (configured: boolean): EmailService => {
+  const provider = makeProvider()
+  provider.isConfigured.mockReturnValue(configured)
+  return new EmailService(emailOptions(), provider, makeRenderer(), makeAudit())
+}
+
+/** A storage that reports itself unconfigured, like an adapter that lacks its client. */
+class UnconfiguredStorage extends InMemoryOtpStorage {
+  override isConfigured(): boolean {
+    return false
+  }
+}
+
+/** An OTP service over a storage that does, or does not, report itself configured. */
 const otp = (configured: boolean): OtpService =>
-  ({ isConfigured: () => configured, generate: jest.fn() }) as unknown as OtpService
+  new OtpService(
+    otpOptions(),
+    configured ? new InMemoryOtpStorage() : new UnconfiguredStorage(),
+    makeAudit()
+  )
 
 describe('NotificationService channel state', () => {
   afterEach(() => {
