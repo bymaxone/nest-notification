@@ -93,9 +93,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `BymaxNotificationModule.forRoot` after importing only a type, so pasted as written it did not
   compile.
 
-- **README: every error code, who raises it, and which are reserved.** A table lists the 24 codes with
-  their HTTP status and the component that throws them. Eleven are marked reserved because the
-  library never throws them: the four OTP verify outcomes (`verify()` returns the reason instead),
+- **README: every error code, who raises it, and which are reserved.** A table lists every code with
+  its HTTP status and the component that throws it. The codes the library never throws are marked
+  reserved: the four OTP verify outcomes (`verify()` returns the reason instead),
   `email_invalid_recipient` (the recipient is not validated), and the SMS and push codes.
 - **README: the options and members that were only in the technical specification.**
   `consumeOnVerify`, `defaultFromName`, `defaultReplyTo` and `defaultTags` join the Configuration
