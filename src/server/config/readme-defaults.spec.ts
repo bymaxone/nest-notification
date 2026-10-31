@@ -59,7 +59,7 @@ function withoutOption(section: string, option: string): BymaxNotificationModule
   return { ...options, [section]: kept }
 }
 
-/** Parses a literal default cell: `'text'`, a number, `true`/`false`, or `{}`. */
+/** Parses a literal default cell: `'text'`, a number, `true`/`false`, `{}` or `[]`. */
 function parseLiteral(cell: string): unknown {
   if (/^'.*'$/.test(cell)) {
     return cell.slice(1, -1)
@@ -72,6 +72,9 @@ function parseLiteral(cell: string): unknown {
   }
   if (cell === '{}') {
     return {}
+  }
+  if (cell === '[]') {
+    return []
   }
   return undefined
 }

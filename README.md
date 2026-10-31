@@ -502,26 +502,30 @@ if (error.code === NOTIFICATION_ERROR_CODES.OTP_MAX_ATTEMPTS_EXCEEDED) {
 
 Configure via `forRoot(options)` or `forRootAsync({ useFactory })`. **At least one channel must be configured**, and configuring a channel the library does not implement throws at startup rather than failing on the first send. The full reference is in [`docs/technical_specification.md` §4](./docs/technical_specification.md); the most-used options:
 
-| Section  | Option                  | Default          | Notes                                                |
-| -------- | ----------------------- | ---------------- | ---------------------------------------------------- |
-| `global` | `redisNamespace`        | `'notification'` | Prefix for store keys.                               |
-| `global` | `defaultLocale`         | `'en'`           | Template locale fallback.                            |
-| `global` | `tenantIdResolver`      | —                | `(req) => tenantId`; the audit source of truth.      |
-| `email`  | `provider`              | — (required)     | Instance or class implementing `IEmailProvider`.     |
-| `email`  | `defaultFrom`           | — (required)     | Must look like an email address.                     |
-| `email`  | `templateRenderer`      | default renderer | Any `IEmailTemplateRenderer`.                        |
-| `email`  | `maxAttachmentBytes`    | `10485760`       | 10 MiB attachment guard.                             |
-| `otp`    | `storage`               | — (required)     | Instance or class implementing `IOtpStorage`.        |
-| `otp`    | `defaultLength`         | `6`              | 1–32.                                                |
-| `otp`    | `defaultCodeType`       | `'numeric'`      | `numeric` \| `alpha` \| `alphanumeric`.              |
-| `otp`    | `defaultTtlSeconds`     | `600`            | Code lifetime.                                       |
-| `otp`    | `defaultMaxAttempts`    | `5`              | Verify attempts before lock-out.                     |
-| `otp`    | `codeSecret`            | —                | Secret (>= 32 bytes) the stored code is keyed under. |
-| `otp`    | `resendCooldownSeconds` | `60`             | Anti-resend window (atomic `SET NX EX`).             |
-| `otp`    | `perPurpose`            | `{}`             | Per-purpose overrides of the above.                  |
-| `audit`  | `repository`            | — (required)     | Any `INotificationLogRepository`.                    |
-| `audit`  | `swallowErrors`         | `true`           | Keep audit failures out of the delivery path.        |
-| `audit`  | `maskRecipient`         | identity         | Minimize recipient PII before persisting.            |
+| Section  | Option                  | Default          | Notes                                                                                                                   |
+| -------- | ----------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `global` | `redisNamespace`        | `'notification'` | Prefix for store keys.                                                                                                  |
+| `global` | `defaultLocale`         | `'en'`           | Template locale fallback.                                                                                               |
+| `global` | `tenantIdResolver`      | —                | `(req) => tenantId`; the audit source of truth.                                                                         |
+| `email`  | `provider`              | — (required)     | Instance or class implementing `IEmailProvider`.                                                                        |
+| `email`  | `defaultFrom`           | — (required)     | Must look like an email address.                                                                                        |
+| `email`  | `templateRenderer`      | default renderer | Any `IEmailTemplateRenderer`.                                                                                           |
+| `email`  | `maxAttachmentBytes`    | `10485760`       | 10 MiB attachment guard.                                                                                                |
+| `otp`    | `storage`               | — (required)     | Instance or class implementing `IOtpStorage`.                                                                           |
+| `otp`    | `defaultLength`         | `6`              | 1–32.                                                                                                                   |
+| `otp`    | `defaultCodeType`       | `'numeric'`      | `numeric` \| `alpha` \| `alphanumeric`.                                                                                 |
+| `otp`    | `defaultTtlSeconds`     | `600`            | Code lifetime.                                                                                                          |
+| `otp`    | `defaultMaxAttempts`    | `5`              | Verify attempts before lock-out.                                                                                        |
+| `otp`    | `codeSecret`            | —                | Secret (>= 32 bytes) the stored code is keyed under.                                                                    |
+| `otp`    | `consumeOnVerify`       | `false`          | `true` deletes the code when `verify()` succeeds; otherwise the entry is marked validated until `consume()` or its TTL. |
+| `email`  | `defaultFromName`       | —                | Display name sent with `defaultFrom`.                                                                                   |
+| `email`  | `defaultReplyTo`        | —                | `Reply-To` applied when a send does not set one.                                                                        |
+| `email`  | `defaultTags`           | `[]`             | Tags merged into every send, before the send's own tags.                                                                |
+| `otp`    | `resendCooldownSeconds` | `60`             | Anti-resend window (atomic `SET NX EX`).                                                                                |
+| `otp`    | `perPurpose`            | `{}`             | Per-purpose overrides of the above.                                                                                     |
+| `audit`  | `repository`            | — (required)     | Any `INotificationLogRepository`.                                                                                       |
+| `audit`  | `swallowErrors`         | `true`           | Keep audit failures out of the delivery path.                                                                           |
+| `audit`  | `maskRecipient`         | identity         | Minimize recipient PII before persisting.                                                                               |
 
 ---
 
@@ -530,6 +534,13 @@ Configure via `forRoot(options)` or `forRootAsync({ useFactory })`. **At least o
 Email rendering goes through `IEmailTemplateRenderer`. The bundled `DefaultTemplateRenderer` does `{{var}}` interpolation with **automatic HTML escaping in the HTML body** — subject and plaintext are left raw, since neither is an HTML context. That closes a stored-XSS vector: a display name containing markup renders as text, not as an element, in the recipient's mail client.
 
 Register named templates per `name::locale`; the renderer falls back to the `en` locale when a locale-specific template is missing.
+
+| Renderer option     | Default   | Notes                                                                                                 |
+| ------------------- | --------- | ----------------------------------------------------------------------------------------------------- |
+| `templates`         | `{}`      | `{ 'name::locale': { subject, html, text? } }`. Every template needs a string `subject` and `html`.   |
+| `fallbackLocales`   | `['en']`  | Locales tried, in order, after the requested one.                                                     |
+| `onMissingVar`      | `'empty'` | `'empty'` renders a missing variable as an empty string; `'throw'` raises instead.                    |
+| `enableNestedPaths` | `false`   | `true` resolves `{{user.name}}` through nested objects; `false` looks up the literal key `user.name`. |
 
 `CANONICAL_EMAIL_TEMPLATES` exports stable names for common transactional emails (`otp_code`, `otp_password_reset`, `otp_resent`, `welcome`, `password_reset_success`, `trial_expiring`, …) so providers and templates agree on the wire. For richer output, plug in Handlebars, MJML, or React Email — examples under [`docs/templates/`](./docs/templates/).
 
@@ -658,7 +669,7 @@ NIST SP 800-63B-4 §3.1.3.2: "Generating a new authentication secret SHALL NOT r
 - A successful verification and `consume()` clear it (the attempt that succeeded included), so the next flow starts with a full budget.
 - Once the count passes the ceiling, `verify()` returns `{ valid: false, reason: 'max_attempts' }` for any code, a freshly issued one included, until the counter lapses. The stored count alone decides, so the lockout ends exactly when the counter lapses. Because the increment is atomic and happens first, guesses that arrive together each get their own number and only those within the ceiling are compared. `remainingAttempts` reports the nearer of the code's own budget and the count's. This also means that someone who keeps sending wrong guesses for a recipient keeps that recipient locked out, so rate-limit the OTP endpoints by IP in your controller.
 - `RedisOtpStorage` keeps the counter under `{namespace}:otp_fail:{purpose}:{hash}`, incremented by one script; `InMemoryOtpStorage` does the same in memory.
-- A custom `IOtpStorage` opts in by implementing three **optional** methods, `getFailures`, `recordFailure` and `clearFailures`; the executable contract in `./testing` checks them when they are present. Without them each code keeps a fresh budget, and one warning, `BYMAX_NOTIFICATION_OTP_FAILURES_NOT_CARRIED`, is logged at startup naming the deviation.
+- A custom `IOtpStorage` opts in by implementing three **optional** methods, `getFailures`, `recordFailure` and `clearFailures`; the executable contract in `./testing` checks them when they are present. The three work together: a storage with only some of them is treated as having none. Without them each code keeps a fresh budget, and one warning, `BYMAX_NOTIFICATION_OTP_FAILURES_NOT_CARRIED`, is logged at startup naming the deviation.
 
 ### Security Checklist
 
@@ -769,6 +780,33 @@ pnpm mutation      # Stryker mutation testing
 | `NotificationService` | `getEnabledChannels()`    | `NotificationChannel[]`          | Which channels this instance actually registered                      |
 | `NotificationService` | `getEmail()` / `getOtp()` | the channel service              | Direct access when you already know the channel                       |
 
+### Send and issue options
+
+`EmailService.send()` takes these fields. `sendTemplate()` takes `tenantId`, `to`, `from`, `fromName`, `replyTo`, `tags`, `userId`, `auditRedactValues` and `publishProviderText` as below, plus `template`, `data` and an optional `locale` in place of `subject`, `html` and `text`; it has no `cc`, `bcc` or `attachments`.
+
+| Field                         | Notes                                                                                              |
+| ----------------------------- | -------------------------------------------------------------------------------------------------- |
+| `tenantId`                    | Required. Refused when blank or when it contains a control character.                              |
+| `to`, `cc`, `bcc`             | A string or an array. `to` is not validated by the library.                                        |
+| `subject`, `html`, `text`     | The message. `text` is optional.                                                                   |
+| `from`, `fromName`, `replyTo` | Override the `defaultFrom`, `defaultFromName` and `defaultReplyTo` of the channel.                 |
+| `tags`                        | Merged after `defaultTags`.                                                                        |
+| `attachments`                 | `{ filename, content, contentType? }[]`; their total size is checked against `maxAttachmentBytes`. |
+| `userId`                      | Recorded in the audit entry.                                                                       |
+| `auditRedactValues`           | Values scrubbed from the failure's `cause` and `errorMessage`. See [Errors](#errors).              |
+| `publishProviderText`         | `false` withholds everything the provider wrote. Default `true`.                                   |
+
+`OtpService.generate()` and `resend()` take:
+
+| Field                              | Notes                                                                                                                                                   |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `tenantId`, `recipient`, `purpose` | Required; the OTP state is keyed on all three.                                                                                                          |
+| `deliverVia`                       | `'email'` hands the code to the email channel; `'manual'` leaves delivery to you. Default `'email'` when an email channel exists, otherwise `'manual'`. |
+| `emailTemplate`                    | Template rendered for email delivery. Default `'otp_code'`.                                                                                             |
+| `emailData`                        | Variables for the template. `code`, `expiresInMinutes` and `purpose` are added to them.                                                                 |
+| `locale`                           | Locale for the template. Default `global.defaultLocale`.                                                                                                |
+| `userId`                           | Recorded in the audit entry.                                                                                                                            |
+
 ### Interceptor
 
 | Member                         | Purpose                                                                                          |
@@ -785,6 +823,35 @@ pnpm mutation      # Stryker mutation testing
 | `NOTIFICATION_ERROR_DEFINITIONS` | Server-side code → HTTP status + default English message                   |
 
 Error codes are namespaced (`notification.otp_invalid_code`, `notification.otp_cooldown_active`, `notification.email_send_failed`, …) and never change once published. Default messages are English; localize on the `code`.
+
+A code marked **reserved** is part of the catalog but is never thrown by the library, so a consumer can map it without the library ever raising it behind their back. The four OTP verify outcomes are the notable ones: `verify()` returns its failure as a result (`{ valid: false, reason }`) and never throws it, so your controller maps `reason` to the code it wants to answer with. The SMS and push codes stay reserved until those channels exist.
+
+| Code                                             | Status | Raised by                                                                                                          |
+| ------------------------------------------------ | ------ | ------------------------------------------------------------------------------------------------------------------ |
+| `notification.email_provider_not_configured`     | 500    | `EmailService` — the provider reports `isConfigured() === false`                                                   |
+| `notification.email_send_failed`                 | 502    | `EmailService` — the provider rejected the send                                                                    |
+| `notification.email_attachments_too_large`       | 413    | `EmailService` — the attachments exceed `maxAttachmentBytes`                                                       |
+| `notification.email_invalid_recipient`           | 400    | reserved — `to` is not validated; a bad address surfaces as `email_send_failed`                                    |
+| `notification.email_missing_body`                | 400    | `NotificationService.dispatch` — neither a template nor a subject and body                                         |
+| `notification.template_not_found`                | 500    | `EmailService.sendTemplate` — no template for the locale or the fallback                                           |
+| `notification.template_render_failed`            | 500    | `EmailService.sendTemplate` — the renderer threw                                                                   |
+| `notification.otp_storage_not_configured`        | 500    | `OtpService` — the OTP channel is absent                                                                           |
+| `notification.otp_email_delivery_not_configured` | 500    | `OtpService.generate` — email delivery without an email channel                                                    |
+| `notification.otp_manual_delivery_unavailable`   | 400    | `OtpService.generate` — manual delivery while `otp.codeSecret` is set                                              |
+| `notification.otp_cooldown_active`               | 429    | `OtpService.generate` and `resend` — inside the resend cooldown                                                    |
+| `notification.otp_not_found`                     | 404    | reserved — `verify()` returns `{ valid: false, reason: 'not_found' }`                                              |
+| `notification.otp_expired`                       | 410    | reserved — an expired code is reported as `not_found`                                                              |
+| `notification.otp_max_attempts_exceeded`         | 429    | reserved — `verify()` returns `{ valid: false, reason: 'max_attempts' }`                                           |
+| `notification.otp_invalid_code`                  | 401    | reserved — `verify()` returns `{ valid: false, reason: 'invalid_code' }`                                           |
+| `notification.otp_invalid_length`                | 400    | module options validation and the code generator                                                                   |
+| `notification.sms_provider_not_configured`       | 500    | reserved — the SMS channel is not implemented                                                                      |
+| `notification.sms_send_failed`                   | 502    | reserved — the SMS channel is not implemented                                                                      |
+| `notification.sms_invalid_recipient`             | 400    | reserved — the SMS channel is not implemented                                                                      |
+| `notification.push_provider_not_configured`      | 500    | reserved — the push channel is not implemented                                                                     |
+| `notification.push_send_failed`                  | 502    | reserved — the push channel is not implemented                                                                     |
+| `notification.audit_log_failed`                  | 500    | `EmailService`, `OtpService` and `NotificationAuditInterceptor` — only with `audit.swallowErrors: false`           |
+| `notification.channel_disabled`                  | 501    | `NotificationService` — the channel is absent, or its provider or storage is not usable                            |
+| `notification.invalid_scope_identifier`          | 400    | `OtpService`, `EmailService` and `NotificationAuditInterceptor` — a blank or control-character tenant or recipient |
 
 Failures raised by the library carry the underlying error as the native `Error.cause` — a provider's `connect ECONNREFUSED` sits on `exception.cause`, where cause-walking log serializers (e.g. pino's `err`) print it alongside the stable code. The cause is stored as a **log-safe copy**: `name`, `message`, `stack`, and the nested `cause` chain survive (depth-bounded); every other property is dropped, because SDK errors routinely retain the request payload (an axios-style `config.data`) and for an OTP email that payload contains the code. The cause never enters the HTTP response body either: `details` stays reserved for the structured, client-safe context shown above. To attach a cause in your own code, pass the options bag as the third constructor argument — `new NotificationException('EMAIL_SEND_FAILED', { providerName }, { cause: error })`; the positional `(key, details, status, message)` form keeps working.
 
@@ -817,15 +884,15 @@ The default is `true`, and deliberately so: for a receipt or a marketing send th
 
 ### Reference adapters
 
-| Export                          | Implements                   | Use for                                      |
-| ------------------------------- | ---------------------------- | -------------------------------------------- |
-| `ResendEmailProvider`           | `IEmailProvider`             | Production email via Resend                  |
-| `SmtpEmailProvider`             | `IEmailProvider`             | Any SMTP relay, and Mailpit/MailHog in tests |
-| `NoOpEmailProvider`             | `IEmailProvider`             | Dev/test — logs a masked recipient only      |
-| `RedisOtpStorage`               | `IOtpStorage`                | Production OTP state (atomic via Lua)        |
-| `InMemoryOtpStorage`            | `IOtpStorage`                | Dev/test — single-process only               |
-| `DefaultTemplateRenderer`       | `IEmailTemplateRenderer`     | `{{var}}` interpolation with HTML escaping   |
-| `NoOpNotificationLogRepository` | `INotificationLogRepository` | Audit configured but intentionally discarded |
+| Export                          | Implements                   | Use for                                                                 |
+| ------------------------------- | ---------------------------- | ----------------------------------------------------------------------- |
+| `ResendEmailProvider`           | `IEmailProvider`             | Production email via Resend                                             |
+| `SmtpEmailProvider`             | `IEmailProvider`             | Any SMTP relay, and Mailpit/MailHog in tests                            |
+| `NoOpEmailProvider`             | `IEmailProvider`             | Dev/test — logs a masked recipient only                                 |
+| `RedisOtpStorage`               | `IOtpStorage`                | Production OTP state (atomic via Lua)                                   |
+| `InMemoryOtpStorage`            | `IOtpStorage`                | Dev/test — single-process only; `.size()` returns `{ otps, cooldowns }` |
+| `DefaultTemplateRenderer`       | `IEmailTemplateRenderer`     | `{{var}}` interpolation with HTML escaping                              |
+| `NoOpNotificationLogRepository` | `INotificationLogRepository` | Audit configured but intentionally discarded                            |
 
 ### Utilities
 
@@ -844,6 +911,37 @@ The default is `true`, and deliberately so: for a receipt or a marketing send th
 | ------------------- | ----------------------------------------------------------------------------------- | ---------------------------------------------------- |
 | `useOtpInput()`     | `{ values, setValue, onChange, onKeyDown, onPaste, refs, code, isComplete, reset }` | Multi-slot OTP input with paste and arrow navigation |
 | `useOtpCountdown()` | `{ remainingSeconds, formatted, expired }`                                          | Expiry countdown for the resend button               |
+
+| Hook option                           | Default      | Notes                                                                                                 |
+| ------------------------------------- | ------------ | ----------------------------------------------------------------------------------------------------- |
+| `useOtpInput({ length })`             | `6`          | Number of slots.                                                                                      |
+| `useOtpInput({ type })`               | `'numeric'`  | `'numeric'`, `'alpha'` or `'alphanumeric'`; other characters are dropped and letters are upper-cased. |
+| `useOtpInput({ onComplete })`         | —            | Called with the full code once every slot is filled.                                                  |
+| `useOtpInput({ autoSubmit })`         | `true`       | `false` stops `onComplete` from firing on its own.                                                    |
+| `useOtpInput({ sanitizeOnPaste })`    | `true`       | Strips whitespace and hyphens from pasted text before distributing it.                                |
+| `useOtpCountdown({ expiresAt })`      | — (required) | Epoch milliseconds, or `null` for no countdown.                                                       |
+| `useOtpCountdown({ tickIntervalMs })` | `1000`       | How often `remainingSeconds` is recomputed.                                                           |
+| `useOtpCountdown({ onExpired })`      | —            | Called once when the countdown reaches zero.                                                          |
+
+### Injection tokens
+
+Every token is a `Symbol()`, exported for an advanced override or a test that replaces one part of the module: `BYMAX_NOTIFICATION_OPTIONS` (the resolved, frozen options), `BYMAX_NOTIFICATION_EMAIL_PROVIDER`, `BYMAX_NOTIFICATION_OTP_STORAGE`, `BYMAX_NOTIFICATION_TEMPLATE_RENDERER` and `BYMAX_NOTIFICATION_LOG_REPOSITORY`. `BYMAX_NOTIFICATION_SMS_PROVIDER` and `BYMAX_NOTIFICATION_PUSH_PROVIDER` exist for the reserved channels and carry nothing today.
+
+### Testing your own storage (`./testing`)
+
+`otpStorageContract(factory, options?)` returns the executable cases your own `IOtpStorage` has to pass: atomic attempt counting, atomic cooldown, TTL that survives an update, and keys scoped by tenant, recipient and purpose. Each case is `{ name, run }`, so it runs in any test runner; `expiryWaitMs` raises the wait of the TTL cases for a backend with coarse expiry.
+
+```ts
+import { InMemoryOtpStorage } from '@bymax-one/nest-notification'
+import { otpStorageContract } from '@bymax-one/nest-notification/testing'
+
+// Run it once per storage you ship; Jest, Vitest and node:test all accept this loop.
+for (const contractCase of otpStorageContract(() => new InMemoryOtpStorage())) {
+  it(contractCase.name, contractCase.run)
+}
+```
+
+Passing the contract does not prove a key encoding safe against every delimiter: it exercises the `:` and `::` joins, and the storage still has to encode the tenant and recipient boundary itself.
 
 ### Constants
 

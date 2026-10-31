@@ -39,6 +39,7 @@ export const NOTIFICATION_ERROR_DEFINITIONS = {
     status: HttpStatus.PAYLOAD_TOO_LARGE,
     message: 'Email attachments exceed size limit'
   },
+  /** Reserved: `to` is not validated, so the library never throws this code. */
   EMAIL_INVALID_RECIPIENT: {
     code: NOTIFICATION_ERROR_CODES.EMAIL_INVALID_RECIPIENT,
     status: HttpStatus.BAD_REQUEST,
@@ -79,21 +80,25 @@ export const NOTIFICATION_ERROR_DEFINITIONS = {
     status: HttpStatus.TOO_MANY_REQUESTS,
     message: 'Resend cooldown is active'
   },
+  /** Reserved: `verify()` returns `{ valid: false, reason: 'not_found' }` instead of throwing. */
   OTP_NOT_FOUND: {
     code: NOTIFICATION_ERROR_CODES.OTP_NOT_FOUND,
     status: HttpStatus.NOT_FOUND,
     message: 'OTP not found or expired'
   },
+  /** Reserved: an expired code is reported as `not_found`. */
   OTP_EXPIRED: {
     code: NOTIFICATION_ERROR_CODES.OTP_EXPIRED,
     status: HttpStatus.GONE,
     message: 'OTP code expired'
   },
+  /** Reserved: `verify()` returns `{ valid: false, reason: 'max_attempts' }` instead of throwing. */
   OTP_MAX_ATTEMPTS_EXCEEDED: {
     code: NOTIFICATION_ERROR_CODES.OTP_MAX_ATTEMPTS_EXCEEDED,
     status: HttpStatus.TOO_MANY_REQUESTS,
     message: 'Maximum OTP attempts exceeded'
   },
+  /** Reserved: `verify()` returns `{ valid: false, reason: 'invalid_code' }` instead of throwing. */
   OTP_INVALID_CODE: {
     code: NOTIFICATION_ERROR_CODES.OTP_INVALID_CODE,
     status: HttpStatus.UNAUTHORIZED,
@@ -104,26 +109,31 @@ export const NOTIFICATION_ERROR_DEFINITIONS = {
     status: HttpStatus.BAD_REQUEST,
     message: 'Invalid OTP length config'
   },
+  /** Reserved: the SMS channel is not implemented. */
   SMS_PROVIDER_NOT_CONFIGURED: {
     code: NOTIFICATION_ERROR_CODES.SMS_PROVIDER_NOT_CONFIGURED,
     status: HttpStatus.INTERNAL_SERVER_ERROR,
     message: 'SMS provider not configured'
   },
+  /** Reserved: the SMS channel is not implemented. */
   SMS_SEND_FAILED: {
     code: NOTIFICATION_ERROR_CODES.SMS_SEND_FAILED,
     status: HttpStatus.BAD_GATEWAY,
     message: 'Failed to send SMS'
   },
+  /** Reserved: the SMS channel is not implemented. */
   SMS_INVALID_RECIPIENT: {
     code: NOTIFICATION_ERROR_CODES.SMS_INVALID_RECIPIENT,
     status: HttpStatus.BAD_REQUEST,
     message: 'Invalid phone number'
   },
+  /** Reserved: the push channel is not implemented. */
   PUSH_PROVIDER_NOT_CONFIGURED: {
     code: NOTIFICATION_ERROR_CODES.PUSH_PROVIDER_NOT_CONFIGURED,
     status: HttpStatus.INTERNAL_SERVER_ERROR,
     message: 'Push provider not configured'
   },
+  /** Reserved: the push channel is not implemented. */
   PUSH_SEND_FAILED: {
     code: NOTIFICATION_ERROR_CODES.PUSH_SEND_FAILED,
     status: HttpStatus.BAD_GATEWAY,

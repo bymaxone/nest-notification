@@ -8,7 +8,8 @@
  * not configured is simply absent, and dispatching to it throws `CHANNEL_DISABLED`.
  */
 
-import { Inject, Injectable, Optional } from '@nestjs/common'
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common'
+import type { OnModuleInit } from '@nestjs/common'
 
 import { EmailService } from './email.service'
 import type { EmailSendInput, EmailSendTemplateInput } from './email.service'
@@ -63,7 +64,9 @@ export type DispatchResult =
 
 /** Uniform façade over the configured channel services. */
 @Injectable()
-export class NotificationService {
+export class NotificationService implements OnModuleInit {
+  private readonly logger = new Logger(NotificationService.name)
+
   /**
    * @param emailService - The email service, present only when the email channel is configured.
    * @param otpService - The OTP service, present only when the OTP channel is configured.
@@ -117,6 +120,12 @@ export class NotificationService {
     if (!this.emailService) {
       throw new NotificationException('CHANNEL_DISABLED', { channel: 'email' })
     }
+    if (!this.emailService.isConfigured()) {
+      throw new NotificationException('CHANNEL_DISABLED', {
+        channel: 'email',
+        reason: 'provider_not_configured'
+      })
+    }
     return this.emailService
   }
 
@@ -130,7 +139,36 @@ export class NotificationService {
     if (!this.otpService) {
       throw new NotificationException('CHANNEL_DISABLED', { channel: 'otp' })
     }
+    if (!this.otpService.isConfigured()) {
+      throw new NotificationException('CHANNEL_DISABLED', {
+        channel: 'otp',
+        reason: 'storage_not_configured'
+      })
+    }
     return this.otpService
+  }
+
+  /**
+   * Warns once per channel that is configured but cannot be used, because its provider or
+   * storage reports `isConfigured() === false`. Such a channel is absent from
+   * {@link NotificationService.getEnabledChannels} and refused by the accessors; without this
+   * line the first sign of it would be a failed send.
+   */
+  onModuleInit(): void {
+    if (this.emailService && !this.emailService.isConfigured()) {
+      this.warnNotUsable('email', 'provider')
+    }
+    if (this.otpService && !this.otpService.isConfigured()) {
+      this.warnNotUsable('otp', 'storage')
+    }
+  }
+
+  /** Logs the not-usable warning for one channel. */
+  private warnNotUsable(channel: NotificationChannel, part: 'provider' | 'storage'): void {
+    this.logger.warn(
+      `[BYMAX_NOTIFICATION_CHANNEL_NOT_USABLE] The ${channel} channel is configured but its ${part} reports isConfigured() = false, ` +
+        `so it is not enabled: check the ${part}'s credentials or environment.`
+    )
   }
 
   /** Routes an email dispatch to `sendTemplate` (template) or `send` (raw body). */
