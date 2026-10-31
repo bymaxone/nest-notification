@@ -147,7 +147,7 @@ verifying a code is the consumer's job. No HTTP client, no Node builtins; `react
 
 - **100% coverage** (statements / branches / functions / lines) per file
   (`pnpm test:cov:all`): a pre-publish gate, not a target.
-- **`./testing`** ships `otpStorageContract(factory)`: 21 executable cases a consumer runs against
+- **`./testing`** ships `otpStorageContract(factory)`: executable cases a consumer runs against
   their own `IOtpStorage`, covering what a type cannot check — atomic `consumeAttempt` and
   `tryAcquireCooldown`, TTL surviving `update`, entry and cooldown keys scoped by tenant,
   recipient and purpose. Each case is pinned by a storage violating exactly that obligation, one
@@ -173,8 +173,7 @@ verifying a code is the consumer's job. No HTTP client, no Node builtins; `react
   `check:mutants` · build · integrity · `check:exports` · `check:published` · `size`).
   `codeql.yml` and `scorecard.yml` run on push + weekly. `release.yml` runs on a `v*.*.*` tag (or a manual
   dispatch to re-run one): `prepublishOnly`, the release-shape gates (`size`, `check:exports`,
-  dogfood smoke), then `npm publish --provenance` via OIDC with a SLSA attestation
-  (`npm audit signatures`); it skips a version already on npm.
+  dogfood smoke), then `npm publish --provenance` via OIDC (`npm audit signatures`); it skips a version already on npm.
 
 ## 10. Common Pitfalls
 
