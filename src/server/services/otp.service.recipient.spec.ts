@@ -1,3 +1,10 @@
+/**
+ * @fileoverview Holds `OtpService` to one OTP state per mailbox: every spelling of an
+ * address shares the cooldown, the attempt budget, the status and the consume, while the
+ * message is addressed exactly as supplied.
+ * @layer domain
+ */
+
 import { NotificationException } from '../errors/notification-exception'
 import type { INotificationLogRepository } from '../interfaces/notification-log-repository.interface'
 import { InMemoryOtpStorage } from '../providers/in-memory-otp.storage'

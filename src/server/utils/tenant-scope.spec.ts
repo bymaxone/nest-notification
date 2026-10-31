@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Specifies `assertIdentifies`: blank, non-string and control-character
+ * identifiers are refused without echoing the value; ordinary identifiers pass.
+ * @layer domain
+ */
+
 import { assertIdentifies } from './tenant-scope'
 
 describe('assertIdentifies', () => {

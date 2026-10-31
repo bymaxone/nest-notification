@@ -1,3 +1,10 @@
+/**
+ * @fileoverview Holds `EmailService.send` and `sendTemplate` to the tenant-scope rule: a
+ * tenant that identifies nobody, or carries a control character, is refused before the
+ * provider, the renderer or the audit sink is reached.
+ * @layer domain
+ */
+
 import {
   baseInput,
   makeAudit,

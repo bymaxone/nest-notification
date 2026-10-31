@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Specifies `normalizeRecipient`: trim always, lower-case an email address,
+ * leave any other identifier's case alone, independent of the process locale.
+ * @layer domain
+ */
+
 import { normalizeRecipient } from './recipient'
 
 describe('normalizeRecipient', () => {
