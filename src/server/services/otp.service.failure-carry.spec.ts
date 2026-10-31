@@ -243,6 +243,18 @@ describe('OtpService failed attempts across re-issues', () => {
     expect((await storage.get('acme', ref.recipient, ref.purpose))?.attempts).toBe(0)
   })
 
+  // The code's own budget can be the nearer one, e.g. when the counter restarted meanwhile.
+  it('should report the attempts left by the code when it is the nearer', async () => {
+    await service.generate(base)
+    await fail(1)
+    jest.spyOn(storage, 'recordFailure').mockResolvedValueOnce(1)
+
+    expect(await service.verify({ ...base, code: WRONG })).toMatchObject({
+      reason: 'invalid_code',
+      remainingAttempts: 1
+    })
+  })
+
   // Both budgets run out; the nearer one is reported.
   it('should report the attempts left by the failure count when it is the nearer', async () => {
     await service.generate(base)
@@ -275,6 +287,9 @@ describe('OtpService failed attempts across re-issues', () => {
         valid: false,
         reason: 'not_found'
       })
+      expect(audit.create).toHaveBeenCalledWith(
+        expect.objectContaining({ verb: 'failed', metadata: { reason: 'not_found' } })
+      )
     })
 
     // Behaviour is unchanged for it: each code carries a fresh budget.
