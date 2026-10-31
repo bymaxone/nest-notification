@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+
+- **README: two statements corrected against the code.** The subpath diagram drew `react`
+  depending on `shared`; `react` imports only `react`, and `server` is the subpath that builds on
+  `shared`. The Architecture section said an unconfigured channel is a startup error; it is not —
+  `getEnabledChannels()` lists the wired channels, and `getEmail()` / `getOtp()` throw
+  `CHANNEL_DISABLED` for one that is not. The SMTP `requireTls` default now reads "`true` unless
+  implicit TLS or loopback", which is what the provider does on port 465.
+
+### Tests
+
+- **The README's option-default tables are held to the code.** Two specs parse the Configuration
+  table and the SMTP option table and assert every stated default, every "required" marker, the
+  OTP length range and the SMTP port, TLS and timeout rules against the resolved options and the
+  transport the provider builds, so a drifted cell fails the suite instead of reaching npm.
+
 ## [1.4.1] - 2026-10-30
 
 ### Security

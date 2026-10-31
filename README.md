@@ -97,12 +97,10 @@ One package, four entry points — import only what your app needs:
 | **Testing** | `@bymax-one/nest-notification/testing` | Executable `IOtpStorage` contract for your own storage |                  None                  |
 
 ```
-shared (zero deps)
-  ↗            ↖
-server        react
+shared (zero deps) ← server        react
 ```
 
-`shared` is independent, `react` depends only on `react`, and `server` is independent — importing one never drags in another's peers. Every subpath ships ESM (`.mjs`), CJS (`.cjs`), and declarations for both formats (`.d.ts` + `.d.cts`).
+`shared` has no dependencies, `server` builds on it (the error codes and TTLs), and `react` imports nothing but `react` — importing one never drags in another's peers. Every subpath ships ESM (`.mjs`), CJS (`.cjs`), and declarations for both formats (`.d.ts` + `.d.cts`).
 
 ---
 
@@ -321,15 +319,15 @@ BymaxNotificationModule.forRoot({
 })
 ```
 
-| Option                                                    | Default               | Notes                                                                        |
-| --------------------------------------------------------- | --------------------- | ---------------------------------------------------------------------------- |
-| `host`                                                    | —                     | Required. Without it `isConfigured()` is `false` and `send()` throws.        |
-| `port`                                                    | `587`                 | Submission port.                                                             |
-| `secure`                                                  | `true` iff port 465   | Implicit TLS from the first byte.                                            |
-| `requireTls`                                              | `true` off-loopback   | Makes the STARTTLS upgrade mandatory. See the TLS note below.                |
-| `credentials`                                             | — (open relay)        | `{ user, pass }`. Supplying it declares the deployment logs in.              |
-| `tls`                                                     | —                     | `rejectUnauthorized` / `servername` / `ca`, for a relay behind a private CA. |
-| `connectionTimeout` / `greetingTimeout` / `socketTimeout` | `10s` / `10s` / `20s` | Bounded on purpose — Nodemailer's own defaults run into minutes.             |
+| Option                                                    | Default                                | Notes                                                                        |
+| --------------------------------------------------------- | -------------------------------------- | ---------------------------------------------------------------------------- |
+| `host`                                                    | —                                      | Required. Without it `isConfigured()` is `false` and `send()` throws.        |
+| `port`                                                    | `587`                                  | Submission port.                                                             |
+| `secure`                                                  | `true` iff port 465                    | Implicit TLS from the first byte.                                            |
+| `requireTls`                                              | `true` unless implicit TLS or loopback | Makes the STARTTLS upgrade mandatory. See the TLS note below.                |
+| `credentials`                                             | — (open relay)                         | `{ user, pass }`. Supplying it declares the deployment logs in.              |
+| `tls`                                                     | —                                      | `rejectUnauthorized` / `servername` / `ca`, for a relay behind a private CA. |
+| `connectionTimeout` / `greetingTimeout` / `socketTimeout` | `10s` / `10s` / `20s`                  | Bounded on purpose — Nodemailer's own defaults run into minutes.             |
 
 > [!IMPORTANT]
 > `isConfigured()` answers on the real configuration, not on "a transport object exists". Omitting `credentials` marks the relay as open and is fine; supplying them half-loaded — an `SMTP_PASS` that never made it into the environment — reports **not configured** and fails the send closed, rather than silently attempting an anonymous delivery a permissive relay might accept.
@@ -561,7 +559,7 @@ The package runs **inside** your NestJS application as a dynamic module — not 
 └──────────────────────────────────────────────────┘
 ```
 
-`NotificationService` is the façade: it dispatches to the channel services and exposes `getEnabledChannels()`, `getEmail()`, and `getOtp()` for direct access. Only the channels present in your configuration are registered, so an unconfigured channel is a startup error, not a runtime surprise.
+`NotificationService` is the façade: it dispatches to the channel services and exposes `getEnabledChannels()`, `getEmail()`, and `getOtp()` for direct access. Only the channels present in your configuration are wired: `getEnabledChannels()` lists them, and `getEmail()` / `getOtp()` throw `CHANNEL_DISABLED` for a channel that is not.
 
 ### Design Principles
 

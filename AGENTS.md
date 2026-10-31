@@ -1,6 +1,6 @@
 # @bymax-one/nest-notification — Agent Specification
 
-Architecture deep-dive. Quick rules: [CLAUDE.md](./CLAUDE.md). Consumer usage: [README.md](./README.md).
+Architecture deep-dive. Quick rules: [CLAUDE.md](./CLAUDE.md). Usage: [README.md](./README.md).
 
 Codex reads its review rules from the [Code Review Rules](#code-review-rules) section at the end
 of this file. The block between the `shared:` markers is the canonical copy from
@@ -40,9 +40,10 @@ src/
 
 The module registers **only the channels you configure**. Sync `forRoot` resolves options eagerly
 and registers a service only for a present channel. `forRootAsync` cannot know the channels until
-the factory runs, so it registers every channel **token** (absent → `null`) and **service**;
-`isConfigured()` reflects the token. `NotificationService` is always registered and injects the
-channel services with `@Optional()`.
+the factory runs, so it registers every channel **token** (absent → `null`) and each channel
+**service** as a factory that resolves to `undefined` when its channel is absent.
+`NotificationService` is always registered, injects the channel services with `@Optional()`, and
+reports an absent channel disabled in both modes.
 
 Injection tokens are `Symbol()`, exported for override: `BYMAX_NOTIFICATION_OPTIONS`, and
 `…_EMAIL_PROVIDER`, `…_OTP_STORAGE`, `…_TEMPLATE_RENDERER`, `…_LOG_REPOSITORY`, `…_SMS_PROVIDER`,
@@ -113,7 +114,7 @@ surfaces failures. The interceptor records `sent` / `failed`; the services recor
 
 ## 6. Provider Implementation Guide
 
-Implement the interface and pass an instance (or class) to `forRoot`.
+Implement the interface; pass an instance (or class) to `forRoot`.
 
 - **`IEmailProvider`** — `send(options): Promise<{ messageId }>`, `isConfigured()`, `name`.
   Throw a plain `Error` on failure; `EmailService` maps it to `EMAIL_SEND_FAILED`. Never log the
@@ -128,7 +129,7 @@ Implement the interface and pass an instance (or class) to `forRoot`.
 - **`INotificationLogRepository`** — `create(entry)` / `name`. `errorMessage` is the message only, never a stack trace.
 
 Adapter examples (Handlebars, MJML, React Email, Prisma) live under `docs/templates/` and
-`docs/schemas/`; the library does not import them.
+`docs/schemas/`; the library imports none.
 
 ### Peer-dependency matrix
 
@@ -171,7 +172,7 @@ verifying a code is the consumer's job. No HTTP client, no Node builtins; `react
 - **CI** — `ci.yml` calls the org-wide `bymaxone/.github` pipeline (lint · typecheck ·
   `test:cov:all` · mutation on main) plus a local `verify` job (`check:no-prisma` · `test:types` ·
   `check:mutants` · build · integrity · `check:exports` · `check:published` · `size`).
-  `codeql.yml` and `scorecard.yml` run on push + weekly. `release.yml` runs on a `v*.*.*` tag (or a manual
+  `codeql.yml` runs on push, pull requests and weekly; `scorecard.yml` on push and weekly. `release.yml` runs on a `v*.*.*` tag (or a manual
   dispatch to re-run one): `prepublishOnly`, the release-shape gates (`size`, `check:exports`,
   dogfood smoke), then `npm publish --provenance` via OIDC; it skips a version already on npm.
 
@@ -184,7 +185,7 @@ verifying a code is the consumer's job. No HTTP client, no Node builtins; `react
 - ❌ Trusting a body `tenantId` — resolve it from a trusted source.
 - ❌ A runtime `dependency` — everything is a peer dep or a `node:` builtin.
 - ❌ Mutation testing in `prepublishOnly` or per-PR CI (see §8).
-- ❌ A function over 50 lines or a file over 800 — split by responsibility.
+- ❌ A function over 50 lines or a file over 800 — split it.
 
 ---
 
