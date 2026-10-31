@@ -62,8 +62,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A live OTP issued to a recipient with uppercase letters or surrounding whitespace is re-keyed.**
   The code was stored under the old key, so verifying it after the upgrade reports `not_found`
   until the user asks for a new code. The window is the code's TTL (10 minutes by default).
+- **The fourteen unused optional peers are gone from `package.json`.** If a tool of yours reads this
+  package's peer list to decide what to install (a template, a bootstrap script), install the SDK
+  of the adapter you write yourself: `handlebars` for a Handlebars renderer, `@sendgrid/mail` for
+  a SendGrid provider, and so on. The package no longer lists them.
 - **A caller that passed a blank `tenantId` to `EmailService` now gets a 400.** Pass the tenant the
   email belongs to.
+
+### Changed
+
+- **Fourteen optional peer dependencies the package never loads are removed.** `package.json`
+  declared `@sendgrid/mail`, `@aws-sdk/client-ses`, `@aws-sdk/client-sns`,
+  `@aws-sdk/client-dynamodb`, `mailgun.js`, `twilio`, `firebase-admin`, `handlebars`,
+  `@react-email/render`, `mjml`, `class-validator`, `class-transformer`, `express` and
+  `@types/express` as optional peers, but no source file imports any of them: they were the
+  libraries the documentation's adapter examples use. What remains is what the package loads:
+  `@nestjs/common`, `@nestjs/core`, `reflect-metadata` and `rxjs` (required), `ioredis`, `resend`,
+  `nodemailer` and `react` (optional). Removing an optional peer cannot break an installation; it
+  stops advertising a range for packages the library has no code for, and it stops a scan of your
+  dependency tree from attributing their advisories to this package. An adapter you write for one
+  of those providers keeps depending on its SDK in your application.
 
 ### Documentation
 
