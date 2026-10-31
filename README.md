@@ -640,7 +640,7 @@ A code is short: a six-digit code has a million values, so a plain hash of it is
 
 This is defence in depth, not a standards requirement: NIST SP 800-63B-4 requires hashed storage for look-up secrets (§3.1.2.2) and a keyed hash with the key "stored separately" for password verifiers (§3.1.1.2), and says nothing about hashing an out-of-band code (§3.1.3.2). The OWASP Password Storage Cheat Sheet describes the same shape for a low-entropy secret: an HMAC whose key is kept separately from the data.
 
-- **Unset** (the default): codes are stored in plaintext, exactly as before, and a warning is logged once at startup.
+- **Unset** (the default): codes are stored in plaintext, and a warning is logged once at startup.
 - **Turning it on loses no live code.** An entry written in plaintext before the secret was set still verifies until it expires.
 - **Changing or removing the secret** makes the digests already stored unverifiable (`invalid_code`); those codes must be requested again. Downgrading the library below the version that introduced the option does the same.
 - A custom `IOtpStorage` is unaffected: `OtpEntry.code` is an opaque string to it.
