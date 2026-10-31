@@ -69,7 +69,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A recipient at the failure ceiling stays locked out until the counter lapses.** With a
   storage that carries failures (the bundled ones), a recipient at the ceiling gets
   `{ valid: false, reason: 'max_attempts' }` for any code, a freshly issued one included, until the
-  counter has not been touched for the purpose's code lifetime (10 minutes by default). Someone who sends wrong
+  counter has not been touched for the purpose's code lifetime. Someone who sends wrong
   guesses for another person's address can keep that address locked out; rate-limit the OTP
   endpoints by IP in your controller, as the security checklist says.
 - **If you implement `IOtpStorage` yourself,** add `getFailures`, `recordFailure` and `clearFailures`

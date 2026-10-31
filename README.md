@@ -652,7 +652,7 @@ This is defence in depth, not a standards requirement: NIST SP 800-63B-4 require
 
 ### Failed attempts survive a re-issue
 
-NIST SP 800-63B-4 §3.1.3.2: "Generating a new authentication secret SHALL NOT reset the failed authentication count." A per-code counter alone breaks that rule: three wrong guesses, a re-issue after the resend cooldown, and three more were accepted, so the attempt limit was only a rate limit of `defaultMaxAttempts` guesses per cooldown. The failed verifications of a `(tenant, recipient, purpose)` are now counted in the storage, and `verify()` refuses once that count reaches `defaultMaxAttempts`, whichever code is live.
+NIST SP 800-63B-4 §3.1.3.2: "Generating a new authentication secret SHALL NOT reset the failed authentication count." A per-code counter alone breaks that rule: three wrong guesses, a re-issue after the resend cooldown, and three more were accepted, so the attempt limit was only a rate limit of `defaultMaxAttempts` guesses per cooldown. The failed verifications of a `(tenant, recipient, purpose)` are now counted in the storage, and `verify()` refuses once that count reaches the purpose's attempt ceiling, whichever code is live.
 
 - A wrong guess adds one failure and restarts the counter's lifetime to the purpose's code lifetime (`ttlSeconds`); a counter that is not touched for that long lapses, which starts the count again from zero.
 - A successful verification and `consume()` clear it, so the next flow starts with a full budget.
