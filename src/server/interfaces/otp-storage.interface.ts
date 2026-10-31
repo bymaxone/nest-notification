@@ -134,7 +134,7 @@ export interface IOtpStorage {
   clearCooldown(tenantId: string, recipient: string, purpose: string): Promise<void>
 
   /**
-   * Optional. Failed verifications recorded for `(tenant, recipient, purpose)`, or `0`.
+   * Optional. Verification attempts counted for `(tenant, recipient, purpose)`, or `0`.
    *
    * Together with {@link IOtpStorage.recordFailure} and {@link IOtpStorage.clearFailures} this
    * makes the failed-attempt count outlive a code: NIST SP 800-63B-4 §3.1.3.2 says generating a
@@ -147,7 +147,7 @@ export interface IOtpStorage {
   getFailures?(tenantId: string, recipient: string, purpose: string): Promise<number>
 
   /**
-   * Optional. Atomically adds one failed verification and (re)sets the counter's lifetime to
+   * Optional. Atomically adds one verification attempt and (re)sets the counter's lifetime to
    * `ttlSeconds`, returning the new count. A counter that is not touched for `ttlSeconds`
    * lapses, which starts the count again from zero.
    *
