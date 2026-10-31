@@ -37,7 +37,7 @@ describe('otp.codeSecret validation', () => {
     expect(() => validateOptions(otp(secret))).not.toThrow()
   })
 
-  // The option is optional: omitting it keeps the unchanged plaintext behaviour.
+  // The option is optional: omitting it selects plaintext storage.
   it('should accept an OTP section without a secret', () => {
     expect(() => validateOptions({ otp: { storage } })).not.toThrow()
   })

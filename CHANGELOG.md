@@ -38,6 +38,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   warning that codes are stored in plaintext. The delivered email still carries the plaintext
   code, the audit entry carries neither form, and the secret is not a property of the resolved
   options.
+- **New error code `notification.otp_manual_delivery_unavailable`** (400; 24 codes, up from 23).
+  `generate()` never returns the code, so a manual delivery reads it back from the store, and a
+  store that holds a digest has nothing to hand over. With `otp.codeSecret` set, a manual
+  delivery (`deliverVia: 'manual'`, or the default when no email channel is configured) is refused
+  before the cooldown is taken or anything is stored, instead of succeeding with a code nobody can
+  deliver.
 
 ### ⚠️ Apply before upgrading
 
@@ -47,6 +53,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   codes must be requested again. A custom `IOtpStorage` is unaffected, since `OtpEntry.code` is an
   opaque string. Set the secret from a secret store, not from the place the Redis credentials come
   from, or a reader of Redis gets both.
+- **`otp.codeSecret` and manual delivery do not combine.** Where a flow delivers the code itself
+  (`deliverVia: 'manual'`, or no email channel), leave the secret unset or move that flow to email
+  delivery; a development setup that reads the code from the store keeps `codeSecret` unset.
 - **A module with the OTP channel and no `otp.codeSecret` logs one warning at startup** (from
   `forRoot` and `forRootAsync`). Set the option, or filter the log line
   `BYMAX_NOTIFICATION_PLAINTEXT_OTP_CODES` if plaintext storage is a decision you have made.

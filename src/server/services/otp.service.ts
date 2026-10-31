@@ -151,6 +151,7 @@ export class OtpService {
     const otp = this.requireOtpOptions()
     this.assertScope(input)
     const scope = this.keyed(input)
+    this.assertDeliverable(input, otp.digestCode)
     const cfg = otp.resolveForPurpose(input.purpose)
     await this.acquireCooldownOrThrow(scope, cfg.resendCooldownSeconds)
     const code = generateOtpCode(cfg.length, cfg.codeType)
@@ -343,15 +344,38 @@ export class OtpService {
     return outgoing
   }
 
+  /** How a generated code reaches the recipient: by email when asked or when an email channel exists. */
+  private deliveryOf(input: OtpGenerateInput): 'email' | 'manual' {
+    // Stryker disable next-line StringLiteral: when no email service is present the default is any non-'email' value; both 'manual' and an emptied string fall into the `!== 'email'` early return, so the literal is equivalent.
+    return input.deliverVia ?? (this.emailService ? 'email' : 'manual')
+  }
+
+  /**
+   * Refuses a manual delivery while codes are stored as digests, before the cooldown is taken
+   * or anything is stored. `generate` never returns the code and a digest cannot be handed to
+   * a person, so the call would otherwise succeed with nothing deliverable.
+   *
+   * @throws NotificationException `OTP_MANUAL_DELIVERY_UNAVAILABLE`.
+   */
+  private assertDeliverable(
+    input: OtpGenerateInput,
+    digestCode: ((code: string) => string) | undefined
+  ): void {
+    if (digestCode && this.deliveryOf(input) !== 'email') {
+      throw new NotificationException('OTP_MANUAL_DELIVERY_UNAVAILABLE', {
+        remedy:
+          'unset otp.codeSecret to read the code from the store, or configure an email channel and deliver by email'
+      })
+    }
+  }
+
   /** Delivers the code by email when requested; throws on failure (release is handled by the caller). */
   private async deliverOtp(
     input: OtpGenerateInput,
     code: string,
     cfg: OtpPurposeConfig
   ): Promise<void> {
-    // Stryker disable next-line StringLiteral: when no email service is present the default is any non-'email' value; both 'manual' and an emptied string fall into the `!== 'email'` early return, so the literal is equivalent.
-    const deliverVia = input.deliverVia ?? (this.emailService ? 'email' : 'manual')
-    if (deliverVia !== 'email') {
+    if (this.deliveryOf(input) !== 'email') {
       return
     }
     if (!this.emailService) {

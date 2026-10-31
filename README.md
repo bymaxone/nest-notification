@@ -79,7 +79,7 @@ pnpm add @bymax-one/nest-notification
 ### 🧩 Developer Experience
 
 - ✅ **Subpaths** — server, zero-dependency shared types, React hooks, and a `testing` storage contract
-- ✅ **Stable error catalog** — 23 namespaced codes shared byte-for-byte between server and frontend, so you localize on the `code`
+- ✅ **Stable error catalog** — 24 namespaced codes shared byte-for-byte between server and frontend, so you localize on the `code`
 - ✅ **Dual-format output** — ESM + CJS + declarations for both, verified against the packed tarball on every PR
 - ✅ **Typed end to end** — TypeScript `strict` with `exactOptionalPropertyTypes` and `noUncheckedIndexedAccess`; zero `any`
 
@@ -641,6 +641,7 @@ A code is short: a six-digit code has a million values, so a plain hash of it is
 This is defence in depth, not a standards requirement: NIST SP 800-63B-4 requires hashed storage for look-up secrets (§3.1.2.2) and a keyed hash with the key "stored separately" for password verifiers (§3.1.1.2), and says nothing about hashing an out-of-band code (§3.1.3.2). The OWASP Password Storage Cheat Sheet describes the same shape for a low-entropy secret: an HMAC whose key is kept separately from the data.
 
 - **Unset** (the default): codes are stored in plaintext, and a warning is logged once at startup.
+- **Manual delivery is refused while it is set.** `generate()` never returns the code, so a manual delivery reads it back from the store, and a store that holds a digest has nothing to hand over. `generate({ deliverVia: 'manual' })`, or the default delivery when no email channel is configured, fails with `notification.otp_manual_delivery_unavailable` (400) before the cooldown is taken or anything is stored. Deliver by email, or leave `codeSecret` unset where you read the code from the store (a local development flow, for instance).
 - **Turning it on loses no live code.** An entry written in plaintext before the secret was set still verifies until it expires.
 - **Changing or removing the secret** makes the digests already stored unverifiable (`invalid_code`); those codes must be requested again. Downgrading the library below the version that introduced the option does the same.
 - A custom `IOtpStorage` is unaffected: `OtpEntry.code` is an opaque string to it.
@@ -770,7 +771,7 @@ pnpm mutation      # Stryker mutation testing
 | -------------------------------- | -------------------------------------------------------------------------- |
 | `NotificationException`          | `HttpException` carrying a stable `code`, a status, and optional `details` |
 | `NotificationExceptionOptions`   | Constructor options bag: `{ status?, message?, cause? }`                   |
-| `NOTIFICATION_ERROR_CODES`       | The 23 stable `notification.*` codes — branch on these, not on messages    |
+| `NOTIFICATION_ERROR_CODES`       | The 24 stable `notification.*` codes — branch on these, not on messages    |
 | `NOTIFICATION_ERROR_DEFINITIONS` | Server-side code → HTTP status + default English message                   |
 
 Error codes are namespaced (`notification.otp_invalid_code`, `notification.otp_cooldown_active`, `notification.email_send_failed`, …) and never change once published. Default messages are English; localize on the `code`.

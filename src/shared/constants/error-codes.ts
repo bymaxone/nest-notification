@@ -12,7 +12,7 @@
  * Stable error-code identifiers, keyed by their symbolic name.
  *
  * Values are namespaced under `notification.*` and never change once published —
- * consumers branch on them to localize messages. The 23 entries cover the email,
+ * consumers branch on them to localize messages. The 24 entries cover the email,
  * template, OTP, SMS, push, audit, channel-config and scoping failure surfaces.
  */
 export const NOTIFICATION_ERROR_CODES = {
@@ -26,6 +26,7 @@ export const NOTIFICATION_ERROR_CODES = {
   TEMPLATE_RENDER_FAILED: 'notification.template_render_failed',
   OTP_STORAGE_NOT_CONFIGURED: 'notification.otp_storage_not_configured',
   OTP_EMAIL_DELIVERY_NOT_CONFIGURED: 'notification.otp_email_delivery_not_configured',
+  OTP_MANUAL_DELIVERY_UNAVAILABLE: 'notification.otp_manual_delivery_unavailable',
   OTP_COOLDOWN_ACTIVE: 'notification.otp_cooldown_active',
   OTP_NOT_FOUND: 'notification.otp_not_found',
   OTP_EXPIRED: 'notification.otp_expired',
