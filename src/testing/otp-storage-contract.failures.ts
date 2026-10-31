@@ -17,7 +17,7 @@ interface FailureStorage extends IOtpStorage {
 }
 
 /** Whether the storage carries failed attempts across a re-issue (the optional methods). */
-export function hasFailureMethods(storage: IOtpStorage): storage is FailureStorage {
+function hasFailureMethods(storage: IOtpStorage): storage is FailureStorage {
   return (
     storage.getFailures !== undefined &&
     storage.recordFailure !== undefined &&
@@ -28,6 +28,7 @@ export function hasFailureMethods(storage: IOtpStorage): storage is FailureStora
 /** Failure lifetime used by the cases that do not exercise expiry. */
 const FAILURE_TTL_SECONDS = 60
 
+/** The counter counts: `recordFailure` returns 1, 2, 3 and `getFailures` reads the total. */
 export function failureCountCase({ scope, withStorage }: ContractContext): OtpStorageContractCase {
   return {
     name: 'counts failures per scope (optional: getFailures, recordFailure, clearFailures)',
@@ -69,6 +70,7 @@ export function failureCountCase({ scope, withStorage }: ContractContext): OtpSt
   }
 }
 
+/** The counter is scoped by tenant, recipient and purpose. */
 export function failureScopeCase({ scope, withStorage }: ContractContext): OtpStorageContractCase {
   return {
     name: 'scopes the failure counter by tenant, recipient and purpose',
@@ -103,6 +105,7 @@ export function failureScopeCase({ scope, withStorage }: ContractContext): OtpSt
   }
 }
 
+/** The counter key encodes the tenant and recipient boundary, so a shifted split does not collide. */
 export function failureBoundaryCase({
   scope,
   withStorage
@@ -130,6 +133,7 @@ export function failureBoundaryCase({
   }
 }
 
+/** `clearFailures` removes only its own scope's counter, and is idempotent. */
 export function failureClearCase({ scope, withStorage }: ContractContext): OtpStorageContractCase {
   return {
     name: 'clearFailures removes only its own counter and is idempotent',
@@ -166,6 +170,7 @@ export function failureClearCase({ scope, withStorage }: ContractContext): OtpSt
   }
 }
 
+/** The counter lapses after its lifetime and starts again from one. */
 export function failureTtlCase({
   scope,
   withStorage,
@@ -201,6 +206,7 @@ export function failureTtlCase({
   }
 }
 
+/** Concurrent `recordFailure` calls are each counted exactly once. */
 export function failureAtomicCase({ scope, withStorage }: ContractContext): OtpStorageContractCase {
   return {
     name: 'recordFailure is ATOMIC under concurrency',
