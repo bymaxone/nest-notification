@@ -596,7 +596,7 @@ The trade-off — opaque keys you cannot read back to a recipient — is intenti
 When you expose notification endpoints over HTTP, a caller could forge another tenant's id in the request body — `POST { "tenantId": "tenant_a", … }` sent from `tenant_b` to verify someone else's OTP. Configure a `tenantIdResolver` that reads the tenant from a **trusted** source: a verified JWT claim, a subdomain, or a gateway-checked header.
 
 ```typescript
-import type { NotificationRequest } from '@bymax-one/nest-notification'
+import { BymaxNotificationModule, type NotificationRequest } from '@bymax-one/nest-notification'
 
 BymaxNotificationModule.forRoot({
   global: {
