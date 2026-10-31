@@ -267,6 +267,16 @@ describe('OtpService failed attempts across re-issues', () => {
       jest.restoreAllMocks()
     })
 
+    // With nothing to count, a verification goes straight to the storage's own answer.
+    it('should answer not_found from the storage when no code is pending', async () => {
+      const legacy = new OtpService(makeOptions({}), new PlainStorage(), audit)
+
+      expect(await legacy.verify({ ...base, code: WRONG })).toEqual({
+        valid: false,
+        reason: 'not_found'
+      })
+    })
+
     // Behaviour is unchanged for it: each code carries a fresh budget.
     it('should keep a fresh budget per code', async () => {
       const plain = new PlainStorage()
