@@ -1,41 +1,23 @@
 # @bymax-one/nest-notification — Agent Specification
 
-Architecture deep-dive for agents and contributors. For the quick rules, see
-[CLAUDE.md](./CLAUDE.md). For consumer usage, see [README.md](./README.md).
+Architecture deep-dive. Quick rules: [CLAUDE.md](./CLAUDE.md). Consumer usage: [README.md](./README.md).
 
-## Table of Contents
-
-1. [Project Overview](#1-project-overview)
-2. [Architecture](#2-architecture)
-3. [Backend Patterns](#3-backend-patterns)
-4. [Multi-tenant Security Model](#4-multi-tenant-security-model)
-5. [Audit Log — Fire-and-Forget](#5-audit-log--fire-and-forget)
-6. [Provider Implementation Guide](#6-provider-implementation-guide)
-7. [Frontend (`./react`)](#7-frontend-react)
-8. [Testing Strategy](#8-testing-strategy)
-9. [Build and Publish](#9-build-and-publish)
-10. [Common Pitfalls](#10-common-pitfalls)
-
-Codex takes its review rules from the [Code Review Rules](#code-review-rules) section at the
-end of this file — that heading, in `AGENTS.md`, is the only repository-level review
-configuration it reads. The block between the `shared:` markers there is the canonical copy
-from `bymaxone/.github` and is replaced wholesale by the `agents-sync` workflow; edit it
-there, not here.
+Codex reads its review rules from the [Code Review Rules](#code-review-rules) section at the end
+of this file. The block between the `shared:` markers is the canonical copy from
+`bymaxone/.github`, replaced by the `agents-sync` workflow; edit it there, not here.
 
 ---
 
 ## 1. Project Overview
 
-A transactional notification library for **NestJS 11**. It ships **email** and **OTP**
-channels. The defining constraint is decoupling: every external boundary — email
-transport, OTP store, template renderer, audit sink — is a TypeScript **interface** the
-consumer implements or picks from the bundled reference adapters. The library ships
-`"dependencies": {}`; NestJS, the email SDK, the Redis client, and React are all peer
-dependencies. OTP cryptography uses `node:crypto` exclusively.
+A transactional notification library for **NestJS 11** with **email** and **OTP** channels. Every
+external boundary — email transport, OTP store, template renderer, audit sink — is a TypeScript
+**interface** the consumer implements or takes from the bundled adapters. It ships
+`"dependencies": {}` (NestJS, the email SDK, the Redis client and React are peers); OTP
+cryptography uses `node:crypto` exclusively.
 
-`ISmsProvider` and `IPushProvider` are declared so consumers can plan dispatch code paths
-against a stable shape, but no service implements them; configuring the `sms` / `push`
-channels is rejected at startup.
+`ISmsProvider` and `IPushProvider` are declared shapes only; no service implements them, and
+configuring `sms` / `push` is rejected at startup.
 
 ## 2. Architecture
 
@@ -43,216 +25,166 @@ channels is rejected at startup.
 
 ```
 src/
-├── server/                         layer: api / domain / infra
-│   ├── bymax-notification.module.ts   dynamic module — conditional registration
-│   ├── services/                      EmailService · OtpService · NotificationService
-│   ├── providers/                     Resend · SMTP · Redis · InMemory · NoOp · DefaultRenderer
-│   ├── interfaces/                    IEmailProvider · IOtpStorage · IEmailTemplateRenderer · INotificationLogRepository (+ SMS/Push sketches)
-│   ├── interceptors/                  NotificationAuditInterceptor
-│   ├── config/                        validate-options · resolved-options (deep-frozen)
-│   ├── errors/                        NotificationException + error catalog
-│   ├── constants/                     purposes · canonical templates · defaults
-│   └── utils/                         hash · code-generator · timing-safe-compare · cooldown-helpers
-├── shared/                         zero-dep types + constants (importable anywhere)
-├── react/                          useOtpInput · useOtpCountdown (UX/state only)
-└── testing/                        otpStorageContract (executable IOtpStorage contract)
+├── server/        api / domain / infra layer
+│   ├── bymax-notification.module.ts   dynamic module
+│   ├── services/ · providers/ (Resend · SMTP · Redis · InMemory · NoOp · DefaultRenderer)
+│   ├── interfaces/ (IEmailProvider · IOtpStorage · IEmailTemplateRenderer · INotificationLogRepository)
+│   ├── interceptors/ (NotificationAuditInterceptor) · config/ (validate-options · resolved-options)
+│   └── errors/ · constants/ · utils/ (hash · code-generator · timing-safe-compare · cooldown-helpers)
+├── shared/        zero-dep types + constants
+├── react/         useOtpInput · useOtpCountdown (UX/state only)
+└── testing/       otpStorageContract (executable IOtpStorage contract)
 ```
 
 ### Conditional provider registration
 
-The dynamic module registers **only the channels you configure**. The synchronous
-`forRoot` resolves options eagerly and registers a channel's service only when that
-channel is present. The async `forRootAsync` cannot know the configured channels until the
-factory runs, so it registers every channel **token** (an absent channel resolves to
-`null` via a factory) and registers the channel **service** unconditionally; the service's
-`isConfigured()` reflects whether its backing token is present. `NotificationService` is
-always registered and injects the channel services with `@Optional()`.
+The module registers **only the channels you configure**. Sync `forRoot` resolves options eagerly
+and registers a service only for a present channel. `forRootAsync` cannot know the channels until
+the factory runs, so it registers every channel **token** (absent → `null`) and **service**;
+`isConfigured()` reflects the token. `NotificationService` is always registered and injects the
+channel services with `@Optional()`.
 
-Injection tokens are `Symbol()` (collision-proof, exported for advanced override):
-`BYMAX_NOTIFICATION_OPTIONS`, `…_EMAIL_PROVIDER`, `…_OTP_STORAGE`, `…_TEMPLATE_RENDERER`,
-`…_LOG_REPOSITORY`, `…_SMS_PROVIDER`, `…_PUSH_PROVIDER`.
+Injection tokens are `Symbol()`, exported for override: `BYMAX_NOTIFICATION_OPTIONS`, and
+`…_EMAIL_PROVIDER`, `…_OTP_STORAGE`, `…_TEMPLATE_RENDERER`, `…_LOG_REPOSITORY`, `…_SMS_PROVIDER`,
+`…_PUSH_PROVIDER`.
 
 ### Options validation and resolution
 
-`validateOptions` runs first — it rejects an empty config (no channel), a missing required
-field, an out-of-range OTP length, and the `sms` / `push` channels (with an explicit
-"not yet implemented" message). `resolveOptions` then merges consumer values over defaults,
-attaches a `resolveForPurpose(purpose)` helper to the OTP section, and **deep-freezes** the
-result so nothing mutates it after bootstrap.
+`validateOptions` runs first and rejects an empty config, a missing required field, an
+out-of-range OTP length and `sms` / `push`. `resolveOptions` then merges consumer
+values over defaults, attaches `resolveForPurpose(purpose)` to the OTP section and **deep-freezes**
+the result.
 
 ## 3. Backend Patterns
 
 ### Service method structure
 
-A service method validates input, calls the configured interface(s), maps any thrown
-provider error to a `NotificationException`, writes a fire-and-forget audit entry, and
-returns a typed result. Codes never appear in a log line or audit entry.
+A service method validates input, calls the configured interface(s), maps any provider error to a
+`NotificationException`, writes a fire-and-forget audit entry, and returns a typed result.
 
 ### Error response format
 
-`NotificationException extends HttpException`. The body is always:
-
-```json
-{
-  "error": {
-    "code": "notification.otp_invalid_code",
-    "message": "Invalid OTP code",
-    "details": null
-  }
-}
-```
-
-Consumers match on the stable `code`. The catalog (`NOTIFICATION_ERROR_DEFINITIONS`) maps
-each key to a `code`, an HTTP status, and a default English message; `shared` re-exports
-the codes (byte-identical) so the frontend can match without importing the server bundle.
+`NotificationException extends HttpException`; the body is always
+`{ "error": { "code": "notification.otp_invalid_code", "message": "Invalid OTP code", "details": null } }`.
+Consumers match on the stable `code`. `NOTIFICATION_ERROR_DEFINITIONS` maps each key to a `code`,
+HTTP status and default English message; `shared` re-exports the codes (byte-identical) for the
+frontend.
 
 ### OTP store key patterns (RedisOtpStorage)
 
 ```
-{namespace}:otp:{purpose}:{sha256(sha256(tenantId):sha256(recipient))}       # the OTP entry (TTL = ttlSeconds)
-{namespace}:otp_cd:{purpose}:{sha256(sha256(tenantId):sha256(recipient))}    # the resend lock (TTL = cooldownSeconds)
+{namespace}:otp:{purpose}:{sha256(sha256(tenantId):sha256(recipient))}       # OTP entry (TTL = ttlSeconds)
+{namespace}:otp_cd:{purpose}:{sha256(sha256(tenantId):sha256(recipient))}    # resend lock (TTL = cooldownSeconds)
 ```
 
-`namespace` defaults to `notification`. The recipient and tenant never appear in plaintext.
+`namespace` defaults to `notification`; recipient and tenant never appear in plaintext.
 
 ### Atomicity (the core invariant)
 
-- **Attempt counting** — `consumeAttempt` does lookup + increment in **one** indivisible
-  step (Redis Lua script; in-memory single synchronous read-modify-write). A service-side
-  `get` + `update` races and lets `maxAttempts` be bypassed under concurrency.
-- **Resend cooldown** — `tryAcquireCooldown` is `SET … NX EX` (atomic check-and-set), so two
-  concurrent generate/resend calls cannot both pass. The lock is released
-  (`clearCooldown`) when delivery fails, so a transient provider error does not lock the
-  user out for the full cooldown window.
+- **Attempt counting** — `consumeAttempt` does lookup + increment in **one** indivisible step
+  (Redis Lua script; in-memory single synchronous read-modify-write). A service-side `get` +
+  `update` races and lets `maxAttempts` be bypassed.
+- **Resend cooldown** — `tryAcquireCooldown` is `SET … NX EX`, so two concurrent calls cannot both
+  pass. `clearCooldown` releases the lock when delivery fails, so a transient provider error does
+  not lock the user out for the full window.
 
 ## 4. Multi-tenant Security Model
 
-1. **SHA-256 store keys** — `sha256(sha256(tenantId):sha256(recipient))`. Privacy (no
-   recipient enumeration from `KEYS`) + isolation. The isolation is a property of the
-   **encoding**, not of the digest: each component is hashed to a fixed length before the
-   join, so distinct pairs cannot share an input. Joining the raw values around a delimiter
-   maps `('a:b', 'c')` and `('a', 'b:c')` to one key while every hash property still holds.
-   An empty component is refused for the same reason — it collapses callers into one scope.
+1. **SHA-256 store keys** — `sha256(sha256(tenantId):sha256(recipient))`: privacy (no recipient
+   enumeration from `KEYS`) plus isolation. Isolation is a property of the **encoding**, not the
+   digest: each component is hashed to a fixed length before the join, so distinct pairs cannot
+   share an input (joining raw values around a delimiter maps `('a:b', 'c')` and `('a', 'b:c')` to
+   one key). An empty component is refused for the same reason — it collapses callers into one scope.
 2. **`tenantIdResolver`** — reads the tenant from a trusted source (verified JWT claim,
-   subdomain, gateway-checked header). The `NotificationAuditInterceptor` uses it as the
-   source of truth, so a `tenantId` forged in the request body cannot operate on another
-   tenant's OTPs. Service methods still take an explicit `tenantId` argument — resolve it
-   in the controller and pass it down.
-3. **Never-log-codes** — codes are never written to any audit entry, console line, or
-   `errorMessage`. A regression test asserts
-   `JSON.stringify(auditEntry).includes(realCode) === false`. `audit.maskRecipient`
-   minimizes recipient PII before persistence.
+   subdomain, gateway-checked header) and is the interceptor's source of truth, so a body-forged
+   `tenantId` cannot operate on another tenant's OTPs. Service methods still take an explicit
+   `tenantId`: resolve it in the controller and pass it down.
+3. **Never-log-codes** — codes are never written to any audit entry, console line or
+   `errorMessage`; a test asserts `JSON.stringify(auditEntry).includes(realCode) === false`.
+   `audit.maskRecipient` minimizes recipient PII before persistence.
 
 ## 5. Audit Log — Fire-and-Forget
 
-Audit is opt-in via `audit.repository` (any `INotificationLogRepository`). When not
-configured, a `NoOpNotificationLogRepository` silently discards entries. By default
-(`swallowErrors: true`) a failing audit write is logged at meta-level but **never**
-propagated — the audit sink can never crash the notification flow. Set
-`swallowErrors: false` to surface audit failures (e.g. when audit is compliance-critical).
-The `NotificationAuditInterceptor` captures HTTP-level `sent` / `failed` verbs; the
-services themselves record `generated`, `verified`, `cooldown_blocked`, and
-`max_attempts_exceeded`.
+Audit is opt-in via `audit.repository`; otherwise a `NoOpNotificationLogRepository` discards
+entries. By default (`swallowErrors: true`) a failing audit write is logged at meta-level but
+**never** propagated, so the sink cannot crash the notification flow; `swallowErrors: false`
+surfaces failures. The interceptor records `sent` / `failed`; the services record `generated`,
+`verified`, `cooldown_blocked` and `max_attempts_exceeded`.
 
 ## 6. Provider Implementation Guide
 
-Implement the interface, then pass an instance (or class) to `forRoot`.
+Implement the interface and pass an instance (or class) to `forRoot`.
 
-- **`IEmailProvider`** — `send(options): Promise<{ messageId }>`, `isConfigured()`,
-  `readonly name`. Throw a plain `Error` on failure; `EmailService` maps it to
-  `EMAIL_SEND_FAILED`. Never log the body or leak credentials.
+- **`IEmailProvider`** — `send(options): Promise<{ messageId }>`, `isConfigured()`, `name`.
+  Throw a plain `Error` on failure; `EmailService` maps it to `EMAIL_SEND_FAILED`. Never log the
+  body or leak credentials.
 - **`IOtpStorage`** — `set` / `get` / `consumeAttempt` / `update` / `delete` /
   `tryAcquireCooldown` / `getCooldown` / `clearCooldown` / `isConfigured` / `name`.
-  `consumeAttempt` and `tryAcquireCooldown` **MUST be atomic** (see §3). Honor TTL — an
-  entry past `expiresAt` returns `null` / `not_found`. `update` must not resurrect an
-  expired entry (Redis: `SET … KEEPTTL XX`). Never log codes.
-- **`IEmailTemplateRenderer`** — `render(name, data, locale)` / `hasTemplate(name, locale)`
-  / `name`. Escape variables in HTML contexts.
-- **`INotificationLogRepository`** — `create(entry)` / `name`. `errorMessage` is the
-  message only — never a stack trace.
+  `consumeAttempt` and `tryAcquireCooldown` **MUST be atomic** (see §3). Honor TTL — an entry past
+  `expiresAt` returns `null` / `not_found`. `update` must not resurrect an expired entry (Redis:
+  `SET … KEEPTTL XX`). Never log codes.
+- **`IEmailTemplateRenderer`** — `render(name, data, locale)` / `hasTemplate(name, locale)` /
+  `name`. Escape variables in HTML contexts.
+- **`INotificationLogRepository`** — `create(entry)` / `name`. `errorMessage` is the message only, never a stack trace.
 
-Adapter examples (Handlebars, MJML, React Email, Prisma repository) live under
-`docs/templates/` and `docs/schemas/` — they are not imported by the library.
+Adapter examples (Handlebars, MJML, React Email, Prisma) live under `docs/templates/` and
+`docs/schemas/`; the library does not import them.
 
 ### Peer-dependency matrix
 
-| Channel / feature | Peer dep(s)                                                  |
-| ----------------- | ------------------------------------------------------------ |
-| NestJS module     | `@nestjs/common`, `@nestjs/core`, `reflect-metadata`, `rxjs` |
-| Resend email      | `resend`                                                     |
-| SMTP email        | `nodemailer`                                                 |
-| Redis OTP store   | `ioredis`                                                    |
-| React hooks       | `react ^19`                                                  |
-| `./shared`        | none                                                         |
-
-All optional peers are marked `{ "optional": true }` so a consumer pulls in only what it uses.
+NestJS module: `@nestjs/common`, `@nestjs/core`, `reflect-metadata`, `rxjs` · Resend email:
+`resend` · SMTP: `nodemailer` · Redis OTP store: `ioredis` · React: `react ^19` · `./shared`:
+none. Optional peers are marked `{ "optional": true }`.
 
 ## 7. Frontend (`./react`)
 
-`useOtpInput` manages N single-character slots (auto-focus, paste distribution, Backspace
-clear, Arrow navigation) and exposes `values` / `code` / `isComplete` / handlers / `refs`.
-`useOtpCountdown` derives `remainingSeconds` / `expired` / `formatted` (`MM:SS` or
-`HH:MM:SS`) from an `expiresAt` epoch. These are **UX/state only** — verifying a code is
-the consumer's job (call the backend). No HTTP client, no Node builtins; `react` is an
-external peer in the published bundle.
+`useOtpInput` manages N single-character slots (auto-focus, paste, Backspace, Arrow keys) and
+exposes `values` / `code` / `isComplete` / handlers / `refs`. `useOtpCountdown` derives
+`remainingSeconds` / `expired` / `formatted` from an `expiresAt` epoch. **UX/state only** —
+verifying a code is the consumer's job. No HTTP client, no Node builtins; `react` is external.
 
 ## 8. Testing Strategy
 
-- **100% coverage** (statements / branches / functions / lines) per file, enforced by
-  `jest.coverage.config.ts` (`pnpm test:cov:all`). A pre-publish gate, not a target.
-- **The `./testing` subpath** ships `otpStorageContract(factory)`: 21 executable cases a consumer
-  runs against their own `IOtpStorage` in any runner (the package depends on none). It covers the
-  obligations a type cannot check — `consumeAttempt` and `tryAcquireCooldown` must be atomic, the
-  TTL must survive `update`, and both entry and cooldown keys must be scoped by tenant, recipient
-  and purpose. Each case is itself pinned by a storage that violates exactly that obligation, one
+- **100% coverage** (statements / branches / functions / lines) per file
+  (`pnpm test:cov:all`): a pre-publish gate, not a target.
+- **`./testing`** ships `otpStorageContract(factory)`: 21 executable cases a consumer runs against
+  their own `IOtpStorage`, covering what a type cannot check — atomic `consumeAttempt` and
+  `tryAcquireCooldown`, TTL surviving `update`, entry and cooldown keys scoped by tenant,
+  recipient and purpose. Each case is pinned by a storage violating exactly that obligation, one
   per operand where the check is composite; a contract that cannot fail is decoration.
-- **`publishProviderText: false`** on a send makes the failure carry no provider-authored byte — no
-  `cause`, and `[provider text withheld]` in the audit entry — publishing instead only the SMTP
-  reply codes a fixed grammar can express (`deliveryStatus` / `deliveryEnhancedStatus`). It exists
-  because value redaction is a blacklist: it removes the shapes it predicts and loses to a body
-  quoted in another transfer encoding. The built-in OTP delivery sets it; the default stays `true`
-  so ordinary mail keeps its diagnosis.
-- **Mutation testing** (Stryker, `break: 100`) is the deeper gate against weak tests; the score
-  is 100%, with critical paths (`code-generator`, `timing-safe-compare`, `hash`,
-  `redis-otp.storage`, `otp.service`) at 100%. Runs automatically post-merge on `main` via the shared reusable (`bymaxone/.github` → node-lib-ci), never on PRs; plus an optional manual `pnpm mutation`.
-- **Mocking** — never real Redis or a real email API in unit tests (a hand-written
-  `RedisLike` double and in-memory fakes).
-- **Security gate test** — the never-log-codes invariant is asserted directly against a
-  serialized audit entry.
+- **`publishProviderText: false`** — see the rule at the end of this file.
+- **Mutation testing** (Stryker, `break: 100`) is the deeper gate against weak tests; the score is
+  100%, critical paths (`code-generator`, `timing-safe-compare`, `hash`, `redis-otp.storage`,
+  `otp.service`) included. It runs post-merge on `main` via the shared reusable
+  (`bymaxone/.github` → node-lib-ci), never on PRs; `pnpm mutation` is an optional manual run.
+- **Mocking** — never a real Redis or email API in unit tests (`RedisLike` double, in-memory fakes).
 
 ## 9. Build and Publish
 
-- **tsup** builds every subpath → ESM (`.mjs`) + CJS (`.cjs`) + `.d.ts` + `.d.cts`;
-  `sideEffects: false`; peer deps always external. The `.mjs` ships unminified (readable
-  stack traces inside a consumer's `node_modules`).
-- **Exports map** — `types` is declared **inside each condition**: `import` resolves to
-  `.d.ts`, `require` to `.d.cts`. A single shared `types` key would hand ESM declarations
-  to a CommonJS consumer; the runtime keeps working, so only `pnpm check:exports` (attw
-  against the packed tarball) catches it. `main` / `module` / `types` at the top level
-  cover the legacy `node` resolution algorithm, which ignores `exports` entirely, and
-  `typesVersions` covers the subpaths in that same mode.
-- **Bundle budgets** (`pnpm size`, brotli): per subpath, in `scripts/check-size.mjs`.
-- **CI** — `ci.yml` is a thin caller of the org-wide `bymaxone/.github` reusable pipeline
-  (lint · typecheck · `test:cov:all` · mutation on main), plus a local `verify` job for
-  `check:no-prisma` · `test:types` · `check:mutants` · build · build-output integrity ·
-  `check:exports` · `check:published` · `size`. `codeql.yml` and `scorecard.yml` run on push + weekly. `release.yml` is
-  triggered by a `v*.*.*` tag (or a manual dispatch to re-run an interrupted release): it runs
-  `prepublishOnly`, the release-shape gates (`size`, `check:exports`, dogfood smoke), then
-  `npm publish --provenance` via OIDC.
-- **Provenance** — published with npm provenance so consumers can `npm audit signatures`.
-  CI publishes through OIDC with a SLSA attestation, and the publish step skips a version
-  that is already on npm.
+- **tsup** builds every subpath → ESM + CJS + `.d.ts` + `.d.cts`; `sideEffects: false`; peer deps
+  external. The `.mjs` ships unminified (readable stack traces).
+- **Exports map** — `types` is declared **inside each condition** (`import` → `.d.ts`, `require`
+  → `.d.cts`). One shared `types` key hands ESM declarations to a CommonJS consumer; the runtime
+  still works, so only `pnpm check:exports` (attw against the packed tarball) catches it.
+  Top-level `main` / `module` / `types` and `typesVersions` cover legacy `node` resolution.
+- **Bundle budgets** (`pnpm size`, brotli) per subpath: `scripts/check-size.mjs`.
+- **CI** — `ci.yml` calls the org-wide `bymaxone/.github` pipeline (lint · typecheck ·
+  `test:cov:all` · mutation on main) plus a local `verify` job (`check:no-prisma` · `test:types` ·
+  `check:mutants` · build · integrity · `check:exports` · `check:published` · `size`).
+  `codeql.yml` and `scorecard.yml` run on push + weekly. `release.yml` runs on a `v*.*.*` tag (or a manual
+  dispatch to re-run one): `prepublishOnly`, the release-shape gates (`size`, `check:exports`,
+  dogfood smoke), then `npm publish --provenance` via OIDC with a SLSA attestation
+  (`npm audit signatures`); it skips a version already on npm.
 
 ## 10. Common Pitfalls
 
-- ❌ Importing `@prisma/client` (or any ORM) anywhere in `src/` — the `check:no-prisma`
-  gate fails the build. Persistence is interface-only.
+- ❌ `@prisma/client` (or any ORM) in `src/` — `check:no-prisma` fails the build.
 - ❌ A service-side `get` + `update` for attempts or cooldown — non-atomic, bypassable.
-- ❌ Logging a code (audit, console, error message) — breaks the never-log-codes invariant.
-- ❌ Using the plaintext recipient or tenant in a store key — defeats privacy + isolation.
-- ❌ Trusting `tenantId` from the request body — always resolve it from a trusted source.
-- ❌ Adding a runtime `dependency` — everything is a peer dep or a `node:` builtin.
-- ❌ Adding mutation testing to `prepublishOnly` / per-PR CI — it runs automatically post-merge on `main` via the shared reusable (`bymaxone/.github` → node-lib-ci), never on PRs.
+- ❌ Logging a code (audit, console, error message).
+- ❌ A plaintext recipient or tenant in a store key.
+- ❌ Trusting a body `tenantId` — resolve it from a trusted source.
+- ❌ A runtime `dependency` — everything is a peer dep or a `node:` builtin.
+- ❌ Mutation testing in `prepublishOnly` or per-PR CI (see §8).
 - ❌ A function over 50 lines or a file over 800 — split by responsibility.
 
 ---
@@ -453,50 +385,47 @@ rewrite published history.
 
 ### The audit entry never records what was dispatched
 
-`NotificationLogEntry` carries the tenant, channel, verb, masked recipient, purpose, provider
-name, message id and a failure **message** — never the subject, never the rendered body, never a
-stack trace. A consumer template can interpolate a one-time code into either, so a finding that
-asks for the subject or the body "for debuggability" asks for a credential in an audit row. The
-logging surface says the same: `NoOpEmailProvider` logs a masked recipient at `debug` and nothing
-else, and the SMTP and Resend providers log a failure reason with no recipient at all.
+`NotificationLogEntry` carries the tenant, channel, verb, masked recipient, purpose, provider name,
+message id and a failure **message** — never the subject, the rendered body or a stack trace. A
+consumer template can interpolate a one-time code into either, so a finding that asks for them
+"for debuggability" asks for a credential in an audit row. Logging agrees: `NoOpEmailProvider`
+logs a masked recipient at `debug` only; SMTP and Resend log a failure reason, no recipient.
 
 **Safe path:** diagnose from `messageId`, `deliveryStatus` / `deliveryEnhancedStatus` and the
-`verb` — the fields that are independent of the message body. The invariant is asserted directly,
-against a serialized entry: `JSON.stringify(auditEntry).includes(realCode) === false`.
+`verb`. The invariant is asserted against a serialized entry:
+`JSON.stringify(auditEntry).includes(realCode) === false`.
 
 ### A send that can carry a secret sets `publishProviderText: false`
 
-`OtpService` sets it on every delivery it builds, alongside `auditRedactValues: [code]`. The two
-are not redundant: declaring the value covers the shapes redaction can predict, and the flag
-covers the ones it cannot — value redaction is a blacklist and loses to a body quoted in another
-transfer encoding. With the flag off, the failure carries no provider-authored byte — no `cause`,
-`[provider text withheld]` in the audit entry — and publishes only the reply codes a fixed grammar
-can express.
+`OtpService` sets it on every delivery it builds, alongside `auditRedactValues: [code]`. They are
+not redundant: declaring the value covers the shapes redaction can predict, the flag the ones it
+cannot — value redaction is a blacklist and loses to a body quoted in another transfer encoding.
+With the flag off, the failure carries no provider-authored byte (no `cause`,
+`[provider text withheld]` in the audit entry) and publishes only the SMTP reply codes a fixed
+grammar can express (`deliveryStatus` / `deliveryEnhancedStatus`).
 
-So a new path that mails a secret and leaves the flag at its default (`true`) is a finding even
-when nothing in that diff visibly leaks. The default stays `true` on purpose, so ordinary mail
-keeps its diagnosis; do not report that default as the defect.
+A new path that mails a secret and leaves the flag at its default (`true`) is a finding even with
+no visible leak. The default stays `true` so ordinary mail keeps its diagnosis; do not
+report that default as the defect.
 
 ### The audit entry and the exception name the reply codes differently, and that is settled
 
 The audit entry carries `deliveryStatus` / `deliveryEnhancedStatus`; the exception's `details`
 carries `status` / `enhanced`. Both names are public API, so unifying them is a breaking change
-and a release decision, not an oversight for a patch to quietly correct.
+and a release decision, already taken.
 
-**Safe path:** if a document describes the two surfaces as the same pair, the finding is that the
-document is wrong. Renaming a field is a release decision, and it is already taken.
+**Safe path:** a document describing the two surfaces as one pair is the defect.
 
 ### `useClass` / `useExisting` are reserved, not missing
 
 `forRootAsync` wires the `useFactory` + `inject` form only. `assertUseFactory` **rejects**
 `useClass` and `useExisting` at registration rather than ignoring them, so a consumer never boots
-believing an unwired form took effect; `BymaxNotificationModuleOptionsFactory` is declared for the
-same reason and documented as reserved. A reviewer meeting the factory interface reads the gap as
-an omission and asks for the branch.
+believing an unwired form took effect; `BymaxNotificationModuleOptionsFactory` is declared and
+documented as reserved for the same reason. Do not read the gap as an omission and ask for the branch.
 
 **Safe path:** treat the rejection as the behaviour under review — that it throws, with a message
-naming the supported form, is what the tests assert. Wiring the form is an API decision, not a fix.
+naming the supported form, is what tests assert. Wiring the form is an API decision.
 
 ## Session memory (Obsidian vault)
 
-Lessons from earlier sessions live outside the repository, in the owner's Obsidian vault at `~/Documents/MyApps/obsidian/Brain/`, when it is present on this machine. Before a task, find this repository's hub under `02 - Areas/`: the table in `02 - Areas/Bymax/Bymax.md` maps each Bymax repository to its folder; for any other repository, search `02 - Areas/` for the repository name. Read the hub with its `Learnings.md` and `Decisions.md`, and the relevant stack notes under `03 - Resources/`. When the vault and the code disagree, the code wins. Record each non-obvious gotcha, root cause or decision in the hub as the vault's `_meta/conventions.md` describes; a repository without a hub gets one from `_meta/templates/project-hub.md`.
+Lessons from earlier sessions live in the owner's Obsidian vault at `~/Documents/MyApps/obsidian/Brain/`, when present on this machine. Before a task, read this repository's hub under `02 - Areas/` (`02 - Areas/Bymax/Bymax.md` maps repositories to folders) with its `Learnings.md` and `Decisions.md`, and the relevant `03 - Resources/` stack notes. The code wins over the vault when they disagree. Record each non-obvious gotcha, root cause or decision in the hub as `_meta/conventions.md` describes; a repository without a hub gets one from `_meta/templates/project-hub.md`.
