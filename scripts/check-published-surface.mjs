@@ -648,10 +648,13 @@ function checkSnippets() {
     return new RegExp(`\\b(class|interface|type)\\s+${name}(?![\\w$])`).test(own)
   }
   /** An import of some OTHER package the fixture does not install — a documented
-   * optional integration. Reported as uncovered, not as a failure. A relative
-   * specifier (`./x`, `../x`) is the reader's own module, which no snippet defines:
-   * it stays an error, so an example cannot lean on a file it never shows. */
+   * optional integration. Reported as uncovered, not as a failure. It applies to a
+   * snippet file only: the prelude exists to type names for real, so an import there
+   * that does not resolve would turn them into `any`. A relative specifier (`./x`,
+   * `../x`) is the reader's own module, which no snippet defines: it stays an error,
+   * so an example cannot lean on a file it never shows. */
   const isForeignModule = (line) =>
+    /^[^(]*snippet-\d+\.tsx?\(/.test(line) &&
     /error TS2307/.test(line) &&
     !line.includes(PKG.name) &&
     !/Cannot find module '\.{1,2}\//.test(line)
