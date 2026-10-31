@@ -191,6 +191,10 @@ export class OtpService implements OnModuleInit {
     // together each get their own number and only those within the ceiling are compared. An
     // attempt is counted only while a code is live.
     const attempt = await this.countAttempt(scope, cfg.ttlSeconds)
+    if (attempt === null) {
+      await this.audit(this.otpAuditEntry('failed', scope, { reason: 'not_found' }))
+      return { valid: false, reason: 'not_found' }
+    }
     if (attempt !== undefined && attempt > cfg.maxAttempts) {
       await this.audit(
         this.otpAuditEntry('max_attempts_exceeded', scope, { reason: 'max_attempts' })
@@ -389,20 +393,21 @@ export class OtpService implements OnModuleInit {
   }
 
   /**
-   * Counts one verification attempt against the recipient, or returns `undefined` when there is
-   * nothing to count: the storage does not carry failures, or no code is live. A verification
-   * with no code guesses at nothing, so it must not spend the budget a later code will need.
+   * Counts one verification attempt against the recipient. Returns `undefined` when the storage
+   * does not carry failures, and `null` when no code is live: a verification with no code guesses
+   * at nothing, so it spends no budget, and the caller must answer `not_found` instead of going on
+   * to consume an attempt from a code issued in the meantime, which would then go uncounted.
    */
   private async countAttempt(
     scope: OtpRecipientRef,
     ttlSeconds: number
-  ): Promise<number | undefined> {
+  ): Promise<number | null | undefined> {
     if (this.storage.recordFailure === undefined) {
       return undefined
     }
     const live = await this.storage.get(scope.tenantId, scope.recipient, scope.purpose)
     if (live === null) {
-      return undefined
+      return null
     }
     return this.storage.recordFailure(scope.tenantId, scope.recipient, scope.purpose, ttlSeconds)
   }

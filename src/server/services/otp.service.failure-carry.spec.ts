@@ -224,6 +224,25 @@ describe('OtpService failed attempts across re-issues', () => {
     }
   })
 
+  // A code issued while a verification is between its lookup and its count must not be consumed
+  // by that verification: the guess would reach a live code without having been counted.
+  it('should answer not_found without consuming a code issued after the lookup', async () => {
+    for (let i = 0; i < 3; i += 1)
+      await storage.recordFailure('acme', ref.recipient, ref.purpose, 600)
+    const realGet = storage.get.bind(storage)
+    jest.spyOn(storage, 'get').mockImplementationOnce(async (...args) => {
+      const found = await realGet(...args)
+      // The replacement code is stored right after the lookup came back empty.
+      await service.generate(base)
+      return found
+    })
+
+    const result = await service.verify({ ...base, code: WRONG })
+
+    expect(result).toEqual({ valid: false, reason: 'not_found' })
+    expect((await storage.get('acme', ref.recipient, ref.purpose))?.attempts).toBe(0)
+  })
+
   // Both budgets run out; the nearer one is reported.
   it('should report the attempts left by the failure count when it is the nearer', async () => {
     await service.generate(base)
