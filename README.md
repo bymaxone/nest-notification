@@ -656,7 +656,7 @@ NIST SP 800-63B-4 §3.1.3.2: "Generating a new authentication secret SHALL NOT r
 
 - A wrong guess adds one failure and restarts the counter's lifetime to the purpose's code lifetime (`ttlSeconds`); a counter that is not touched for that long lapses, which starts the count again from zero.
 - A successful verification and `consume()` clear it, so the next flow starts with a full budget.
-- Once the count reaches the ceiling, a re-issued code is locked out at once: `verify()` returns `{ valid: false, reason: 'max_attempts' }` until the counter lapses. This also means that someone who keeps sending wrong guesses for a recipient keeps that recipient locked out, so rate-limit the OTP endpoints by IP in your controller.
+- Once the count reaches the ceiling, a re-issued code is locked out at once: `verify()` returns `{ valid: false, reason: 'max_attempts' }` until the counter lapses. The stored count, not the count the code was issued with, decides: `verify()` reads it once per call, so a failure recorded while a code was being re-issued still counts. This also means that someone who keeps sending wrong guesses for a recipient keeps that recipient locked out, so rate-limit the OTP endpoints by IP in your controller.
 - `RedisOtpStorage` keeps the counter under `{namespace}:otp_fail:{purpose}:{hash}`, incremented by one script; `InMemoryOtpStorage` does the same in memory.
 - A custom `IOtpStorage` opts in by implementing three **optional** methods, `getFailures`, `recordFailure` and `clearFailures`; the executable contract in `./testing` checks them when they are present. Without them each code keeps a fresh budget, and one warning, `BYMAX_NOTIFICATION_OTP_FAILURES_NOT_CARRIED`, is logged at startup naming the deviation.
 

@@ -151,6 +151,28 @@ describe('OtpService failed attempts across re-issues', () => {
     await expect(cooled.generate(base)).resolves.toMatchObject({ cooldownSeconds: 60 })
   })
 
+  // A wrong guess recorded between the count being read and the new entry being stored leaves
+  // the entry seeded short; the persistent count stays the authority.
+  it('should refuse a guess once the persistent count is spent, whatever the entry holds', async () => {
+    await service.generate(base)
+    await fail(2)
+    const realSet = storage.set.bind(storage)
+    jest.spyOn(storage, 'set').mockImplementationOnce(async (...args) => {
+      // The in-flight wrong guess lands after the seed was read and before the entry is stored.
+      await storage.recordFailure('acme', ref.recipient, ref.purpose, 600)
+      await realSet(...args)
+    })
+
+    await service.generate(base)
+
+    expect((await storage.get('acme', ref.recipient, ref.purpose))?.attempts).toBe(2)
+    // Without the check the right code would be accepted as the third attempt.
+    expect(await service.verify({ ...base, code: await codeOf() })).toEqual({
+      valid: false,
+      reason: 'max_attempts'
+    })
+  })
+
   describe('a storage without the failure methods', () => {
     /** A storage that implements the required contract only. */
     class PlainStorage extends InMemoryOtpStorage {

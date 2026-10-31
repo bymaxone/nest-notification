@@ -199,6 +199,14 @@ export class OtpService implements OnModuleInit {
       return { valid: false, reason: 'max_attempts' }
     }
     const { entry } = result
+    // The persistent count is the authority: a failure recorded between a re-issue reading the
+    // count and storing the entry leaves the entry seeded short, and must not buy a guess.
+    if (await this.failuresSpent(scope, otp.resolveForPurpose(scope.purpose).maxAttempts)) {
+      await this.audit(
+        this.otpAuditEntry('max_attempts_exceeded', scope, { reason: 'max_attempts' })
+      )
+      return { valid: false, reason: 'max_attempts' }
+    }
     if (!this.matchesStoredCode(entry.code, scope.code, otp.digestCode)) {
       await this.storage.recordFailure?.(
         scope.tenantId,
@@ -379,6 +387,16 @@ export class OtpService implements OnModuleInit {
         'NIST SP 800-63B-4 §3.1.3.2 says generating a new secret SHALL NOT reset the failed authentication count. ' +
         'Implement the three optional methods to carry the count across re-issues.'
     )
+  }
+
+  /** True when the failures recorded for this recipient and purpose have reached the ceiling. */
+  private async failuresSpent(scope: OtpRecipientRef, maxAttempts: number): Promise<boolean> {
+    const failures = await this.storage.getFailures?.(
+      scope.tenantId,
+      scope.recipient,
+      scope.purpose
+    )
+    return (failures ?? 0) >= maxAttempts
   }
 
   /** The failures already recorded for the scope, capped at what one code allows. */
