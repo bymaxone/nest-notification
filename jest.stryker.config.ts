@@ -15,7 +15,14 @@ import base from './jest.config.ts'
  */
 const config: Config = {
   ...base,
-  testEnvironment: '@stryker-mutator/jest-runner/jest-env/node'
+  testEnvironment: '@stryker-mutator/jest-runner/jest-env/node',
+  testPathIgnorePatterns: [
+    ...(base.testPathIgnorePatterns ?? []),
+    // Reads the source text to find every throw site. Under Stryker the sandbox source is
+    // instrumented, so the pattern it searches for is no longer there; it kills no mutant, and
+    // `pnpm test` and CI still run it.
+    '<rootDir>/server/errors/error-codes\\.readme\\.spec\\.ts$'
+  ]
 }
 
 export default config
