@@ -23,7 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`EmailService` refuses a tenant that identifies nobody.** `send` and `sendTemplate` accepted an
   empty or whitespace-only `tenantId` and recorded any string in the audit entry verbatim. They now
   refuse it with `notification.invalid_scope_identifier`, as `OtpService` already did.
-- **A control character in a tenant or a recipient is refused in both services.** A newline in an
+- **A control character in a tenant is refused in both services, and in a recipient by `OtpService`.** A newline in an
   identifier reaches the consumer's audit sink and log lines verbatim and forges a second record;
   no legitimate identifier contains one. The refusal never echoes the value.
 
