@@ -49,7 +49,7 @@ describe('assertIdentifies', () => {
     }
   )
 
-  // Blank and non-string values keep their existing refusals.
+  // Empty, whitespace-only and non-string values are refused.
   it('should keep refusing empty, whitespace-only and non-string values', () => {
     expect(() => assertIdentifies('Owner', 'x', '')).toThrow()
     expect(() => assertIdentifies('Owner', 'x', '   ')).toThrow()

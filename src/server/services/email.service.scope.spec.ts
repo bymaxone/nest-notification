@@ -43,7 +43,7 @@ describe('EmailService tenant scope', () => {
     )
   })
 
-  // Ordinary tenant ids still send and are audited verbatim.
+  // An ordinary tenant id is sent for and audited verbatim.
   it('should send for an ordinary tenant', async () => {
     const provider = makeProvider()
     const audit = makeAudit()
