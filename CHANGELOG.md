@@ -21,6 +21,9 @@ built output of this version is byte-identical to the published 1.4.1 tarball, c
   `getEnabledChannels()` lists the wired channels, and `getEmail()` / `getOtp()` throw
   `CHANNEL_DISABLED` for one that is not. The SMTP `requireTls` default now reads "`true` unless
   implicit TLS or loopback", which is what the provider does on port 465.
+- **README: the multi-tenant snippet imports what it calls.** The `tenantIdResolver` example called
+  `BymaxNotificationModule.forRoot` after importing only a type, so pasted as written it did not
+  compile.
 
 ### Tests
 
@@ -28,6 +31,11 @@ built output of this version is byte-identical to the published 1.4.1 tarball, c
   table and the SMTP option table and assert every stated default, every "required" marker, the
   OTP length range and the SMTP port, TLS and timeout rules against the resolved options and the
   transport the provider builds, so a drifted cell fails the suite instead of reaching npm.
+- **`check:published` compiles every README snippet against the built types.** It now runs the
+  TypeScript API, so a parse error in one snippet no longer hides the semantic errors in the
+  others; compiles all 14 snippets instead of the 11 that import the package; and types the names
+  the prose introduces in `scripts/readme-prelude.d.ts`, so a wrong method, option or destructured
+  field is an error instead of a call through `any`.
 
 ## [1.4.1] - 2026-10-30
 
