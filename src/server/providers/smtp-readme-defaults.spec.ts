@@ -17,12 +17,11 @@ jest.mock(
 // The README's SMTP option table is what a consumer reads as the contract. These cases parse it
 // and hold each stated default to the transport configuration the provider actually builds.
 
+const table = readmeTable(['Option', 'Default', 'Notes'])
 const rows = new Map(
-  readmeTable(['Option', 'Default', 'Notes']).map(([option = '', fallback = '']) => [
-    unquote(option),
-    unquote(fallback)
-  ])
+  table.map(([option = '', fallback = '']) => [unquote(option), unquote(fallback)])
 )
+const notes = new Map(table.map(([option = '', , note = '']) => [unquote(option), note]))
 
 /** The transport config handed to `createTransport` for a provider built from `options`. */
 async function transportFor(
@@ -50,6 +49,16 @@ describe('README SMTP option table', () => {
     expect([...rows.keys()]).toEqual(
       expect.arrayContaining(['host', 'port', 'secure', 'requireTls', 'credentials', 'tls'])
     )
+  })
+
+  // `host` is the one required option: the README says so, and without it the provider reports
+  // itself unconfigured and refuses to send.
+  it('should document host as required and refuse a send without it', async () => {
+    const provider = new SmtpEmailProvider({})
+
+    expect(notes.get('host')).toMatch(/^Required\./)
+    expect(provider.isConfigured()).toBe(false)
+    await expect(provider.send(baseOptions)).rejects.toThrow()
   })
 
   // The port default is the submission port.
