@@ -13,7 +13,7 @@ import {
 const SECRET = 'a'.repeat(MIN_CODE_SECRET_BYTES)
 
 describe('createCodeDigester', () => {
-  // The same key and code must always give the same stored value, or verify cannot compare.
+  // One key and one code give one stored value, or verify cannot compare.
   it('should be deterministic for one key and one code', () => {
     const digest = createCodeDigester(SECRET)
 

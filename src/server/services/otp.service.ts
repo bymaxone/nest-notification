@@ -438,7 +438,7 @@ export class OtpService {
    * A stored digest is recomputed from the guess. A digest that cannot be recomputed (no
    * secret configured, or a different one) never matches, and the digest string itself is
    * not accepted as a code. A stored value that is not a digest is a plaintext code written
-   * before the secret was configured; it is compared as it always was and ages out with its TTL.
+   * while no secret was set; it is compared directly and ages out with its TTL.
    */
   private matchesStoredCode(
     stored: string,

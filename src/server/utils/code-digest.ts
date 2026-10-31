@@ -9,8 +9,8 @@
  * to test a guess against. OWASP's Password Storage guidance reaches the same shape for a
  * low-entropy secret: a keyed hash whose key is "stored separately" from the data.
  *
- * The stored value carries a version prefix so a legacy plaintext entry, written before the
- * secret was configured, can be told apart and verified until it expires.
+ * The stored value carries a version prefix so a plaintext entry, written while no secret
+ * was set, can be told apart and verified until it expires.
  */
 
 import { createHmac } from 'node:crypto'
