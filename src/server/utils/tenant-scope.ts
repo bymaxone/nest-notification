@@ -23,6 +23,9 @@
 
 import { NotificationException } from '../errors/notification-exception'
 
+/** C0 and C1 control characters and DEL: a newline in an identifier forges a log record. */
+const CONTROL_CHARACTER = /\p{Cc}/u
+
 /**
  * Builds the refusal, carrying the same facts in `details` and in `message`.
  *
@@ -60,7 +63,7 @@ function refuse(owner: string, label: string, reason: string): NotificationExcep
  * @param label - Parameter name quoted in `details`.
  * @param value - The candidate value.
  * @throws NotificationException `INVALID_SCOPE_IDENTIFIER` when the value is not a
- *   string, or is empty or whitespace-only.
+ *   string, is empty or whitespace-only, or contains a control character.
  */
 export function assertIdentifies(owner: string, label: string, value: string): void {
   if (typeof value !== 'string') {
@@ -68,5 +71,8 @@ export function assertIdentifies(owner: string, label: string, value: string): v
   }
   if (value.trim() === '') {
     throw refuse(owner, label, 'empty or whitespace-only')
+  }
+  if (CONTROL_CHARACTER.test(value)) {
+    throw refuse(owner, label, 'contains a control character')
   }
 }

@@ -7,11 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.4.2] - 2026-10-31
+## [1.5.0] - 2026-10-31
 
-A documentation release: the published `README.md` and `CHANGELOG.md` change, `dist/` does not (the
-built output of this version is byte-identical to the published 1.4.1 tarball, compared with
-`diff -r`).
+### Security
+
+- **Two spellings of one mailbox are one OTP state.** `OtpService` keyed its state on the recipient
+  byte for byte, so `Jane@Acme.com`, `jane@acme.com` and ` jane@acme.com` each had their own resend
+  cooldown and their own attempt counter: with `defaultMaxAttempts: 3`, five spellings accepted 15
+  wrong guesses and five codes could be minted back to back, and a user who typed another case than
+  the one the code was issued for was told it did not exist. The service now keys on the recipient
+  with surrounding whitespace trimmed and an email address (a value containing `@`) lower-cased, in
+  all five methods and in the audit entry. The message is still delivered to the address exactly as
+  supplied, because RFC 5321 §2.4 requires a sender to preserve the local-part's case; only the key
+  is folded. A recipient that is not an email is only trimmed.
+- **`EmailService` refuses a tenant that identifies nobody.** `send` and `sendTemplate` accepted an
+  empty or whitespace-only `tenantId` and recorded any string in the audit entry verbatim. They now
+  refuse it with `notification.invalid_scope_identifier`, as `OtpService` already did.
+- **A control character in a tenant or a recipient is refused in both services.** A newline in an
+  identifier reaches the consumer's audit sink and log lines verbatim and forges a second record;
+  no legitimate identifier contains one. The refusal never echoes the value.
+
+### ⚠️ Apply before upgrading
+
+- **A live OTP issued to a recipient with uppercase letters or surrounding whitespace is re-keyed.**
+  The code was stored under the old key, so verifying it after the upgrade reports `not_found`
+  until the user asks for a new code. The window is the code's TTL (10 minutes by default).
+- **A caller that passed a blank `tenantId` to `EmailService` now gets a 400.** Pass the tenant the
+  email belongs to.
 
 ### Documentation
 
@@ -802,8 +824,8 @@ rejected at startup rather than failing on the first send.
 
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.4.2...HEAD
-[1.4.2]: https://github.com/bymaxone/nest-notification/compare/v1.4.1...v1.4.2
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/bymaxone/nest-notification/compare/v1.4.1...v1.5.0
 [1.4.1]: https://github.com/bymaxone/nest-notification/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/bymaxone/nest-notification/compare/v1.3.1...v1.4.0
 [1.3.1]: https://github.com/bymaxone/nest-notification/compare/v1.3.0...v1.3.1

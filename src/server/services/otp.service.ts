@@ -38,6 +38,7 @@ import type { OtpPurposeConfig } from '../interfaces/notification-module-options
 import type { IOtpStorage, OtpEntry, OtpVerifyResult } from '../interfaces/otp-storage.interface'
 import { generateOtpCode } from '../utils/code-generator'
 import { cooldownExpiresAt, toRetryAfterHeader } from '../utils/cooldown-helpers'
+import { normalizeRecipient } from '../utils/recipient'
 import {
   attachCauseIfAbsent,
   coerceRedacted,
@@ -148,12 +149,13 @@ export class OtpService {
   async generate(input: OtpGenerateInput): Promise<OtpGenerateResult> {
     const otp = this.requireOtpOptions()
     this.assertScope(input)
+    const scope = this.keyed(input)
     const cfg = otp.resolveForPurpose(input.purpose)
-    await this.acquireCooldownOrThrow(input, cfg.resendCooldownSeconds)
+    await this.acquireCooldownOrThrow(scope, cfg.resendCooldownSeconds)
     const code = generateOtpCode(cfg.length, cfg.codeType)
     const expiresAt = Date.now() + cfg.ttlSeconds * MS_PER_SECOND
-    await this.persistAndDeliver(input, code, expiresAt, cfg)
-    await this.audit(this.otpAuditEntry('generated', input, undefined))
+    await this.persistAndDeliver(input, scope, code, expiresAt, cfg)
+    await this.audit(this.otpAuditEntry('generated', scope, undefined))
     return { expiresAt, cooldownSeconds: cfg.resendCooldownSeconds }
   }
 
@@ -167,27 +169,28 @@ export class OtpService {
   async verify(input: OtpVerifyInput): Promise<OtpVerifyResult> {
     const otp = this.requireOtpOptions()
     this.assertScope(input)
-    const result = await this.storage.consumeAttempt(input.tenantId, input.recipient, input.purpose)
+    const scope = this.keyed(input)
+    const result = await this.storage.consumeAttempt(scope.tenantId, scope.recipient, scope.purpose)
     if (result.status === 'not_found') {
-      await this.audit(this.otpAuditEntry('failed', input, { reason: 'not_found' }))
+      await this.audit(this.otpAuditEntry('failed', scope, { reason: 'not_found' }))
       return { valid: false, reason: 'not_found' }
     }
     if (result.status === 'max_attempts') {
       await this.audit(
-        this.otpAuditEntry('max_attempts_exceeded', input, { reason: 'max_attempts' })
+        this.otpAuditEntry('max_attempts_exceeded', scope, { reason: 'max_attempts' })
       )
       return { valid: false, reason: 'max_attempts' }
     }
     const { entry } = result
-    if (!safeCompare(entry.code, input.code)) {
-      await this.audit(this.otpAuditEntry('failed', input, { reason: 'invalid_code' }))
+    if (!safeCompare(entry.code, scope.code)) {
+      await this.audit(this.otpAuditEntry('failed', scope, { reason: 'invalid_code' }))
       return {
         valid: false,
         reason: 'invalid_code',
         remainingAttempts: entry.maxAttempts - entry.attempts
       }
     }
-    await this.finalizeVerifySuccess(input, entry, otp.consumeOnVerify)
+    await this.finalizeVerifySuccess(scope, entry, otp.consumeOnVerify)
     return { valid: true }
   }
 
@@ -200,8 +203,9 @@ export class OtpService {
   async consume(input: OtpConsumeInput): Promise<void> {
     this.requireOtpOptions()
     this.assertScope(input)
-    await this.storage.delete(input.tenantId, input.recipient, input.purpose)
-    await this.storage.clearCooldown(input.tenantId, input.recipient, input.purpose)
+    const scope = this.keyed(input)
+    await this.storage.delete(scope.tenantId, scope.recipient, scope.purpose)
+    await this.storage.clearCooldown(scope.tenantId, scope.recipient, scope.purpose)
   }
 
   /**
@@ -222,9 +226,10 @@ export class OtpService {
    */
   async getStatus(input: OtpStatusInput): Promise<OtpStatusResult> {
     this.assertScope(input)
+    const scope = this.keyed(input)
     const [entry, cooldownSeconds] = await Promise.all([
-      this.storage.get(input.tenantId, input.recipient, input.purpose),
-      this.storage.getCooldown(input.tenantId, input.recipient, input.purpose)
+      this.storage.get(scope.tenantId, scope.recipient, scope.purpose),
+      this.storage.getCooldown(scope.tenantId, scope.recipient, scope.purpose)
     ])
     if (!entry) {
       return { exists: false, cooldownSeconds }
@@ -275,12 +280,13 @@ export class OtpService {
    */
   private async persistAndDeliver(
     input: OtpGenerateInput,
+    scope: OtpGenerateInput,
     code: string,
     expiresAt: number,
     cfg: OtpPurposeConfig
   ): Promise<void> {
     try {
-      await this.storage.set(input.tenantId, input.recipient, input.purpose, {
+      await this.storage.set(scope.tenantId, scope.recipient, scope.purpose, {
         code,
         expiresAt,
         attempts: 0,
@@ -290,7 +296,7 @@ export class OtpService {
     } catch (error) {
       let failure: unknown = error
       try {
-        await this.releaseOtp(input)
+        await this.releaseOtp(scope)
       } catch (cleanupError) {
         // A failed cleanup supersedes the delivery error — the cooldown/OTP may
         // now be orphaned, which the caller must see — and it must NOT bypass
@@ -311,7 +317,7 @@ export class OtpService {
         ? scrubValuesFromErrorChain(failure, [code])
         : coerceRedacted(failure, [code])
       await this.audit(
-        this.otpAuditEntry('failed', input, {
+        this.otpAuditEntry('failed', scope, {
           // `outgoing` is already fully redacted by the scrub above; this read
           // only needs the fail-closed guard, not a second redaction pass.
           errorMessage: readRedactedMessage(outgoing)
@@ -397,6 +403,17 @@ export class OtpService {
   private assertScope(ref: OtpRecipientRef): void {
     assertIdentifies('OtpService', 'tenantId', ref.tenantId)
     assertIdentifies('OtpService', 'recipient', ref.recipient)
+  }
+
+  /**
+   * Returns the input with its recipient replaced by the value the OTP state is keyed on.
+   *
+   * Every storage call and audit entry takes the result, so two spellings of one mailbox
+   * share a cooldown and an attempt counter. Delivery takes the original input: the
+   * message is addressed exactly as the caller wrote it.
+   */
+  private keyed<T extends OtpRecipientRef>(input: T): T {
+    return { ...input, recipient: normalizeRecipient(input.recipient) }
   }
 
   /** Returns the resolved OTP options or throws `OTP_STORAGE_NOT_CONFIGURED`. */

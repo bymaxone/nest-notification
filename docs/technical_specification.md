@@ -153,7 +153,7 @@ interface graduates to a channel when a real consumer needs it.
 **Behavior to account for when migrating off a hand-rolled module:**
 
 - **Resend cooldown** — the FE "resend" button must handle `OTP_COOLDOWN_ACTIVE` (429 + `remainingSeconds`).
-- **Recipient normalization** — this lib does not lowercase, so the host must pass `email.trim().toLowerCase()` as `recipient`.
+- **Recipient normalization** — `OtpService` trims the recipient and lower-cases an email address (a value containing `@`) before it reaches the storage and the audit entry, so two spellings of one mailbox share a cooldown and an attempt counter. Delivery uses the address as supplied (RFC 5321 §2.4).
 - **Stricter errors** — a missing email provider throws `EMAIL_PROVIDER_NOT_CONFIGURED` instead of silently logging and returning (use `NoOpEmailProvider` in dev).
 
 ---
@@ -1486,18 +1486,19 @@ The key interface to solve the **Prisma coupling** a hand-rolled OTP store would
  * - Apply TTL — expired entries must not be returned by `get`/`consumeAttempt`.
  * - Scope keys by (tenantId, recipient, purpose) without collision across tenants — including pairs
  *   that differ only in where the tenant/recipient boundary falls (`('a:b', 'c')` vs `('a', 'b:c')`).
- * - Refuse an empty, whitespace-only or non-string tenantId/recipient (INVALID_SCOPE_IDENTIFIER).
+ * - Refuse an empty, whitespace-only, non-string or control-character tenantId/recipient (INVALID_SCOPE_IDENTIFIER).
  * - Never expose OTP codes in plaintext logs.
  *
- * Note on recipient normalization: the lib does NOT normalize `recipient`. Callers must pass a
- * canonical value (e.g. `email.trim().toLowerCase()`); 'A@x.com' and 'a@x.com' map to different keys.
+ * Note on recipient normalization: `OtpService` normalizes `recipient` before calling a storage
+ * (trim; lower-case when it contains '@'), so a storage receives one canonical value per mailbox.
+ * A storage used directly, without the service, keys on exactly what it is given.
  */
 export interface IOtpStorage {
   /**
    * Creates or replaces an OTP entry.
    *
    * @param tenantId - Tenant ID (isolation scope)
-   * @param recipient - Recipient identifier (email, phone, userId — caller decides; pre-normalized)
+   * @param recipient - Recipient identifier (email, phone, userId); `OtpService` passes it normalized
    * @param purpose - OTP purpose (e.g., 'email_verification', 'password_reset')
    * @param entry - Entry data: code, attempts, maxAttempts, expiresAt
    */
