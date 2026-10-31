@@ -10,7 +10,7 @@
  * low-entropy secret: a keyed hash whose key is "stored separately" from the data.
  *
  * The stored value carries a version prefix so a legacy plaintext entry, written before the
- * secret was configured, can still be told apart and verified until it expires.
+ * secret was configured, can be told apart and verified until it expires.
  */
 
 import { createHmac } from 'node:crypto'

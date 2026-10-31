@@ -104,8 +104,8 @@ export interface OtpChannelOptions {
    * Secret under which a code is stored as an HMAC-SHA-256 digest instead of in plaintext.
    * At least 32 UTF-8 bytes, kept with the application and never in the store, so a reader
    * of the store alone cannot recover or test a code. Omitted: codes are stored in plaintext
-   * and a warning is logged at startup. A plaintext entry written before the secret was set
-   * still verifies until it expires; changing or removing the secret makes a stored digest
+   * and a warning is logged at startup. A plaintext entry written while no secret was set
+   * verifies until it expires; changing or removing the secret makes a stored digest
    * unverifiable, so those codes must be requested again.
    */
   codeSecret?: string

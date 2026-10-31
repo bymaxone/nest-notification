@@ -1,8 +1,8 @@
 /**
  * @fileoverview Specifies how `OtpService` stores and checks a code under `otp.codeSecret`:
- * the store holds a keyed digest and never the code, a correct code still verifies, an
- * entry written in plaintext before the secret was configured still verifies until it
- * expires, and a digest that can no longer be recomputed never verifies.
+ * the store holds a keyed digest and never the code, a correct code verifies, an entry
+ * written in plaintext while no secret was set verifies until it expires, and a digest
+ * that cannot be recomputed never verifies.
  * @layer domain
  */
 import type { INotificationLogRepository } from '../interfaces/notification-log-repository.interface'
@@ -56,7 +56,7 @@ describe('OtpService with otp.codeSecret', () => {
     expect(JSON.stringify(stored)).not.toContain(delivered)
   })
 
-  // The digest must still let the right code in, and keep the wrong one out.
+  // The digest lets the right code in and keeps the wrong one out.
   it('should verify the delivered code and refuse a wrong one', async () => {
     const service = new OtpService(
       makeOptions({ codeSecret: SECRET }),
@@ -108,9 +108,9 @@ describe('OtpService with otp.codeSecret', () => {
     expect(serialized.replaceAll('12345', '')).not.toContain(delivered)
   })
 
-  // Upgrade path: an entry written in plaintext before the secret was configured still
-  // verifies until it expires, so no live code is invalidated by turning the option on.
-  it('should still verify a legacy plaintext entry', async () => {
+  // An entry written in plaintext while no secret was set verifies until it expires, so
+  // no live code is invalidated by turning the option on.
+  it('should verify a legacy plaintext entry', async () => {
     await storage.set('acme', ref.recipient, ref.purpose, {
       code: '654321',
       expiresAt: Date.now() + 60_000,
@@ -149,7 +149,7 @@ describe('OtpService with otp.codeSecret', () => {
     })
   })
 
-  // Without a secret the stored value is the code, as before: the option is opt-in.
+  // Omitting the secret stores the plaintext code: the option is opt-in.
   it('should store the plaintext code when no secret is configured', async () => {
     const service = new OtpService(makeOptions({}), storage, audit, emailServiceStub)
 

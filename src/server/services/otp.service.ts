@@ -290,7 +290,7 @@ export class OtpService {
     try {
       await this.storage.set(scope.tenantId, scope.recipient, scope.purpose, {
         // What the store holds is the digest when a secret is configured; the delivery
-        // below still carries the plaintext code the recipient has to type.
+        // below carries the plaintext code the recipient has to type.
         code: digestCode ? digestCode(code) : code,
         expiresAt,
         attempts: 0,
@@ -298,37 +298,49 @@ export class OtpService {
       })
       await this.deliverOtp(input, code, cfg)
     } catch (error) {
-      let failure: unknown = error
-      try {
-        await this.releaseOtp(scope)
-      } catch (cleanupError) {
-        // A failed cleanup supersedes the delivery error — the cooldown/OTP may
-        // now be orphaned, which the caller must see — and it must NOT bypass
-        // the scrub below. The delivery error is preserved as its cause when
-        // the cleanup error can verifiably carry one; a hostile trap inside
-        // the attachment is contained by the helper.
-        attachCauseIfAbsent(cleanupError, error)
-        failure = cleanupError
-      }
-      // Scrub BEFORE the audit write and the rethrow, so neither the entry's
-      // `errorMessage` nor the outgoing chain can carry the plaintext code. An
-      // Error chain is scrubbed (in place, or via redacted copies when a node
-      // resists mutation); ANY other rejection (string, object from a custom
-      // storage, number) is flattened to a redacted string, because a raw
-      // object could carry the code in its properties and a primitive cannot
-      // be mutated.
-      const outgoing: unknown = isSafeError(failure)
-        ? scrubValuesFromErrorChain(failure, [code])
-        : coerceRedacted(failure, [code])
-      await this.audit(
-        this.otpAuditEntry('failed', scope, {
-          // `outgoing` is already fully redacted by the scrub above; this read
-          // only needs the fail-closed guard, not a second redaction pass.
-          errorMessage: readRedactedMessage(outgoing)
-        })
-      )
-      throw outgoing
+      throw await this.failedOutgoing(scope, error, code)
     }
+  }
+
+  /**
+   * Releases the cooldown and the orphan entry after a failed persist or delivery, audits the
+   * failure, and returns what the caller must throw.
+   *
+   * A failed cleanup supersedes the delivery error — the cooldown/OTP may now be orphaned,
+   * which the caller must see — and it must NOT bypass the scrub below. The delivery error is
+   * preserved as its cause when the cleanup error can verifiably carry one; a hostile trap
+   * inside the attachment is contained by the helper.
+   *
+   * The scrub runs BEFORE the audit write and the rethrow, so neither the entry's
+   * `errorMessage` nor the outgoing chain can carry the plaintext code. An Error chain is
+   * scrubbed (in place, or via redacted copies when a node resists mutation); ANY other
+   * rejection (string, object from a custom storage, number) is flattened to a redacted
+   * string, because a raw object could carry the code in its properties and a primitive
+   * cannot be mutated.
+   */
+  private async failedOutgoing(
+    scope: OtpGenerateInput,
+    error: unknown,
+    code: string
+  ): Promise<unknown> {
+    let failure: unknown = error
+    try {
+      await this.releaseOtp(scope)
+    } catch (cleanupError) {
+      attachCauseIfAbsent(cleanupError, error)
+      failure = cleanupError
+    }
+    const outgoing: unknown = isSafeError(failure)
+      ? scrubValuesFromErrorChain(failure, [code])
+      : coerceRedacted(failure, [code])
+    await this.audit(
+      this.otpAuditEntry('failed', scope, {
+        // `outgoing` is already fully redacted by the scrub above; this read
+        // only needs the fail-closed guard, not a second redaction pass.
+        errorMessage: readRedactedMessage(outgoing)
+      })
+    )
+    return outgoing
   }
 
   /** Delivers the code by email when requested; throws on failure (release is handled by the caller). */
