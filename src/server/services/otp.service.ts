@@ -157,9 +157,6 @@ export class OtpService implements OnModuleInit {
     const scope = this.keyed(input)
     this.assertDeliverable(input, otp.digestCode)
     const cfg = otp.resolveForPurpose(input.purpose)
-    // Read before the cooldown is taken: a failed read must not leave it held with no live code.
-    // The failures recorded for this recipient and purpose carry over to the new code.
-    const attempts = await this.carriedFailures(scope, cfg.maxAttempts)
     await this.acquireCooldownOrThrow(scope, cfg.resendCooldownSeconds)
     const code = generateOtpCode(cfg.length, cfg.codeType)
     const expiresAt = Date.now() + cfg.ttlSeconds * MS_PER_SECOND
@@ -168,7 +165,7 @@ export class OtpService implements OnModuleInit {
       // carries the plaintext code the recipient has to type.
       code: otp.digestCode ? otp.digestCode(code) : code,
       expiresAt,
-      attempts,
+      attempts: 0,
       maxAttempts: cfg.maxAttempts
     }
     await this.persistAndDeliver(input, scope, code, entry, cfg)
@@ -187,6 +184,15 @@ export class OtpService implements OnModuleInit {
     const otp = this.requireOtpOptions()
     this.assertScope(input)
     const scope = this.keyed(input)
+    const cfg = otp.resolveForPurpose(scope.purpose)
+    // The stored failure count is the only thing that outlives a code, so it alone decides
+    // whether the recipient is locked out, and the lockout ends when the counter lapses.
+    if (await this.failuresSpent(scope, cfg.maxAttempts)) {
+      await this.audit(
+        this.otpAuditEntry('max_attempts_exceeded', scope, { reason: 'max_attempts' })
+      )
+      return { valid: false, reason: 'max_attempts' }
+    }
     const result = await this.storage.consumeAttempt(scope.tenantId, scope.recipient, scope.purpose)
     if (result.status === 'not_found') {
       await this.audit(this.otpAuditEntry('failed', scope, { reason: 'not_found' }))
@@ -199,26 +205,23 @@ export class OtpService implements OnModuleInit {
       return { valid: false, reason: 'max_attempts' }
     }
     const { entry } = result
-    // The persistent count is the authority: a failure recorded between a re-issue reading the
-    // count and storing the entry leaves the entry seeded short, and must not buy a guess.
-    if (await this.failuresSpent(scope, otp.resolveForPurpose(scope.purpose).maxAttempts)) {
-      await this.audit(
-        this.otpAuditEntry('max_attempts_exceeded', scope, { reason: 'max_attempts' })
-      )
-      return { valid: false, reason: 'max_attempts' }
-    }
     if (!this.matchesStoredCode(entry.code, scope.code, otp.digestCode)) {
-      await this.storage.recordFailure?.(
+      const failures = await this.storage.recordFailure?.(
         scope.tenantId,
         scope.recipient,
         scope.purpose,
-        otp.resolveForPurpose(scope.purpose).ttlSeconds
+        cfg.ttlSeconds
       )
       await this.audit(this.otpAuditEntry('failed', scope, { reason: 'invalid_code' }))
+      const ofCode = entry.maxAttempts - entry.attempts
       return {
         valid: false,
         reason: 'invalid_code',
-        remainingAttempts: entry.maxAttempts - entry.attempts
+        // The code's own budget and the recipient's failure budget both run out; the nearer wins.
+        remainingAttempts:
+          failures === undefined
+            ? ofCode
+            : Math.min(ofCode, Math.max(0, cfg.maxAttempts - failures))
       }
     }
     await this.storage.clearFailures?.(scope.tenantId, scope.recipient, scope.purpose)
@@ -397,13 +400,6 @@ export class OtpService implements OnModuleInit {
       scope.purpose
     )
     return (failures ?? 0) >= maxAttempts
-  }
-
-  /** The failures already recorded for the scope, capped at what one code allows. */
-  private async carriedFailures(scope: OtpRecipientRef, maxAttempts: number): Promise<number> {
-    const failures =
-      (await this.storage.getFailures?.(scope.tenantId, scope.recipient, scope.purpose)) ?? 0
-    return Math.min(failures, maxAttempts)
   }
 
   /** How a generated code reaches the recipient: by email when asked or when an email channel exists. */

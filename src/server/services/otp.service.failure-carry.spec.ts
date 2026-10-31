@@ -52,7 +52,7 @@ describe('OtpService failed attempts across re-issues', () => {
     await service.generate(base)
 
     // The budget is spent, so the new code is locked out at once.
-    expect(await fail(2)).toEqual(['max_attempts', 'not_found'])
+    expect(await fail(2)).toEqual(['max_attempts', 'max_attempts'])
   })
 
   // Failures accumulate over any number of codes until the budget is spent.
@@ -137,35 +137,25 @@ describe('OtpService failed attempts across re-issues', () => {
     }
   })
 
-  // A failing counter read must not leave the recipient behind a cooldown with no live code.
-  it('should not hold the resend cooldown when the failure count cannot be read', async () => {
-    const cooled = new OtpService(
-      makeOptions({ defaultMaxAttempts: 3, resendCooldownSeconds: 60 }),
-      storage,
-      audit
-    )
-    jest.spyOn(storage, 'getFailures').mockRejectedValueOnce(new Error('store unavailable'))
-
-    await expect(cooled.generate(base)).rejects.toThrow('store unavailable')
-
-    await expect(cooled.generate(base)).resolves.toMatchObject({ cooldownSeconds: 60 })
-  })
-
-  // The stored count decides, whatever the entry was seeded with: a failure recorded while a
-  // code is being re-issued still counts.
-  it('should refuse a guess once the persistent count is spent, whatever the entry holds', async () => {
+  // The counter alone carries the budget across codes: a code is issued with its own attempts.
+  it('should issue every code with its own full attempt count', async () => {
+    const read = jest.spyOn(storage, 'getFailures')
     await service.generate(base)
     await fail(2)
-    const realSet = storage.set.bind(storage)
-    jest.spyOn(storage, 'set').mockImplementationOnce(async (...args) => {
-      // The in-flight wrong guess lands after the seed was read and before the entry is stored.
-      await storage.recordFailure('acme', ref.recipient, ref.purpose, 600)
-      await realSet(...args)
-    })
+    read.mockClear()
 
     await service.generate(base)
 
-    expect((await storage.get('acme', ref.recipient, ref.purpose))?.attempts).toBe(2)
+    expect((await storage.get('acme', ref.recipient, ref.purpose))?.attempts).toBe(0)
+    expect(read).not.toHaveBeenCalled()
+  })
+
+  // The stored count decides, whatever the entry holds.
+  it('should refuse a guess once the stored count is spent, whatever the entry holds', async () => {
+    await service.generate(base)
+    for (let i = 0; i < 3; i += 1)
+      await storage.recordFailure('acme', ref.recipient, ref.purpose, 600)
+
     // The right code is refused too: the ceiling is already reached.
     expect(await service.verify({ ...base, code: await codeOf() })).toEqual({
       valid: false,
@@ -177,6 +167,46 @@ describe('OtpService failed attempts across re-issues', () => {
         metadata: { reason: 'max_attempts' }
       })
     )
+  })
+
+  // The lockout ends when the counter lapses, even for a code issued just before.
+  it('should accept the right code once the counter has lapsed', async () => {
+    jest.useFakeTimers()
+    try {
+      jest.setSystemTime(0)
+      await service.generate(base)
+      await fail(3)
+      jest.setSystemTime(599_000)
+      await service.generate(base)
+      jest.setSystemTime(601_000)
+
+      expect(await storage.getFailures('acme', ref.recipient, ref.purpose)).toBe(0)
+      expect(await service.verify({ ...base, code: await codeOf() })).toEqual({ valid: true })
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  // Both budgets run out; the nearer one is reported.
+  it('should report the attempts left by the failure count when it is the nearer', async () => {
+    await service.generate(base)
+    await fail(2)
+    await service.generate(base)
+
+    expect(await service.verify({ ...base, code: WRONG })).toMatchObject({
+      reason: 'invalid_code',
+      remainingAttempts: 0
+    })
+  })
+
+  it('should never report fewer than zero attempts left', async () => {
+    await service.generate(base)
+    jest.spyOn(storage, 'recordFailure').mockResolvedValueOnce(9)
+
+    expect(await service.verify({ ...base, code: WRONG })).toMatchObject({
+      reason: 'invalid_code',
+      remainingAttempts: 0
+    })
   })
 
   describe('a storage without the failure methods', () => {

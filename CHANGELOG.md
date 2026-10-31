@@ -43,8 +43,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   fresh `defaultMaxAttempts`: with 3 attempts, three wrong guesses, a re-issue after the cooldown
   and three more were all accepted, so the limit only bounded guesses per cooldown. A
   `(tenant, recipient, purpose)` now has a failure counter in the storage: every wrong guess adds
-  one and restarts its lifetime to the purpose's code lifetime, a newly issued code starts with
-  the count (capped at the ceiling), and a successful verification or `consume()` clears it.
+  one and restarts its lifetime to the purpose's code lifetime, `verify()` refuses once the count
+  reaches the ceiling whichever code is live, and a successful verification or `consume()` clears it.
   `RedisOtpStorage` keeps it under `{namespace}:otp_fail:{purpose}:{hash}` with one atomic script.
   A custom `IOtpStorage` opts in with three optional methods, `getFailures`, `recordFailure` and
   `clearFailures`; one without them behaves as before and the module logs one
@@ -68,17 +68,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   from, or a reader of Redis gets both.
 - **A recipient at the failure ceiling stays locked out until the counter lapses.** With a
   storage that carries failures (the bundled ones), a recipient at the ceiling gets
-  `{ valid: false, reason: 'max_attempts' }` for a re-issued code too, until the counter has not
-  been touched for the purpose's code lifetime (10 minutes by default). Someone who sends wrong
+  `{ valid: false, reason: 'max_attempts' }` for any code, a freshly issued one included, until the
+  counter has not been touched for the purpose's code lifetime (10 minutes by default). Someone who sends wrong
   guesses for another person's address can keep that address locked out; rate-limit the OTP
   endpoints by IP in your controller, as the security checklist says.
 - **If you implement `IOtpStorage` yourself,** add `getFailures`, `recordFailure` and `clearFailures`
   and re-run the contract from `@bymax-one/nest-notification/testing`. Until you do, a re-issued
   code gets a fresh attempt budget and the startup warning says so. Redis users: the new key
   `{namespace}:otp_fail:*` is created on the first wrong guess; nothing is migrated.
-- **An extra storage read in `verify()`.** The stored failure count is the authority, so `verify()`
-  reads it once a live code is found, before comparing the code; a wrong guess recorded while a code was
-  being re-issued cannot buy a guess. Storages without the failure methods skip the read.
+- **An extra storage read in `verify()`.** The stored failure count is the only thing that
+  outlives a code, so `verify()` reads it before consuming an attempt (one `GET` on Redis); a code is
+  issued with its own full attempt count and the lockout ends exactly when the counter lapses.
+  Storages without the failure methods skip the read. A refused verification now reports
+  `max_attempts` where it used to report `not_found` after the code was spent.
 - **`otp.codeSecret` and manual delivery do not combine.** Where a flow delivers the code itself
   (`deliverVia: 'manual'`, or no email channel), leave the secret unset or move that flow to email
   delivery; a development setup that reads the code from the store keeps `codeSecret` unset.
