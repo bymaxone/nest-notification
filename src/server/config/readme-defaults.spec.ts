@@ -1,6 +1,12 @@
-import type { IEmailProvider } from '../interfaces/email-provider.interface'
-import type { INotificationLogRepository } from '../interfaces/notification-log-repository.interface'
-import type { IOtpStorage } from '../interfaces/otp-storage.interface'
+/**
+ * @fileoverview Holds the README Configuration table to `resolveOptions` and `validateOptions`:
+ * every stated default, every "required" marker and the OTP length range.
+ * @layer infrastructure
+ */
+
+import { NoOpEmailProvider } from '../providers/no-op-email.provider'
+import { InMemoryOtpStorage } from '../providers/in-memory-otp.storage'
+import { NoOpNotificationLogRepository } from '../providers/no-op-notification-log.repository'
 import type { BymaxNotificationModuleOptions } from '../interfaces/notification-module-options.interface'
 
 import { readmeTable, unquote } from './__tests__/readme-tables'
@@ -12,15 +18,12 @@ import { validateOptions } from './validate-options'
 // it and hold every stated default and every "required" marker to the code, so the next drift
 // fails here instead of shipping to npm.
 
-/** A minimal valid configuration: every channel present, nothing optional set. */
+/** A minimal valid configuration built from the bundled adapters: every channel, nothing optional. */
 function minimalOptions(): BymaxNotificationModuleOptions {
   return {
-    email: {
-      provider: { name: 'stub' } as unknown as IEmailProvider,
-      defaultFrom: 'noreply@example.com'
-    },
-    otp: { storage: { name: 'stub' } as unknown as IOtpStorage },
-    audit: { repository: { name: 'stub' } as unknown as INotificationLogRepository }
+    email: { provider: new NoOpEmailProvider(), defaultFrom: 'noreply@example.com' },
+    otp: { storage: new InMemoryOtpStorage() },
+    audit: { repository: new NoOpNotificationLogRepository() }
   }
 }
 
@@ -36,8 +39,24 @@ const rows = readmeTable(['Section', 'Option', 'Default', 'Notes']).map(
 /** Reads the resolved value a README row documents. */
 function resolvedValue(section: string, option: string): unknown {
   const resolved = resolveOptions(minimalOptions())
-  const sectionValue = (resolved as unknown as Record<string, Record<string, unknown>>)[section]
-  return sectionValue?.[option]
+  const sections = new Map<string, object | undefined>([
+    ['global', resolved.global],
+    ['email', resolved.email],
+    ['otp', resolved.otp],
+    ['audit', resolved.audit]
+  ])
+  const target = sections.get(section)
+  return target === undefined
+    ? undefined
+    : Object.entries(target).find(([key]) => key === option)?.[1]
+}
+
+/** The minimal configuration with one option of one section left out. */
+function withoutOption(section: string, option: string): BymaxNotificationModuleOptions {
+  const options = minimalOptions()
+  const present = Object.entries(options).find(([key]) => key === section)?.[1] as object
+  const kept = Object.fromEntries(Object.entries(present).filter(([key]) => key !== option))
+  return { ...options, [section]: kept }
 }
 
 /** Parses a literal default cell: `'text'`, a number, `true`/`false`, or `{}`. */
@@ -80,10 +99,7 @@ describe('README Configuration table', () => {
   it.each(requiredRows.map((row) => [`${row.section}.${row.option}`, row] as const))(
     'should refuse a configuration without the required %s',
     (_name, row) => {
-      const options = minimalOptions() as unknown as Record<string, Record<string, unknown>>
-      delete options[row.section]?.[row.option]
-
-      expect(() => validateOptions(options as unknown as BymaxNotificationModuleOptions)).toThrow()
+      expect(() => validateOptions(withoutOption(row.section, row.option))).toThrow()
     }
   )
 

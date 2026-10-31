@@ -1,11 +1,14 @@
+/**
+ * @fileoverview Reads the README tables whose cells state option defaults, so a spec can hold the
+ * prose to the code. Lives under `__tests__/`, which the coverage and mutation configs exclude.
+ * @layer infrastructure
+ */
+
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-/**
- * Reads the README tables whose cells state option defaults, so a spec can hold the prose to the
- * code. The README ships to npm, and a table that drifted from the defaults is read by a consumer
- * as the contract; nothing else in the pipeline reads these cells.
- */
+// The README ships to npm, and a table that drifted from the defaults is read by a consumer as the
+// contract; nothing else in the pipeline reads these cells.
 
 const README = readFileSync(join(__dirname, '..', '..', '..', '..', 'README.md'), 'utf8')
 

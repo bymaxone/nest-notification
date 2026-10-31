@@ -1,3 +1,9 @@
+/**
+ * @fileoverview Holds the README SMTP option table to the transport configuration
+ * `SmtpEmailProvider` builds: port, TLS, credentials, timeouts and the required `host`.
+ * @layer infrastructure
+ */
+
 import { readmeTable, unquote } from '../config/__tests__/readme-tables'
 
 import { baseOptions } from './__tests__/smtp-email-provider.fixtures'
