@@ -7,9 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-10-31
+
+A documentation release: the published `README.md` and `CHANGELOG.md` change, `dist/` does not (the
+built output of this version is byte-identical to the published 1.4.1 tarball, compared with
+`diff -r`).
+
 ### Documentation
 
-- **README: two statements corrected against the code.** The subpath diagram drew `react`
+- **README: three statements corrected against the code.** The subpath diagram drew `react`
   depending on `shared`; `react` imports only `react`, and `server` is the subpath that builds on
   `shared`. The Architecture section said an unconfigured channel is a startup error; it is not —
   `getEnabledChannels()` lists the wired channels, and `getEmail()` / `getOtp()` throw
@@ -788,7 +794,8 @@ rejected at startup rather than failing on the first send.
 
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.4.1...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.4.2...HEAD
+[1.4.2]: https://github.com/bymaxone/nest-notification/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/bymaxone/nest-notification/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/bymaxone/nest-notification/compare/v1.3.1...v1.4.0
 [1.3.1]: https://github.com/bymaxone/nest-notification/compare/v1.3.0...v1.3.1
