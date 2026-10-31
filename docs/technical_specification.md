@@ -82,7 +82,7 @@ Rewriting this pipeline in each service is wasteful; and each rewrite tends to f
 
 1. **Channel abstraction** — each channel (email, OTP, SMS, push) has its own `IXxxProvider` or `IXxxStorage` interface. Adding a new channel does not affect existing ones.
 2. **Zero opinion on persistence** — all persistence (OTP, audit log) goes through TypeScript interfaces. The lib never imports Prisma, TypeORM, Drizzle, ioredis (directly), or Mongoose.
-3. **Zero opinion on providers** — Resend, Twilio, FCM, etc. are reference adapters. The lib does not have `resend`/`twilio`/`firebase-admin` as a direct dependency — everything is an optional peer dep, provided by the consumer.
+3. **Zero opinion on providers** — Resend and SMTP are the reference adapters; Twilio, FCM and the like are what a consumer writes behind the interfaces. The lib has no provider SDK as a direct dependency: the SDK of a bundled adapter (`resend`, `nodemailer`, `ioredis`) is an optional peer, and the SDK of an adapter you write is a dependency of your application.
 4. **Configuration over convention** — everything configurable via `forRoot()`/`forRootAsync()`. Sensible defaults where applicable (e.g., 6-digit OTP, 10-minute TTL, 60s cooldown).
 5. **Opt-in features** — only configured channels are registered as providers in the NestJS container. Enabling SMS without configuring `ISmsProvider` is an initialization error.
 6. **Native multi-tenant** — every operation accepts `tenantId` and scopes rate limits, logs, and counters per tenant. No tenant can read or interfere with another tenant's OTPs, cooldowns, or logs.
@@ -2850,7 +2850,7 @@ specification import `@sendgrid/mail`, `@aws-sdk/*`, `mailgun.js`, `handlebars`,
 
 ### 13.3 Dependencies
 
-The lib has **zero direct dependencies** (`"dependencies": {}`). All external functionality is an optional peer dep. Crypto comes from `node:crypto` (native, Node 24+).
+The lib has **zero direct dependencies** (`"dependencies": {}`). The external functionality it loads is an optional peer dep (§13.2); an adapter you write brings its own SDK. Crypto comes from `node:crypto` (native, Node 24+).
 
 ### 13.4 Peer deps per subpath
 
