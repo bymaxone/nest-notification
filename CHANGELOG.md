@@ -33,7 +33,7 @@ built output of this version is byte-identical to the published 1.4.1 tarball, c
   transport the provider builds, so a drifted cell fails the suite instead of reaching npm.
 - **`check:published` compiles every README snippet against the built types.** It now runs the
   TypeScript API, so a parse error in one snippet no longer hides the semantic errors in the
-  others; compiles all 14 snippets instead of the 11 that import the package; and types the names
+  others; compiles snippets that do not import the package too; and types the names
   the prose introduces in `scripts/readme-prelude.d.ts`, so a wrong method, option or destructured
   field is an error instead of a call through `any`.
 
