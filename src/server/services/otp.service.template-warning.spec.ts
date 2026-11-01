@@ -109,6 +109,36 @@ describe('OtpService startup warning for an unresolved default template', () => 
     expect(ours()[0]).toContain('manual')
   })
 
+  // The whole line is the contract a host reads at 3 a.m.: pin it by value, not by fragments.
+  it('should log exactly the documented line', async () => {
+    const { service } = build({ locale: 'pt-BR' })
+
+    service.onModuleInit()
+    await settle()
+
+    expect(ours()).toEqual([
+      "[BYMAX_NOTIFICATION_OTP_TEMPLATE_NOT_RESOLVED] The email template 'otp_code' resolves for neither 'pt-BR' nor 'en', " +
+        'so the first generate() that delivers by email fails with TEMPLATE_NOT_FOUND. ' +
+        "Register 'otp_code' in your template renderer (DefaultTemplateRenderer takes it under 'otp_code::en'). " +
+        'Ignore this line if every generate() call passes emailTemplate, if you deliver manually, ' +
+        'or if your renderer loads its templates after startup.'
+    ])
+  })
+
+  // The variant for a renderer that could not answer is pinned the same way.
+  it('should log exactly the documented line when the check cannot run', async () => {
+    const { service, renderer } = build()
+    renderer.hasTemplate.mockRejectedValue(new Error('store down'))
+
+    service.onModuleInit()
+    await settle()
+
+    expect(ours()).toEqual([
+      "[BYMAX_NOTIFICATION_OTP_TEMPLATE_NOT_RESOLVED] Could not check whether the email template 'otp_code' resolves " +
+        '(store down); if it does not, the first generate() that delivers by email fails with TEMPLATE_NOT_FOUND.'
+    ])
+  })
+
   // One line per process, however often the hook runs.
   it('should warn once', async () => {
     const { service } = build()
