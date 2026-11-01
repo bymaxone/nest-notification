@@ -14,7 +14,8 @@ import { makeAudit, makeOptions, ref } from './__tests__/otp-service.fixtures'
 import { OtpService } from './otp.service'
 
 const base = { ...ref, tenantId: 'acme', deliverVia: 'manual' as const }
-const WRONG = '000000'
+// Letters never occur in the numeric codes the service generates, so this guess is always wrong.
+const WRONG = 'ABCDEF'
 
 describe('OtpService failed attempts across re-issues', () => {
   let storage: InMemoryOtpStorage

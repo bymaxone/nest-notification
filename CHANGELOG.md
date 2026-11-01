@@ -26,7 +26,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **A control character in a tenant is refused in both services, and in a recipient by `OtpService`.** A newline in an
   identifier reaches the consumer's audit sink and log lines verbatim and forges a second record;
   no legitimate identifier contains one. The refusal never echoes the value.
-
 - **An OTP code can be stored as a keyed digest instead of in plaintext.** `OtpEntry.code` held the
   code itself, so anyone able to read Redis saw every live code. The new optional
   `otp.codeSecret` (a string of at least 32 UTF-8 bytes, validated at startup, kept with the
@@ -142,7 +141,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **README: the multi-tenant snippet imports what it calls.** The `tenantIdResolver` example called
   `BymaxNotificationModule.forRoot` after importing only a type, so pasted as written it did not
   compile.
-
 - **README: every error code, who raises it, and which are reserved.** A table lists every code with
   its HTTP status and the component that throws it. The codes the library never throws are marked
   reserved: the four OTP verify outcomes (`verify()` returns the reason instead),
@@ -168,6 +166,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   error table with the catalog and with the source: a code is reserved exactly when no file
   constructs a `NotificationException` with it. Another builds a `DefaultTemplateRenderer` without
   each option and checks the documented default.
+- **`RedisOtpStorage` is exercised against a real Redis on every pull request.** A `Real Redis e2e`
+  job starts `redis:8-alpine` with testcontainers and runs the executable `otpStorageContract`,
+  200 concurrent `recordFailure` calls, the hashed `otp_fail` key with its lifetime, and the
+  `OtpService` flows (lockout across a re-issue, parallel guesses, a success clearing the counter).
+  The unit suite keeps its in-process double; `pnpm test:e2e:redis` runs the same suite locally with
+  Docker.
+- **A test guess cannot equal a generated code.** Specs that guessed `000000` against a code the
+  service had just generated failed about once in a million runs; they now guess `ABCDEF`, which
+  no numeric code can equal.
 
 ## [1.4.1] - 2026-10-30
 
