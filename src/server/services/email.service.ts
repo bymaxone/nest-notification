@@ -51,7 +51,8 @@ const FALLBACK_LOCALE = 'en'
 /** What to tell a host whose OTP email has no template: the OTP default is the one it never names. */
 const OTP_TEMPLATE_REMEDY =
   "register an 'otp_code' template (for example 'otp_code::en') in your template renderer, such as " +
-  'DefaultTemplateRenderer, or pass emailTemplate to generate()'
+  'DefaultTemplateRenderer; the OTP email can use another template through the emailTemplate ' +
+  'option of generate()'
 
 /**
  * Stands in for the provider's own message when the caller set

@@ -442,8 +442,11 @@ export class OtpService implements OnModuleInit {
       ) {
         return
       }
+      // The fallback is `en`, so for an `en` host there is one locale to name, not two.
+      const resolution =
+        locale === 'en' ? "does not resolve for 'en'" : `resolves for neither '${locale}' nor 'en'`
       this.logger.warn(
-        `[${TEMPLATE_WARNING_CODE}] The email template '${DEFAULT_OTP_TEMPLATE}' resolves for neither '${locale}' nor 'en', ` +
+        `[${TEMPLATE_WARNING_CODE}] The email template '${DEFAULT_OTP_TEMPLATE}' ${resolution}, ` +
           'so the first generate() that delivers by email fails with TEMPLATE_NOT_FOUND. ' +
           `Register '${DEFAULT_OTP_TEMPLATE}' in your template renderer (DefaultTemplateRenderer takes it under 'otp_code::en'). ` +
           'Ignore this line if every generate() call passes emailTemplate, if you deliver manually, ' +
