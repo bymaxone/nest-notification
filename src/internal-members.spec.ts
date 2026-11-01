@@ -18,19 +18,33 @@ interface Reading {
   readonly members: readonly string[]
 }
 
-/** Reads every snippet in one child process and returns one reading per snippet. */
-function read(snippets: readonly string[]): Reading[] {
+interface TimedReading extends Reading {
+  readonly ms: number
+}
+
+/** Reads every snippet in one child process; `ms` is the time of the call itself, taken inside it. */
+function readTimed(snippets: readonly string[]): TimedReading[] {
   const script =
     `import { readFileSync } from 'node:fs'\n` +
     `import { readInternalMembers } from ${JSON.stringify(MODULE)}\n` +
     `const rows = JSON.parse(readFileSync(0, 'utf8'))\n` +
-    `console.log(JSON.stringify(rows.map((text) => readInternalMembers(text))))`
+    `console.log(JSON.stringify(rows.map((text) => {\n` +
+    `  const started = performance.now()\n` +
+    `  const reading = readInternalMembers(text)\n` +
+    `  return { ...reading, ms: performance.now() - started }\n` +
+    `})))`
   const run = spawnSync('node', ['--input-type=module', '-e', script], {
     encoding: 'utf8',
-    input: JSON.stringify(snippets)
+    input: JSON.stringify(snippets),
+    maxBuffer: 64 * 1024 * 1024
   })
   if (run.status !== 0) throw new Error(run.stderr)
-  return JSON.parse(run.stdout) as Reading[]
+  return JSON.parse(run.stdout) as TimedReading[]
+}
+
+/** Reads every snippet in one child process and returns one reading per snippet. */
+function read(snippets: readonly string[]): Reading[] {
+  return readTimed(snippets).map(({ tags, members }) => ({ tags, members }))
 }
 
 const TAG = '/** @internal */'
@@ -106,22 +120,18 @@ describe('readInternalMembers', () => {
 
   // A long run of whitespace after a tag costs one pass, not a retry per character.
   it('should refuse a long whitespace run quickly', () => {
-    const started = Date.now()
+    const [reading] = readTimed([`${TAG}${'\n'.repeat(50_000)}@`])
 
-    const [reading] = read([`${TAG}${'\n'.repeat(50_000)}@`])
-
-    expect(reading).toEqual({ tags: 1, members: [] })
-    expect(Date.now() - started).toBeLessThan(1500)
+    expect(reading).toMatchObject({ tags: 1, members: [] })
+    expect(reading?.ms).toBeLessThan(1500)
   })
 
   // A `/** @internal ` with no closing `*/` is not a tag, and thousands of them cost one pass.
   it('should read unterminated comments quickly', () => {
-    const started = Date.now()
+    const [reading] = readTimed(['/** @internal '.repeat(5000)])
 
-    const [reading] = read(['/** @internal '.repeat(5000)])
-
-    expect(reading).toEqual({ tags: 0, members: [] })
-    expect(Date.now() - started).toBeLessThan(1500)
+    expect(reading).toMatchObject({ tags: 0, members: [] })
+    expect(reading?.ms).toBeLessThan(1500)
   })
 
   it('should not read a tag inside a comment that ends before the member', () => {
@@ -132,33 +142,36 @@ describe('readInternalMembers', () => {
 
   // A line comment is read to its newline once, so a long run of them costs one pass.
   it('should read a long run of line comments quickly', () => {
-    const started = Date.now()
+    const [reading] = readTimed([`${TAG} ${'// '.repeat(5000)}\nclass`])
 
-    const [reading] = read([`${TAG} ${'// '.repeat(5000)}\nclass`])
-
-    expect(reading).toEqual({ tags: 1, members: [] })
-    expect(Date.now() - started).toBeLessThan(1500)
+    expect(reading).toMatchObject({ tags: 1, members: [] })
+    expect(reading?.ms).toBeLessThan(1500)
   })
 
   // Many tags on one long line each read their own decorator arguments; the limit bounds the cost.
   it('should bound the work of many tags on one long line', () => {
-    const started = Date.now()
-
-    const [reading] = read([`${TAG}@a(${'x'.repeat(10_000)}`.repeat(300)])
+    const [reading] = readTimed([`${TAG}@a(${'x'.repeat(10_000)}`.repeat(300)])
 
     expect(reading?.tags).toBe(300)
-    expect(Date.now() - started).toBeLessThan(1500)
+    expect(reading?.ms).toBeLessThan(1500)
   })
 
   // Each tag's scan stops at the next comment block, so tags that sit inside line comments cost
   // one pass in total, not one pass each.
   it('should read many tags inside line comments quickly', () => {
-    const started = Date.now()
+    const [reading] = readTimed(['// /** @internal */\n'.repeat(20_000)])
 
-    const [reading] = read(['// /** @internal */\n'.repeat(20_000)])
+    expect(reading).toMatchObject({ tags: 20_000, members: [] })
+    expect(reading?.ms).toBeLessThan(1500)
+  })
 
-    expect(reading).toEqual({ tags: 20_000, members: [] })
-    expect(Date.now() - started).toBeLessThan(1500)
+  // The newline that ends a line comment is looked for only up to the next comment block, so
+  // many tags on one very long line cost one pass in total.
+  it('should read many tags with line comments on one long line quickly', () => {
+    const [reading] = readTimed([`${`${TAG} // ${'x'.repeat(3000)}`.repeat(10_000)}\n`])
+
+    expect(reading).toMatchObject({ tags: 10_000, members: [] })
+    expect(reading?.ms).toBeLessThan(800)
   })
 
   it('should find nothing in a file with no tag', () => {

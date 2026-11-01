@@ -69,8 +69,10 @@ function skipTrivia(text, start, limit) {
     at = skipSpace(text, at)
     if (at >= limit) return -1
     if (text.startsWith('//', at)) {
-      const newline = text.indexOf('\n', at)
-      if (newline === -1) return text.length
+      // Looked for only up to `limit`: a longer search would be repeated by every tag on the line.
+      let newline = at
+      while (newline < limit && text.charAt(newline) !== '\n') newline += 1
+      if (newline >= limit) return -1
       at = newline
     } else if (text.charAt(at) === '@') {
       DECORATOR_NAME.lastIndex = at + 1
