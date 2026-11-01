@@ -103,6 +103,16 @@ jobs:
       - name: Verify (typecheck · test:types · lint · check:no-prisma · test · build)
         run: pnpm prepublishOnly
 
+      - name: Verify a change to the public declarations carries its CHANGELOG note
+        # Runs after the build inside prepublishOnly, so `dist/` exists, and before the
+        # publish. It compares the built `.d.ts` and `.d.cts` with the previous published
+        # version, ignoring comments, and always prints what differs. A difference passes only
+        # when the CHANGELOG section of this version holds an "Apply to a derived backend" note,
+        # since the version number carries no compatibility information here. It reads the
+        # previous version from the public registry, so it needs no credential. There is no
+        # override: a difference without its note is resolved by writing the note.
+        run: node scripts/check-api-surface.mjs
+
       - name: Release-shape gates (bundle size + type resolution + dogfood smoke test)
         # prepublishOnly runs typecheck/lint/tests/build but NOT these
         # release-shape gates, and this tag-driven job is the only place the

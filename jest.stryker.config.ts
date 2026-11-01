@@ -24,7 +24,8 @@ const config: Config = {
     '<rootDir>/server/errors/error-codes\\.readme\\.spec\\.ts$',
     // Runs a repository script on source snippets and touches no code in `src`, so it kills no
     // mutant; `pnpm test` and CI still run it.
-    '<rootDir>/internal-members\\.spec\\.ts$'
+    '<rootDir>/internal-members\\.spec\\.ts$',
+    '<rootDir>/check-api-surface\\.spec\\.ts$'
   ]
 }
 
