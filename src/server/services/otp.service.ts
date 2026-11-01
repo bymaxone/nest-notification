@@ -135,6 +135,7 @@ export interface OtpStatusResult {
 export class OtpService implements OnModuleInit {
   private readonly logger = new Logger(OtpService.name)
   private warnedFailuresNotCarried = false
+  /** @internal */
   private warnedTemplate = false
 
   /**
@@ -405,6 +406,7 @@ export class OtpService implements OnModuleInit {
   /**
    * Warns once when the storage cannot carry failed attempts across a re-issue, naming the
    * deviation from NIST SP 800-63B-4 §3.1.3.2 and the methods that remove it.
+   * @internal
    */
   private warnFailuresNotCarried(): void {
     const storage = this.storage
@@ -425,6 +427,7 @@ export class OtpService implements OnModuleInit {
    * `otp_code` template for the default locale or `en`. It only ever logs: it catches
    * everything, so it cannot reject, and a renderer that answers late or never leaves boot
    * untouched because the caller does not wait for it.
+   * @internal
    */
   private async warnUnresolvedDefaultTemplate(): Promise<void> {
     if (this.warnedTemplate || !this.options.otp || !this.emailService) {

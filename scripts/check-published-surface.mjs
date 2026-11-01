@@ -33,6 +33,7 @@ import {
   copyFileSync,
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   rmSync,
   symlinkSync,
@@ -687,11 +688,56 @@ function checkSnippets() {
 }
 
 // ---------------------------------------------------------------------------
+// 4. A member marked `@internal` in src does not reach a published declaration.
+// ---------------------------------------------------------------------------
+
+/** Members a source file marks `@internal`: the JSDoc block carries the tag and the next
+ * declaration is the member it hides. */
+const INTERNAL_MEMBER =
+  /\/\*\*(?:(?!\*\/)[\s\S])*?@internal(?:(?!\*\/)[\s\S])*?\*\/\s*(?:(?:private|protected|public|async|readonly|static)\s+)*(\w+)/g
+
+/** Every file under `dir` with one of the given suffixes. */
+function filesUnder(dir, suffixes) {
+  return existsSync(dir)
+    ? readdirSync(dir, { recursive: true })
+        .map((name) => join(dir, String(name)))
+        .filter((file) => suffixes.some((suffix) => file.endsWith(suffix)))
+    : []
+}
+
+function checkInternalDeclarations() {
+  const hidden = new Set()
+  for (const file of filesUnder(join(ROOT, 'src'), ['.ts', '.tsx'])) {
+    if (/\.(spec|test)\.tsx?$/.test(file)) continue
+    for (const match of readFileSync(file, 'utf8').matchAll(INTERNAL_MEMBER)) {
+      hidden.add(match[1])
+    }
+  }
+  const declarations = filesUnder(join(ROOT, 'dist'), ['.d.ts', '.d.cts'])
+  const leaked = []
+  for (const name of hidden) {
+    const word = new RegExp(`\\b${name}\\b`)
+    const where = declarations.filter((file) => word.test(readFileSync(file, 'utf8')))
+    if (where.length > 0) leaked.push(`${name} (${where.map((f) => relative(ROOT, f)).join(', ')})`)
+  }
+  if (leaked.length > 0) {
+    fail(
+      'declarations',
+      `member(s) marked @internal appear in a published declaration: ${leaked.join('; ')}. ` +
+        'Hide them with `stripInternal` in tsconfig.build.json, or drop the tag.'
+    )
+    return
+  }
+  console.log(`  declarations: ${hidden.size} @internal member(s), none in dist/ declarations`)
+}
+
+// ---------------------------------------------------------------------------
 
 console.log(`Published-surface gate — ${PKG.name}@${PKG.version}`)
 await checkLinks()
 checkChangelog()
 checkSnippets()
+checkInternalDeclarations()
 
 if (failures.length > 0) {
   console.error(`\n✖ ${failures.length} problem(s):\n`)

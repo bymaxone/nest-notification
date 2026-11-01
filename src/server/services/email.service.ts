@@ -377,6 +377,7 @@ export class EmailService {
    * Picks the locale that has a template: the requested one, else `en`. Answers `undefined` when
    * neither has it. The one probe behind both a send and the startup check, so the two cannot
    * disagree.
+   * @internal
    */
   private async findTemplateLocale(template: string, locale: string): Promise<string | undefined> {
     if (await this.renderer.hasTemplate(template, locale)) {
@@ -395,6 +396,7 @@ export class EmailService {
    * @param template - The template name.
    * @param locale - The requested locale.
    * @returns `true` when the renderer has the template for the locale or for `en`.
+   * @internal
    */
   async resolvesTemplate(template: string, locale: string): Promise<boolean> {
     return (await this.findTemplateLocale(template, locale)) !== undefined
