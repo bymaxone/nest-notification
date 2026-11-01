@@ -29,6 +29,7 @@ import {
 import { EmailService } from './email.service'
 import type { EmailSendTemplateInput } from './email.service'
 import type { ResolvedNotificationOptions, ResolvedOtpOptions } from '../config/resolved-options'
+import { CANONICAL_EMAIL_TEMPLATES } from '../constants/canonical-templates'
 import { NotificationException } from '../errors/notification-exception'
 import type {
   INotificationLogRepository,
@@ -40,6 +41,7 @@ import type { IOtpStorage, OtpEntry, OtpVerifyResult } from '../interfaces/otp-s
 import { isCodeDigest } from '../utils/code-digest'
 import { generateOtpCode } from '../utils/code-generator'
 import { cooldownExpiresAt, toRetryAfterHeader } from '../utils/cooldown-helpers'
+import { describeError } from '../utils/describe-error'
 import { normalizeRecipient } from '../utils/recipient'
 import {
   attachCauseIfAbsent,
@@ -56,7 +58,9 @@ const MS_PER_SECOND = 1000
 /** Seconds in one minute — used to derive `expiresInMinutes` for the OTP email. */
 const SECONDS_PER_MINUTE = 60
 /** Default template name used when the caller does not name one. */
-const DEFAULT_OTP_TEMPLATE = 'otp_code'
+const DEFAULT_OTP_TEMPLATE = CANONICAL_EMAIL_TEMPLATES.OTP_CODE
+/** Log code of the warning for an OTP channel whose default email template cannot be found. */
+const TEMPLATE_WARNING_CODE = 'BYMAX_NOTIFICATION_OTP_TEMPLATE_NOT_RESOLVED'
 /** Common `(tenant, recipient, purpose)` reference shared by every OTP operation. */
 interface OtpRecipientRef {
   tenantId: string
@@ -131,6 +135,8 @@ export interface OtpStatusResult {
 export class OtpService implements OnModuleInit {
   private readonly logger = new Logger(OtpService.name)
   private warnedFailuresNotCarried = false
+  /** @internal */
+  private warnedTemplate = false
 
   /**
    * @param options - The resolved, frozen module options.
@@ -388,10 +394,21 @@ export class OtpService implements OnModuleInit {
   }
 
   /**
-   * Warns once when the storage cannot carry failed attempts across a re-issue, naming the
-   * deviation from NIST SP 800-63B-4 §3.1.3.2 and the methods that remove it.
+   * Runs the two startup checks. Neither depends on the other, and neither can fail or delay
+   * boot: the template check is started detached, so a renderer that never answers holds
+   * nothing.
    */
   onModuleInit(): void {
+    this.warnFailuresNotCarried()
+    void this.warnUnresolvedDefaultTemplate()
+  }
+
+  /**
+   * Warns once when the storage cannot carry failed attempts across a re-issue, naming the
+   * deviation from NIST SP 800-63B-4 §3.1.3.2 and the methods that remove it.
+   * @internal
+   */
+  private warnFailuresNotCarried(): void {
     const storage = this.storage
     if (carriesFailures(storage) || this.warnedFailuresNotCarried) {
       return
@@ -403,6 +420,41 @@ export class OtpService implements OnModuleInit {
         'NIST SP 800-63B-4 §3.1.3.2 says generating a new secret SHALL NOT reset the failed authentication count. ' +
         'Implement the three optional methods to carry the count across re-issues.'
     )
+  }
+
+  /**
+   * Warns once when the OTP email would fail on its first use because the renderer has no
+   * `otp_code` template for the default locale or `en`. It only ever logs: it catches
+   * everything, so it cannot reject, and a renderer that answers late or never leaves boot
+   * untouched because the caller does not wait for it.
+   * @internal
+   */
+  private async warnUnresolvedDefaultTemplate(): Promise<void> {
+    if (this.warnedTemplate || !this.options.otp || !this.emailService) {
+      return
+    }
+    this.warnedTemplate = true
+    const locale = this.options.global.defaultLocale
+    try {
+      if (
+        !this.emailService.isConfigured() ||
+        (await this.emailService.resolvesTemplate(DEFAULT_OTP_TEMPLATE, locale))
+      ) {
+        return
+      }
+      this.logger.warn(
+        `[${TEMPLATE_WARNING_CODE}] The email template '${DEFAULT_OTP_TEMPLATE}' resolves for neither '${locale}' nor 'en', ` +
+          'so the first generate() that delivers by email fails with TEMPLATE_NOT_FOUND. ' +
+          `Register '${DEFAULT_OTP_TEMPLATE}' in your template renderer (DefaultTemplateRenderer takes it under 'otp_code::en'). ` +
+          'Ignore this line if every generate() call passes emailTemplate, if you deliver manually, ' +
+          'or if your renderer loads its templates after startup.'
+      )
+    } catch (error) {
+      this.logger.warn(
+        `[${TEMPLATE_WARNING_CODE}] Could not check whether the email template '${DEFAULT_OTP_TEMPLATE}' resolves ` +
+          `(${describeError(error)}); if it does not, the first generate() that delivers by email fails with TEMPLATE_NOT_FOUND.`
+      )
+    }
   }
 
   /**

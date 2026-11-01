@@ -184,7 +184,7 @@ import {
 export class AppModule {}
 ```
 
-The OTP email is rendered from the `otp_code` template, and the default renderer ships none, so register one as above (the same template as in step 3). Without it the first `generate()` throws `TEMPLATE_NOT_FOUND`.
+The OTP email is rendered from the `otp_code` template, and the default renderer ships none, so register one as above (the same template as in step 3). Without it the first `generate()` throws `TEMPLATE_NOT_FOUND` (its details carry a `remedy` for this case), and one warning, `BYMAX_NOTIFICATION_OTP_TEMPLATE_NOT_RESOLVED`, is logged at startup. Ignore that line if every `generate()` passes `emailTemplate`, if you deliver manually, or if your renderer loads its templates after startup.
 
 Inject `OtpService` anywhere and the two-step flow is complete:
 
@@ -838,32 +838,32 @@ Error codes are namespaced (`notification.otp_invalid_code`, `notification.otp_c
 
 A code marked **reserved** is part of the catalog but is never thrown by the library, so a consumer can map it without the library ever raising it behind their back. The four OTP verify outcomes are the notable ones: `verify()` returns its failure as a result (`{ valid: false, reason }`) and never throws it, so your controller maps `reason` to the code it wants to answer with. The SMS and push codes stay reserved until those channels exist.
 
-| Code                                             | Status | Raised by                                                                                                          |
-| ------------------------------------------------ | ------ | ------------------------------------------------------------------------------------------------------------------ |
-| `notification.email_provider_not_configured`     | 500    | `EmailService` — the provider reports `isConfigured() === false`                                                   |
-| `notification.email_send_failed`                 | 502    | `EmailService` — the provider rejected the send                                                                    |
-| `notification.email_attachments_too_large`       | 413    | `EmailService` — the attachments exceed `maxAttachmentBytes`                                                       |
-| `notification.email_invalid_recipient`           | 400    | reserved — `to` is not validated; a bad address surfaces as `email_send_failed`                                    |
-| `notification.email_missing_body`                | 400    | `NotificationService.dispatch` — neither a template nor a subject and body                                         |
-| `notification.template_not_found`                | 500    | `EmailService.sendTemplate` — no template for the locale or the fallback                                           |
-| `notification.template_render_failed`            | 500    | `EmailService.sendTemplate` — the renderer threw                                                                   |
-| `notification.otp_storage_not_configured`        | 500    | `OtpService` — the OTP channel is absent                                                                           |
-| `notification.otp_email_delivery_not_configured` | 500    | `OtpService.generate` — email delivery without an email channel                                                    |
-| `notification.otp_manual_delivery_unavailable`   | 400    | `OtpService.generate` — manual delivery while `otp.codeSecret` is set                                              |
-| `notification.otp_cooldown_active`               | 429    | `OtpService.generate` and `resend` — inside the resend cooldown                                                    |
-| `notification.otp_not_found`                     | 404    | reserved — `verify()` returns `{ valid: false, reason: 'not_found' }`                                              |
-| `notification.otp_expired`                       | 410    | reserved — an expired code is reported as `not_found`                                                              |
-| `notification.otp_max_attempts_exceeded`         | 429    | reserved — `verify()` returns `{ valid: false, reason: 'max_attempts' }`                                           |
-| `notification.otp_invalid_code`                  | 401    | reserved — `verify()` returns `{ valid: false, reason: 'invalid_code' }`                                           |
-| `notification.otp_invalid_length`                | 400    | module options validation and the code generator                                                                   |
-| `notification.sms_provider_not_configured`       | 500    | reserved — the SMS channel is not implemented                                                                      |
-| `notification.sms_send_failed`                   | 502    | reserved — the SMS channel is not implemented                                                                      |
-| `notification.sms_invalid_recipient`             | 400    | reserved — the SMS channel is not implemented                                                                      |
-| `notification.push_provider_not_configured`      | 500    | reserved — the push channel is not implemented                                                                     |
-| `notification.push_send_failed`                  | 502    | reserved — the push channel is not implemented                                                                     |
-| `notification.audit_log_failed`                  | 500    | `EmailService`, `OtpService` and `NotificationAuditInterceptor` — only with `audit.swallowErrors: false`           |
-| `notification.channel_disabled`                  | 501    | `NotificationService` — the channel is absent, or its provider or storage is not usable                            |
-| `notification.invalid_scope_identifier`          | 400    | `OtpService`, `EmailService` and `NotificationAuditInterceptor` — a blank or control-character tenant or recipient |
+| Code                                             | Status | Raised by                                                                                                                           |
+| ------------------------------------------------ | ------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `notification.email_provider_not_configured`     | 500    | `EmailService` — the provider reports `isConfigured() === false`                                                                    |
+| `notification.email_send_failed`                 | 502    | `EmailService` — the provider rejected the send                                                                                     |
+| `notification.email_attachments_too_large`       | 413    | `EmailService` — the attachments exceed `maxAttachmentBytes`                                                                        |
+| `notification.email_invalid_recipient`           | 400    | reserved — `to` is not validated; a bad address surfaces as `email_send_failed`                                                     |
+| `notification.email_missing_body`                | 400    | `NotificationService.dispatch` — neither a template nor a subject and body                                                          |
+| `notification.template_not_found`                | 500    | `EmailService.sendTemplate` — no template for the locale or the fallback (for `otp_code`, `details.remedy` says how to register it) |
+| `notification.template_render_failed`            | 500    | `EmailService.sendTemplate` — the renderer threw                                                                                    |
+| `notification.otp_storage_not_configured`        | 500    | `OtpService` — the OTP channel is absent                                                                                            |
+| `notification.otp_email_delivery_not_configured` | 500    | `OtpService.generate` — email delivery without an email channel                                                                     |
+| `notification.otp_manual_delivery_unavailable`   | 400    | `OtpService.generate` — manual delivery while `otp.codeSecret` is set                                                               |
+| `notification.otp_cooldown_active`               | 429    | `OtpService.generate` and `resend` — inside the resend cooldown                                                                     |
+| `notification.otp_not_found`                     | 404    | reserved — `verify()` returns `{ valid: false, reason: 'not_found' }`                                                               |
+| `notification.otp_expired`                       | 410    | reserved — an expired code is reported as `not_found`                                                                               |
+| `notification.otp_max_attempts_exceeded`         | 429    | reserved — `verify()` returns `{ valid: false, reason: 'max_attempts' }`                                                            |
+| `notification.otp_invalid_code`                  | 401    | reserved — `verify()` returns `{ valid: false, reason: 'invalid_code' }`                                                            |
+| `notification.otp_invalid_length`                | 400    | module options validation and the code generator                                                                                    |
+| `notification.sms_provider_not_configured`       | 500    | reserved — the SMS channel is not implemented                                                                                       |
+| `notification.sms_send_failed`                   | 502    | reserved — the SMS channel is not implemented                                                                                       |
+| `notification.sms_invalid_recipient`             | 400    | reserved — the SMS channel is not implemented                                                                                       |
+| `notification.push_provider_not_configured`      | 500    | reserved — the push channel is not implemented                                                                                      |
+| `notification.push_send_failed`                  | 502    | reserved — the push channel is not implemented                                                                                      |
+| `notification.audit_log_failed`                  | 500    | `EmailService`, `OtpService` and `NotificationAuditInterceptor` — only with `audit.swallowErrors: false`                            |
+| `notification.channel_disabled`                  | 501    | `NotificationService` — the channel is absent, or its provider or storage is not usable                                             |
+| `notification.invalid_scope_identifier`          | 400    | `OtpService`, `EmailService` and `NotificationAuditInterceptor` — a blank or control-character tenant or recipient                  |
 
 Failures raised by the library carry the underlying error as the native `Error.cause` — a provider's `connect ECONNREFUSED` sits on `exception.cause`, where cause-walking log serializers (e.g. pino's `err`) print it alongside the stable code. The cause is stored as a **log-safe copy**: `name`, `message`, `stack`, and the nested `cause` chain survive (depth-bounded); every other property is dropped, because SDK errors routinely retain the request payload (an axios-style `config.data`) and for an OTP email that payload contains the code. The cause never enters the HTTP response body either: `details` stays reserved for the structured, client-safe context shown above. To attach a cause in your own code, pass the options bag as the third constructor argument — `new NotificationException('EMAIL_SEND_FAILED', { providerName }, { cause: error })`; the positional `(key, details, status, message)` form keeps working.
 
