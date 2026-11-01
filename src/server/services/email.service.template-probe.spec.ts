@@ -93,7 +93,8 @@ describe('EmailService TEMPLATE_NOT_FOUND', () => {
     expect(details(error).remedy).toContain('emailTemplate')
   })
 
-  // Additive only: any other template keeps exactly the details it had.
+  // The remedy is specific to the OTP default: every other template's error carries exactly
+  // `template` and `locale`.
   it('should keep exactly template and locale for any other template', async () => {
     const error = await missing('welcome')
 
