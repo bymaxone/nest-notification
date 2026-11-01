@@ -21,7 +21,10 @@ const config: Config = {
     // Reads the source text to find every throw site. Under Stryker the sandbox source is
     // instrumented, so the pattern it searches for is no longer there; it kills no mutant, and
     // `pnpm test` and CI still run it.
-    '<rootDir>/server/errors/error-codes\\.readme\\.spec\\.ts$'
+    '<rootDir>/server/errors/error-codes\\.readme\\.spec\\.ts$',
+    // Runs a repository script on source snippets and touches no code in `src`, so it kills no
+    // mutant; `pnpm test` and CI still run it.
+    '<rootDir>/internal-members\\.spec\\.ts$'
   ]
 }
 

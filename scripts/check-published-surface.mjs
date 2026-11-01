@@ -43,6 +43,8 @@ import { createRequire } from 'node:module'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { readInternalMembers } from './internal-members.mjs'
+
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const PKG = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'))
 const README = readFileSync(join(ROOT, 'README.md'), 'utf8')
@@ -691,11 +693,6 @@ function checkSnippets() {
 // 4. A member marked `@internal` in src does not reach a published declaration.
 // ---------------------------------------------------------------------------
 
-/** Members a source file marks `@internal`: the JSDoc block carries the tag and the next
- * declaration is the member it hides. */
-const INTERNAL_MEMBER =
-  /\/\*\*(?:(?!\*\/)[\s\S])*?@internal(?:(?!\*\/)[\s\S])*?\*\/\s*(?:(?:private|protected|public|async|readonly|static)\s+)*(\w+)/g
-
 /** Every file under `dir` with one of the given suffixes. */
 function filesUnder(dir, suffixes) {
   return existsSync(dir)
@@ -709,9 +706,16 @@ function checkInternalDeclarations() {
   const hidden = new Set()
   for (const file of filesUnder(join(ROOT, 'src'), ['.ts', '.tsx'])) {
     if (/\.(spec|test)\.tsx?$/.test(file)) continue
-    for (const match of readFileSync(file, 'utf8').matchAll(INTERNAL_MEMBER)) {
-      hidden.add(match[1])
+    const { tags, members } = readInternalMembers(readFileSync(file, 'utf8'))
+    // A tag whose member the reader cannot name would go unchecked and look like a pass.
+    if (members.length !== tags) {
+      fail(
+        'declarations',
+        `${relative(ROOT, file)} has ${tags} @internal tag(s) but the reader names ${members.length} member(s); ` +
+          'put the tag directly above a plain member, or teach scripts/internal-members.mjs the new shape.'
+      )
     }
+    for (const name of members) hidden.add(name)
   }
   const declarations = filesUnder(join(ROOT, 'dist'), ['.d.ts', '.d.cts'])
   const leaked = []
