@@ -386,6 +386,30 @@ describe('SmtpEmailProvider failure handling', () => {
     await expect(provider.send(baseOptions)).rejects.toBe(failure)
   })
 
+  // An Error whose `message` getter throws cannot be rethrown as it is: every consumer that
+  // reads the message would throw in turn. It is replaced by a plain Error with a fixed phrase.
+  it('should replace an initialization failure whose message cannot be read', async () => {
+    const hostile = new Error('shell')
+    Object.defineProperty(hostile, 'message', {
+      get: (): never => {
+        throw new Error('getter')
+      }
+    })
+    mockCreateTransport.mockImplementation(() => {
+      throw hostile
+    })
+    const provider = new SmtpEmailProvider({
+      host: 'h',
+      credentials: { user: 'smtp-account', pass: 'unrelated' }
+    })
+
+    const thrown: unknown = await provider.send(baseOptions).catch((error: unknown) => error)
+
+    expect(thrown).not.toBe(hostile)
+    expect(thrown).toBeInstanceOf(Error)
+    expect((thrown as Error).message).toBe('unprintable error')
+  })
+
   // The user is not always a public login: an SES SMTP username is itself
   // generated secret material, so it is scrubbed alongside the password.
   it('should scrub the user as well as the password', async () => {
