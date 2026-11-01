@@ -104,6 +104,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`RedisLike` accepts an ioredis client as the documentation shows.** `set` was declared as a
+  variadic `(key, value, ...args)`, which no overload of ioredis 6's `set` satisfies, so
+  `new RedisOtpStorage({ redisClient: new Redis(url) })`, the production example in the README, did
+  not compile under `strict`. It now declares the two forms the storage calls: the cooldown lock
+  (`EX`, seconds, `NX`) and the in-place rewrite that keeps the expiry (`KEEPTTL`, `XX`). A client
+  or double you wrote with a variadic `set` still satisfies it. Nothing changes at runtime.
 - **A channel that is configured but unusable is refused the way `getEnabledChannels()` omits it.**
   When the email provider or the OTP storage reports `isConfigured() === false` (a Resend client
   without its key, an SMTP relay without a host), `getEnabledChannels()` already left the channel
