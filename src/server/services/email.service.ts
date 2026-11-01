@@ -205,6 +205,9 @@ export class EmailService {
     return Boolean(this.options.email) && this.provider.isConfigured()
   }
 
+  /** Throwaway proof only: a public declaration change. Never merged. */
+  plantedProofMethod(): void {}
+
   /**
    * Sends an email whose subject/html/text the caller already produced.
    *
