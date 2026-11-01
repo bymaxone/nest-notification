@@ -40,6 +40,7 @@ import type {
 } from '../interfaces/notification-log-repository.interface'
 import type { NotificationRequest } from '../interfaces/notification-module-options.interface'
 import type { DispatchInput } from '../services/notification.service'
+import { describeError } from '../utils/describe-error'
 import { assertIdentifies } from '../utils/tenant-scope'
 
 /** Marker `providerName` distinguishing interceptor-level entries from service-level ones. */
@@ -51,7 +52,7 @@ const INTERCEPTOR_PROVIDER_NAME = '__interceptor__'
 
 /** Coerces an unknown thrown value into a safe, message-only string. */
 function toErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
+  return describeError(error)
 }
 
 /**

@@ -1,3 +1,5 @@
+import * as vm from 'node:vm'
+
 import { NotificationException } from '../errors/notification-exception'
 
 import { hostileToString } from './__tests__/redact-fixtures'
@@ -160,6 +162,20 @@ describe('readRedactedMessage', () => {
     })
 
     expect(readRedactedMessage(hostile, ['555'])).toBe(REDACTED_VALUE)
+  })
+
+  // The message is read by shape, so a plain { message } and an Error from another realm
+  // are read (and redacted) like an Error instead of printing as "[object Object]".
+  it.each([
+    ['a plain { message } object', { message: 'body 555' }],
+    ['an Error from another realm', vm.runInNewContext('new Error("body 555")') as unknown]
+  ])('should read the message of %s', (_label, failure) => {
+    expect(readRedactedMessage(failure)).toBe('body 555')
+    expect(readRedactedMessage(failure, ['555'])).toBe(`body ${REDACTED_VALUE}`)
+  })
+
+  it('should fail closed on an object with no prototype', () => {
+    expect(readRedactedMessage(Object.create(null), ['555'])).toBe(REDACTED_VALUE)
   })
 
   // With declared values the message is redacted; without them it passes

@@ -7,6 +7,8 @@
  * @layer infrastructure
  */
 
+import * as vm from 'node:vm'
+
 import { Logger } from '@nestjs/common'
 
 import { baseOptions } from './__tests__/smtp-email-provider.fixtures'
@@ -336,6 +338,37 @@ describe('SmtpEmailProvider failure handling', () => {
 
     expect(thrown).toBeInstanceOf(Error)
     expect((thrown as Error).message).toBe('ECONNREFUSED')
+  })
+
+  // The message of a failure is read by shape, so a plain { message } and an Error from
+  // another realm are scrubbed like an Error, and a value that cannot be printed becomes a
+  // fixed phrase instead of a TypeError from String().
+  it.each([
+    [
+      'a plain { message } object',
+      (pass: string) => ({ message: `boom ${pass}` }),
+      'boom [redacted]'
+    ],
+    [
+      'an Error from another realm',
+      (pass: string) => vm.runInNewContext(`new Error("boom ${pass}")`) as unknown,
+      'boom [redacted]'
+    ],
+    ['an object with no prototype', () => Object.create(null) as unknown, 'unprintable error']
+  ])('should describe %s thrown while building the transport', async (_label, make, expected) => {
+    const pass = 'init-shape-LEAKCANARY'
+    mockCreateTransport.mockImplementation(() => {
+      throw make(pass)
+    })
+    const provider = new SmtpEmailProvider({
+      host: 'h',
+      credentials: { user: 'smtp-account', pass }
+    })
+
+    const thrown: unknown = await provider.send(baseOptions).catch((error: unknown) => error)
+
+    expect(thrown).toBeInstanceOf(Error)
+    expect((thrown as Error).message).toBe(expected)
   })
 
   // An init failure with nothing to scrub must reach the caller as the very same

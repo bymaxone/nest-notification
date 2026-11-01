@@ -1,8 +1,10 @@
+import * as vm from 'node:vm'
+
 import { loadOptionalPeer } from './load-optional-peer'
 
 // The loader is exercised through a virtual module whose factory decides how the
 // import fails, which is the only way to drive the `code` branches deterministically.
-let mockFailure: (Error & { code?: string }) | null = null
+let mockFailure: unknown = null
 
 jest.mock(
   'virtual-optional-peer',
@@ -60,6 +62,26 @@ describe('loadOptionalPeer', () => {
     // The instruction names the fix; the cause names the specifier the runtime
     // actually rejected, which a nested resolution failure does not share with it.
     expect(error.cause).toBe(mockFailure)
+  })
+
+  // A peer can fail to load with a value that is not a same-realm Error. The message is
+  // read by shape, and a value that cannot be printed never turns into a TypeError.
+  it.each([
+    ['a plain { message } object', { message: 'plain failure' }, 'plain failure'],
+    [
+      'an Error from another realm',
+      vm.runInNewContext('new Error("foreign failure")') as unknown,
+      'foreign failure'
+    ],
+    ['an object with no prototype', Object.create(null) as unknown, 'unprintable error']
+  ])('should describe %s in the load failure', async (_label, failure, reason) => {
+    mockFailure = failure
+    jest.resetModules()
+
+    const error = (await loadOptionalPeer(MODULE).catch((thrown: unknown) => thrown)) as Error
+
+    expect(error).toBeInstanceOf(Error)
+    expect(error.message).toBe(`Failed to load \`virtual-optional-peer\`: ${reason}`)
   })
 
   // The trap the code alone walks into. An INSTALLED peer whose own evaluation

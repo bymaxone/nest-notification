@@ -1,3 +1,5 @@
+import * as vm from 'node:vm'
+
 import { HttpStatus } from '@nestjs/common'
 
 import { NOTIFICATION_ERROR_CODES } from '../../shared/constants/error-codes'
@@ -194,6 +196,26 @@ describe('NotificationException', () => {
     })
 
     expect(exception.cause).toBe('[object Object]')
+  })
+
+  // The flattened form of a non-Error object cause is its message when it has a string one,
+  // whatever realm it came from; a cause that cannot be printed never breaks construction.
+  it.each([
+    ['a plain { message } object', { message: 'SMTP down' }, 'SMTP down'],
+    [
+      'an Error from another realm',
+      vm.runInNewContext('new Error("SMTP down")') as unknown,
+      'SMTP down'
+    ],
+    [
+      'an object with no prototype',
+      Object.create(null) as unknown,
+      'Cause unavailable: inspecting it threw'
+    ]
+  ])('should flatten %s to readable text', (_label, cause, expected) => {
+    const exception = new NotificationException('EMAIL_SEND_FAILED', undefined, { cause })
+
+    expect(exception.cause).toBe(expected)
   })
 
   // A CUSTOM error name must survive the copy — pins the `name` transfer against

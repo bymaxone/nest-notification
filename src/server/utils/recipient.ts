@@ -8,8 +8,8 @@
  * than the one the code was issued for is told the code does not exist.
  *
  * Only the KEY is derived here. RFC 5321 §2.4 makes the local-part case sensitive and
- * requires a sender to preserve it, so a message is addressed exactly as the
- * caller supplied it.
+ * requires a sender to preserve it, so a message keeps the case the caller supplied.
+ * Surrounding whitespace is no part of an address and is trimmed there as well.
  */
 
 /**

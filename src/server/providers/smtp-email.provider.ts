@@ -28,6 +28,7 @@ import type {
   IEmailProvider
 } from '../interfaces/email-provider.interface'
 import { extractDeliveryStatus, withoutDeclaredValues } from '../utils/delivery-status'
+import { describeError, UNPRINTABLE_ERROR } from '../utils/describe-error'
 import { loadOptionalPeer } from '../utils/load-optional-peer'
 import { collectEchoedExcerpts, readRedactedMessage, redactValues } from '../utils/redact'
 
@@ -619,11 +620,12 @@ export class SmtpEmailProvider implements IEmailProvider {
    *   `Error` carrying the scrubbed message.
    */
   private redactError(error: unknown): Error {
-    if (error instanceof Error) {
-      const message = this.redact(error.message)
-      return message === error.message ? error : new Error(message)
-    }
-    return new Error(this.redact(String(error)))
+    const text = describeError(error)
+    const message = this.redact(text)
+    // The original keeps its type and stack only when it is a readable Error that needed no scrubbing.
+    return error instanceof Error && message === text && text !== UNPRINTABLE_ERROR
+      ? error
+      : new Error(message)
   }
 
   /**

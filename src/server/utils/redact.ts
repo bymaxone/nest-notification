@@ -4,6 +4,7 @@
  * @layer domain
  */
 
+import { describeError } from './describe-error'
 import { NotificationException } from '../errors/notification-exception'
 
 /** Marker substituted for a secret value wherever it is redacted. */
@@ -77,12 +78,8 @@ export function coerceRedacted(value: unknown, values: readonly string[]): strin
  * @returns The (optionally redacted) message, or the marker when reading threw.
  */
 export function readRedactedMessage(error: unknown, values?: readonly string[]): string {
-  try {
-    const message = error instanceof Error ? error.message : String(error)
-    return values ? redactValues(message, values) : message
-  } catch {
-    return REDACTED_VALUE
-  }
+  const message = describeError(error, REDACTED_VALUE)
+  return values ? redactValues(message, values) : message
 }
 
 /**

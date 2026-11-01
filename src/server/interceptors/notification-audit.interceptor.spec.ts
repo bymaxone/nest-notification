@@ -1,3 +1,5 @@
+import * as vm from 'node:vm'
+
 import type { CallHandler, ExecutionContext } from '@nestjs/common'
 import { firstValueFrom, of, throwError } from 'rxjs'
 import type { Observable } from 'rxjs'
@@ -115,6 +117,27 @@ describe('NotificationAuditInterceptor', () => {
       firstValueFrom(interceptor.intercept(ctx, handlerOf(throwError(() => 'string failure'))))
     ).rejects.toBe('string failure')
     expect(repo.entries[0]).toMatchObject({ verb: 'failed', errorMessage: 'string failure' })
+  })
+
+  // A rejection is described without throwing, whatever its shape: a plain { message }, an
+  // Error from another realm, and an object with no prototype (String() throws on it).
+  it.each([
+    ['a plain { message } object', { message: 'plain failure' }, 'plain failure'],
+    [
+      'an Error from another realm',
+      vm.runInNewContext('new Error("foreign failure")') as unknown,
+      'foreign failure'
+    ],
+    ['an object with no prototype', Object.create(null) as unknown, 'unprintable error']
+  ])('describes %s in the failed entry', async (_label, failure, expected) => {
+    const repo = new CapturingRepo()
+    const interceptor = new NotificationAuditInterceptor(buildOptions(), repo)
+    const ctx = buildContext([otpInput])
+
+    await expect(
+      firstValueFrom(interceptor.intercept(ctx, handlerOf(throwError(() => failure))))
+    ).rejects.toBe(failure)
+    expect(repo.entries[0]).toMatchObject({ verb: 'failed', errorMessage: expected })
   })
 
   // The tenant resolver is the trusted source — it overrides a spoofed payload tenantId.

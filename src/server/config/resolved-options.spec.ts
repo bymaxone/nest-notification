@@ -1,8 +1,4 @@
-import type {
-  IEmailProvider,
-  INotificationLogRepository,
-  IOtpStorage
-} from '../interfaces'
+import type { IEmailProvider, INotificationLogRepository, IOtpStorage } from '../interfaces'
 
 import { resolveOptions } from './resolved-options'
 
