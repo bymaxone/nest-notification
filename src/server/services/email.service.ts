@@ -12,7 +12,7 @@
  * `EMAIL_SEND_FAILED`. OTP codes ride inside the body, never in audit metadata.
  */
 
-import { Inject, Injectable } from '@nestjs/common'
+import { Inject, Injectable, Logger } from '@nestjs/common'
 
 import {
   BYMAX_NOTIFICATION_EMAIL_PROVIDER,
@@ -29,6 +29,7 @@ import type {
   INotificationLogRepository,
   NotificationLogEntry
 } from '../interfaces/notification-log-repository.interface'
+import { AuditWriteWarning } from '../utils/audit-write-warning'
 import type { DeliveryStatus } from '../utils/delivery-status'
 import {
   extractDeliveryStatus,
@@ -179,6 +180,9 @@ function readAttachedStatus(error: unknown): DeliveryStatus | undefined {
 /** Transactional email service. */
 @Injectable()
 export class EmailService {
+  /** @internal */
+  private readonly auditWarning = new AuditWriteWarning(new Logger(EmailService.name), 'email')
+
   /**
    * @param options - The resolved, frozen module options.
    * @param provider - The configured email send provider.
@@ -472,6 +476,7 @@ export class EmailService {
         // into the HTTP response body, so internal error text must never land there.
         throw new NotificationException('AUDIT_LOG_FAILED', undefined, { cause: error })
       }
+      this.auditWarning.warn(error)
     }
   }
 

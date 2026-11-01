@@ -514,30 +514,30 @@ if (error.code === NOTIFICATION_ERROR_CODES.OTP_MAX_ATTEMPTS_EXCEEDED) {
 
 Configure via `forRoot(options)` or `forRootAsync({ useFactory })`. **At least one channel must be configured**, and configuring a channel the library does not implement throws at startup rather than failing on the first send. The full reference is in [`docs/technical_specification.md` §4](./docs/technical_specification.md); the most-used options:
 
-| Section  | Option                  | Default          | Notes                                                                                                                   |
-| -------- | ----------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `global` | `redisNamespace`        | `'notification'` | Prefix for store keys.                                                                                                  |
-| `global` | `defaultLocale`         | `'en'`           | Template locale fallback.                                                                                               |
-| `global` | `tenantIdResolver`      | —                | `(req) => tenantId`; the audit source of truth.                                                                         |
-| `email`  | `provider`              | — (required)     | Instance or class implementing `IEmailProvider`.                                                                        |
-| `email`  | `defaultFrom`           | — (required)     | Must look like an email address.                                                                                        |
-| `email`  | `templateRenderer`      | default renderer | Any `IEmailTemplateRenderer`.                                                                                           |
-| `email`  | `maxAttachmentBytes`    | `10485760`       | 10 MiB attachment guard.                                                                                                |
-| `otp`    | `storage`               | — (required)     | Instance or class implementing `IOtpStorage`.                                                                           |
-| `otp`    | `defaultLength`         | `6`              | 1–32.                                                                                                                   |
-| `otp`    | `defaultCodeType`       | `'numeric'`      | `numeric` \| `alpha` \| `alphanumeric`.                                                                                 |
-| `otp`    | `defaultTtlSeconds`     | `600`            | Code lifetime.                                                                                                          |
-| `otp`    | `defaultMaxAttempts`    | `5`              | Verify attempts before lock-out.                                                                                        |
-| `otp`    | `codeSecret`            | —                | Secret (>= 32 bytes) the stored code is keyed under.                                                                    |
-| `otp`    | `consumeOnVerify`       | `false`          | `true` deletes the code when `verify()` succeeds; otherwise the entry is marked validated until `consume()` or its TTL. |
-| `email`  | `defaultFromName`       | —                | Display name sent with `defaultFrom`.                                                                                   |
-| `email`  | `defaultReplyTo`        | —                | `Reply-To` applied when a send does not set one.                                                                        |
-| `email`  | `defaultTags`           | `[]`             | Tags merged into every send, before the send's own tags.                                                                |
-| `otp`    | `resendCooldownSeconds` | `60`             | Anti-resend window (atomic `SET NX EX`).                                                                                |
-| `otp`    | `perPurpose`            | `{}`             | Per-purpose overrides of the above.                                                                                     |
-| `audit`  | `repository`            | — (required)     | Any `INotificationLogRepository`.                                                                                       |
-| `audit`  | `swallowErrors`         | `true`           | Keep audit failures out of the delivery path.                                                                           |
-| `audit`  | `maskRecipient`         | identity         | Minimize recipient PII before persisting.                                                                               |
+| Section  | Option                  | Default          | Notes                                                                                                                                              |
+| -------- | ----------------------- | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `global` | `redisNamespace`        | `'notification'` | Prefix for store keys.                                                                                                                             |
+| `global` | `defaultLocale`         | `'en'`           | Template locale fallback.                                                                                                                          |
+| `global` | `tenantIdResolver`      | —                | `(req) => tenantId`; the audit source of truth.                                                                                                    |
+| `email`  | `provider`              | — (required)     | Instance or class implementing `IEmailProvider`.                                                                                                   |
+| `email`  | `defaultFrom`           | — (required)     | Must look like an email address.                                                                                                                   |
+| `email`  | `templateRenderer`      | default renderer | Any `IEmailTemplateRenderer`.                                                                                                                      |
+| `email`  | `maxAttachmentBytes`    | `10485760`       | 10 MiB attachment guard.                                                                                                                           |
+| `otp`    | `storage`               | — (required)     | Instance or class implementing `IOtpStorage`.                                                                                                      |
+| `otp`    | `defaultLength`         | `6`              | 1–32.                                                                                                                                              |
+| `otp`    | `defaultCodeType`       | `'numeric'`      | `numeric` \| `alpha` \| `alphanumeric`.                                                                                                            |
+| `otp`    | `defaultTtlSeconds`     | `600`            | Code lifetime.                                                                                                                                     |
+| `otp`    | `defaultMaxAttempts`    | `5`              | Verify attempts before lock-out.                                                                                                                   |
+| `otp`    | `codeSecret`            | —                | Secret (>= 32 bytes) the stored code is keyed under.                                                                                               |
+| `otp`    | `consumeOnVerify`       | `false`          | `true` deletes the code when `verify()` succeeds; otherwise the entry is marked validated until `consume()` or its TTL.                            |
+| `email`  | `defaultFromName`       | —                | Display name sent with `defaultFrom`.                                                                                                              |
+| `email`  | `defaultReplyTo`        | —                | `Reply-To` applied when a send does not set one.                                                                                                   |
+| `email`  | `defaultTags`           | `[]`             | Tags merged into every send, before the send's own tags.                                                                                           |
+| `otp`    | `resendCooldownSeconds` | `60`             | Anti-resend window (atomic `SET NX EX`).                                                                                                           |
+| `otp`    | `perPurpose`            | `{}`             | Per-purpose overrides of the above.                                                                                                                |
+| `audit`  | `repository`            | — (required)     | Any `INotificationLogRepository`.                                                                                                                  |
+| `audit`  | `swallowErrors`         | `true`           | Keep audit failures out of the delivery path. A swallowed failure logs `BYMAX_NOTIFICATION_AUDIT_WRITE_FAILED`, at most once a minute per channel. |
+| `audit`  | `maskRecipient`         | identity         | Minimize recipient PII before persisting.                                                                                                          |
 
 ---
 
@@ -638,6 +638,10 @@ const tenantIdResolver = (req: NotificationRequest): string =>
 `NotificationRequest` is a minimal, framework-agnostic request shape declared by the library itself, so a public signature never drags in a framework's types. When a resolver is set, the `NotificationAuditInterceptor` uses it as the **source of truth** for the audited tenant id — any `tenantId` in the payload becomes a suggestion the resolver overrides.
 
 A tenant id that identifies nobody is never recorded. The interceptor refuses a value that is not a string, is empty, or is whitespace-only, on every path that produces the id: what `tenantIdResolver` returns, the payload's `tenantId` when no resolver is configured, and the payload's `tenantId` when a resolver is configured but there is no HTTP request to read it from (a non-HTTP context). Your caller never sees the refusal itself. With `audit.swallowErrors: true` (the default) it is swallowed and no audit entry is written; with `false` it surfaces as `AUDIT_LOG_FAILED`, whose `cause` is a sanitized copy of the refusal. One input is ignored, not refused: an argument whose payload `tenantId` is not a string is not recognised as a dispatch at all, so it produces no audit entry and no error.
+
+A swallowed audit failure is not silent: each channel (`otp`, `email`, the interceptor) logs one warning, `BYMAX_NOTIFICATION_AUDIT_WRITE_FAILED`, naming the channel and the repository's error text (or the library's own error code, such as `notification.invalid_scope_identifier` for a refused tenant id), never the raw recipient or an OTP code: the entry is masked before it is written and never holds a code, so if your repository's error quotes the entry, the line shows the masked form. The text is cut at 200 characters and kept on one line. At most one line is written per channel per minute; the next line says how many failures it stands for. The operation's own result is unchanged.
+
+With `audit.swallowErrors: false` the audit write comes after the state change, so `AUDIT_LOG_FAILED` can reach your caller when the work is already done: `generate()` after the code was stored and delivered (its resend cooldown is then held), `verify()` after the code was accepted (consumed, or marked validated). Treat that error as "done, but not audited", not as "nothing happened".
 
 > [!NOTE]
 > The resolver governs what the audit interceptor trusts. Service methods still take an explicit `tenantId`: resolve the tenant in your controller and pass it down — there is no hidden override of a method argument.
