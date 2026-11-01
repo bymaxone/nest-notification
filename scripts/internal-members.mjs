@@ -61,25 +61,22 @@ function skipArguments(text, open) {
 }
 
 /** The index of the first character after any line comments and decorators, or -1 when the shape
- * is unreadable or reaches `limit`, the start of the next comment block: a member that follows
- * another block belongs to that block, and stopping there keeps the work of all tags linear. */
-function skipTrivia(text, start, limit) {
-  let at = start
+ * is unreadable or the region ends first. */
+function skipTrivia(region) {
+  let at = 0
   for (;;) {
-    at = skipSpace(text, at)
-    if (at >= limit) return -1
-    if (text.startsWith('//', at)) {
-      // Looked for only up to `limit`: a longer search would be repeated by every tag on the line.
-      let newline = at
-      while (newline < limit && text.charAt(newline) !== '\n') newline += 1
-      if (newline >= limit) return -1
+    at = skipSpace(region, at)
+    if (at >= region.length) return -1
+    if (region.startsWith('//', at)) {
+      const newline = region.indexOf('\n', at)
+      if (newline === -1) return -1
       at = newline
-    } else if (text.charAt(at) === '@') {
+    } else if (region.charAt(at) === '@') {
       DECORATOR_NAME.lastIndex = at + 1
-      if (!DECORATOR_NAME.exec(text)) return -1
+      if (!DECORATOR_NAME.exec(region)) return -1
       at = DECORATOR_NAME.lastIndex
-      if (text.charAt(at) === '(') {
-        at = skipArguments(text, at)
+      if (region.charAt(at) === '(') {
+        at = skipArguments(region, at)
         if (at === -1) return -1
       }
     } else {
@@ -88,9 +85,9 @@ function skipTrivia(text, start, limit) {
   }
 }
 
-/** The name of the member declared at `start`, or undefined when the shape is not one it reads. */
-function memberAt(text, start, limit) {
-  let at = skipTrivia(text, start, limit)
+/** The name of the member that opens `text`, or undefined when the shape is not one it reads. */
+function memberAt(text) {
+  let at = skipTrivia(text)
   if (at === -1) return undefined
   const words = []
   let afterStar = false
@@ -136,8 +133,10 @@ export function readInternalMembers(text) {
     from = end
     if (!TAG.test(text.slice(start, end))) continue
     tags += 1
+    // The member belongs to this block alone: what follows is read only up to the next block, so
+    // the work of all tags together is one pass over the text, whatever the input.
     const next = text.indexOf('/**', end)
-    const member = memberAt(text, end, next === -1 ? text.length : next)
+    const member = memberAt(text.slice(end, next === -1 ? text.length : next))
     if (member !== undefined) members.push(member)
   }
   return { tags, members }
