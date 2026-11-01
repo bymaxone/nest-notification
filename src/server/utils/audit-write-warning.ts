@@ -2,14 +2,20 @@
  * @fileoverview The warning logged when an audit write fails and `audit.swallowErrors` hides it.
  * @layer utils
  *
- * A swallowed audit failure used to leave nothing at all: sends and verifications kept
- * succeeding while the audit trail, including the entries that record a recipient hitting its
- * attempt ceiling, silently stopped. An outage touches every operation, so a line per failure
- * would be a flood; the warning is rate limited per channel and counts what it suppressed.
+ * A failure the caller never sees must still be visible to the operator. With
+ * `audit.swallowErrors` set, sends and verifications keep succeeding when the audit repository
+ * fails, so this warning is the only sign that the trail, including the entries that record a
+ * recipient reaching its attempt ceiling, has stopped. An outage touches every operation, so a
+ * line per failure would be a flood: the warning is rate limited per channel and counts what it
+ * suppressed. The entry the repository rejected identifies a recipient, and `maskRecipient`
+ * defaults to the identity function, so the reason has that identity removed by value before it
+ * is bounded.
  */
 import type { Logger } from '@nestjs/common'
 
 import { describeError } from './describe-error'
+import { redactValues } from './redact'
+import type { NotificationLogEntry } from '../interfaces/notification-log-repository.interface'
 
 /** The shortest time between two warnings of one channel. */
 export const AUDIT_WARNING_INTERVAL_MS = 60_000
@@ -26,14 +32,24 @@ const MAX_REASON_LENGTH = 200
 const LIBRARY_CODE_PREFIX = 'notification.'
 
 /**
- * What to tell an operator about the error, as one bounded line. A library exception's message is
+ * What to tell an operator about the error, as one bounded line without the identity of the
+ * entry that was being written. A library exception's message is
  * only its class label, so its code is named instead; any other error is described by its
  * message. Both reach the line through {@link oneLine}: the code is a property of whatever the
  * repository threw, so nothing makes it a short catalog string. Reading the code is guarded: the
  * error is consumer code.
  */
-function reasonOf(error: unknown): string {
-  return oneLine(libraryCodeOf(error) ?? describeError(error))
+function reasonOf(error: unknown, identity: readonly string[]): string {
+  return oneLine(redactValues(libraryCodeOf(error) ?? describeError(error), identity))
+}
+
+/** The strings by which an entry identifies who it is about: its recipient and its user id. */
+function identityOf(
+  entry: Pick<NotificationLogEntry, 'recipient' | 'userId'> | undefined
+): string[] {
+  return [entry?.recipient, entry?.userId].filter(
+    (value): value is string => typeof value === 'string'
+  )
 }
 
 /** The error's code when it is a string in the library's catalog namespace, else `undefined`. */
@@ -97,8 +113,10 @@ export class AuditWriteWarning {
    * Logs the warning, or counts the failure when one was logged less than an interval ago.
    *
    * @param error - What the audit repository threw; any value, described without throwing.
+   * @param entry - The entry that could not be written, when the caller has it: its recipient and
+   *   user id are removed from the reason wherever the error quotes them (an empty one names nothing).
    */
-  warn(error: unknown): void {
+  warn(error: unknown, entry?: Pick<NotificationLogEntry, 'recipient' | 'userId'>): void {
     const now = Date.now()
     // A wall clock that stepped backward gives a negative elapsed time; that counts as the
     // interval having passed, so the warning is not silenced until the clock catches up.
@@ -111,7 +129,7 @@ export class AuditWriteWarning {
     this.suppressed = 0
     this.logger.warn(
       `[${WARNING_CODE}] An audit entry could not be written by the ${this.channel} channel ` +
-        `(${reasonOf(error)}${similar}); ` +
+        `(${reasonOf(error, identityOf(entry))}${similar}); ` +
         "the operation's result is unaffected because audit.swallowErrors is true."
     )
   }

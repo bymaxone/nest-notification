@@ -80,6 +80,16 @@ describe('swallowed audit failures leave a trace', () => {
       )
     })
 
+    // maskRecipient defaults to the identity function, so the entry holds the raw recipient and a
+    // repository error that quotes the entry would carry it into the log.
+    it('should not put a quoted raw recipient in the line under the default mask', async () => {
+      const service = otpService(failing('Invalid create(): {"recipient":"jane@acme.com"}'))
+      await service.generate({ ...scope, deliverVia: 'manual' })
+
+      expect(ours().join('\n')).not.toContain('jane@acme.com')
+      expect(ours().join('\n')).toContain('[redacted]')
+    })
+
     it('should not put the recipient or any code in the line', async () => {
       const service = otpService(failing('store down'))
       await service.generate({ ...scope, deliverVia: 'manual' })
@@ -110,6 +120,22 @@ describe('swallowed audit failures leave a trace', () => {
   })
 
   describe('EmailService', () => {
+    it('should not put a quoted recipient in the line', async () => {
+      const options = resolveOptions({
+        email: { provider: makeProvider(), defaultFrom: 'no-reply@acme.com' },
+        audit: { repository: dummyRepo }
+      })
+      const service = new EmailService(
+        options,
+        makeProvider(),
+        makeRenderer(),
+        failing('Invalid create(): {"recipient":"jane@acme.com"}')
+      )
+      await service.send({ tenantId: 'acme', to: 'jane@acme.com', subject: 'S', html: '<p>B</p>' })
+
+      expect(ours().join('\n')).not.toContain('jane@acme.com')
+    })
+
     it('should leave a line when the sent entry cannot be written', async () => {
       const options = resolveOptions({
         email: { provider: makeProvider(), defaultFrom: 'no-reply@acme.com' },
@@ -158,7 +184,19 @@ describe('swallowed audit failures leave a trace', () => {
       ])
     })
 
-    // A tenant resolver that returns nothing used to empty the whole trail without a word.
+    it('should not put a quoted recipient in the line', async () => {
+      const options = resolveOptions({ otp: { storage: InMemoryOtpStorage } })
+      const interceptor = new NotificationAuditInterceptor(
+        options,
+        failing('Invalid create(): {"recipient":"maria@x.com"}')
+      )
+
+      await firstValueFrom(interceptor.intercept(context(), handler))
+
+      expect(ours().join('\n')).not.toContain('maria@x.com')
+    })
+
+    // A tenant resolver that returns nothing empties the whole trail, so it must be heard.
     it('should leave a line when the tenant resolver returns a blank id', async () => {
       const options = resolveOptions({
         otp: { storage: InMemoryOtpStorage },

@@ -476,7 +476,7 @@ export class EmailService {
         // into the HTTP response body, so internal error text must never land there.
         throw new NotificationException('AUDIT_LOG_FAILED', undefined, { cause: error })
       }
-      this.auditWarning.warn(error)
+      this.auditWarning.warn(error, entry)
     }
   }
 

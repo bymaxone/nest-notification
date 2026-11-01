@@ -199,6 +199,66 @@ describe('AuditWriteWarning', () => {
     })
   })
 
+  // A repository error can quote the entry it rejected. Whatever `maskRecipient` is (it defaults
+  // to the identity function), the entry's recipient and user id are removed from the reason
+  // wherever they appear, so the line never carries what the entry identified.
+  describe('the entry the repository rejected', () => {
+    const entry = { recipient: 'jane@acme.com', userId: 'user_42' }
+    const warnWith = (error: unknown): string => {
+      new AuditWriteWarning(new Logger('Test'), 'otp').warn(error, entry)
+      return lines()[0] ?? ''
+    }
+
+    it('should remove the recipient from a quoted entry', () => {
+      const line = warnWith(new Error('Invalid create(): {"recipient":"jane@acme.com"}'))
+
+      expect(line).not.toContain('jane@acme.com')
+      expect(line).toContain('Invalid create(): {"recipient":"[redacted]"}')
+    })
+
+    it('should remove the user id and every occurrence', () => {
+      const line = warnWith(new Error('dup user_42 for jane@acme.com and user_42 again'))
+
+      expect(line).not.toMatch(/user_42|jane@acme\.com/)
+    })
+
+    // A masked form the repository quotes is what the entry holds; it goes too.
+    it('should remove a masked recipient the entry holds', () => {
+      new AuditWriteWarning(new Logger('Test'), 'otp').warn(new Error('bad row j***@acme.com'), {
+        recipient: 'j***@acme.com'
+      })
+
+      expect(lines()[0]).not.toContain('j***@acme.com')
+    })
+
+    it('should remove them from a library code too', () => {
+      const line = warnWith({ code: 'notification.jane@acme.com' })
+
+      expect(line).not.toContain('jane@acme.com')
+    })
+
+    // The removal runs before the cut, so a recipient straddling the cut is not printed in part.
+    it('should not print half a recipient at the cut', () => {
+      const line = warnWith(new Error(`${'x'.repeat(190)}jane@acme.com tail`))
+
+      expect(line).not.toMatch(/jane|@acme/)
+    })
+
+    it('should leave the text alone when the entry names nothing', () => {
+      new AuditWriteWarning(new Logger('Test'), 'otp').warn(new Error('store down'), {
+        recipient: ''
+      })
+
+      expect(lines()[0]).toContain('(store down)')
+    })
+
+    it('should leave the text alone when no entry is given', () => {
+      new AuditWriteWarning(new Logger('Test'), 'otp').warn(new Error('keeps jane@acme.com'))
+
+      expect(lines()[0]).toContain('keeps jane@acme.com')
+    })
+  })
+
   // A NotificationException's message is only its class label; its code is what tells an
   // operator what was refused, so the line carries the code.
   it('should name the code of a NotificationException instead of its class label', () => {
