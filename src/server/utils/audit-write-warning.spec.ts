@@ -149,6 +149,56 @@ describe('AuditWriteWarning', () => {
     expect(lines()[1]).toContain('(b)')
   })
 
+  // Every reason reaches the line through the same bound, whichever path produced it: the
+  // library's code, the error's message, or the string form of a value. The code is a property
+  // of whatever the repository threw, so nothing makes it a short catalog string.
+  describe('the bound on a reason', () => {
+    const reasonOfLine = (): string => {
+      const line = lines()[0] ?? ''
+      return line.slice(line.indexOf('channel (') + 'channel ('.length, line.indexOf('); the'))
+    }
+    const cases: ReadonlyArray<readonly [string, unknown]> = [
+      ['the message of an Error', new Error('m'.repeat(500))],
+      ['a string value', 's'.repeat(500)],
+      ['a plain { message } object', { message: 'p'.repeat(500) }],
+      ['a library code', { code: `notification.${'c'.repeat(500)}` }]
+    ]
+
+    it.each(cases)('should cut %s at 200 characters', (_label, error) => {
+      new AuditWriteWarning(new Logger('Test'), 'otp').warn(error)
+
+      expect(reasonOfLine()).toHaveLength(201)
+      expect(reasonOfLine().endsWith('…')).toBe(true)
+    })
+
+    it.each([
+      ['the message of an Error', new Error('a\nb\r\nc\u2028d')],
+      ['a library code', { code: 'notification.a\nb' }]
+    ])('should keep %s on one line', (_label, error) => {
+      new AuditWriteWarning(new Logger('Test'), 'otp').warn(error)
+
+      expect(lines()[0]).not.toMatch(/[\n\r\u2028\u2029]/)
+    })
+
+    // A terminal escape in a repository error must not reach a terminal through the log.
+    it.each([
+      ['the message of an Error', new Error('a\u001b[2Jb\u0007c')],
+      ['a library code', { code: 'notification.a\u001b[2Jb' }]
+    ])('should replace control characters in %s', (_label, error) => {
+      new AuditWriteWarning(new Logger('Test'), 'otp').warn(error)
+
+      expect(lines()[0]).not.toMatch(/\p{Cc}/u)
+    })
+
+    // The cut counts code units; it must not leave half of an astral character before the dots.
+    it('should not cut inside a surrogate pair', () => {
+      new AuditWriteWarning(new Logger('Test'), 'otp').warn(new Error(`${'x'.repeat(199)}😀tail`))
+
+      expect(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/.test(reasonOfLine())).toBe(false)
+      expect(reasonOfLine()).toBe(`${'x'.repeat(199)}…`)
+    })
+  })
+
   // A NotificationException's message is only its class label; its code is what tells an
   // operator what was refused, so the line carries the code.
   it('should name the code of a NotificationException instead of its class label', () => {

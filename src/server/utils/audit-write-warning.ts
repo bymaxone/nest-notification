@@ -26,30 +26,43 @@ const MAX_REASON_LENGTH = 200
 const LIBRARY_CODE_PREFIX = 'notification.'
 
 /**
- * What to tell an operator about the error. A library exception's message is only its class
- * label, so its code is named instead; any other error is described by its message. Reading the
- * code is guarded: the error is consumer code.
+ * What to tell an operator about the error, as one bounded line. A library exception's message is
+ * only its class label, so its code is named instead; any other error is described by its
+ * message. Both reach the line through {@link oneLine}: the code is a property of whatever the
+ * repository threw, so nothing makes it a short catalog string. Reading the code is guarded: the
+ * error is consumer code.
  */
 function reasonOf(error: unknown): string {
+  return oneLine(libraryCodeOf(error) ?? describeError(error))
+}
+
+/** The error's code when it is a string in the library's catalog namespace, else `undefined`. */
+function libraryCodeOf(error: unknown): string | undefined {
   try {
     const code = (error as { code?: unknown } | null | undefined)?.code
-    if (typeof code === 'string' && code.startsWith(LIBRARY_CODE_PREFIX)) {
-      return code
-    }
+    return typeof code === 'string' && code.startsWith(LIBRARY_CODE_PREFIX) ? code : undefined
   } catch {
-    // A hostile `code` getter contributes nothing; the message below still applies.
+    // A hostile `code` getter contributes nothing; the message still applies.
+    return undefined
   }
-  return oneLine(describeError(error))
 }
 
 /**
- * Collapses every run of whitespace to one space and cuts the text at the limit. A repository
- * error can quote the entry it failed to write over many lines and at any length; the line stays
- * one line and bounded, so it can neither flood the log nor forge a second line in it.
+ * Replaces every control character, line breaks included, and every run of whitespace with one
+ * space, and cuts the text at the limit without splitting an astral character. A repository error
+ * can quote the entry it failed to write over many lines and at any length; the line stays one
+ * line and bounded, so it can neither flood the log, forge a second line in it, nor send a
+ * terminal an escape sequence.
  */
 function oneLine(text: string): string {
-  const flat = text.replace(/\s+/g, ' ').trim()
-  return flat.length > MAX_REASON_LENGTH ? `${flat.slice(0, MAX_REASON_LENGTH)}…` : flat
+  const flat = text.replace(/[\p{Cc}\p{Zl}\p{Zp}\s]+/gu, ' ').trim()
+  if (flat.length <= MAX_REASON_LENGTH) {
+    return flat
+  }
+  const cut = flat.slice(0, MAX_REASON_LENGTH)
+  const last = cut.charCodeAt(cut.length - 1)
+  const whole = last >= 0xd800 && last <= 0xdbff ? cut.slice(0, -1) : cut
+  return `${whole}…`
 }
 
 /**
