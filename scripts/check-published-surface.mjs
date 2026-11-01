@@ -427,7 +427,7 @@ async function checkLinks() {
  * differently from the workflow proves nothing about the workflow. */
 function releaseNotes(version) {
   const lines = CHANGELOG.split('\n')
-  const start = lines.findIndex((l) => /^## \[/.test(l) && l.includes(`[${version}]`))
+  const start = lines.findIndex((l) => l.startsWith(`## [${version}]`))
   if (start === -1) return null
   const rest = lines.slice(start + 1)
   const end = rest.findIndex((l) => /^## \[/.test(l))
@@ -442,7 +442,7 @@ function checkChangelog() {
   if (notes === null) {
     fail(
       'changelog',
-      `no "## [${PKG.version}]" heading — the release would publish the generic fallback`
+      `no "## [${PKG.version}]" heading — the release would fail before it publishes`
     )
     return
   }
@@ -528,7 +528,7 @@ function checkChangelog() {
   for (const v of missing) {
     fail(
       'changelog',
-      `v${v} is tagged but has no "## [${v}]" section — its release notes would be the generic fallback`
+      `v${v} is tagged but has no "## [${v}]" section — a re-run of its release would fail`
     )
   }
   console.log(

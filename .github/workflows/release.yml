@@ -79,6 +79,27 @@ jobs:
             exit 1
           fi
 
+      - name: Extract release notes from CHANGELOG
+        # Runs before the gates and the publish: a tag whose CHANGELOG section is
+        # missing or blank must fail here, not after the package is already on npm
+        # with nothing to put in the Release. There is no fallback text for the
+        # same reason. The heading is matched literally from column 0 (`index`, not
+        # a regex), so a heading that merely mentions the version, or a version
+        # containing regex metacharacters, cannot select the wrong section.
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          awk -v ver="$VERSION" '
+            /^## \[/ {
+              if (found) exit
+              if (index($0, "## [" ver "]") == 1) { found=1; next }
+            }
+            found { print }
+          ' CHANGELOG.md > "$RUNNER_TEMP/release-notes.md"
+          if ! grep -q '[^[:space:]]' "$RUNNER_TEMP/release-notes.md"; then
+            echo "CHANGELOG.md has no non-empty '## [$VERSION]' section — refusing to release."
+            exit 1
+          fi
+
       - name: Verify (typecheck · test:types · lint · check:no-prisma · test · build)
         run: pnpm prepublishOnly
 
@@ -131,38 +152,13 @@ jobs:
             npm publish --provenance --access public --ignore-scripts
           fi
 
-      - name: Extract release notes from CHANGELOG
-        # Pulls the section for the current tag out of CHANGELOG.md so the GitHub
-        # Release body stays in sync with the changelog. Falls back to a generic
-        # pointer when the section is not found.
-        id: changelog
-        run: |
-          VERSION=${GITHUB_REF_NAME#v}
-          NOTES=$(awk -v ver="$VERSION" '
-            /^## \[/ {
-              if (found) exit
-              if ($0 ~ "\\[" ver "\\]") { found=1; next }
-            }
-            found { print }
-          ' CHANGELOG.md)
-          if [ -z "$NOTES" ]; then
-            NOTES="See [CHANGELOG.md](./CHANGELOG.md) for details."
-          fi
-          {
-            echo 'notes<<EOF'
-            echo "$NOTES"
-            echo 'EOF'
-          } >> "$GITHUB_OUTPUT"
-
       - name: Create GitHub Release
-        # Notes are passed via env var (NOT `${{ ... }}` interpolation) so that
-        # backticks, `$()`, and other shell metacharacters inside the CHANGELOG
-        # cannot be evaluated by bash — a script-injection vector that would
-        # otherwise let CHANGELOG content execute arbitrary commands on the runner.
+        # The notes come from a file written by the step above, never from an
+        # `${{ ... }}` interpolation, so backticks, `$()` and other shell
+        # metacharacters in the CHANGELOG cannot be evaluated on the runner.
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_NOTES: ${{ steps.changelog.outputs.notes }}
         run: |
           gh release create "$GITHUB_REF_NAME" \
             --title "$GITHUB_REF_NAME" \
-            --notes "$RELEASE_NOTES"
+            --notes-file "$RUNNER_TEMP/release-notes.md"
