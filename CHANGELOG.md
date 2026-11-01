@@ -17,8 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reaching its attempt ceiling, while every send and verification kept succeeding. The OTP
   service, the email service and the audit interceptor each log
   `BYMAX_NOTIFICATION_AUDIT_WRITE_FAILED`, naming the channel and the repository's error text (or
-  the library's own error code for one of its exceptions), never the recipient or an OTP code. At most one line is written per channel per minute; the next line
-  says how many failures it stands for. What the caller receives is unchanged.
+  the library's own error code for one of its exceptions), never the raw recipient or an OTP code
+  (a repository error that quotes the entry shows its masked form), cut at 200 characters and kept
+  on one line. At most one line is written per channel per minute; the next line says how many
+  failures it stands for. What the caller receives is unchanged.
 
 ### Documentation
 

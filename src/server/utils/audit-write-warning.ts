@@ -19,6 +19,9 @@ export type AuditChannel = 'otp' | 'email' | 'interceptor'
 
 const WARNING_CODE = 'BYMAX_NOTIFICATION_AUDIT_WRITE_FAILED'
 
+/** The most characters of an error's text the line carries. */
+const MAX_REASON_LENGTH = 200
+
 /** Prefix of every code in the library's own error catalog. */
 const LIBRARY_CODE_PREFIX = 'notification.'
 
@@ -36,7 +39,17 @@ function reasonOf(error: unknown): string {
   } catch {
     // A hostile `code` getter contributes nothing; the message below still applies.
   }
-  return describeError(error)
+  return oneLine(describeError(error))
+}
+
+/**
+ * Collapses every run of whitespace to one space and cuts the text at the limit. A repository
+ * error can quote the entry it failed to write over many lines and at any length; the line stays
+ * one line and bounded, so it can neither flood the log nor forge a second line in it.
+ */
+function oneLine(text: string): string {
+  const flat = text.replace(/\s+/g, ' ').trim()
+  return flat.length > MAX_REASON_LENGTH ? `${flat.slice(0, MAX_REASON_LENGTH)}…` : flat
 }
 
 /**
@@ -59,13 +72,24 @@ export class AuditWriteWarning {
   ) {}
 
   /**
+   * Whether `elapsed` milliseconds since the last line is still inside the interval.
+   *
+   * @internal
+   */
+  private within(elapsed: number): boolean {
+    return elapsed >= 0 && elapsed < AUDIT_WARNING_INTERVAL_MS
+  }
+
+  /**
    * Logs the warning, or counts the failure when one was logged less than an interval ago.
    *
    * @param error - What the audit repository threw; any value, described without throwing.
    */
   warn(error: unknown): void {
     const now = Date.now()
-    if (this.lastLoggedAt !== undefined && now - this.lastLoggedAt < AUDIT_WARNING_INTERVAL_MS) {
+    // A wall clock that stepped backward gives a negative elapsed time; that counts as the
+    // interval having passed, so the warning is not silenced until the clock catches up.
+    if (this.lastLoggedAt !== undefined && this.within(now - this.lastLoggedAt)) {
       this.suppressed += 1
       return
     }

@@ -106,6 +106,49 @@ describe('AuditWriteWarning', () => {
     expect(AUDIT_WARNING_INTERVAL_MS).toBe(60_000)
   })
 
+  // A repository's error can quote the entry it failed to write, over many lines and at any
+  // length. The line stays one line and bounded, so it cannot flood or forge log lines.
+  it('should log one line of bounded length for a long multi-line error', () => {
+    const warning = new AuditWriteWarning(new Logger('Test'), 'otp')
+
+    warning.warn(new Error(`Invalid create():\n  recipient: 'j***@acme.com'\n${'x'.repeat(2000)}`))
+
+    const line = lines()[0] ?? ''
+    expect(line).not.toContain('\n')
+    expect(line).toContain("(Invalid create(): recipient: 'j***@acme.com' xxx")
+    expect(line).toContain('…)')
+    expect(line.length).toBeLessThan(500)
+  })
+
+  it('should leave a short error as it is', () => {
+    const warning = new AuditWriteWarning(new Logger('Test'), 'otp')
+
+    warning.warn(new Error('x'.repeat(200)))
+
+    expect(lines()[0]).toContain(`(${'x'.repeat(200)})`)
+  })
+
+  it('should cut an error one character over the limit', () => {
+    const warning = new AuditWriteWarning(new Logger('Test'), 'otp')
+
+    warning.warn(new Error('y'.repeat(201)))
+
+    expect(lines()[0]).toContain(`(${'y'.repeat(200)}…)`)
+  })
+
+  // The wall clock can step backward (NTP, a resumed VM). A negative elapsed time must not
+  // silence the warning until the clock catches up.
+  it('should log again after the clock steps backward', () => {
+    const warning = new AuditWriteWarning(new Logger('Test'), 'otp')
+    warning.warn(new Error('a'))
+
+    jest.setSystemTime(1_000_000 - 3_600_000)
+    warning.warn(new Error('b'))
+
+    expect(lines()).toHaveLength(2)
+    expect(lines()[1]).toContain('(b)')
+  })
+
   // A NotificationException's message is only its class label; its code is what tells an
   // operator what was refused, so the line carries the code.
   it('should name the code of a NotificationException instead of its class label', () => {
