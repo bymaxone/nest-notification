@@ -86,8 +86,9 @@ function oneLine(text: string): string {
 /**
  * Warns, at most once per interval, that an audit entry could not be written.
  *
- * The line carries the channel and the error text only: never the recipient, the entry or a
- * code. There is no timer, so nothing needs clearing at shutdown.
+ * The line carries the channel and the error text only, with the entry's recipient and user id
+ * removed where the error quotes them verbatim; it holds no OTP code. There is no timer, so
+ * nothing needs clearing at shutdown.
  */
 export class AuditWriteWarning {
   private lastLoggedAt: number | undefined
