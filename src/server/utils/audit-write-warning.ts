@@ -117,7 +117,8 @@ export class AuditWriteWarning {
    *
    * @param error - What the audit repository threw; any value, described without throwing.
    * @param entry - The entry that could not be written, when the caller has it: its recipient and
-   *   user id are removed from the reason wherever the error quotes them (an empty one names nothing).
+   *   user id are removed from the reason wherever the error quotes them verbatim; a re-cased or
+   *   re-encoded copy is not recognised, and an empty value names nothing.
    */
   warn(error: unknown, entry?: Pick<NotificationLogEntry, 'recipient' | 'userId'>): void {
     const now = Date.now()
