@@ -21,6 +21,7 @@ import {
   BYMAX_NOTIFICATION_TEMPLATE_RENDERER
 } from '../bymax-notification.constants'
 import type { ResolvedNotificationOptions } from '../config/resolved-options'
+import { CANONICAL_EMAIL_TEMPLATES } from '../constants/canonical-templates'
 import { NotificationException } from '../errors/notification-exception'
 import type { EmailSendOptions, IEmailProvider } from '../interfaces/email-provider.interface'
 import type { IEmailTemplateRenderer } from '../interfaces/email-template-renderer.interface'
@@ -46,6 +47,11 @@ import { assertIdentifies } from '../utils/tenant-scope'
 
 /** Locale used as the fallback when the requested locale has no template. */
 const FALLBACK_LOCALE = 'en'
+
+/** What to tell a host whose OTP email has no template: the OTP default is the one it never names. */
+const OTP_TEMPLATE_REMEDY =
+  "register an 'otp_code' template (for example 'otp_code::en') in your template renderer, such as " +
+  'DefaultTemplateRenderer, or pass emailTemplate to generate()'
 
 /**
  * Stands in for the provider's own message when the caller set
@@ -367,15 +373,45 @@ export class EmailService {
     }
   }
 
-  /** Picks the locale that has a template, falling back to `en`, else throws `TEMPLATE_NOT_FOUND`. */
-  private async resolveTemplateLocale(template: string, locale: string): Promise<string> {
+  /**
+   * Picks the locale that has a template: the requested one, else `en`. Answers `undefined` when
+   * neither has it. The one probe behind both a send and the startup check, so the two cannot
+   * disagree.
+   */
+  private async findTemplateLocale(template: string, locale: string): Promise<string | undefined> {
     if (await this.renderer.hasTemplate(template, locale)) {
       return locale
     }
     if (await this.renderer.hasTemplate(template, FALLBACK_LOCALE)) {
       return FALLBACK_LOCALE
     }
-    throw new NotificationException('TEMPLATE_NOT_FOUND', { template, locale })
+    return undefined
+  }
+
+  /**
+   * Whether a send of `template` for `locale` would find it: the requested locale, else `en`,
+   * probed in that order exactly as {@link EmailService.sendTemplate} does.
+   *
+   * @param template - The template name.
+   * @param locale - The requested locale.
+   * @returns `true` when the renderer has the template for the locale or for `en`.
+   */
+  async resolvesTemplate(template: string, locale: string): Promise<boolean> {
+    return (await this.findTemplateLocale(template, locale)) !== undefined
+  }
+
+  /** Picks the locale that has a template, falling back to `en`, else throws `TEMPLATE_NOT_FOUND`. */
+  private async resolveTemplateLocale(template: string, locale: string): Promise<string> {
+    const found = await this.findTemplateLocale(template, locale)
+    if (found !== undefined) {
+      return found
+    }
+    throw new NotificationException(
+      'TEMPLATE_NOT_FOUND',
+      template === CANONICAL_EMAIL_TEMPLATES.OTP_CODE
+        ? { template, locale, remedy: OTP_TEMPLATE_REMEDY }
+        : { template, locale }
+    )
   }
 
   /** Renders the template, mapping a renderer failure to `TEMPLATE_RENDER_FAILED`. */

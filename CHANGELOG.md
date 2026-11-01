@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.5] - 2026-11-01
+
+### Added
+
+- **A startup warning for an OTP channel whose email template cannot be found.** The OTP email is
+  rendered from the `otp_code` template and the default renderer ships none, so a host that enables
+  OTP with an email channel and no such template booted cleanly and failed on the first
+  `generate()`. When the OTP channel is on, the email provider is configured and the renderer has
+  `otp_code` for neither the default locale nor `en`, one line,
+  `BYMAX_NOTIFICATION_OTP_TEMPLATE_NOT_RESOLVED`, is logged at startup. It names the way out and
+  the hosts it does not apply to: those that pass `emailTemplate` on every call, deliver manually,
+  or load templates after startup. The check runs detached, so it never delays or fails boot, even
+  for a renderer that throws, rejects or never answers (in the first two cases the line says the
+  check could not run and why).
+
+### Changed
+
+- **`TEMPLATE_NOT_FOUND` for `otp_code` carries a `remedy`.** `details` gains `remedy`, naming the
+  template, `DefaultTemplateRenderer` and the `emailTemplate` option. `template` and `locale` are
+  unchanged, and the error for any other template is unchanged.
+
 ## [1.4.4] - 2026-11-01
 
 Documentation only: `dist/` is byte-identical to 1.4.3.
@@ -982,7 +1003,8 @@ rejected at startup rather than failing on the first send.
 
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.4.4...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.4.5...HEAD
+[1.4.5]: https://github.com/bymaxone/nest-notification/compare/v1.4.4...v1.4.5
 [1.4.4]: https://github.com/bymaxone/nest-notification/compare/v1.4.3...v1.4.4
 [1.4.3]: https://github.com/bymaxone/nest-notification/compare/v1.4.2...v1.4.3
 [1.4.2]: https://github.com/bymaxone/nest-notification/compare/v1.4.1...v1.4.2
