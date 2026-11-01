@@ -7,9 +7,11 @@
  * fails, so this warning is the only sign that the trail, including the entries that record a
  * recipient reaching its attempt ceiling, has stopped. An outage touches every operation, so a
  * line per failure would be a flood: the warning is rate limited per channel and counts what it
- * suppressed. The entry the repository rejected identifies a recipient, and `maskRecipient`
- * defaults to the identity function, so the reason has that identity removed by value before it
- * is bounded.
+ * suppressed. The entry the repository rejected holds personal data, its recipient and user id,
+ * and `maskRecipient` defaults to the identity function, so the reason has verbatim copies of
+ * both removed before it is bounded. The tenant id, purpose, provider name and metadata are the
+ * operator's own keys, labels and library-generated reasons, and stay readable so the cause of an
+ * outage can be told.
  */
 import type { Logger } from '@nestjs/common'
 
