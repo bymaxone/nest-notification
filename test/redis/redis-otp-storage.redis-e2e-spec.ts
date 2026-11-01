@@ -24,7 +24,8 @@ import {
 const REDIS_IMAGE = 'redis:8-alpine'
 const REDIS_PORT = 6379
 const RACERS = 200
-const WRONG = '000000'
+// Letters never occur in the numeric codes the service generates, so this guess is always wrong.
+const WRONG = 'ABCDEF'
 
 describe('RedisOtpStorage against a real Redis', () => {
   let container: StartedTestContainer
