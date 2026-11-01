@@ -13,14 +13,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the provider still received the address as typed, so `" Jane.Doe@Example.COM "` reached it with
   its surrounding spaces. Delivery now trims the address and keeps its case (RFC 5321 §2.4); the
   key is unchanged.
-- **A thrown value is described without throwing, and by shape.** Five sites turned a caught value
+- **A thrown value is described without throwing, and by shape.** A caught value was turned
   into text with `error instanceof Error ? error.message : String(error)`. That throws on a value
   with no prototype or a hostile `toString`, and it printed `[object Object]` (or `Error: …`) for
   an error from another realm and for a plain `{ message }` object, which many SDKs reject with.
   They now read a string `message`, fall back to `String()` inside a `try`, and finally to a fixed
-  phrase. The sites are the `NotificationException` cause copy, the audit interceptor's failed
-  entry, the SMTP provider's transport-initialisation failure, the optional-peer loader and the
-  audit-message reader. Redaction is applied exactly where it was.
+  phrase. Redaction is applied exactly where it was.
 
 ## [1.4.2] - 2026-10-31
 
