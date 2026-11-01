@@ -60,7 +60,8 @@ describe('OtpService recipient normalization', () => {
 
     const reasons: string[] = []
     for (const recipient of SPELLINGS) {
-      const result = await service.verify({ ...base, recipient, code: '000000' })
+      // A guess no generated (numeric) code can equal.
+      const result = await service.verify({ ...base, recipient, code: 'ABCDEF' })
       if (!result.valid) reasons.push(result.reason)
     }
 
