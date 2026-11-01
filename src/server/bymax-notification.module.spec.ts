@@ -53,7 +53,10 @@ class FakeOtpStorage implements IOtpStorage {
     return true
   }
 }
-const auditRepository = { name: 'fake', create: async () => undefined } as INotificationLogRepository
+const auditRepository = {
+  name: 'fake',
+  create: async () => undefined
+} as INotificationLogRepository
 
 type AnyProvider = Provider & { provide?: unknown }
 const findProvider = (module: DynamicModule, token: symbol): AnyProvider | undefined =>
@@ -167,7 +170,9 @@ describe('BymaxNotificationModule.forRoot', () => {
 
   // Validation runs first: an empty config throws before any provider is built.
   it('should throw for an empty configuration', () => {
-    expect(() => BymaxNotificationModule.forRoot({})).toThrow('At least one channel must be configured')
+    expect(() => BymaxNotificationModule.forRoot({})).toThrow(
+      'At least one channel must be configured'
+    )
   })
 
   // A successful bootstrap emits the BOOTSTRAP_OK log listing the active channels
@@ -227,7 +232,9 @@ describe('BymaxNotificationModule resolved options container', () => {
       imports: [BymaxNotificationModule.forRoot({ email: validEmail })]
     }).compile()
 
-    expect(moduleRef.get(BYMAX_NOTIFICATION_TEMPLATE_RENDERER)).toBeInstanceOf(DefaultTemplateRenderer)
+    expect(moduleRef.get(BYMAX_NOTIFICATION_TEMPLATE_RENDERER)).toBeInstanceOf(
+      DefaultTemplateRenderer
+    )
   })
 })
 
@@ -243,7 +250,9 @@ class ConfigStubModule {}
 describe('BymaxNotificationModule.forRootAsync', () => {
   // The async form returns a global module exposing every public token + service.
   it('should return a global module exposing the public tokens and services', () => {
-    const module = BymaxNotificationModule.forRootAsync({ useFactory: () => ({ email: validEmail }) })
+    const module = BymaxNotificationModule.forRootAsync({
+      useFactory: () => ({ email: validEmail })
+    })
 
     expect(module.global).toBe(true)
     expect(module.imports).toEqual([])
@@ -277,7 +286,9 @@ describe('BymaxNotificationModule.forRootAsync', () => {
   it('should validate and resolve options from the factory', async () => {
     const moduleRef = await Test.createTestingModule({
       imports: [
-        BymaxNotificationModule.forRootAsync({ useFactory: () => ({ otp: { storage: new FakeOtpStorage() } }) })
+        BymaxNotificationModule.forRootAsync({
+          useFactory: () => ({ otp: { storage: new FakeOtpStorage() } })
+        })
       ]
     }).compile()
 
@@ -292,7 +303,11 @@ describe('BymaxNotificationModule.forRootAsync', () => {
       imports: [
         BymaxNotificationModule.forRootAsync({
           useFactory: () => ({
-            email: { provider: emailProvider, defaultFrom: 'noreply@example.com', templateRenderer: renderer },
+            email: {
+              provider: emailProvider,
+              defaultFrom: 'noreply@example.com',
+              templateRenderer: renderer
+            },
             otp: { storage: FakeOtpStorage },
             audit: { repository: auditRepository }
           })
@@ -312,14 +327,20 @@ describe('BymaxNotificationModule.forRootAsync', () => {
   it('should default absent channels and audit in async mode', async () => {
     const moduleRef = await Test.createTestingModule({
       imports: [
-        BymaxNotificationModule.forRootAsync({ useFactory: () => ({ otp: { storage: new FakeOtpStorage() } }) })
+        BymaxNotificationModule.forRootAsync({
+          useFactory: () => ({ otp: { storage: new FakeOtpStorage() } })
+        })
       ]
     }).compile()
 
     expect(moduleRef.get(BYMAX_NOTIFICATION_EMAIL_PROVIDER)).toBeNull()
     expect(moduleRef.get(BYMAX_NOTIFICATION_OTP_STORAGE)).toBeInstanceOf(FakeOtpStorage)
-    expect(moduleRef.get(BYMAX_NOTIFICATION_LOG_REPOSITORY)).toBeInstanceOf(NoOpNotificationLogRepository)
-    expect(moduleRef.get(BYMAX_NOTIFICATION_TEMPLATE_RENDERER)).toBeInstanceOf(DefaultTemplateRenderer)
+    expect(moduleRef.get(BYMAX_NOTIFICATION_LOG_REPOSITORY)).toBeInstanceOf(
+      NoOpNotificationLogRepository
+    )
+    expect(moduleRef.get(BYMAX_NOTIFICATION_TEMPLATE_RENDERER)).toBeInstanceOf(
+      DefaultTemplateRenderer
+    )
   })
 
   // An email-only async config resolves the OTP storage token to null.
@@ -453,7 +474,9 @@ describe('BymaxNotificationModule.forRootAsync channel-absent invariant', () => 
   it('should instantiate a zero-argument class in async mode', async () => {
     const moduleRef = await Test.createTestingModule({
       imports: [
-        BymaxNotificationModule.forRootAsync({ useFactory: () => ({ otp: { storage: FakeOtpStorage } }) })
+        BymaxNotificationModule.forRootAsync({
+          useFactory: () => ({ otp: { storage: FakeOtpStorage } })
+        })
       ]
     }).compile()
 

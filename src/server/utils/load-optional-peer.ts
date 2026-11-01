@@ -14,6 +14,8 @@
  * `node_modules`.
  */
 
+import { describeError } from './describe-error'
+
 /**
  * Error codes a genuinely absent module produces. `ERR_MODULE_NOT_FOUND` comes from
  * a dynamic `import()` (from an ESM or a CommonJS host alike); `MODULE_NOT_FOUND` is
@@ -77,7 +79,7 @@ export async function loadOptionalPeer<T>(moduleName: string): Promise<T> {
         { cause: error }
       )
     }
-    const reason = error instanceof Error ? error.message : String(error)
+    const reason = describeError(error)
     throw new Error(`Failed to load \`${moduleName}\`: ${reason}`, { cause: error })
   }
 }

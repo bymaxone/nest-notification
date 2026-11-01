@@ -481,7 +481,7 @@ export class OtpService implements OnModuleInit {
     const expiresInMinutes = Math.ceil(cfg.ttlSeconds / SECONDS_PER_MINUTE)
     return {
       tenantId: input.tenantId,
-      to: input.recipient,
+      to: input.recipient.trim(),
       template: input.emailTemplate ?? DEFAULT_OTP_TEMPLATE,
       data: { ...input.emailData, code, expiresInMinutes, purpose: input.purpose },
       // The provider receives the code inside the rendered body and may echo it
@@ -531,8 +531,8 @@ export class OtpService implements OnModuleInit {
    * Returns the input with its recipient replaced by the value the OTP state is keyed on.
    *
    * Every storage call and audit entry takes the result, so two spellings of one mailbox
-   * share a cooldown and an attempt counter. Delivery takes the original input: the
-   * message is addressed exactly as the caller wrote it.
+   * share a cooldown and an attempt counter. Delivery takes the original input, trimmed:
+   * the message keeps the caller's case but never its surrounding whitespace.
    */
   private keyed<T extends OtpRecipientRef>(input: T): T {
     return { ...input, recipient: normalizeRecipient(input.recipient) }

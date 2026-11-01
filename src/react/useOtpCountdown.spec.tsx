@@ -98,9 +98,7 @@ describe('useOtpCountdown', () => {
 
   // A custom tick cadence fires sooner than the 1s default.
   it('should honor a custom tick interval', () => {
-    const { result } = renderHook(() =>
-      useOtpCountdown({ expiresAt: 60_000, tickIntervalMs: 500 })
-    )
+    const { result } = renderHook(() => useOtpCountdown({ expiresAt: 60_000, tickIntervalMs: 500 }))
 
     act(() => {
       jest.advanceTimersByTime(500)

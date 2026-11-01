@@ -1,7 +1,7 @@
 /**
  * @fileoverview Holds `OtpService` to one OTP state per mailbox: every spelling of an
  * address shares the cooldown, the attempt budget, the status and the consume, while the
- * message is addressed exactly as supplied.
+ * message keeps the case supplied.
  * @layer domain
  */
 
@@ -100,7 +100,7 @@ describe('OtpService recipient normalization', () => {
 
   // RFC 5321 §2.4: the local-part is case sensitive on the wire and a sender must
   // preserve it. Only the KEY is folded; the message goes to the address as supplied.
-  it('should deliver to the address exactly as supplied', async () => {
+  it('should deliver to the address in the case supplied', async () => {
     service = new OtpService(makeOptions(), storage, audit, emailServiceStub)
 
     await service.generate({ ...base, recipient: 'Jane.Doe@Acme.com' })
@@ -109,6 +109,18 @@ describe('OtpService recipient normalization', () => {
       expect.objectContaining({ to: 'Jane.Doe@Acme.com' })
     )
     expect(await storage.get('acme', 'jane.doe@acme.com', 'password_reset')).not.toBeNull()
+  })
+
+  // Surrounding whitespace is never part of an address: the provider receives the trimmed
+  // address, with its case kept.
+  it('should deliver to the trimmed address', async () => {
+    service = new OtpService(makeOptions(), storage, audit, emailServiceStub)
+
+    await service.generate({ ...base, recipient: ' Jane.Doe@Example.COM ' })
+
+    expect(emailSendTemplate).toHaveBeenCalledWith(
+      expect.objectContaining({ to: 'Jane.Doe@Example.COM' })
+    )
   })
 
   // Audit entries correlate across spellings: they carry the folded recipient.
