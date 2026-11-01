@@ -21,11 +21,13 @@ interface Reading {
 /** Reads every snippet in one child process and returns one reading per snippet. */
 function read(snippets: readonly string[]): Reading[] {
   const script =
+    `import { readFileSync } from 'node:fs'\n` +
     `import { readInternalMembers } from ${JSON.stringify(MODULE)}\n` +
-    `const rows = JSON.parse(process.argv[1])\n` +
+    `const rows = JSON.parse(readFileSync(0, 'utf8'))\n` +
     `console.log(JSON.stringify(rows.map((text) => readInternalMembers(text))))`
-  const run = spawnSync('node', ['--input-type=module', '-e', script, JSON.stringify(snippets)], {
-    encoding: 'utf8'
+  const run = spawnSync('node', ['--input-type=module', '-e', script], {
+    encoding: 'utf8',
+    input: JSON.stringify(snippets)
   })
   if (run.status !== 0) throw new Error(run.stderr)
   return JSON.parse(run.stdout) as Reading[]
@@ -73,7 +75,13 @@ const REFUSED: ReadonlyArray<readonly [string, string]> = [
     'a decorator string with a closing parenthesis and a type-like tail',
     `${TAG}\n@Foo("a)b: ") y = 1`
   ],
-  ['a decorator template string', `${TAG}\n@Foo(\`a\`) y = 1`]
+  ['a decorator template string', `${TAG}\n@Foo(\`a\`) y = 1`],
+  [
+    'a line comment holding a URL above an exported constant',
+    `${TAG}\n// see http://x.y\nexport const X = 1`
+  ],
+  ['a line comment with a colon above a function', `${TAG}\n// note: keep\nexport function f() {}`],
+  ['a decorator argument list longer than the limit', `${TAG}\n@Foo(${'x'.repeat(3000)}) y = 1`]
 ]
 
 describe('readInternalMembers', () => {
@@ -122,6 +130,27 @@ describe('readInternalMembers', () => {
     const [reading] = read([`/** @internal */ /** other */\nprivate x = 1`])
 
     expect(reading).toEqual({ tags: 1, members: [] })
+  })
+
+  // The line comment once sat in a nested quantifier: ten `//` took 7 ms, fourteen 540 ms and
+  // eighteen did not finish. The scanner reads a comment to its newline once.
+  it('should read a long run of line comments quickly', () => {
+    const started = Date.now()
+
+    const [reading] = read([`${TAG} ${'// '.repeat(5000)}\nclass`])
+
+    expect(reading).toEqual({ tags: 1, members: [] })
+    expect(Date.now() - started).toBeLessThan(1500)
+  })
+
+  // Many tags on one long line each read their own decorator arguments; the limit bounds the cost.
+  it('should bound the work of many tags on one long line', () => {
+    const started = Date.now()
+
+    const [reading] = read([`${TAG}@a(${'x'.repeat(10_000)}`.repeat(300)])
+
+    expect(reading?.tags).toBe(300)
+    expect(Date.now() - started).toBeLessThan(1500)
   })
 
   it('should find nothing in a file with no tag', () => {
