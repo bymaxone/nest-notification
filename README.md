@@ -151,7 +151,8 @@ import { Module } from '@nestjs/common'
 import {
   BymaxNotificationModule,
   NoOpEmailProvider,
-  InMemoryOtpStorage
+  InMemoryOtpStorage,
+  DefaultTemplateRenderer
 } from '@bymax-one/nest-notification'
 
 @Module({
@@ -159,7 +160,16 @@ import {
     BymaxNotificationModule.forRoot({
       email: {
         provider: new NoOpEmailProvider(),
-        defaultFrom: 'no-reply@dev.local'
+        defaultFrom: 'no-reply@dev.local',
+        templateRenderer: new DefaultTemplateRenderer({
+          templates: {
+            'otp_code::en': {
+              subject: 'Your Acme verification code',
+              html: '<p>Your code is <strong>{{code}}</strong>. It expires in {{expiresInMinutes}} minutes.</p>',
+              text: 'Your code is {{code}}. It expires in {{expiresInMinutes}} minutes.'
+            }
+          }
+        })
       },
       otp: {
         storage: new InMemoryOtpStorage(),
@@ -173,6 +183,8 @@ import {
 })
 export class AppModule {}
 ```
+
+The OTP email is rendered from the `otp_code` template, and the default renderer ships none, so register one as above (the same template as in step 3). Without it the first `generate()` throws `TEMPLATE_NOT_FOUND`.
 
 Inject `OtpService` anywhere and the two-step flow is complete:
 
