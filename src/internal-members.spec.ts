@@ -104,8 +104,7 @@ describe('readInternalMembers', () => {
     expect(reading).toEqual({ tags: 2, members: ['a', 'b'] })
   })
 
-  // Two adjacent whitespace groups once made a long run followed by an unreadable token cost
-  // quadratic time (2.5 s at 50,000 newlines); a linear reader answers in milliseconds.
+  // A long run of whitespace after a tag costs one pass, not a retry per character.
   it('should refuse a long whitespace run quickly', () => {
     const started = Date.now()
 
@@ -115,8 +114,7 @@ describe('readInternalMembers', () => {
     expect(Date.now() - started).toBeLessThan(1500)
   })
 
-  // Each `/** @internal ` with no closing `*/` once made the scan read to the end of the text
-  // twice over (3.9 s at 1,000 starts, no answer at 5,000); a single pass answers in milliseconds.
+  // A `/** @internal ` with no closing `*/` is not a tag, and thousands of them cost one pass.
   it('should read unterminated comments quickly', () => {
     const started = Date.now()
 
@@ -132,8 +130,7 @@ describe('readInternalMembers', () => {
     expect(reading).toEqual({ tags: 1, members: [] })
   })
 
-  // The line comment once sat in a nested quantifier: ten `//` took 7 ms, fourteen 540 ms and
-  // eighteen did not finish. The scanner reads a comment to its newline once.
+  // A line comment is read to its newline once, so a long run of them costs one pass.
   it('should read a long run of line comments quickly', () => {
     const started = Date.now()
 
@@ -150,6 +147,17 @@ describe('readInternalMembers', () => {
     const [reading] = read([`${TAG}@a(${'x'.repeat(10_000)}`.repeat(300)])
 
     expect(reading?.tags).toBe(300)
+    expect(Date.now() - started).toBeLessThan(1500)
+  })
+
+  // Each tag's scan stops at the next comment block, so tags that sit inside line comments cost
+  // one pass in total, not one pass each.
+  it('should read many tags inside line comments quickly', () => {
+    const started = Date.now()
+
+    const [reading] = read(['// /** @internal */\n'.repeat(20_000)])
+
+    expect(reading).toEqual({ tags: 20_000, members: [] })
     expect(Date.now() - started).toBeLessThan(1500)
   })
 

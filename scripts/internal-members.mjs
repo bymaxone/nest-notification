@@ -60,11 +60,14 @@ function skipArguments(text, open) {
   return -1
 }
 
-/** The index of the first character after any line comments and decorators, or -1. */
-function skipTrivia(text, start) {
+/** The index of the first character after any line comments and decorators, or -1 when the shape
+ * is unreadable or reaches `limit`, the start of the next comment block: a member that follows
+ * another block belongs to that block, and stopping there keeps the work of all tags linear. */
+function skipTrivia(text, start, limit) {
   let at = start
   for (;;) {
     at = skipSpace(text, at)
+    if (at >= limit) return -1
     if (text.startsWith('//', at)) {
       const newline = text.indexOf('\n', at)
       if (newline === -1) return text.length
@@ -84,8 +87,8 @@ function skipTrivia(text, start) {
 }
 
 /** The name of the member declared at `start`, or undefined when the shape is not one it reads. */
-function memberAt(text, start) {
-  let at = skipTrivia(text, start)
+function memberAt(text, start, limit) {
+  let at = skipTrivia(text, start, limit)
   if (at === -1) return undefined
   const words = []
   let afterStar = false
@@ -131,7 +134,8 @@ export function readInternalMembers(text) {
     from = end
     if (!TAG.test(text.slice(start, end))) continue
     tags += 1
-    const member = memberAt(text, end)
+    const next = text.indexOf('/**', end)
+    const member = memberAt(text, end, next === -1 ? text.length : next)
     if (member !== undefined) members.push(member)
   }
   return { tags, members }
