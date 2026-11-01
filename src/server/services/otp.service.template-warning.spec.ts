@@ -125,6 +125,22 @@ describe('OtpService startup warning for an unresolved default template', () => 
     ])
   })
 
+  // With 'en' as the default locale the fallback is the same locale: the line names it once.
+  it('should name the locale once when the default locale is en', async () => {
+    const { service } = build({ locale: 'en' })
+
+    service.onModuleInit()
+    await settle()
+
+    expect(ours()).toEqual([
+      "[BYMAX_NOTIFICATION_OTP_TEMPLATE_NOT_RESOLVED] The email template 'otp_code' does not resolve for 'en', " +
+        'so the first generate() that delivers by email fails with TEMPLATE_NOT_FOUND. ' +
+        "Register 'otp_code' in your template renderer (DefaultTemplateRenderer takes it under 'otp_code::en'). " +
+        'Ignore this line if every generate() call passes emailTemplate, if you deliver manually, ' +
+        'or if your renderer loads its templates after startup.'
+    ])
+  })
+
   // The variant for a renderer that could not answer is pinned the same way.
   it('should log exactly the documented line when the check cannot run', async () => {
     const { service, renderer } = build()

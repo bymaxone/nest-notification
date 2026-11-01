@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.6] - 2026-11-01
+
+### Fixed
+
+- **The missing-template startup warning names the locale once for an `en` host.** With `en` as the
+  default locale the line read "neither 'en' nor 'en'". It now reads "does not resolve for 'en'";
+  every other default locale keeps "resolves for neither '<locale>' nor 'en'".
+- **The `remedy` on `TEMPLATE_NOT_FOUND` for `otp_code` is true on every path.** It told the reader
+  to pass `emailTemplate` to `generate()`, which a direct `sendTemplate('otp_code')` has no way to
+  do. It now says where the option applies: the OTP email can use another template through the
+  `emailTemplate` option of `generate()`.
+
 ## [1.4.5] - 2026-11-01
 
 ### Added
@@ -1003,7 +1015,8 @@ rejected at startup rather than failing on the first send.
 
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.4.5...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.4.6...HEAD
+[1.4.6]: https://github.com/bymaxone/nest-notification/compare/v1.4.5...v1.4.6
 [1.4.5]: https://github.com/bymaxone/nest-notification/compare/v1.4.4...v1.4.5
 [1.4.4]: https://github.com/bymaxone/nest-notification/compare/v1.4.3...v1.4.4
 [1.4.3]: https://github.com/bymaxone/nest-notification/compare/v1.4.2...v1.4.3

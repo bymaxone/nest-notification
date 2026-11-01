@@ -93,6 +93,19 @@ describe('EmailService TEMPLATE_NOT_FOUND', () => {
     expect(details(error).remedy).toContain('emailTemplate')
   })
 
+  // The sentence is read by whoever hit the error, from generate() or from a direct
+  // sendTemplate('otp_code'), so it names where emailTemplate applies instead of telling the
+  // caller to pass it. Pinned by value.
+  it('should give the same remedy to a direct sendTemplate of the OTP template', async () => {
+    const error = await missing('otp_code')
+
+    expect(details(error).remedy).toBe(
+      "register an 'otp_code' template (for example 'otp_code::en') in your template renderer, such as " +
+        'DefaultTemplateRenderer; the OTP email can use another template through the emailTemplate ' +
+        'option of generate()'
+    )
+  })
+
   // The remedy is specific to the OTP default: every other template's error carries exactly
   // `template` and `locale`.
   it('should keep exactly template and locale for any other template', async () => {
