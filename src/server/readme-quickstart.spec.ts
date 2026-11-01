@@ -140,8 +140,8 @@ describe('README development Quick Start', () => {
   it('should issue a code, deliver it, and verify it', async () => {
     /**
      * Guards the README section "2. Development": the module registers, `start` delivers one
-     * email to the address given and returns an expiry, the code in that email verifies, and the
-     * same code does not verify a second time.
+     * email to the address given and returns an expiry, a wrong code is refused, and the code in
+     * that email verifies.
      */
     const service = await boot()
 
