@@ -17,14 +17,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reaching its attempt ceiling, while every send and verification kept succeeding. The OTP
   service, the email service and the audit interceptor each log
   `BYMAX_NOTIFICATION_AUDIT_WRITE_FAILED`, naming the channel and the repository's error text (or
-  the library's own error code for a refused tenant id), never the recipient or an OTP code. At most one line is written per channel per minute; the next line
+  the library's own error code for one of its exceptions), never the recipient or an OTP code. At most one line is written per channel per minute; the next line
   says how many failures it stands for. What the caller receives is unchanged.
 
 ### Documentation
 
 - The README now states the ordering behind `AUDIT_LOG_FAILED` when `audit.swallowErrors` is
   `false`: the audit write comes after the state change, so the error can reach the caller after a
-  code was stored, delivered or consumed.
+  code was stored, delivered or accepted.
 
 ## [1.4.6] - 2026-11-01
 

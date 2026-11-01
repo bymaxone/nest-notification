@@ -641,7 +641,7 @@ A tenant id that identifies nobody is never recorded. The interceptor refuses a 
 
 A swallowed audit failure is not silent: each channel (`otp`, `email`, the interceptor) logs one warning, `BYMAX_NOTIFICATION_AUDIT_WRITE_FAILED`, naming the channel and the repository's error text (or the library's own error code, such as `notification.invalid_scope_identifier` for a refused tenant id), never the recipient or an OTP code. At most one line is written per channel per minute; the next line says how many failures it stands for. The operation's own result is unchanged.
 
-With `audit.swallowErrors: false` the audit write comes after the state change, so `AUDIT_LOG_FAILED` can reach your caller when the work is already done: `generate()` after the code was stored and delivered (its resend cooldown is then held), `verify()` or `consume()` after the code was consumed. Treat that error as "done, but not audited", not as "nothing happened".
+With `audit.swallowErrors: false` the audit write comes after the state change, so `AUDIT_LOG_FAILED` can reach your caller when the work is already done: `generate()` after the code was stored and delivered (its resend cooldown is then held), `verify()` after the code was accepted (consumed, or marked validated). Treat that error as "done, but not audited", not as "nothing happened".
 
 > [!NOTE]
 > The resolver governs what the audit interceptor trusts. Service methods still take an explicit `tenantId`: resolve the tenant in your controller and pass it down — there is no hidden override of a method argument.
