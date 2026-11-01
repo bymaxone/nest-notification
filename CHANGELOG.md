@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.7] - 2026-11-01
+
+#### Apply to a derived backend
+
+Throwaway proof only: none required. Never merged.
+
 ## [1.4.6] - 2026-11-01
 
 ### Fixed
