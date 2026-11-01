@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.3] - 2026-11-01
+
+### ⚠️ Apply before upgrading
+
+- **The address the OTP email is delivered to is now trimmed.** A caller that passed a recipient
+  with surrounding whitespace used to have the provider receive it as typed; the provider now
+  receives it without the whitespace, with its case unchanged. A test that asserts the `to` of
+  the delivered message against an untrimmed fixture has to expect the trimmed value. The OTP
+  state key is unchanged, so no live code or cooldown is lost.
+
 ### Fixed
 
 - **The OTP email goes to the trimmed address.** The scope key was already trimmed and folded, but
@@ -954,7 +964,8 @@ rejected at startup rather than failing on the first send.
 
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.4.2...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.4.3...HEAD
+[1.4.3]: https://github.com/bymaxone/nest-notification/compare/v1.4.2...v1.4.3
 [1.4.2]: https://github.com/bymaxone/nest-notification/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/bymaxone/nest-notification/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/bymaxone/nest-notification/compare/v1.3.1...v1.4.0
