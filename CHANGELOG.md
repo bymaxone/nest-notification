@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.4] - 2026-11-01
+
+Documentation only: `dist/` is byte-identical to 1.4.3.
+
+### Fixed
+
+- **The development Quick Start now runs.** Step 2 registered `NoOpEmailProvider` and
+  `InMemoryOtpStorage` but no template renderer, and the OTP email is rendered from the `otp_code`
+  template, which the default renderer does not ship. The module booted, and the first
+  `generate()` threw `TEMPLATE_NOT_FOUND`. Step 2 now registers a `DefaultTemplateRenderer` with
+  the same `otp_code::en` template as step 3, and says why it is needed.
+
+### Tests
+
+- The README development Quick Start is executed as written: the module and the service are
+  compiled from the README text and run against a Nest testing graph, with a stand-in email
+  provider. A second case fails if the `otp_code::en` template in steps 2 and 3 drifts apart.
+
 ## [1.4.3] - 2026-11-01
 
 ### ⚠️ Apply before upgrading
@@ -964,7 +982,8 @@ rejected at startup rather than failing on the first send.
 
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.4.3...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.4.4...HEAD
+[1.4.4]: https://github.com/bymaxone/nest-notification/compare/v1.4.3...v1.4.4
 [1.4.3]: https://github.com/bymaxone/nest-notification/compare/v1.4.2...v1.4.3
 [1.4.2]: https://github.com/bymaxone/nest-notification/compare/v1.4.1...v1.4.2
 [1.4.1]: https://github.com/bymaxone/nest-notification/compare/v1.4.0...v1.4.1
