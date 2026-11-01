@@ -101,6 +101,20 @@ jobs:
       - name: Bundle size budget
         run: pnpm size
 
+  redis-e2e:
+    # The unit suite drives RedisOtpStorage through an in-process double. This job starts the
+    # production major of Redis in a container and runs the executable IOtpStorage contract, the
+    # concurrent failure counter and the OTP flow against the real server, which is the only place
+    # the Lua scripts and key expiry are exercised. GitHub-hosted runners ship Docker.
+    name: Real Redis e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: bymaxone/.github/.github/actions/setup-node-pnpm@v1
+      - name: Run the real-Redis suite
+        run: pnpm test:e2e:redis
+
   security:
     # Dependency review needs the dependency graph (public repos, or private + GHAS).
     # Gated on visibility so it starts running automatically once this repo is public.
@@ -129,7 +143,7 @@ jobs:
   ci-pass:
     name: CI passed
     if: always()
-    needs: [ci, verify, security]
+    needs: [ci, verify, redis-e2e, security]
     runs-on: ubuntu-latest
     # Once this is the required check, a hung runner holds every merge behind it
     # for GitHub's default of six hours. The job is one comparison, so a short

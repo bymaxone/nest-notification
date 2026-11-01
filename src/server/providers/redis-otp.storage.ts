@@ -32,7 +32,16 @@ import { hashTenantRecipient } from '../utils/hash'
 /** The slim Redis surface {@link RedisOtpStorage} relies on (ioredis is structurally compatible). */
 export interface RedisLike {
   get(key: string): Promise<string | null>
-  set(key: string, value: string, ...args: Array<string | number>): Promise<'OK' | null>
+  /** The cooldown lock: `SET key value EX seconds NX`. */
+  set(
+    key: string,
+    value: string,
+    expiry: 'EX',
+    seconds: number,
+    condition: 'NX'
+  ): Promise<'OK' | null>
+  /** An in-place rewrite that keeps the expiry: `SET key value KEEPTTL XX`. */
+  set(key: string, value: string, keepTtl: 'KEEPTTL', condition: 'XX'): Promise<'OK' | null>
   setex(key: string, ttlSeconds: number, value: string): Promise<'OK'>
   del(...keys: string[]): Promise<number>
   ttl(key: string): Promise<number>

@@ -10,6 +10,7 @@
  * (`tsc`). There is no runtime here — everything is checked by the compiler.
  */
 import type { DynamicModule } from '@nestjs/common'
+import type { Redis } from 'ioredis'
 
 import type {
   IOtpStorage,
@@ -23,7 +24,8 @@ import type {
   EmailService,
   NotificationLogEntry,
   BymaxNotificationModuleOptions,
-  SmtpEmailProviderOptions
+  SmtpEmailProviderOptions,
+  RedisLike
 } from '@bymax-one/nest-notification'
 import {
   BymaxNotificationModule,
@@ -217,3 +219,13 @@ type _ContractCases = Expect<Equal<typeof contractCases, OtpStorageContractCase[
 type _AsyncContractCases = Expect<Equal<typeof asyncContractCases, OtpStorageContractCase[]>>
 type _CaseRun = Expect<Equal<OtpStorageContractCase['run'], () => Promise<void>>>
 type _CaseName = Expect<Equal<OtpStorageContractCase['name'], string>>
+
+// ---------------------------------------------------------------------------
+// RedisLike — the production example hands an ioredis client straight to the storage
+// ---------------------------------------------------------------------------
+
+declare const ioredisClient: Redis
+
+// Passing the client as the documentation does must compile; the narrowed `set` forms are what
+// make an ioredis overload set satisfy the interface.
+const _redisClient: RedisLike = ioredisClient

@@ -43,7 +43,12 @@ allowBuilds:
   # Positioned where pnpm writes its own placeholder, so a future rewrite is a
   # no-op rather than a reordering diff.
   '@parcel/watcher': false
+  # The three below come in through testcontainers (the real-Redis e2e). Nothing here needs
+  # their build steps, so none runs.
+  cpu-features: false
   esbuild: true
+  protobufjs: false
+  ssh2: false
   unrs-resolver: true
 
 # Forced versions for vulnerable transitive dev dependencies. These live here and
