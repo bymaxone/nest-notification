@@ -75,7 +75,7 @@ describe('swallowed audit failures leave a trace', () => {
       expect(answers[5]).toBe('max_attempts')
       expect(ours()).toHaveLength(1)
       expect(ours()[0]).toBe(
-        `[${CODE}] An audit entry could not be written by the otp channel (store down); ` +
+        `[${CODE}] An audit entry could not be written by the otp channel (Error); ` +
           "the operation's result is unaffected because audit.swallowErrors is true."
       )
     })
@@ -87,7 +87,7 @@ describe('swallowed audit failures leave a trace', () => {
       await service.generate({ ...scope, deliverVia: 'manual' })
 
       expect(ours().join('\n')).not.toContain('jane@acme.com')
-      expect(ours().join('\n')).toContain('[redacted]')
+      expect(ours().join('\n')).toContain('(Error)')
     })
 
     it('should not put the recipient or any code in the line', async () => {
@@ -152,7 +152,7 @@ describe('swallowed audit failures leave a trace', () => {
 
       expect(sent).toEqual({ messageId: 'msg_1' })
       expect(ours()).toEqual([
-        `[${CODE}] An audit entry could not be written by the email channel (db gone); ` +
+        `[${CODE}] An audit entry could not be written by the email channel (Error); ` +
           "the operation's result is unaffected because audit.swallowErrors is true."
       ])
     })
@@ -179,7 +179,7 @@ describe('swallowed audit failures leave a trace', () => {
 
       expect(value).toBe('RESULT')
       expect(ours()).toEqual([
-        `[${CODE}] An audit entry could not be written by the interceptor channel (db gone); ` +
+        `[${CODE}] An audit entry could not be written by the interceptor channel (Error); ` +
           "the operation's result is unaffected because audit.swallowErrors is true."
       ])
     })

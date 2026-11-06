@@ -7,17 +7,12 @@
  * fails, so this warning is the only sign that the trail, including the entries that record a
  * recipient reaching its attempt ceiling, has stopped. An outage touches every operation, so a
  * line per failure would be a flood: the warning is rate limited per channel and counts what it
- * suppressed. The entry the repository rejected holds personal data, its recipient and user id,
- * and `maskRecipient` defaults to the identity function, so the reason has verbatim copies of
- * both removed before it is bounded. The tenant id, purpose, provider name and metadata are the
- * operator's own keys, labels and library-generated reasons, and stay readable so the cause of an
- * outage can be told.
+ * suppressed. The entry the repository rejected holds personal data, and a repository error can
+ * quote it in any form, so the line never carries the error's message: only the library's code,
+ * or the error's name and code when each is a short token. The cause is in the repository's own
+ * logs.
  */
 import type { Logger } from '@nestjs/common'
-
-import { describeError } from './describe-error'
-import { redactValues } from './redact'
-import type { NotificationLogEntry } from '../interfaces/notification-log-repository.interface'
 
 /** The shortest time between two warnings of one channel. */
 export const AUDIT_WARNING_INTERVAL_MS = 60_000
@@ -27,79 +22,43 @@ export type AuditChannel = 'otp' | 'email' | 'interceptor'
 
 const WARNING_CODE = 'BYMAX_NOTIFICATION_AUDIT_WRITE_FAILED'
 
-/** The most characters of an error's text the line carries. */
-const MAX_REASON_LENGTH = 200
+/** What a name or a code must look like to be named: a short token, never free text. */
+const TOKEN = /^[A-Za-z0-9_.:-]{1,64}$/
 
 /** Prefix of every code in the library's own error catalog. */
 const LIBRARY_CODE_PREFIX = 'notification.'
 
-/**
- * What to tell an operator about the error, as one bounded line without the identity of the
- * entry that was being written. A library exception's message is
- * only its class label, so its code is named instead; any other error is described by its
- * message. Both reach the line through {@link oneLine}: the code is a property of whatever the
- * repository threw, so nothing makes it a short catalog string. Reading the code is guarded: the
- * error is consumer code.
- */
-function reasonOf(error: unknown, identity: readonly string[]): string {
-  return oneLine(redactValues(libraryCodeOf(error) ?? describeError(error), identity))
+/** The value when it is a string that is a short token, else `undefined`. */
+function tokenOf(value: unknown): string | undefined {
+  return typeof value === 'string' && TOKEN.test(value) ? value : undefined
 }
 
 /**
- * An address-like token of a recipient: a run of characters that is not whitespace, a list
- * separator, a bracket or a quote. However a recipient list is written (joined by `EmailService`,
- * or typed by the caller with commas, semicolons, tabs or newlines, padded, wrapped in angle
- * brackets or quotes, behind a display name), each address is one such token.
+ * What to tell an operator about the error, without any text the repository wrote. The message is
+ * never read: a repository error can quote the entry it rejected, the recipient or the user id,
+ * in any form. The library's own code is named when there is one; otherwise the error's name and
+ * code, each only when it is a short token, since a custom name or code can carry text too.
+ * Reading is guarded: the error is consumer code, and each property is read once.
  */
-const ADDRESS_TOKEN = /[^\s,;<>"'()]+/g
-
-/**
- * The strings by which an entry identifies who it is about: every address-like token of its
- * recipient, because a repository names the one address it rejected and not the list, and its
- * user id. A token can only remove more, never less: a display-name word is removed too.
- */
-function identityOf(
-  entry: Pick<NotificationLogEntry, 'recipient' | 'userId'> | undefined
-): string[] {
-  const recipient = entry?.recipient
-  const addresses = typeof recipient === 'string' ? (recipient.match(ADDRESS_TOKEN) ?? []) : []
-  return [...addresses, entry?.userId].filter((value): value is string => typeof value === 'string')
-}
-
-/** The error's code when it is a string in the library's catalog namespace, else `undefined`. */
-function libraryCodeOf(error: unknown): string | undefined {
+function reasonOf(error: unknown): string {
   try {
-    const code = (error as { code?: unknown } | null | undefined)?.code
-    return typeof code === 'string' && code.startsWith(LIBRARY_CODE_PREFIX) ? code : undefined
+    const source = error as { name?: unknown; code?: unknown } | null | undefined
+    const code = tokenOf(source?.code)
+    if (code?.startsWith(LIBRARY_CODE_PREFIX)) {
+      return code
+    }
+    const name = tokenOf(source?.name) ?? 'Error'
+    return code === undefined ? name : `${name} ${code}`
   } catch {
-    // A hostile `code` getter contributes nothing; the message still applies.
-    return undefined
+    return 'Error'
   }
-}
-
-/**
- * Replaces every control character, line breaks included, and every run of whitespace with one
- * space, and cuts the text at the limit without splitting an astral character. A repository error
- * can quote the entry it failed to write over many lines and at any length; the line stays one
- * line and bounded, so it can neither flood the log, forge a second line in it, nor send a
- * terminal an escape sequence.
- */
-function oneLine(text: string): string {
-  const flat = text.replace(/[\p{Cc}\p{Zl}\p{Zp}\s]+/gu, ' ').trim()
-  if (flat.length <= MAX_REASON_LENGTH) {
-    return flat
-  }
-  const cut = flat.slice(0, MAX_REASON_LENGTH)
-  const last = cut.charCodeAt(cut.length - 1)
-  const whole = last >= 0xd800 && last <= 0xdbff ? cut.slice(0, -1) : cut
-  return `${whole}…`
 }
 
 /**
  * Warns, at most once per interval, that an audit entry could not be written.
  *
- * The line carries the channel and the error text only, with the entry's recipient and user id
- * removed where the error quotes them verbatim; it holds no OTP code. There is no timer, so
+ * The line carries the channel and the error's class or code only; it holds no message, no
+ * recipient, no user id and no OTP code. There is no timer, so
  * nothing needs clearing at shutdown.
  */
 export class AuditWriteWarning {
@@ -127,12 +86,9 @@ export class AuditWriteWarning {
   /**
    * Logs the warning, or counts the failure when one was logged less than an interval ago.
    *
-   * @param error - What the audit repository threw; any value, described without throwing.
-   * @param entry - The entry that could not be written, when the caller has it: its recipient and
-   *   user id are removed from the reason wherever the error quotes them verbatim; a re-cased or
-   *   re-encoded copy is not recognised, and an empty value names nothing.
+   * @param error - What the audit repository threw; any value, named without throwing.
    */
-  warn(error: unknown, entry?: Pick<NotificationLogEntry, 'recipient' | 'userId'>): void {
+  warn(error: unknown): void {
     const now = Date.now()
     // A wall clock that stepped backward gives a negative elapsed time; that counts as the
     // interval having passed, so the warning is not silenced until the clock catches up.
@@ -145,7 +101,7 @@ export class AuditWriteWarning {
     this.suppressed = 0
     this.logger.warn(
       `[${WARNING_CODE}] An audit entry could not be written by the ${this.channel} channel ` +
-        `(${reasonOf(error, identityOf(entry))}${similar}); ` +
+        `(${reasonOf(error)}${similar}); ` +
         "the operation's result is unaffected because audit.swallowErrors is true."
     )
   }

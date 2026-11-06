@@ -16,14 +16,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   that returned a blank id, emptied the audit trail, including the entries that record a recipient
   reaching its attempt ceiling, while every send and verification kept succeeding. The OTP
   service, the email service and the audit interceptor each log
-  `BYMAX_NOTIFICATION_AUDIT_WRITE_FAILED`, naming the channel and the repository's error text (or
-  the library's own error code for one of its exceptions), never an OTP code, and the entry's
-  recipient (as `maskRecipient` left it, every run of characters in it that is not whitespace, a comma, a semicolon, an angle bracket, a quote or a parenthesis) and
-  user id,
-  the personal data an entry holds, are
-  replaced by `[redacted]` wherever the error quotes them verbatim (a re-cased or re-encoded copy is not recognised; `maskRecipient` defaults to the
-  identity function, so the mask cannot be relied on), cut at 200 characters and kept on one line. At most one line is written per channel per minute; the next line says how many
-  failures it stands for. What the caller receives is unchanged.
+  `BYMAX_NOTIFICATION_AUDIT_WRITE_FAILED`, naming the channel and the failure's class or code only:
+  the library's own error code for one of its exceptions, otherwise the error's name and code, each
+  only when it is a short token. The repository's error message is never printed, because it can
+  quote the entry it rejected, whose recipient and user id are personal data, in any form; the cause
+  is in the repository's own logs. No OTP code is ever written. At most one line is written per
+  channel per minute; the next line says how many failures it stands for. What the caller receives
+  is unchanged.
 
 ### Documentation
 
