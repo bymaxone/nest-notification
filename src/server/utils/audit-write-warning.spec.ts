@@ -325,6 +325,82 @@ describe('AuditWriteWarning', () => {
       })
     })
 
+    // The class, not a list of cases: however a list of addresses is written, a repository that
+    // names one of them (anywhere in its text) must not get it into the line. Each combination
+    // of separator, padding and wrapping builds a recipient; every address is then quoted alone,
+    // at the start of the error text and in the middle of it.
+    describe('every address, however the list is written', () => {
+      const ADDRESSES = ['jane@acme.com', 'maria.k@example.org', 'x+tag@sub.acme.co']
+      const SEPARATORS = [',', ', ', ';', '; ', '\t', '\n', ' ', ' , ', '\r\n']
+      const PADDINGS = ['', ' ', '  \t']
+      const WRAPPERS: ReadonlyArray<readonly [string, (address: string) => string]> = [
+        ['bare', (address) => address],
+        ['angle brackets', (address) => `<${address}>`],
+        ['double quotes', (address) => `"${address}"`],
+        ['single quotes', (address) => `'${address}'`],
+        ['parentheses', (address) => `(${address})`],
+        ['a display name', (address) => `Jane Doe <${address}>`]
+      ]
+      const combinations = SEPARATORS.flatMap((separator) =>
+        PADDINGS.flatMap((padding) =>
+          WRAPPERS.map(([name, wrap]) => ({ separator, padding, name, wrap }))
+        )
+      )
+
+      it.each(combinations)(
+        'should remove every address written with $name, padding $padding and separator $separator',
+        ({ separator, padding, wrap }) => {
+          const recipient = ADDRESSES.map((address) => `${padding}${wrap(address)}${padding}`).join(
+            separator
+          )
+          for (const address of ADDRESSES) {
+            for (const message of [
+              `${address} is not deliverable`,
+              `Invalid recipient: ${address}`,
+              `rejected (${address}), retry later`
+            ]) {
+              warn.mockClear()
+              new AuditWriteWarning(new Logger('Test'), 'email').warn(new Error(message), {
+                recipient
+              })
+
+              expect(lines()[0]).not.toContain(address)
+            }
+          }
+        }
+      )
+    })
+
+    const lineForRecipient = (error: Error, recipient: string): string => {
+      new AuditWriteWarning(new Logger('Test'), 'email').warn(error, { recipient })
+      return lines()[0] ?? ''
+    }
+
+    it('should remove an address from a comma list with no space', () => {
+      const line = lineForRecipient(
+        new Error('Invalid recipient: jane@acme.com'),
+        'jane@acme.com,maria@acme.com'
+      )
+
+      expect(line).toContain('(Invalid recipient: [redacted])')
+    })
+
+    it('should remove an address from a semicolon list', () => {
+      const line = lineForRecipient(
+        new Error('Invalid recipient: maria@acme.com'),
+        'jane@acme.com;maria@acme.com'
+      )
+
+      expect(line).toContain('(Invalid recipient: [redacted])')
+    })
+
+    // A recipient made only of separators names no address, so nothing is removed from the text.
+    it('should leave the text alone when the recipient has no address-like token', () => {
+      const line = lineForRecipient(new Error('separators , ; stay'), ' , ; ')
+
+      expect(line).toContain('(separators , ; stay)')
+    })
+
     it('should leave the text alone when the entry names nothing', () => {
       new AuditWriteWarning(new Logger('Test'), 'otp').warn(new Error('store down'), {
         recipient: ''

@@ -45,19 +45,24 @@ function reasonOf(error: unknown, identity: readonly string[]): string {
   return oneLine(redactValues(libraryCodeOf(error) ?? describeError(error), identity))
 }
 
-/** The separator `EmailService` joins the addresses of one send with. */
-const RECIPIENT_SEPARATOR = ', '
+/**
+ * An address-like token of a recipient: a run of characters that is not whitespace, a list
+ * separator, a bracket or a quote. However a recipient list is written (joined by `EmailService`,
+ * or typed by the caller with commas, semicolons, tabs or newlines, padded, wrapped in angle
+ * brackets or quotes, behind a display name), each address is one such token.
+ */
+const ADDRESS_TOKEN = /[^\s,;<>"'()]+/g
 
 /**
- * The strings by which an entry identifies who it is about: each address of its recipient (a
- * send to several addresses is audited as one joined list, and a repository names the one it
- * rejected) and its user id. A fragment of a recipient can only remove more, never less.
+ * The strings by which an entry identifies who it is about: every address-like token of its
+ * recipient, because a repository names the one address it rejected and not the list, and its
+ * user id. A token can only remove more, never less: a display-name word is removed too.
  */
 function identityOf(
   entry: Pick<NotificationLogEntry, 'recipient' | 'userId'> | undefined
 ): string[] {
   const recipient = entry?.recipient
-  const addresses = typeof recipient === 'string' ? recipient.split(RECIPIENT_SEPARATOR) : []
+  const addresses = typeof recipient === 'string' ? (recipient.match(ADDRESS_TOKEN) ?? []) : []
   return [...addresses, entry?.userId].filter((value): value is string => typeof value === 'string')
 }
 
