@@ -18,7 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   service, the email service and the audit interceptor each log
   `BYMAX_NOTIFICATION_AUDIT_WRITE_FAILED`, naming the channel and the repository's error text (or
   the library's own error code for one of its exceptions), never an OTP code, and the entry's
-  recipient (as `maskRecipient` left it, every address of a list however the list is written) and
+  recipient (as `maskRecipient` left it, every run of characters in it that is not whitespace, a comma, a semicolon, an angle bracket, a quote or a parenthesis) and
   user id,
   the personal data an entry holds, are
   replaced by `[redacted]` wherever the error quotes them verbatim (a re-cased or re-encoded copy is not recognised; `maskRecipient` defaults to the
