@@ -191,6 +191,37 @@ describe('AuditWriteWarning', () => {
     })
 
     // The cut counts code units; it must not leave half of an astral character before the dots.
+    // The reason is trimmed: padding must not count against the bound or show in the line.
+    it('should drop leading and trailing whitespace', () => {
+      new AuditWriteWarning(new Logger('Test'), 'otp').warn(new Error('  \n padded \t  '))
+
+      expect(lines()[0]).toContain('(padded)')
+    })
+
+    // The cut drops a trailing HIGH surrogate, U+D800 to U+DBFF inclusive, and nothing else.
+    it.each([
+      ['the first high surrogate', '\uD800'],
+      ['the last high surrogate', '\uDBFF']
+    ])('should drop %s left at the cut', (_label, unit) => {
+      new AuditWriteWarning(new Logger('Test'), 'otp').warn(
+        new Error(`${'x'.repeat(199)}${unit}tail`)
+      )
+
+      expect(reasonOfLine()).toBe(`${'x'.repeat(199)}…`)
+    })
+
+    it.each([
+      ['a low surrogate', '\uDC00'],
+      ['the first character after the surrogates', '\uE000'],
+      ['a full-width letter', '\uFF21']
+    ])('should keep %s left at the cut', (_label, unit) => {
+      new AuditWriteWarning(new Logger('Test'), 'otp').warn(
+        new Error(`${'x'.repeat(199)}${unit}tail`)
+      )
+
+      expect(reasonOfLine()).toBe(`${'x'.repeat(199)}${unit}…`)
+    })
+
     it('should not cut inside a surrogate pair', () => {
       new AuditWriteWarning(new Logger('Test'), 'otp').warn(new Error(`${'x'.repeat(199)}😀tail`))
 
@@ -242,6 +273,56 @@ describe('AuditWriteWarning', () => {
       const line = warnWith(new Error(`${'x'.repeat(190)}jane@acme.com tail`))
 
       expect(line).not.toMatch(/jane|@acme/)
+    })
+
+    // A send to several addresses audits them as one joined string (', '), but a repository
+    // names the one it rejected, so each address is removed by itself as well as the whole list.
+    describe('a send to several addresses', () => {
+      const several = { recipient: 'jane@acme.com, maria@acme.com' }
+      const lineFor = (error: Error, entry: { recipient: string }): string => {
+        new AuditWriteWarning(new Logger('Test'), 'email').warn(error, entry)
+        return lines()[0] ?? ''
+      }
+
+      it('should remove the first address quoted alone', () => {
+        expect(lineFor(new Error('Invalid recipient: jane@acme.com'), several)).not.toContain(
+          'jane@acme.com'
+        )
+      })
+
+      it('should remove the last address quoted alone', () => {
+        expect(lineFor(new Error('maria@acme.com is not deliverable'), several)).not.toContain(
+          'maria@acme.com'
+        )
+      })
+
+      it('should remove the whole list when it is quoted', () => {
+        const line = lineFor(new Error('bad row jane@acme.com, maria@acme.com'), several)
+
+        expect(line).not.toMatch(/jane|maria/)
+      })
+
+      it('should remove every address of a list of three', () => {
+        const line = lineFor(new Error('rejected c@acme.com then a@acme.com then b@acme.com'), {
+          recipient: 'a@acme.com, b@acme.com, c@acme.com'
+        })
+
+        expect(line).not.toMatch(/a@acme|b@acme|c@acme/)
+      })
+
+      it('should remove an address that appears twice, in both places', () => {
+        const line = lineFor(new Error('x@acme.com failed; retry x@acme.com'), {
+          recipient: 'x@acme.com, y@acme.com, x@acme.com'
+        })
+
+        expect(line).not.toContain('x@acme.com')
+      })
+
+      it('should keep the rest of the text readable', () => {
+        const line = lineFor(new Error('Invalid recipient: jane@acme.com'), several)
+
+        expect(line).toContain('(Invalid recipient: [redacted])')
+      })
     })
 
     it('should leave the text alone when the entry names nothing', () => {

@@ -18,7 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   service, the email service and the audit interceptor each log
   `BYMAX_NOTIFICATION_AUDIT_WRITE_FAILED`, naming the channel and the repository's error text (or
   the library's own error code for one of its exceptions), never an OTP code, and the entry's
-  recipient (as `maskRecipient` left it) and user id, the personal data an entry holds, are
+  recipient (as `maskRecipient` left it, each address separately for a send to several) and user id,
+  the personal data an entry holds, are
   replaced by `[redacted]` wherever the error quotes them verbatim (a re-cased or re-encoded copy is not recognised; `maskRecipient` defaults to the
   identity function, so the mask cannot be relied on), cut at 200 characters and kept on one line. At most one line is written per channel per minute; the next line says how many
   failures it stands for. What the caller receives is unchanged.

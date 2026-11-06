@@ -45,13 +45,20 @@ function reasonOf(error: unknown, identity: readonly string[]): string {
   return oneLine(redactValues(libraryCodeOf(error) ?? describeError(error), identity))
 }
 
-/** The strings by which an entry identifies who it is about: its recipient and its user id. */
+/** The separator `EmailService` joins the addresses of one send with. */
+const RECIPIENT_SEPARATOR = ', '
+
+/**
+ * The strings by which an entry identifies who it is about: each address of its recipient (a
+ * send to several addresses is audited as one joined list, and a repository names the one it
+ * rejected) and its user id. A fragment of a recipient can only remove more, never less.
+ */
 function identityOf(
   entry: Pick<NotificationLogEntry, 'recipient' | 'userId'> | undefined
 ): string[] {
-  return [entry?.recipient, entry?.userId].filter(
-    (value): value is string => typeof value === 'string'
-  )
+  const recipient = entry?.recipient
+  const addresses = typeof recipient === 'string' ? recipient.split(RECIPIENT_SEPARATOR) : []
+  return [...addresses, entry?.userId].filter((value): value is string => typeof value === 'string')
 }
 
 /** The error's code when it is a string in the library's catalog namespace, else `undefined`. */
