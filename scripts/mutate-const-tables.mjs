@@ -11,8 +11,10 @@
  * - it finds every object or array literal marked `as const` (alone or followed by `satisfies`)
  *   in the tracked source files under the source directory, ignoring specs, tests, declaration
  *   files and `index.ts`;
- * - for each entry it makes one mutant that removes the entry, and, when the entry is a number,
- *   one that adds one to it;
+ * - it also visits every object or array literal nested inside such a table, since an inner
+ *   object is part of the table it sits in;
+ * - for each entry it makes one mutant that removes the entry, and, when the entry is a plain
+ *   decimal integer, one that adds one to it (other forms of number are only removed);
  * - for each mutant it runs the given test command and counts the mutant as killed when the
  *   command fails, or as a survivor when it passes;
  * - it prints the survivors and exits 1 when there are any.
@@ -43,8 +45,8 @@
  * error or a failing baseline.
  */
 
-import { execFileSync, spawnSync } from 'node:child_process'
-import { readFileSync, writeFileSync } from 'node:fs'
+import { execFileSync, spawn } from 'node:child_process'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join, resolve } from 'node:path'
 
@@ -90,6 +92,7 @@ function candidateFiles(root, src, only) {
   return listing
     .split('\0')
     .filter((path) => SOURCE_FILE.test(path) && !SKIPPED_FILE.test(path) && path.includes(only))
+    .filter((path) => existsSync(join(root, path)))
 }
 
 /** The expression inside any `as`, `satisfies` and parentheses wrapping. */
@@ -110,16 +113,33 @@ function isConstAssertion(ts, node) {
   return ts.isAsExpression(node) && node.type.getText() === 'const'
 }
 
-/** Every object or array literal asserted `as const`, with or without a `satisfies` after it. */
+/** Whether the node is an object or array literal. */
+function isLiteral(ts, node) {
+  return ts.isObjectLiteralExpression(node) || ts.isArrayLiteralExpression(node)
+}
+
+/** The literal and every object or array literal nested inside it. */
+function withNested(ts, literal) {
+  const found = []
+  const visit = (node) => {
+    if (isLiteral(ts, node)) found.push(node)
+    ts.forEachChild(node, visit)
+  }
+  visit(literal)
+  return found
+}
+
+/**
+ * Every object or array literal asserted `as const`, with or without a `satisfies` after it,
+ * and every literal nested inside one: an inner object is part of the table it sits in.
+ */
 function constTables(ts, sourceFile) {
   const tables = []
   const visit = (node) => {
     const asserted = ts.isSatisfiesExpression(node) ? node.expression : node
     if (isConstAssertion(ts, asserted)) {
       const literal = unwrap(ts, asserted)
-      if (ts.isObjectLiteralExpression(literal) || ts.isArrayLiteralExpression(literal)) {
-        tables.push(literal)
-      }
+      if (isLiteral(ts, literal)) tables.push(...withNested(ts, literal))
       return
     }
     ts.forEachChild(node, visit)
@@ -128,18 +148,20 @@ function constTables(ts, sourceFile) {
   return tables
 }
 
-/** The text with one entry cut out, together with the comma that separates it from its neighbour. */
-function withoutEntry(text, entry) {
-  let start = entry.getFullStart()
-  let end = entry.getEnd()
-  const trailing = text.slice(end).match(/^\s*,/)
-  if (trailing) {
-    end += trailing[0].length
-  } else {
-    const leading = text.slice(0, start).match(/,\s*$/)
-    if (leading) start -= leading[0].length
+/**
+ * The text with one entry cut out of its list. An entry that has a successor goes with everything
+ * up to the successor, comma and comments included; the last entry goes with the comma that
+ * separates it from its predecessor and with its own trailing comma.
+ */
+function withoutEntry(text, entries, index) {
+  const entry = entries.at(index)
+  const next = entries.at(index + 1)
+  if (next !== undefined) {
+    return text.slice(0, entry.getFullStart()) + text.slice(next.getFullStart())
   }
-  return text.slice(0, start) + text.slice(end)
+  const previous = index === 0 ? undefined : entries.at(index - 1)
+  const start = previous === undefined ? entry.getFullStart() : previous.getEnd()
+  return text.slice(0, start) + text.slice(entries.end)
 }
 
 /** The numeric literal an entry holds as its value, or `undefined`. */
@@ -148,12 +170,16 @@ function numberOf(ts, entry) {
   return ts.isNumericLiteral(value) ? value : undefined
 }
 
-/** The text with the entry's number raised by one, or `undefined` when the entry holds none. */
+/**
+ * The text with the entry's number raised by one, or `undefined` when the entry holds no plain
+ * decimal integer small enough to add one to exactly. Other forms of number are only removed.
+ */
 function withNumberBumped(ts, text, entry) {
   const literal = numberOf(ts, entry)
-  if (literal === undefined) return undefined
-  const bumped = String(Number(literal.text.replaceAll('_', '')) + 1)
-  return text.slice(0, literal.getStart()) + bumped + text.slice(literal.getEnd())
+  if (literal === undefined || !/^\d[\d_]*$/.test(literal.getText())) return undefined
+  const value = Number(literal.text)
+  if (!Number.isSafeInteger(value + 1)) return undefined
+  return text.slice(0, literal.getStart()) + String(value + 1) + text.slice(literal.getEnd())
 }
 
 /** The mutants of one file: for each entry of each table, a removal and possibly a bump. */
@@ -163,33 +189,49 @@ function mutantsOf(ts, path, text) {
   const mutants = []
   for (const table of constTables(ts, sourceFile)) {
     const entries = ts.isObjectLiteralExpression(table) ? table.properties : table.elements
-    for (const entry of entries) {
+    entries.forEach((entry, index) => {
       const line = sourceFile.getLineAndCharacterOfPosition(entry.getStart()).line + 1
       const label = `${path}:${line} ${entry.getText().slice(0, 50).replace(/\s+/g, ' ')}`
-      mutants.push({ kind: 'remove', label, text: withoutEntry(text, entry) })
+      mutants.push({ kind: 'remove', label, text: withoutEntry(text, entries, index) })
       const bumped = withNumberBumped(ts, text, entry)
       if (bumped !== undefined) mutants.push({ kind: 'bump', label, text: bumped })
-    }
+    })
   }
   return mutants
 }
 
-/** Runs the test command once and returns its exit status; `null` means it was killed. */
+/** The test command's child process while one runs, so an interrupt can stop it. */
+let running
+
+/** Runs the test command once and resolves with how it ended: an exit status or a signal. */
 function runCommand(root, command, file) {
   const [program, ...args] = command.map((part) => part.replaceAll('{file}', file))
-  const result = spawnSync(program, args, {
-    cwd: root,
-    env: { ...process.env, MUTATED_FILE: file },
-    stdio: 'ignore'
+  return new Promise((done) => {
+    running = spawn(program, args, {
+      cwd: root,
+      env: { ...process.env, MUTATED_FILE: file },
+      stdio: 'ignore'
+    })
+    running.once('error', () => done({ status: null, signal: null }))
+    running.once('close', (status, signal) => {
+      running = undefined
+      done({ status, signal })
+    })
   })
-  return result.status
 }
 
-/** Mutates the files one entry at a time and returns the mutants the command did not kill. */
-function survivorsOf(ts, root, files, command) {
+/** Whether a finished command passed: it exited with status 0. */
+const passed = (outcome) => outcome.status === 0
+
+/**
+ * Mutates the files one entry at a time and returns the mutants the command did not kill. A
+ * command stopped by a signal is not a verdict on the mutant, so the run stops instead.
+ */
+async function survivorsOf(ts, root, files, command) {
   const survivors = []
   let restore = () => {}
   const onSignal = () => {
+    running?.kill('SIGKILL')
     restore()
     process.exit(EXIT_USAGE)
   }
@@ -202,9 +244,13 @@ function survivorsOf(ts, root, files, command) {
     try {
       for (const mutant of mutantsOf(ts, file, original)) {
         writeFileSync(absolute, mutant.text)
-        const killed = runCommand(root, command, file) !== 0
-        process.stderr.write(`${killed ? 'killed  ' : 'SURVIVED'} ${mutant.kind} ${mutant.label}\n`)
-        if (!killed) survivors.push(mutant)
+        const outcome = await runCommand(root, command, file)
+        if (outcome.signal !== null)
+          throw new Error(`The test command was stopped by ${outcome.signal}.`)
+        process.stderr.write(
+          `${passed(outcome) ? 'SURVIVED' : 'killed  '} ${mutant.kind} ${mutant.label}\n`
+        )
+        if (passed(outcome)) survivors.push(mutant)
       }
     } finally {
       restore()
@@ -214,7 +260,7 @@ function survivorsOf(ts, root, files, command) {
 }
 
 /** Parses the arguments, checks the baseline, runs the mutants and prints the survivors. */
-function main() {
+async function main() {
   const { root, src, only, command } = parseArguments(process.argv.slice(2))
   if (command.length === 0) {
     process.stderr.write(
@@ -223,11 +269,11 @@ function main() {
     process.exit(EXIT_USAGE)
   }
   const files = candidateFiles(root, src, only)
-  if (runCommand(root, command, '') !== 0) {
+  if (!passed(await runCommand(root, command, ''))) {
     process.stderr.write('The test command fails on the unmutated tree; fix it first.\n')
     process.exit(EXIT_USAGE)
   }
-  const survivors = survivorsOf(loadTypeScript(root), root, files, command)
+  const survivors = await survivorsOf(loadTypeScript(root), root, files, command)
   if (survivors.length === 0) {
     console.log('Every mutant of every `as const` table was killed.')
     return
@@ -237,4 +283,7 @@ function main() {
   process.exitCode = 1
 }
 
-main()
+main().catch((error) => {
+  process.stderr.write(`${error.message}\n`)
+  process.exit(EXIT_USAGE)
+})

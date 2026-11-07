@@ -6,7 +6,7 @@
  *
  * Layer: repository tooling, tests.
  */
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
@@ -147,7 +147,7 @@ describe('mutate-const-tables', () => {
     expect(texts).toContain(source.replace("['x', 'y']", "['x']"))
     expect(texts).toContain(source.replace('1_000', '1001'))
     expect(texts).toContain(source.replace('  big: 1_000,\n', ''))
-    expect(texts).toContain(source.replace("  nested: {\n    deep: 'v'\n  },\n", ''))
+    expect(texts).toContain(source.replace(",\n  nested: {\n    deep: 'v'\n  },\n", '\n'))
   })
 
   // Only an `as const` literal is a table; a plain object, a nested literal inside a table, and
@@ -225,5 +225,82 @@ describe('mutate-const-tables', () => {
     expect(result.status).toBe(2)
     expect(result.stderr).toContain('fails on the unmutated tree')
     expect(seen(root)).toHaveLength(1)
+  })
+  // An inner object is part of the table it sits in, so its entries are mutated too.
+  it('should mutate the entries of a literal nested inside a table', () => {
+    const source = 'export const T = { outer: { inner: 1, other: 2 }, list: [3] } as const\n'
+    const root = repo({ 'src/table.ts': source }, [])
+
+    run(root)
+
+    const texts = seen(root).slice(1)
+    expect(texts).toContain(source.replace('{ inner: 1, other: 2 }', '{ other: 2 }'))
+    expect(texts).toContain(source.replace('{ inner: 1, other: 2 }', '{ inner: 1 }'))
+    expect(texts).toContain(source.replace('inner: 1', 'inner: 2'))
+    expect(texts).toContain(source.replace('[3]', '[]'))
+    expect(texts).toContain(source.replace('[3]', '[4]'))
+  })
+
+  // A comment between an entry and its comma must go with the entry, or the mutant would not
+  // parse and a failing parse would be counted as a kill.
+  it('should remove an entry together with a comment before its comma', () => {
+    const source = 'export const T = { a: 1 /* note */, b: 2 } as const\n'
+    const root = repo({ 'src/table.ts': source }, [])
+
+    run(root)
+
+    expect(seen(root)).toContain('export const T = { b: 2 } as const\n')
+  })
+
+  // Only a plain decimal integer is bumped: adding one to a float, a hex, an exponent or a value
+  // past 2^53 would change nothing, or something other than adding one. Those are only removed.
+  it('should bump a plain integer and only remove other forms of number', () => {
+    const source = 'export const T = { f: 1.5, h: 0x10, e: 1e3, big: 9007199254740992 } as const\n'
+    const root = repo({ 'src/table.ts': source }, [])
+
+    run(root)
+
+    expect(seen(root).slice(1)).toHaveLength(4)
+  })
+
+  // A tracked file that was deleted from the working tree has nothing to mutate.
+  it('should skip a tracked file that no longer exists', () => {
+    const root = repo({ 'src/table.ts': TABLE, 'src/gone.ts': TABLE.replace('T', 'G') }, [
+      'a: 1',
+      'b: 2'
+    ])
+    rmSync(join(root, 'src/gone.ts'))
+
+    const result = run(root)
+
+    expect(result.status).toBe(0)
+    expect(seen(root)).toHaveLength(5)
+  })
+
+  // An interrupt must leave the source as it was: the mutant that was written is taken back, and
+  // the run ends with the usage-error code rather than reporting survivors it never finished.
+  it('should restore the file and exit 2 when interrupted mid-run', async () => {
+    const root = repo({ 'src/table.ts': TABLE }, [])
+    writeFileSync(
+      join(root, 'hang.mjs'),
+      [
+        "import { readFileSync } from 'node:fs'",
+        "if (readFileSync('src/table.ts', 'utf8').includes('a: 1, b: 2')) process.exit(0)",
+        'setTimeout(() => undefined, 60_000)'
+      ].join('\n')
+    )
+    const child = spawn('node', [SCRIPT, '--root', root, '--', 'node', 'hang.mjs'], {
+      stdio: 'ignore'
+    })
+    const closed = new Promise<number | null>((done) => child.once('close', done))
+    const deadline = Date.now() + 20_000
+    while (readFileSync(join(root, 'src/table.ts'), 'utf8') === TABLE && Date.now() < deadline) {
+      await new Promise((wait) => setTimeout(wait, 50))
+    }
+
+    child.kill('SIGTERM')
+
+    expect(await closed).toBe(2)
+    expect(readFileSync(join(root, 'src/table.ts'), 'utf8')).toBe(TABLE)
   })
 })
