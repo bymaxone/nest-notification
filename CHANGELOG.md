@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.4.7] - 2026-11-01
+## [1.4.7] - 2026-11-07
 
 ### Added
 
@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   reaching its attempt ceiling, while every send and verification kept succeeding. The OTP
   service, the email service and the audit interceptor each log
   `BYMAX_NOTIFICATION_AUDIT_WRITE_FAILED`, naming the channel and the failure's class or code only:
-  the library's own error code for one of its exceptions, otherwise the error's name and code, each
+  a `notification.` code, otherwise the error's name and code, each
   only when it is a short token. The repository's error message is never printed, because it can
   quote the entry it rejected, whose recipient and user id are personal data, in any form; the cause
   is in the repository's own logs. A name or code your repository sets itself is printed when it is a short token, so do not put an identifier of the entry in one. No OTP code is ever written. At most one line is written per
@@ -29,7 +29,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The README now states the ordering behind `AUDIT_LOG_FAILED` when `audit.swallowErrors` is
   `false`: the audit write comes after the state change, so the error says only that the audit write
   failed and replaces the result the call would have returned. It can follow a stored, delivered or
-  accepted code, or the recording of a refusal, so the outcome cannot be inferred from it.
+  accepted code, or the recording of a refusal, so the outcome cannot be inferred from it. When the
+  email channel's own audit of a send fails, `generate()` also releases the stored code and the
+  resend cooldown.
 
 ## [1.4.6] - 2026-11-01
 
