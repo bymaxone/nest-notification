@@ -191,7 +191,6 @@ function withNumberBumped(ts, text, entry) {
 
 /** The mutants of one file: for each entry of each table, a removal and possibly a bump. */
 function mutantsOf(ts, path, text) {
-  if (!text.includes('as const')) return []
   const sourceFile = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true)
   const mutants = []
   for (const table of constTables(ts, sourceFile)) {

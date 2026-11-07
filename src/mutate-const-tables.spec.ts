@@ -346,4 +346,19 @@ describe('mutate-const-tables', () => {
     expect(await closed).toBe(2)
     expect(readFileSync(join(root, 'src/table.ts'), 'utf8')).toBe(TABLE)
   })
+  // A comment or a line break between `as` and `const` is still `as const`. A search of the text
+  // for the exact spelling would skip such a file and the run would report every mutant killed;
+  // a command that pins nothing must show both entries as survivors.
+  it.each([
+    ['a comment', 'export const T = { a: 1 } as /* keep */ const\n'],
+    ['a line break', 'export const T = { a: 1 } as\nconst\n']
+  ])('should find a table with %s between as and const', (_label, source) => {
+    const root = repo({ 'src/table.ts': source }, [])
+
+    const result = run(root)
+
+    expect(result.status).toBe(1)
+    expect(result.stdout).toContain('2 mutant(s) survived')
+    expect(seen(root)).toHaveLength(3)
+  })
 })
