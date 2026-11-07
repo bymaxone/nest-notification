@@ -20,7 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the library's own error code for one of its exceptions, otherwise the error's name and code, each
   only when it is a short token. The repository's error message is never printed, because it can
   quote the entry it rejected, whose recipient and user id are personal data, in any form; the cause
-  is in the repository's own logs. No OTP code is ever written. At most one line is written per
+  is in the repository's own logs. A name or code your repository sets itself is printed when it is a short token, so do not put an identifier of the entry in one. No OTP code is ever written. At most one line is written per
   channel per minute; the next line says how many failures it stands for. What the caller receives
   is unchanged.
 
