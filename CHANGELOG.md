@@ -27,8 +27,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Documentation
 
 - The README now states the ordering behind `AUDIT_LOG_FAILED` when `audit.swallowErrors` is
-  `false`: the audit write comes after the state change, so the error can reach the caller after a
-  code was stored, delivered or accepted.
+  `false`: the audit write comes after the state change, so the error says only that the audit write
+  failed and replaces the result the call would have returned. It can follow a stored, delivered or
+  accepted code, or the recording of a refusal, so the outcome cannot be inferred from it.
 
 ## [1.4.6] - 2026-11-01
 
