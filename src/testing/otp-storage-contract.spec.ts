@@ -55,6 +55,20 @@ describe('otpStorageContract', () => {
     }
   })
 
+  // Every key a case writes must be removed by the cleanup, whichever scope it was written under:
+  // the cases that use a second tenant or a second purpose write keys no other case touches, so
+  // a cleanup that skips one of those scopes leaves it behind. Asserted through the reference
+  // storage's own size rather than by inspection.
+  it('should leave nothing behind after every case has run', async () => {
+    const storage = new InMemoryOtpStorage()
+
+    for (const contractCase of otpStorageContract(() => storage, FAST_EXPIRY)) {
+      await contractCase.run()
+    }
+
+    expect(storage.size()).toEqual({ otps: 0, cooldowns: 0 })
+  })
+
   // Building the case list must not touch the storage: a consumer registers the
   // cases with their runner first and only then does the runner execute them.
   it('should not call the factory while only building the list', () => {
