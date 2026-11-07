@@ -64,6 +64,17 @@ jobs:
         run: pnpm test:types
       - name: Mutation directives parse and carry their reason
         run: pnpm check:mutants
+      - name: Source files stay within the length limit
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          # A pull request is also checked against the baseline on its base branch, so the
+          # baseline it carries cannot admit the offender it adds.
+          if [ -n "$BASE_REF" ]; then
+            pnpm check:file-length --base "origin/$BASE_REF"
+          else
+            pnpm check:file-length
+          fi
       - name: Build all subpaths
         run: pnpm build
       - name: Verify build output integrity
