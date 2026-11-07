@@ -92,6 +92,8 @@ pnpm mutation:dry-run   # validate config
 pnpm mutation           # incremental — re-tests only what changed; writes reports/mutation/mutation.html
 ```
 
+`as const` value tables are not mutated by Stryker (it neither removes a property nor changes a number). `scripts/mutate-const-tables.mjs` does, one entry at a time, against a test command you give it; it is a development tool, not a CI step (usage in its header).
+
 Equivalent mutants are documented inline with `// Stryker disable next-line <Mutator>: <reason>`
 — acceptable **only** for genuinely equivalent mutants (no test can kill them), each carrying a
 reason. Minimize them, and **never** disable a mutant a test could kill. Do **not** add mutation
