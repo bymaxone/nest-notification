@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.7] - 2026-11-01
+
+### Added
+
+- **A swallowed audit failure now leaves a warning.** With the default `audit.swallowErrors: true`
+  a failed audit write was dropped without a trace, so an audit outage, or a `tenantIdResolver`
+  that returned a blank id, emptied the audit trail, including the entries that record a recipient
+  reaching its attempt ceiling, while every send and verification kept succeeding. The OTP
+  service, the email service and the audit interceptor each log
+  `BYMAX_NOTIFICATION_AUDIT_WRITE_FAILED`, naming the channel and the failure's class or code only:
+  the library's own error code for one of its exceptions, otherwise the error's name and code, each
+  only when it is a short token. The repository's error message is never printed, because it can
+  quote the entry it rejected, whose recipient and user id are personal data, in any form; the cause
+  is in the repository's own logs. A name or code your repository sets itself is printed when it is a short token, so do not put an identifier of the entry in one. No OTP code is ever written. At most one line is written per
+  channel per minute; the next line says how many failures it stands for. What the caller receives
+  is unchanged.
+
+### Documentation
+
+- The README now states the ordering behind `AUDIT_LOG_FAILED` when `audit.swallowErrors` is
+  `false`: the audit write comes after the state change, so the error says only that the audit write
+  failed and replaces the result the call would have returned. It can follow a stored, delivered or
+  accepted code, or the recording of a refusal, so the outcome cannot be inferred from it.
+
 ## [1.4.6] - 2026-11-01
 
 ### Fixed
@@ -1015,7 +1039,8 @@ rejected at startup rather than failing on the first send.
 
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.4.6...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.4.7...HEAD
+[1.4.7]: https://github.com/bymaxone/nest-notification/compare/v1.4.6...v1.4.7
 [1.4.6]: https://github.com/bymaxone/nest-notification/compare/v1.4.5...v1.4.6
 [1.4.5]: https://github.com/bymaxone/nest-notification/compare/v1.4.4...v1.4.5
 [1.4.4]: https://github.com/bymaxone/nest-notification/compare/v1.4.3...v1.4.4

@@ -22,7 +22,7 @@
  * `{ provide: APP_INTERCEPTOR, useClass: NotificationAuditInterceptor }`.
  */
 
-import { Inject, Injectable } from '@nestjs/common'
+import { Inject, Injectable, Logger } from '@nestjs/common'
 import type { CallHandler, ExecutionContext, NestInterceptor } from '@nestjs/common'
 import { catchError, concatMap, from, map, throwError } from 'rxjs'
 import type { Observable } from 'rxjs'
@@ -40,6 +40,7 @@ import type {
 } from '../interfaces/notification-log-repository.interface'
 import type { NotificationRequest } from '../interfaces/notification-module-options.interface'
 import type { DispatchInput } from '../services/notification.service'
+import { AuditWriteWarning } from '../utils/audit-write-warning'
 import { describeError } from '../utils/describe-error'
 import { assertIdentifies } from '../utils/tenant-scope'
 
@@ -66,6 +67,12 @@ function toErrorMessage(error: unknown): string {
  */
 @Injectable()
 export class NotificationAuditInterceptor implements NestInterceptor {
+  /** @internal */
+  private readonly auditWarning = new AuditWriteWarning(
+    new Logger(NotificationAuditInterceptor.name),
+    'interceptor'
+  )
+
   /**
    * @param options - The resolved, frozen module options (carries the tenant resolver + mask).
    * @param auditLog - The audit-log repository (no-op when none configured).
@@ -120,6 +127,7 @@ export class NotificationAuditInterceptor implements NestInterceptor {
         // into the HTTP response body, so internal error text must never land there.
         throw new NotificationException('AUDIT_LOG_FAILED', undefined, { cause: error })
       }
+      this.auditWarning.warn(error)
     }
   }
 

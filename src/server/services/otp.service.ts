@@ -38,6 +38,7 @@ import type {
 } from '../interfaces/notification-log-repository.interface'
 import type { OtpPurposeConfig } from '../interfaces/notification-module-options.interface'
 import type { IOtpStorage, OtpEntry, OtpVerifyResult } from '../interfaces/otp-storage.interface'
+import { AuditWriteWarning } from '../utils/audit-write-warning'
 import { isCodeDigest } from '../utils/code-digest'
 import { generateOtpCode } from '../utils/code-generator'
 import { cooldownExpiresAt, toRetryAfterHeader } from '../utils/cooldown-helpers'
@@ -137,6 +138,8 @@ export class OtpService implements OnModuleInit {
   private warnedFailuresNotCarried = false
   /** @internal */
   private warnedTemplate = false
+  /** @internal */
+  private readonly auditWarning = new AuditWriteWarning(this.logger, 'otp')
 
   /**
    * @param options - The resolved, frozen module options.
@@ -649,6 +652,7 @@ export class OtpService implements OnModuleInit {
         // into the HTTP response body, so internal error text must never land there.
         throw new NotificationException('AUDIT_LOG_FAILED', undefined, { cause: error })
       }
+      this.auditWarning.warn(error)
     }
   }
 }
