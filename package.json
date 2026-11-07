@@ -83,6 +83,7 @@
     "build": "pnpm clean && tsup",
     "check:api": "node scripts/check-api-surface.mjs",
     "check:exports": "attw --pack .",
+    "check:file-length": "node scripts/check-file-length.mjs",
     "check:mutants": "node scripts/check-mutation-directives.mjs",
     "check:no-prisma": "grep -rq '@prisma/client' src; s=$?; [ $s -eq 1 ] && exit 0; [ $s -eq 0 ] && { echo check:no-prisma: found @prisma/client import in src/; exit 1; }; echo check:no-prisma: grep failed with exit $s; exit $s",
     "check:published": "node scripts/check-published-surface.mjs",
