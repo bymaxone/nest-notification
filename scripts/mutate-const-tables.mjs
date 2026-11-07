@@ -19,9 +19,15 @@
  *   command fails, or as a survivor when it passes;
  * - it prints the survivors and exits 1 when there are any.
  *
- * The unmutated tree must pass the command first, or the run stops with exit 2, because a failing
- * command would "kill" every mutant. The source file is restored after every mutant, and on
- * SIGINT or SIGTERM. Run it on a clean working tree.
+ * Before a file is mutated, the command must pass on that file unmutated, with `{file}` and
+ * MUTATED_FILE set to it, or the run stops with exit 2 and names the file: a failing command
+ * would "kill" every mutant, and the judgement of each file's mutants is the command's verdict
+ * on that file. A file with no table is not run. The source file is restored after every mutant,
+ * and on SIGINT or SIGTERM. Run it on a clean working tree.
+ *
+ * An interrupt stops the command's own process only. A runner that starts workers of its own,
+ * such as `pnpm exec jest`, can leave them finishing after the file is restored; their verdict is
+ * discarded.
  *
  * Make the command fail on a failed assertion only. A test runner that also type-checks counts a
  * removed property that other code reads as killed, which Stryker would not; turn the type check
@@ -42,7 +48,8 @@
  *   --config jest.mutants.config.ts --findRelatedTests {file} --coverage=false --silent
  *
  * Exit codes: 0 every mutant was killed (or there is no table), 1 at least one survived, 2 usage
- * error or a failing baseline.
+ * error, a command that fails on an unmutated file, or a run stopped by SIGINT, SIGTERM or a
+ * command ended by a signal.
  */
 
 import { execFileSync, spawn } from 'node:child_process'
@@ -56,7 +63,7 @@ const SKIPPED_FILE = /(?:\.(?:spec|test)\.[cm]?[jt]sx?|\.d\.[cm]?ts|(?:^|\/)inde
 /** Source files that can hold a table. */
 const SOURCE_FILE = /\.[cm]?[jt]sx?$/
 
-/** Exit code for a usage error or a failing baseline. */
+/** Exit code for a usage error, a failing baseline or a stopped run. */
 const EXIT_USAGE = 2
 
 /** Reads `--name value` from the options, or returns the fallback. */
@@ -224,6 +231,19 @@ function runCommand(root, command, file) {
 const passed = (outcome) => outcome.status === 0
 
 /**
+ * Stops the run unless the command passes on the unmutated file, so that a failing command does
+ * not "kill" every mutant of it. A file with no mutant is not run.
+ */
+async function requirePassing(root, command, file, mutantCount) {
+  if (mutantCount === 0) return
+  const outcome = await runCommand(root, command, file)
+  if (outcome.signal !== null) throw new Error(`The test command was stopped by ${outcome.signal}.`)
+  if (!passed(outcome)) {
+    throw new Error(`The test command fails on the unmutated file ${file}; fix it first.`)
+  }
+}
+
+/**
  * Mutates the files one entry at a time and returns the mutants the command did not kill. A
  * command stopped by a signal is not a verdict on the mutant, so the run stops instead.
  */
@@ -241,8 +261,10 @@ async function survivorsOf(ts, root, files, command) {
     const absolute = join(root, file)
     const original = readFileSync(absolute, 'utf8')
     restore = () => writeFileSync(absolute, original)
+    const mutants = mutantsOf(ts, file, original)
     try {
-      for (const mutant of mutantsOf(ts, file, original)) {
+      await requirePassing(root, command, file, mutants.length)
+      for (const mutant of mutants) {
         writeFileSync(absolute, mutant.text)
         const outcome = await runCommand(root, command, file)
         if (outcome.signal !== null)
@@ -259,7 +281,7 @@ async function survivorsOf(ts, root, files, command) {
   return survivors
 }
 
-/** Parses the arguments, checks the baseline, runs the mutants and prints the survivors. */
+/** Parses the arguments, runs the mutants file by file and prints the survivors. */
 async function main() {
   const { root, src, only, command } = parseArguments(process.argv.slice(2))
   if (command.length === 0) {
@@ -269,10 +291,6 @@ async function main() {
     process.exit(EXIT_USAGE)
   }
   const files = candidateFiles(root, src, only)
-  if (!passed(await runCommand(root, command, ''))) {
-    process.stderr.write('The test command fails on the unmutated tree; fix it first.\n')
-    process.exit(EXIT_USAGE)
-  }
   const survivors = await survivorsOf(loadTypeScript(root), root, files, command)
   if (survivors.length === 0) {
     console.log('Every mutant of every `as const` table was killed.')

@@ -7,7 +7,15 @@
  * Layer: repository tooling, tests.
  */
 import { spawn, spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 
@@ -40,7 +48,7 @@ function repo(files: Record<string, string>, required: readonly string[]): strin
     join(root, 'checker.mjs'),
     [
       "import { appendFileSync, readFileSync } from 'node:fs'",
-      "const file = process.argv[2] || 'src/table.ts'",
+      'const file = process.argv[2]',
       "const text = readFileSync(file, 'utf8')",
       "appendFileSync('log.jsonl', JSON.stringify(text) + '\\n')",
       `const required = ${JSON.stringify(required)}`,
@@ -61,9 +69,14 @@ function run(
   return { status: result.status, stdout: result.stdout, stderr: result.stderr }
 }
 
-/** The texts the checker saw, one per run: the unmutated baseline first, then each mutant. */
+/**
+ * The texts the checker saw, one per run: for each file with a table its unmutated baseline first,
+ * then each mutant. Nothing was run when no file holds a table.
+ */
 function seen(root: string): string[] {
-  return readFileSync(join(root, 'log.jsonl'), 'utf8')
+  const log = join(root, 'log.jsonl')
+  if (!existsSync(log)) return []
+  return readFileSync(log, 'utf8')
     .split('\n')
     .filter((line) => line !== '')
     .map((line) => JSON.parse(line) as string)
@@ -157,7 +170,7 @@ describe('mutate-const-tables', () => {
 
     const result = run(root)
 
-    expect(seen(root)).toHaveLength(1)
+    expect(seen(root)).toHaveLength(0)
     expect(result.status).toBe(0)
   })
 
@@ -169,7 +182,7 @@ describe('mutate-const-tables', () => {
 
       run(root)
 
-      expect(seen(root)).toHaveLength(1)
+      expect(seen(root)).toHaveLength(0)
     }
   )
 
@@ -202,8 +215,7 @@ describe('mutate-const-tables', () => {
     run(root, ['--', 'node', 'env.mjs', '{file}'])
 
     const lines = readFileSync(join(root, 'env.log'), 'utf8').split('\n').filter(Boolean)
-    expect(lines[0]).toBe('|')
-    expect(lines.slice(1)).toEqual(Array<string>(4).fill('src/table.ts|src/table.ts'))
+    expect(lines).toEqual(Array<string>(5).fill('src/table.ts|src/table.ts'))
   })
 
   // With no command the tool cannot run anything; it must say how to call it.
@@ -217,14 +229,45 @@ describe('mutate-const-tables', () => {
   })
 
   // A command that already fails would kill every mutant and report a clean run.
-  it('should refuse a command that fails on the unmutated tree', () => {
+  it('should refuse a command that fails on the unmutated file', () => {
     const root = repo({ 'src/table.ts': TABLE }, ['never present'])
 
     const result = run(root)
 
     expect(result.status).toBe(2)
-    expect(result.stderr).toContain('fails on the unmutated tree')
+    expect(result.stderr).toContain('fails on the unmutated file src/table.ts')
     expect(seen(root)).toHaveLength(1)
+  })
+
+  // The baseline is the command's verdict on each file, run with that file's path: a command that
+  // passes on one file and fails on another stops at the second and names it, after the first has
+  // been mutated and restored.
+  it('should name the file the command fails on when it passes on another', () => {
+    const root = repo({ 'src/a.ts': TABLE, 'src/b.ts': 'export const U = { c: 3 } as const\n' }, [
+      'a: 1',
+      'b: 2'
+    ])
+
+    const result = run(root)
+
+    expect(result.status).toBe(2)
+    expect(result.stderr).toContain('fails on the unmutated file src/b.ts')
+    expect(seen(root)).toHaveLength(6)
+    expect(readFileSync(join(root, 'src/a.ts'), 'utf8')).toBe(TABLE)
+  })
+
+  // A file with no table has no mutant to judge, so the command is not run on it: a command that
+  // would fail on that file cannot stop the run.
+  it('should not run the command on a file without a table', () => {
+    const root = repo({ 'src/a.ts': TABLE, 'src/b.ts': 'export const none = 1\n' }, [
+      'a: 1',
+      'b: 2'
+    ])
+
+    const result = run(root)
+
+    expect(result.status).toBe(0)
+    expect(seen(root)).toHaveLength(5)
   })
   // An inner object is part of the table it sits in, so its entries are mutated too.
   it('should mutate the entries of a literal nested inside a table', () => {
