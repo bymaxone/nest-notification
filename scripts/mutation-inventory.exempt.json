@@ -1,0 +1,22 @@
+[
+  {
+    "file": "src/check-api-surface.spec.ts",
+    "reason": "Runs scripts/check-api-surface.mjs as a child process against throwaway git repositories and imports nothing under src/, so it judges no mutant. Stryker's Jest config also leaves it out."
+  },
+  {
+    "file": "src/internal-members.spec.ts",
+    "reason": "Runs a repository script on TypeScript source snippets in a child process and imports nothing under src/, so it judges no mutant. Stryker's Jest config also leaves it out."
+  },
+  {
+    "file": "src/server/errors/error-codes.readme.spec.ts",
+    "reason": "Reads the source text to find every throw site and checks the README tables against it. Under Stryker the sandbox source is instrumented, so the text it searches for is no longer there; Stryker's Jest config leaves it out for that reason. The catalog values it also reads are pinned by notification-error-codes.spec.ts, which the mutation run does execute."
+  },
+  {
+    "file": "src/check-file-length.spec.ts",
+    "reason": "Runs scripts/check-file-length.mjs as a child process against throwaway git repositories and imports nothing under src/, so it judges no mutant."
+  },
+  {
+    "file": "src/mutate-const-tables.spec.ts",
+    "reason": "Runs scripts/mutate-const-tables.mjs as a child process against throwaway git repositories and imports nothing under src/, so it judges no mutant."
+  }
+]

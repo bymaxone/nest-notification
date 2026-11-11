@@ -37,3 +37,7 @@ jobs:
       # over-wide ceiling costs only the minutes it uses, while an under-tight one costs the
       # whole run and leaves the week without a measured baseline.
       timeout-minutes: 60
+      # A unit test the cold run did not run fails the job: the score cannot notice a test the
+      # related-test lookup never selected. The specs that run no mutated source are listed with
+      # their reason in scripts/mutation-inventory.exempt.json.
+      inventory: enforce
