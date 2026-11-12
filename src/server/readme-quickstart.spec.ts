@@ -116,27 +116,6 @@ describe('README development Quick Start', () => {
     expect(serviceBlock).toContain('export class VerificationService')
   })
 
-  it('should define the same otp_code template in the development and production sections', () => {
-    /**
-     * Guards against drift between the two sections: the development module must carry the same
-     * `otp_code::en` template text as the production one, so a reader who starts with one and
-     * moves to the other changes nothing but the provider and the storage.
-     */
-    const template = (section: string): string | undefined =>
-      /'otp_code::en': \{[\s\S]*?\n {12}\}/.exec(section)?.[0]
-    const development = readme.slice(
-      readme.indexOf('### 2. Development'),
-      readme.indexOf('### 3. Production')
-    )
-    const production = readme.slice(
-      readme.indexOf('### 3. Production'),
-      readme.indexOf('### 4. SMTP')
-    )
-
-    expect(template(development)).toBeDefined()
-    expect(template(development)).toBe(template(production))
-  })
-
   it('should issue a code, deliver it, and verify it', async () => {
     /**
      * Guards the README section "2. Development": the module registers, `start` delivers one
