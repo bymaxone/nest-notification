@@ -617,6 +617,20 @@ When integrating `@bymax-one/nest-notification` in production, verify each of th
 
 ---
 
+## 🧱 Tech Stack
+
+<p>
+  <img src="https://img.shields.io/badge/NestJS-11-E0234E?style=flat-square&logo=nestjs&logoColor=white" alt="NestJS" />
+  <img src="https://img.shields.io/badge/TypeScript-strict-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" />
+  <img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black" alt="React" />
+  <img src="https://img.shields.io/badge/Node.js-24%2B-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js" />
+  <img src="https://img.shields.io/badge/Redis-7%2B-DC382D?style=flat-square&logo=redis&logoColor=white" alt="Redis" />
+  <img src="https://img.shields.io/badge/Resend-email-000000?style=flat-square&logo=resend&logoColor=white" alt="Resend" />
+  <img src="https://img.shields.io/badge/Jest-30-C21325?style=flat-square&logo=jest&logoColor=white" alt="Jest" />
+</p>
+
+---
+
 ## 🧪 Testing & Quality
 
 A one-time password is a credential, so every behavior is pinned so that a regression **fails a test**.

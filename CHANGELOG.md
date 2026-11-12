@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Wording fixes: audit failures are swallowed by default (`audit.swallowErrors`), not
   never; the OTP verify codes are reserved; and the Supply chain row no longer claims a scan on
   every push.
+- A Tech Stack badge row sits between the Security Table and Testing & Quality.
 
 `dist/` is unchanged from 1.4.7: no source, declaration or behaviour change.
 
