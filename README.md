@@ -45,10 +45,6 @@ Everything that touches the outside world — the email transport, the OTP store
 - **⚛️ Atomic by construction** — The attempt counter and the resend cooldown are mutated **inside the storage** (Redis Lua / `SET NX EX`), never by a service-side read-then-write. A `get` + `update` pair races, and the race is exactly how a max-attempts ceiling gets bypassed under concurrent requests.
 - **🪶 Pay for what you use** — `"dependencies": {}`. NestJS, your email SDK, your Redis client, and React are all peer dependencies, and only the channels you configure are registered in the container.
 
-```
-pnpm add @bymax-one/nest-notification
-```
-
 ---
 
 ## 🔥 Features
@@ -73,8 +69,8 @@ pnpm add @bymax-one/nest-notification
 
 - ✅ **SHA-256 storage keys** — `sha256(sha256(tenantId):sha256(recipient))`: no recipient PII in a key, and the encoding adds no ambiguity of its own, so two pairs never share one by construction
 - ✅ **`tenantIdResolver`** — the audited tenant comes from a trusted source (a JWT claim, a subdomain, a gateway-checked header), not the payload
-- ✅ **Opt-in audit log** — a fire-and-forget `INotificationLogRepository` plus a `NotificationAuditInterceptor`; audit failures never break delivery
-- ✅ **This library never logs a code** — not to a logger, not to an audit entry, not into an error message it authors, enforced by a regression test. Text a **provider** authors is a separate problem with a documented ceiling: an error quoting the body in another encoding survives every guard, so control whether provider error text reaches your logs at all
+- ✅ **Opt-in audit log** — a fire-and-forget `INotificationLogRepository` plus a `NotificationAuditInterceptor`; audit failures do not break delivery unless `audit.swallowErrors` is `false`
+- ✅ **This library never logs a code** — not to a logger, an audit entry, or an error message it authors, enforced by a regression test. Text a **provider** authors has a documented ceiling: see [Errors](#-errors)
 
 ### 🧩 Developer Experience
 
@@ -112,35 +108,20 @@ shared (zero deps) ← server        react
 ### 1. Install
 
 ```bash
-# Using pnpm (recommended)
 pnpm add @bymax-one/nest-notification
 
-# Using npm
-npm install @bymax-one/nest-notification
-
-# Using yarn
-yarn add @bymax-one/nest-notification
-```
-
-> [!IMPORTANT]
-> You must also install the **peer dependencies** for the subpaths and channels you use:
-
-```bash
-# Server subpath (required)
+# Server subpath peers (required)
 pnpm add @nestjs/common @nestjs/core reflect-metadata rxjs
 
-# Production email + OTP over Redis (optional — pick your own provider/store)
-pnpm add resend ioredis
-
-# …or SMTP instead of Resend (any relay, plus Mailpit/MailHog in tests)
-pnpm add nodemailer ioredis
+# Pick your provider and store (optional peers): Resend or SMTP, plus Redis
+pnpm add resend ioredis        # …or: pnpm add nodemailer ioredis
 
 # React subpath (optional)
 pnpm add react
 ```
 
 > [!NOTE]
-> Requires Node.js **24+** and NestJS **11**. Every provider and storage SDK is an _optional_ peer dependency: install only the ones your configuration actually names.
+> Requires Node.js **24+** and NestJS **11**. Every provider and storage SDK is an _optional_ peer dependency: install only the ones your configuration names.
 
 ### 2. Development — `NoOpEmailProvider` + `InMemoryOtpStorage`
 
@@ -155,21 +136,24 @@ import {
   DefaultTemplateRenderer
 } from '@bymax-one/nest-notification'
 
+// The default renderer ships no templates: register the one the OTP email is rendered from.
+const templateRenderer = new DefaultTemplateRenderer({
+  templates: {
+    'otp_code::en': {
+      subject: 'Your Acme verification code',
+      html: '<p>Your code is <strong>{{code}}</strong>. It expires in {{expiresInMinutes}} minutes.</p>',
+      text: 'Your code is {{code}}. It expires in {{expiresInMinutes}} minutes.'
+    }
+  }
+})
+
 @Module({
   imports: [
     BymaxNotificationModule.forRoot({
       email: {
         provider: new NoOpEmailProvider(),
         defaultFrom: 'no-reply@dev.local',
-        templateRenderer: new DefaultTemplateRenderer({
-          templates: {
-            'otp_code::en': {
-              subject: 'Your Acme verification code',
-              html: '<p>Your code is <strong>{{code}}</strong>. It expires in {{expiresInMinutes}} minutes.</p>',
-              text: 'Your code is {{code}}. It expires in {{expiresInMinutes}} minutes.'
-            }
-          }
-        })
+        templateRenderer
       },
       otp: {
         storage: new InMemoryOtpStorage(),
@@ -233,8 +217,7 @@ import Redis from 'ioredis'
 import {
   BymaxNotificationModule,
   ResendEmailProvider,
-  RedisOtpStorage,
-  DefaultTemplateRenderer
+  RedisOtpStorage
 } from '@bymax-one/nest-notification'
 
 const redis = new Redis(process.env.REDIS_URL!)
@@ -252,15 +235,7 @@ const redis = new Redis(process.env.REDIS_URL!)
         provider: new ResendEmailProvider({ apiKey: process.env.RESEND_API_KEY! }),
         defaultFrom: 'no-reply@acme.com',
         defaultFromName: 'Acme',
-        templateRenderer: new DefaultTemplateRenderer({
-          templates: {
-            'otp_code::en': {
-              subject: 'Your Acme verification code',
-              html: '<p>Your code is <strong>{{code}}</strong>. It expires in {{expiresInMinutes}} minutes.</p>',
-              text: 'Your code is {{code}}. It expires in {{expiresInMinutes}} minutes.'
-            }
-          }
-        })
+        templateRenderer // the DefaultTemplateRenderer from step 2, with its `otp_code` template
       },
       otp: {
         storage: new RedisOtpStorage({ redisClient: redis }),
@@ -308,54 +283,24 @@ BymaxNotificationModule.forRootAsync({
 
 ### 4. SMTP — any relay, and end-to-end tests
 
-`SmtpEmailProvider` speaks the protocol rather than one vendor's HTTP API, so the same adapter drives a corporate relay, Postfix, SES-via-SMTP, and the mail-capture servers (Mailpit, MailHog) that make email flows testable end to end. Requires the optional `nodemailer` peer dependency.
+`SmtpEmailProvider` drives any SMTP relay and the mail-capture servers (Mailpit, MailHog) that make email flows testable end to end. It needs the optional `nodemailer` peer.
 
 ```typescript
-import { BymaxNotificationModule, SmtpEmailProvider } from '@bymax-one/nest-notification'
+import { SmtpEmailProvider } from '@bymax-one/nest-notification'
 
-// Local capture server — no credentials, no TLS. Read the captured mail at :8025.
-const mailpit = new SmtpEmailProvider({ host: 'localhost', port: 1025, secure: false })
-
-// Authenticated production relay. STARTTLS is already mandatory by default here.
 const relay = new SmtpEmailProvider({
   host: process.env.SMTP_HOST,
   port: 587,
   credentials: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
 })
-
-BymaxNotificationModule.forRoot({
-  email: {
-    provider: process.env.NODE_ENV === 'production' ? relay : mailpit,
-    defaultFrom: 'no-reply@acme.com'
-  }
-})
 ```
 
-| Option                                                    | Default                                | Notes                                                                        |
-| --------------------------------------------------------- | -------------------------------------- | ---------------------------------------------------------------------------- |
-| `host`                                                    | —                                      | Required. Without it `isConfigured()` is `false` and `send()` throws.        |
-| `port`                                                    | `587`                                  | Submission port.                                                             |
-| `secure`                                                  | `true` iff port 465                    | Implicit TLS from the first byte.                                            |
-| `requireTls`                                              | `true` unless implicit TLS or loopback | Makes the STARTTLS upgrade mandatory. See the TLS note below.                |
-| `credentials`                                             | — (open relay)                         | `{ user, pass }`. Supplying it declares the deployment logs in.              |
-| `tls`                                                     | —                                      | `rejectUnauthorized` / `servername` / `ca`, for a relay behind a private CA. |
-| `connectionTimeout` / `greetingTimeout` / `socketTimeout` | `10s` / `10s` / `20s`                  | Bounded on purpose — Nodemailer's own defaults run into minutes.             |
-
-> [!IMPORTANT]
-> `isConfigured()` answers on the real configuration, not on "a transport object exists". Omitting `credentials` marks the relay as open and is fine; supplying them half-loaded — an `SMTP_PASS` that never made it into the environment — reports **not configured** and fails the send closed, rather than silently attempting an anonymous delivery a permissive relay might accept.
-
 > [!WARNING]
-> **STARTTLS is mandatory by default for any non-loopback host.** On a connection that does not start out encrypted, whether TLS happens at all is decided by the _plaintext_ EHLO banner: an attacker with network position strips the `250-STARTTLS` line, the transport never upgrades, and the credentials and the message body — which carries the OTP code — cross the network in the clear. So `requireTls` defaults to `true` unless the host is `localhost` / `127.0.0.1` / `::1` or `secure` is already on. If your relay genuinely cannot upgrade, opt out explicitly with `requireTls: false`; a Mailpit or MailHog container reached by its compose service name rather than over loopback is the common case.
-
-Three further behaviours worth knowing:
-
-- The returned `messageId` is the RFC-5322 `Message-ID` with its angle brackets, so an audit entry correlates with the header the recipient received.
-- `tags` are not forwarded, because SMTP has no tag facility — they still reach the audit log through `EmailService`.
-- A line break in `from`, `replyTo`, a recipient, or a custom header name/value is **rejected before the send**. Nodemailer already neutralizes those, so this is defence in depth — but header injection is the one place where trusting a peer dependency's current behaviour would be the whole security boundary. The subject is deliberately exempt: a stray trailing newline from a template is plausible there, and Nodemailer folds it away.
+> STARTTLS is mandatory by default for any non-loopback host, because a network attacker can strip the plaintext `STARTTLS` capability and read the OTP body. Opt out only with `requireTls: false`. The option table, the TLS rationale and the header-injection guard are in [`docs/smtp-provider.md`](./docs/smtp-provider.md).
 
 ### 5. Bring Your Own Provider
 
-Every external boundary is an interface — implement it and pass the instance (or class) to `forRoot`. The bundled `ResendEmailProvider` and `RedisOtpStorage` are reference implementations, not requirements.
+Every external boundary is an interface: implement it and pass the instance (or class) to `forRoot`. The bundled adapters are reference implementations, not requirements; SendGrid, Mailgun or AWS SES over HTTP are an `IEmailProvider` away.
 
 ```typescript
 import type {
@@ -378,37 +323,16 @@ export class SendGridEmailProvider implements IEmailProvider {
 }
 ```
 
-```typescript
-import type { IOtpStorage } from '@bymax-one/nest-notification'
-// Implement set / get / consumeAttempt / update / delete /
-// tryAcquireCooldown / getCooldown / clearCooldown.
-```
+A custom `IOtpStorage` implements the interface the package exports; the `/testing` subpath runs it against the contract.
 
 > [!IMPORTANT]
 > `consumeAttempt` and `tryAcquireCooldown` **must be atomic** — one indivisible read-modify-write (a Redis Lua script, or a synchronous operation for an in-memory store). Implemented as a `get` followed by an `update`, two concurrent requests both read the same attempt count and the `maxAttempts` ceiling stops being a ceiling.
 
-Adapter examples for several providers and stores live under [`docs/templates/`](./docs/templates/) and [`docs/schemas/`](./docs/schemas/):
-
-| Email provider          | Adapter                                   |
-| ----------------------- | ----------------------------------------- |
-| Resend                  | bundled — `ResendEmailProvider`           |
-| SMTP (any relay)        | bundled — `SmtpEmailProvider`             |
-| Mailpit / MailHog       | bundled — `SmtpEmailProvider`             |
-| AWS SES (SMTP endpoint) | bundled — `SmtpEmailProvider`             |
-| SendGrid                | implement `IEmailProvider` (sketch above) |
-| AWS SES (HTTP API)      | implement `IEmailProvider`                |
-| Mailgun                 | implement `IEmailProvider`                |
-
-| Template engine | Adapter                                                                                              |
-| --------------- | ---------------------------------------------------------------------------------------------------- |
-| Default         | bundled — `DefaultTemplateRenderer` (`{{var}}` interpolation, HTML-escaped)                          |
-| Handlebars      | [`docs/templates/handlebars-renderer.example.md`](./docs/templates/handlebars-renderer.example.md)   |
-| MJML            | [`docs/templates/mjml-renderer.example.md`](./docs/templates/mjml-renderer.example.md)               |
-| React Email     | [`docs/templates/react-email-renderer.example.md`](./docs/templates/react-email-renderer.example.md) |
+Template-engine adapters (Handlebars, MJML, React Email) are under [`docs/templates/`](./docs/templates/).
 
 ### 6. Audit Log
 
-The library never imports Prisma. You implement `INotificationLogRepository` against your own client; the module calls it fire-and-forget, so the audit sink can never crash the notification flow. A copy-pasteable Prisma schema fragment lives in [`docs/schemas/notification-log.prisma`](./docs/schemas/notification-log.prisma) and a full repository in [`docs/schemas/prisma-repository.example.md`](./docs/schemas/prisma-repository.example.md).
+The library never imports Prisma. You implement `INotificationLogRepository` against your own client and the module swallows its failures by default (`audit.swallowErrors`), so the audit sink does not crash the notification flow. A Prisma schema fragment is in [`docs/schemas/notification-log.prisma`](./docs/schemas/notification-log.prisma) and a full repository in [`docs/schemas/prisma-repository.example.md`](./docs/schemas/prisma-repository.example.md).
 
 ```typescript
 import { Injectable } from '@nestjs/common'
@@ -452,12 +376,7 @@ BymaxNotificationModule.forRoot({
 })
 ```
 
-To capture HTTP-level `sent` / `failed` entries automatically, apply the interceptor:
-
-```typescript
-import { NotificationAuditInterceptor } from '@bymax-one/nest-notification'
-// @UseInterceptors(NotificationAuditInterceptor) on a controller/handler, or wire it globally.
-```
+To capture HTTP-level `sent` / `failed` entries automatically, apply `NotificationAuditInterceptor` with `@UseInterceptors(...)` on a controller or handler, or wire it globally.
 
 ### 7. Frontend Integration (React)
 
@@ -498,7 +417,7 @@ function OtpForm({ expiresAt }: { expiresAt: number }) {
 }
 ```
 
-Pair it with the `./shared` subpath to branch on server errors without duplicating string literals:
+Branch on a server error without duplicating string literals:
 
 ```typescript
 import { NOTIFICATION_ERROR_CODES } from '@bymax-one/nest-notification/shared'
@@ -523,6 +442,9 @@ Configure via `forRoot(options)` or `forRootAsync({ useFactory })`. **At least o
 | `email`  | `defaultFrom`           | — (required)     | Must look like an email address.                                                                                                                   |
 | `email`  | `templateRenderer`      | default renderer | Any `IEmailTemplateRenderer`.                                                                                                                      |
 | `email`  | `maxAttachmentBytes`    | `10485760`       | 10 MiB attachment guard.                                                                                                                           |
+| `email`  | `defaultFromName`       | —                | Display name sent with `defaultFrom`.                                                                                                              |
+| `email`  | `defaultReplyTo`        | —                | `Reply-To` applied when a send does not set one.                                                                                                   |
+| `email`  | `defaultTags`           | `[]`             | Tags merged into every send, before the send's own tags.                                                                                           |
 | `otp`    | `storage`               | — (required)     | Instance or class implementing `IOtpStorage`.                                                                                                      |
 | `otp`    | `defaultLength`         | `6`              | 1–32.                                                                                                                                              |
 | `otp`    | `defaultCodeType`       | `'numeric'`      | `numeric` \| `alpha` \| `alphanumeric`.                                                                                                            |
@@ -530,9 +452,6 @@ Configure via `forRoot(options)` or `forRootAsync({ useFactory })`. **At least o
 | `otp`    | `defaultMaxAttempts`    | `5`              | Verify attempts before lock-out.                                                                                                                   |
 | `otp`    | `codeSecret`            | —                | Secret (>= 32 bytes) the stored code is keyed under.                                                                                               |
 | `otp`    | `consumeOnVerify`       | `false`          | `true` deletes the code when `verify()` succeeds; otherwise the entry is marked validated until `consume()` or its TTL.                            |
-| `email`  | `defaultFromName`       | —                | Display name sent with `defaultFrom`.                                                                                                              |
-| `email`  | `defaultReplyTo`        | —                | `Reply-To` applied when a send does not set one.                                                                                                   |
-| `email`  | `defaultTags`           | `[]`             | Tags merged into every send, before the send's own tags.                                                                                           |
 | `otp`    | `resendCooldownSeconds` | `60`             | Anti-resend window (atomic `SET NX EX`).                                                                                                           |
 | `otp`    | `perPurpose`            | `{}`             | Per-purpose overrides of the above.                                                                                                                |
 | `audit`  | `repository`            | — (required)     | Any `INotificationLogRepository`.                                                                                                                  |
@@ -585,22 +504,11 @@ The package runs **inside** your NestJS application as a dynamic module — not 
 
 `NotificationService` is the façade: it dispatches to the channel services and exposes `getEnabledChannels()`, `getEmail()`, and `getOtp()` for direct access. Only the channels present in your configuration are wired: `getEnabledChannels()` lists them, and `getEmail()` / `getOtp()` throw `CHANNEL_DISABLED` for a channel that is not.
 
-### Design Principles
-
-| Principle                     | Description                                                                                                                                                       |
-| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **🔌 Interface-Driven**       | Define contracts, inject implementations — works with any email provider, any store, any ORM (or none)                                                            |
-| **🔒 Secure by Default**      | CSPRNG codes, constant-time comparison, hashed keys, and a never-log-codes invariant — all on by default, nothing to opt into                                     |
-| **⚛️ Atomic Where It Counts** | The attempt counter and the resend cooldown are mutated by the storage in one indivisible step; a service-side read-then-write is a bug, not a style choice       |
-| **🪶 Zero Runtime Deps**      | `"dependencies": {}` — adds nothing of its own; crypto is native `node:crypto`. Required peers (NestJS…) come from your app, optional ones only when you use them |
-| **🌳 Tree-Shakeable**         | `sideEffects: false`, subpath exports, ESM + CJS dual output with declarations for both                                                                           |
-| **⚡ Conditional Loading**    | Unconfigured channels don't register — no wasted memory or startup time, and no half-wired channel that fails on the first send                                   |
-
 ---
 
 ## 🔐 Security Model
 
-OTP codes are bearer secrets with a short life and a wide blast radius: whoever holds one is the account. The model below is built around keeping them unreadable, unguessable, and unresendable.
+OTP codes are bearer secrets with a short life and a wide blast radius: whoever holds one is the account. The model below keeps them unreadable, unguessable, and unresendable.
 
 ### SHA-256 storage keys
 
@@ -648,24 +556,17 @@ With `audit.swallowErrors: false` the audit write comes after the state change, 
 
 ### The library never writes a code anywhere readable
 
-Everything below is about text **this library authors**. Text a provider authors is a separate
-problem with a documented ceiling — see [Errors](#errors) — and
-the two must not be read as one guarantee.
+This is about text **this library authors**. Text a provider authors has a documented ceiling (see [Errors](#-errors)); the two are not one guarantee. The library never writes a code to a sink that can be read back:
 
-The library **never** writes a code to a sink that can be read back:
+- **The audit log.** An entry is `{ verb, tenantId, recipient, purpose, providerName, … }`, never `code`.
+- **A console or logger line**, or an `errorMessage`, which carries the message only, never a stack trace.
+- **A rethrown delivery error.** The renderer and the provider both receive the code, so on a failed delivery every literal occurrence of it is scrubbed to `[redacted]` across the outgoing error chain (message and stack at every link, cycle-safe) before the audit write and the rethrow. The email channel's own `failed` entry goes further: OTP delivery sets `publishProviderText: false`, so it records the fixed label `[provider text withheld]` plus the SMTP reply codes a fixed grammar can express, never the provider's words.
 
-- Not to the audit log — an entry is `{ verb, tenantId, recipient, purpose, providerName, … }`, never `code`.
-- Not to a console or logger line.
-- Not inside an `errorMessage`, which carries the message only — never a stack trace.
-- Not inside a rethrown delivery error: the renderer and the provider both receive the code (template `data`, rendered body), so on a failed delivery every **literal** occurrence of the code — the form it was issued in, which is the form this library's own text carries — is scrubbed to `[redacted]` across the outgoing error chain — message **and** stack at every link, cycle-safe with no depth limit — before the audit write and the rethrow, and a non-`Error` rejection is flattened to a redacted string. The email channel's own `failed` audit entry goes further than redaction: OTP delivery sets `publishProviderText: false`, so that entry records the fixed label `[provider text withheld]` plus the SMTP reply codes a fixed grammar can express — never the provider's own words. It also declares the code via `auditRedactValues`, which stays as precision for the paths that do publish text. Default V8 stack frames carry only function names and source locations, never argument values; the header line (`Error: <message>`) is where a code could ride a stack, and the scrub covers it.
-
-Within this library, codes exist only inside the OTP store, under a TTL (as a keyed digest when `otp.codeSecret` is set, see below), and in process memory for the duration of the request — a provider that quotes the body back is outside that boundary, and its ceiling is documented under [Errors](#errors). `audit.maskRecipient` minimizes the recipient before it is persisted (`jane@acme.com` → `j***@acme.com`). A regression test asserts the invariant directly rather than trusting review: `JSON.stringify(auditEntry).includes(code) === false`.
+Codes exist only inside the OTP store, under a TTL (as a keyed digest when `otp.codeSecret` is set), and in process memory for the duration of the request. `audit.maskRecipient` minimizes the recipient before it is persisted (`jane@acme.com` → `j***@acme.com`). A regression test asserts the invariant directly: `JSON.stringify(auditEntry).includes(code) === false`.
 
 ### Stored codes are keyed digests when you set `otp.codeSecret`
 
 A code is short: a six-digit code has a million values, so a plain hash of it is recovered by trying all of them, in a fraction of a second, by anyone who can read the store. With `otp.codeSecret` set (a string of at least 32 bytes, kept with the application and never in Redis), the store holds `hmac-sha256:v1:<hex>`, an HMAC-SHA-256 of the code under that secret, and `verify()` recomputes it and compares in constant time. A reader of the store alone then holds nothing to test a guess against. The delivered email still carries the plaintext code, and the audit entry never carries either form.
-
-This is defence in depth, not a standards requirement: NIST SP 800-63B-4 requires hashed storage for look-up secrets (§3.1.2.2) and a keyed hash with the key "stored separately" for password verifiers (§3.1.1.2), and says nothing about hashing an out-of-band code (§3.1.3.2). The OWASP Password Storage Cheat Sheet describes the same shape for a low-entropy secret: an HMAC whose key is kept separately from the data.
 
 - **Unset** (the default): codes are stored in plaintext, and a warning is logged once at startup.
 - **Manual delivery is refused while it is set.** `generate()` never returns the code, so a manual delivery reads it back from the store, and a store that holds a digest has nothing to hand over. `generate({ deliverVia: 'manual' })`, or the default delivery when no email channel is configured, fails with `notification.otp_manual_delivery_unavailable` (400) before the cooldown is taken or anything is stored. Deliver by email, or leave `codeSecret` unset where you read the code from the store (a local development flow, for instance).
@@ -679,7 +580,7 @@ This is defence in depth, not a standards requirement: NIST SP 800-63B-4 require
 
 ### Failed attempts survive a re-issue
 
-NIST SP 800-63B-4 §3.1.3.2: "Generating a new authentication secret SHALL NOT reset the failed authentication count." A per-code counter alone breaks that rule: three wrong guesses, a re-issue after the resend cooldown, and three more were accepted, so the attempt limit was only a rate limit of `defaultMaxAttempts` guesses per cooldown. The failed verifications of a `(tenant, recipient, purpose)` are now counted in the storage, and `verify()` refuses once that count passes the purpose's attempt ceiling, whichever code is live.
+A per-code counter alone lets a re-issue reset the failure count: guess wrongly up to the limit, wait out the resend cooldown, and guess again. So the failed verifications of a `(tenant, recipient, purpose)` are counted in the storage, and `verify()` refuses once that count passes the purpose's attempt ceiling, whichever code is live.
 
 - Every verification attempt against a live code adds one to the count, before its code is compared, and restarts the counter's lifetime to the purpose's code lifetime (`ttlSeconds`); a counter that is not touched for that long lapses, which starts the count again from zero.
 - A successful verification and `consume()` clear it (the attempt that succeeded included), so the next flow starts with a full budget.
@@ -703,52 +604,26 @@ When integrating `@bymax-one/nest-notification` in production, verify each of th
 
 ## 🛡️ Security Table
 
-| Layer              | Implementation                                                                                                                                                                                  |
-| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Code Generation    | `crypto.randomInt` per character over the configured alphabet — uniform at every position, no modulo bias                                                                                       |
-| Code Comparison    | `crypto.timingSafeEqual` (constant-time), never `===`                                                                                                                                           |
-| Storage Keys       | `sha256(sha256(tenantId):sha256(recipient))` — no recipient PII; the encoding adds no ambiguity, so no two pairs share a key by construction                                                    |
-| Attempt Ceiling    | Counter spent atomically inside the storage (Redis Lua) — never a service-side read-then-write                                                                                                  |
-| Resend Cooldown    | `SET NX EX` acquire, released only on delivery failure — two concurrent resends cannot both win                                                                                                 |
-| Code Lifetime      | TTL-bound in the store; expiry and absence are reported identically so neither leaks the other                                                                                                  |
-| Code Exposure      | Never logged, audited, or placed in an error message or stack trace **by this library** — asserted by a regression test. Provider-authored text has a documented ceiling: see [Errors](#errors) |
-| Recipient PII      | Absent from keys; optionally masked before it reaches the audit sink                                                                                                                            |
-| Provider Secrets   | The Resend API key, the SMTP password and the Redis client live in private fields; serializing a provider omits them, and a failing SMTP session has its password scrubbed from the error       |
-| Tenant Isolation   | `tenantId` scopes every operation and is resolved from a trusted source, not the payload                                                                                                        |
-| Template Injection | HTML body escaped on interpolation by the bundled renderer — closes stored XSS through a display name                                                                                           |
-| Attachment DoS     | Total attachment size rejected against a budget before the provider is called                                                                                                                   |
-| Audit Failures     | Fire-and-forget with `swallowErrors` — an audit outage never becomes a delivery outage                                                                                                          |
-| Supply Chain       | `"dependencies": {}`; published with npm provenance (OIDC), CodeQL and OpenSSF Scorecard on every push                                                                                          |
+| Layer              | Implementation                                                                                                                                                                            |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Code Lifetime      | TTL-bound in the store; expiry and absence are reported identically so neither leaks the other                                                                                            |
+| Provider Secrets   | The Resend API key, the SMTP password and the Redis client live in private fields; serializing a provider omits them, and a failing SMTP session has its password scrubbed from the error |
+| Template Injection | HTML body escaped on interpolation by the bundled renderer — closes stored XSS through a display name                                                                                     |
+| Attachment DoS     | Total attachment size rejected against a budget before the provider is called                                                                                                             |
+| Supply Chain       | `"dependencies": {}`; published with npm provenance (OIDC), CodeQL and OpenSSF Scorecard                                                                                                  |
 
 > [!IMPORTANT]
 > This package uses **zero external cryptographic dependencies**. All operations use Node.js native `node:crypto`, eliminating supply chain attack vectors for critical security code.
 
 ---
 
-## 🧱 Tech Stack
-
-<p>
-  <img src="https://img.shields.io/badge/NestJS-11-E0234E?style=flat-square&logo=nestjs&logoColor=white" alt="NestJS" />
-  <img src="https://img.shields.io/badge/TypeScript-strict-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" />
-  <img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black" alt="React" />
-  <img src="https://img.shields.io/badge/Node.js-24%2B-339933?style=flat-square&logo=node.js&logoColor=white" alt="Node.js" />
-  <img src="https://img.shields.io/badge/Redis-7%2B-DC382D?style=flat-square&logo=redis&logoColor=white" alt="Redis" />
-  <img src="https://img.shields.io/badge/Resend-email-000000?style=flat-square&logo=resend&logoColor=white" alt="Resend" />
-  <img src="https://img.shields.io/badge/Jest-30-C21325?style=flat-square&logo=jest&logoColor=white" alt="Jest" />
-</p>
-
----
-
 ## 🧪 Testing & Quality
 
-A one-time password is a credential, so the suite is held to a bar beyond "it runs" — every behavior is pinned so that a regression **fails a test**.
+A one-time password is a credential, so every behavior is pinned so that a regression **fails a test**.
 
-- ✅ **100% line coverage** — statements, branches, functions, and lines, enforced per file as a release gate across unit + e2e
-- ✅ **100% mutation score** — verified with [Stryker](https://stryker-mutator.io/): every viable seeded fault killed, with **no survivors**, against a `break` threshold of 100. The equivalents that no test can kill carry their reason on the line they apply to, so the number is an accounting rather than a target
-- ✅ **100% coverage** — unit and end-to-end tests spanning every subpath
-- ✅ **Invariants asserted, not assumed** — the never-log-codes rule is a test (`JSON.stringify(entry).includes(code) === false` on every audit entry, and the thrown exception is serialized recursively — message, stack, response body, every nested `cause` — asserting the code appears at no depth), not a review convention
+- ✅ **100% coverage and mutation score** — per file across unit and end-to-end tests of every subpath, with [Stryker](https://stryker-mutator.io/) at `break: 100`. The equivalent mutants no test can kill carry an inline `// Stryker disable` with the reason, so the score is an accounting rather than a target
+- ✅ **Invariants asserted, not assumed** — the never-log-codes rule is a test (`JSON.stringify(entry).includes(code) === false` on every audit entry, and the thrown exception serialized recursively at every depth), not a review convention
 - ✅ **Published shape verified** — `attw` resolves every entrypoint against the packed tarball, and a dogfood smoke test installs the package into a scratch consumer before any tag is cut
-- ✅ **Every equivalent mutant documented** — the ones no test can kill carry an inline `// Stryker disable` with the reason, so the score is an accounting rather than a number
 
 | Gate           | Standard                                                                            |
 | -------------- | ----------------------------------------------------------------------------------- |
@@ -809,7 +684,7 @@ pnpm mutation      # Stryker mutation testing
 | `tags`                        | Merged after `defaultTags`.                                                                        |
 | `attachments`                 | `{ filename, content, contentType? }[]`; their total size is checked against `maxAttachmentBytes`. |
 | `userId`                      | Recorded in the audit entry.                                                                       |
-| `auditRedactValues`           | Values scrubbed from the failure's `cause` and `errorMessage`. See [Errors](#errors).              |
+| `auditRedactValues`           | Values scrubbed from the failure's `cause` and `errorMessage`. See [Errors](#-errors).             |
 | `publishProviderText`         | `false` withholds everything the provider wrote. Default `true`.                                   |
 
 `OtpService.generate()` and `resend()` take:
@@ -828,75 +703,6 @@ pnpm mutation      # Stryker mutation testing
 | Member                         | Purpose                                                                                          |
 | ------------------------------ | ------------------------------------------------------------------------------------------------ |
 | `NotificationAuditInterceptor` | Records `sent` / `failed` audit entries at the HTTP layer, tenant resolved by `tenantIdResolver` |
-
-### Errors
-
-| Member                           | Purpose                                                                    |
-| -------------------------------- | -------------------------------------------------------------------------- |
-| `NotificationException`          | `HttpException` carrying a stable `code`, a status, and optional `details` |
-| `NotificationExceptionOptions`   | Constructor options bag: `{ status?, message?, cause? }`                   |
-| `NOTIFICATION_ERROR_CODES`       | The 24 stable `notification.*` codes — branch on these, not on messages    |
-| `NOTIFICATION_ERROR_DEFINITIONS` | Server-side code → HTTP status + default English message                   |
-
-Error codes are namespaced (`notification.otp_invalid_code`, `notification.otp_cooldown_active`, `notification.email_send_failed`, …) and never change once published. Default messages are English; localize on the `code`.
-
-A code marked **reserved** is part of the catalog but is never thrown by the library, so a consumer can map it without the library ever raising it behind their back. The four OTP verify outcomes are the notable ones: `verify()` returns its failure as a result (`{ valid: false, reason }`) and never throws it, so your controller maps `reason` to the code it wants to answer with. The SMS and push codes stay reserved until those channels exist.
-
-| Code                                             | Status | Raised by                                                                                                                           |
-| ------------------------------------------------ | ------ | ----------------------------------------------------------------------------------------------------------------------------------- |
-| `notification.email_provider_not_configured`     | 500    | `EmailService` — the provider reports `isConfigured() === false`                                                                    |
-| `notification.email_send_failed`                 | 502    | `EmailService` — the provider rejected the send                                                                                     |
-| `notification.email_attachments_too_large`       | 413    | `EmailService` — the attachments exceed `maxAttachmentBytes`                                                                        |
-| `notification.email_invalid_recipient`           | 400    | reserved — `to` is not validated; a bad address surfaces as `email_send_failed`                                                     |
-| `notification.email_missing_body`                | 400    | `NotificationService.dispatch` — neither a template nor a subject and body                                                          |
-| `notification.template_not_found`                | 500    | `EmailService.sendTemplate` — no template for the locale or the fallback (for `otp_code`, `details.remedy` says how to register it) |
-| `notification.template_render_failed`            | 500    | `EmailService.sendTemplate` — the renderer threw                                                                                    |
-| `notification.otp_storage_not_configured`        | 500    | `OtpService` — the OTP channel is absent                                                                                            |
-| `notification.otp_email_delivery_not_configured` | 500    | `OtpService.generate` — email delivery without an email channel                                                                     |
-| `notification.otp_manual_delivery_unavailable`   | 400    | `OtpService.generate` — manual delivery while `otp.codeSecret` is set                                                               |
-| `notification.otp_cooldown_active`               | 429    | `OtpService.generate` and `resend` — inside the resend cooldown                                                                     |
-| `notification.otp_not_found`                     | 404    | reserved — `verify()` returns `{ valid: false, reason: 'not_found' }`                                                               |
-| `notification.otp_expired`                       | 410    | reserved — an expired code is reported as `not_found`                                                                               |
-| `notification.otp_max_attempts_exceeded`         | 429    | reserved — `verify()` returns `{ valid: false, reason: 'max_attempts' }`                                                            |
-| `notification.otp_invalid_code`                  | 401    | reserved — `verify()` returns `{ valid: false, reason: 'invalid_code' }`                                                            |
-| `notification.otp_invalid_length`                | 400    | module options validation and the code generator                                                                                    |
-| `notification.sms_provider_not_configured`       | 500    | reserved — the SMS channel is not implemented                                                                                       |
-| `notification.sms_send_failed`                   | 502    | reserved — the SMS channel is not implemented                                                                                       |
-| `notification.sms_invalid_recipient`             | 400    | reserved — the SMS channel is not implemented                                                                                       |
-| `notification.push_provider_not_configured`      | 500    | reserved — the push channel is not implemented                                                                                      |
-| `notification.push_send_failed`                  | 502    | reserved — the push channel is not implemented                                                                                      |
-| `notification.audit_log_failed`                  | 500    | `EmailService`, `OtpService` and `NotificationAuditInterceptor` — only with `audit.swallowErrors: false`                            |
-| `notification.channel_disabled`                  | 501    | `NotificationService` — the channel is absent, or its provider or storage is not usable                                             |
-| `notification.invalid_scope_identifier`          | 400    | `OtpService`, `EmailService` and `NotificationAuditInterceptor` — a blank or control-character tenant or recipient                  |
-
-Failures raised by the library carry the underlying error as the native `Error.cause` — a provider's `connect ECONNREFUSED` sits on `exception.cause`, where cause-walking log serializers (e.g. pino's `err`) print it alongside the stable code. The cause is stored as a **log-safe copy**: `name`, `message`, `stack`, and the nested `cause` chain survive (depth-bounded); every other property is dropped, because SDK errors routinely retain the request payload (an axios-style `config.data`) and for an OTP email that payload contains the code. The cause never enters the HTTP response body either: `details` stays reserved for the structured, client-safe context shown above. To attach a cause in your own code, pass the options bag as the third constructor argument — `new NotificationException('EMAIL_SEND_FAILED', { providerName }, { cause: error })`; the positional `(key, details, status, message)` form keeps working.
-
-**If you send a secret through `EmailService` yourself — declare it, and treat the provider's error text as untrusted anyway.** A relay or DLP filter that quotes the rejected content puts the rendered body (and any secret inside it) into the provider error, which rides the `cause` into your logs. Pass `auditRedactValues: [code]` on the send input: the value is scrubbed from the attached `cause`, from the failed-audit `errorMessage`, and — forwarded as `EmailSendOptions.redactValues` — from the provider's own error logging. As defense-in-depth for the undeclared case, any run of 16+ characters of the rendered body detected inside a provider error is redacted automatically.
-
-**Withholding provider text — `publishProviderText: false`.** For a message whose body carries a credential, set it on the send input (`EmailService.send` or `sendTemplate`); the built-in OTP delivery already does. The failure then carries **no byte the provider wrote**: no `cause`, and the audit entry's `errorMessage` is the fixed label `[provider text withheld]`.
-
-What it publishes instead is what a fixed grammar can express — the basic SMTP reply code and, when present, the RFC 3463 enhanced code — as structured fields. The two surfaces name them differently, so read the right keys: the audit entry carries `deliveryStatus` and `deliveryEnhancedStatus`, while the exception's `details` carries `status` and `enhanced`.
-
-```ts
-await emailService.send({
-  tenantId,
-  to: user.email,
-  subject: 'Your code',
-  html: rendered,
-  publishProviderText: false // this body carries a credential
-})
-// On failure: NotificationException('notification.email_send_failed')
-//   details → { providerName: 'smtp', status: 550, enhanced: '5.7.1' }
-//   cause   → absent
-// Audit entry: { verb: 'failed', errorMessage: '[provider text withheld]',
-//                deliveryStatus: 550, deliveryEnhancedStatus: '5.7.1', … }
-```
-
-Three properties worth knowing before you rely on it. The published codes are **independent of the secret** — the same reply publishes `550 5.7.1` whether the code was `550571`, `123456` or absent — which is why they are safe to log while the prose is not. **Ambiguity resolves to silence**: a text carrying two different replies publishes neither, so a cause chain cannot have `424` and `242` read as one value. And a code that would carry a **declared** secret is dropped, since this library's invariant is that a code's characters never reach an audit entry.
-
-The default is `true`, and deliberately so: for a receipt or a marketing send the provider's message is often the only diagnosis available. The flag is **per send, never global** — one setting cannot serve an OTP path and a marketing path in the same application.
-
-**Know the ceiling of both guards.** They remove the shapes they can predict, and a relay quotes what it _transmitted_, not what you handed it — a MIME body travels raw, quoted-printable or base64. A declared `123456` cannot match `MTIzNDU2`, and echo detection compares the error against the rendered body it holds, not against the encoding the relay chose; measured, an error quoting the base64 of the body survives both. No list of values closes an encoding gap. So control whether provider error text reaches your logs at all for secret-bearing sends — pass `publishProviderText: false` on the send input, which withholds every provider-authored byte and publishes only the SMTP reply codes a fixed grammar can express — and use declared values as precision on top of that rather than as the barrier. If you consume `@bymax-one/nest-auth` and bind its bundled `DefaultAuthEmailProvider`, that provider is the call site, so the declaration belongs there rather than in your application code; if you implement `nest-auth`'s email port yourself, your adapter is the call site and the declaration is yours to make.
 
 ### Reference adapters
 
@@ -973,27 +779,90 @@ Passing the contract does not prove a key encoding safe against every delimiter:
 
 ---
 
+## 🚨 Errors
+
+| Member                           | Purpose                                                                    |
+| -------------------------------- | -------------------------------------------------------------------------- |
+| `NotificationException`          | `HttpException` carrying a stable `code`, a status, and optional `details` |
+| `NotificationExceptionOptions`   | Constructor options bag: `{ status?, message?, cause? }`                   |
+| `NOTIFICATION_ERROR_CODES`       | The stable `notification.*` codes — branch on these, not on messages       |
+| `NOTIFICATION_ERROR_DEFINITIONS` | Server-side code → HTTP status + default English message                   |
+
+Codes never change once published; default messages are English, so localize on the `code`. A code marked **reserved** is in the catalog but never thrown by the library. The OTP verify codes are reserved: `verify()` returns its failure as a result (`{ valid: false, reason }`) and never throws it, so your controller maps `reason` to the code it answers with. The SMS and push codes stay reserved until those channels exist.
+
+| Code                                             | Status | Raised by                                                                                                                           |
+| ------------------------------------------------ | ------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `notification.email_provider_not_configured`     | 500    | `EmailService` — the provider reports `isConfigured() === false`                                                                    |
+| `notification.email_send_failed`                 | 502    | `EmailService` — the provider rejected the send                                                                                     |
+| `notification.email_attachments_too_large`       | 413    | `EmailService` — the attachments exceed `maxAttachmentBytes`                                                                        |
+| `notification.email_invalid_recipient`           | 400    | reserved — `to` is not validated; a bad address surfaces as `email_send_failed`                                                     |
+| `notification.email_missing_body`                | 400    | `NotificationService.dispatch` — neither a template nor a subject and body                                                          |
+| `notification.template_not_found`                | 500    | `EmailService.sendTemplate` — no template for the locale or the fallback (for `otp_code`, `details.remedy` says how to register it) |
+| `notification.template_render_failed`            | 500    | `EmailService.sendTemplate` — the renderer threw                                                                                    |
+| `notification.otp_storage_not_configured`        | 500    | `OtpService` — the OTP channel is absent                                                                                            |
+| `notification.otp_email_delivery_not_configured` | 500    | `OtpService.generate` — email delivery without an email channel                                                                     |
+| `notification.otp_manual_delivery_unavailable`   | 400    | `OtpService.generate` — manual delivery while `otp.codeSecret` is set                                                               |
+| `notification.otp_cooldown_active`               | 429    | `OtpService.generate` and `resend` — inside the resend cooldown                                                                     |
+| `notification.otp_not_found`                     | 404    | reserved — `verify()` returns `{ valid: false, reason: 'not_found' }`                                                               |
+| `notification.otp_expired`                       | 410    | reserved — an expired code is reported as `not_found`                                                                               |
+| `notification.otp_max_attempts_exceeded`         | 429    | reserved — `verify()` returns `{ valid: false, reason: 'max_attempts' }`                                                            |
+| `notification.otp_invalid_code`                  | 401    | reserved — `verify()` returns `{ valid: false, reason: 'invalid_code' }`                                                            |
+| `notification.otp_invalid_length`                | 400    | module options validation and the code generator                                                                                    |
+| `notification.sms_provider_not_configured`       | 500    | reserved — the SMS channel is not implemented                                                                                       |
+| `notification.sms_send_failed`                   | 502    | reserved — the SMS channel is not implemented                                                                                       |
+| `notification.sms_invalid_recipient`             | 400    | reserved — the SMS channel is not implemented                                                                                       |
+| `notification.push_provider_not_configured`      | 500    | reserved — the push channel is not implemented                                                                                      |
+| `notification.push_send_failed`                  | 502    | reserved — the push channel is not implemented                                                                                      |
+| `notification.audit_log_failed`                  | 500    | `EmailService`, `OtpService` and `NotificationAuditInterceptor` — only with `audit.swallowErrors: false`                            |
+| `notification.channel_disabled`                  | 501    | `NotificationService` — the channel is absent, or its provider or storage is not usable                                             |
+| `notification.invalid_scope_identifier`          | 400    | `OtpService`, `EmailService` and `NotificationAuditInterceptor` — a blank or control-character tenant or recipient                  |
+
+The library attaches the underlying error as the native `Error.cause`, as a **log-safe copy**: `name`, `message`, `stack` and the depth-bounded `cause` chain survive, and every other property is dropped, because SDK errors retain the request payload and, for an OTP email, that payload holds the code. The cause never enters the HTTP response, and `details` stays client-safe. To attach one yourself, pass the options bag third: `new NotificationException('EMAIL_SEND_FAILED', { providerName }, { cause: error })`.
+
+### Secrets in provider error text
+
+A relay that quotes the rejected content puts the rendered body into the provider error, which rides the `cause` into your logs. Two controls, both per send:
+
+- **Declare the secret.** `auditRedactValues: [code]` scrubs it from the `cause`, from the failed-audit `errorMessage`, and from the provider's own error logging (as `EmailSendOptions.redactValues`). Any run of 16+ characters of the rendered body found in a provider error is also redacted.
+- **Withhold the provider text.** `publishProviderText: false` (the built-in OTP delivery already sets it) removes every byte the provider wrote: no `cause`, and an `errorMessage` of `[provider text withheld]`. It publishes only the SMTP reply code and the RFC 3463 enhanced code, which are independent of the secret. The audit entry names them `deliveryStatus` / `deliveryEnhancedStatus`; the exception's `details` names them `status` / `enhanced`.
+
+```ts
+await emailService.send({
+  tenantId,
+  to: user.email,
+  subject: 'Your code',
+  html: rendered,
+  publishProviderText: false // this body carries a credential
+})
+// On failure: NotificationException('notification.email_send_failed')
+//   details → { providerName: 'smtp', status: 550, enhanced: '5.7.1' }
+//   cause   → absent
+// Audit entry: { verb: 'failed', errorMessage: '[provider text withheld]',
+//                deliveryStatus: 550, deliveryEnhancedStatus: '5.7.1', … }
+```
+
+> [!WARNING]
+> Declared values are not a barrier. A relay quotes what it _transmitted_ (a MIME body travels raw, quoted-printable or base64), so a declared `123456` cannot match `MTIzNDU2`, and no list of values closes an encoding gap. For a secret-bearing send, withhold the provider text and use declared values as precision on top. The default of `publishProviderText` is `true`: for a receipt or a marketing send the provider's message is often the only diagnosis available.
+
+---
+
+## 🚫 What This Library Does NOT Do
+
+- **No SMS or push channel.** Only email and OTP exist; the SMS and push error codes and tokens are reserved.
+- **No HTTP endpoints.** It ships no controller or route. Your controller resolves the tenant, calls the services, and maps `verify()` results to responses.
+- **No rate limiting by IP.** It bounds failed attempts per recipient and purpose, not requests per client. Rate-limit the OTP endpoints yourself.
+- **No database or ORM.** It never imports `@prisma/client`; persistence is behind `IOtpStorage` and `INotificationLogRepository`, which you implement or take from the bundled adapters.
+- **No address validation.** `to` is not validated, so a bad address surfaces as `email_send_failed` from the provider.
+- **No translations.** Default error messages are English; localize on the `code`.
+- **No template engine beyond `{{var}}`.** Handlebars, MJML and React Email plug in through `IEmailTemplateRenderer`.
+- **No `useClass` / `useExisting` configuration.** `forRootAsync` supports `useFactory` only and rejects the others at startup.
+- **No verification in the React hooks.** They drive the input box and the countdown; verifying the code is your app's job.
+
+---
+
 ## 🤝 Contributing
 
-Contributions are welcome! Please read our [contributing guidelines](./CONTRIBUTING.md) before submitting a pull request.
-
-```bash
-# Clone the repository
-git clone https://github.com/bymaxone/nest-notification.git
-cd nest-notification
-
-# Install dependencies
-pnpm install
-
-# Run tests
-pnpm test
-
-# Build
-pnpm build
-
-# Type check
-pnpm typecheck
-```
+Contributions are welcome. Read the [contributing guidelines](./CONTRIBUTING.md) before submitting a pull request; it covers the setup and the checks a change has to pass.
 
 ---
 

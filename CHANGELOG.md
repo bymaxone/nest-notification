@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.8] - 2026-11-12
+
+### Documentation
+
+- The README is shorter and says only what a consumer needs. It drops a sentence of project
+  history and guidance about another library's provider, defines the `otp_code` template once,
+  groups the email rows of the Configuration table, and gives Errors its own section with the
+  provider-text guidance condensed. A new section lists what the library does not do.
+- The `SmtpEmailProvider` option table, the TLS rationale and the header-injection guard moved to
+  [`docs/smtp-provider.md`](https://github.com/bymaxone/nest-notification/blob/main/docs/smtp-provider.md);
+  the README keeps a short section and the link.
+- Wording fixes: audit failures are swallowed by default (`audit.swallowErrors`), not
+  never; the OTP verify codes are reserved; and the Supply chain row no longer claims a scan on
+  every push.
+
+`dist/` is unchanged from 1.4.7: no source, declaration or behaviour change.
+
 ## [1.4.7] - 2026-11-07
 
 ### Added
@@ -1041,7 +1058,8 @@ rejected at startup rather than failing on the first send.
 
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.4.7...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.4.8...HEAD
+[1.4.8]: https://github.com/bymaxone/nest-notification/compare/v1.4.7...v1.4.8
 [1.4.7]: https://github.com/bymaxone/nest-notification/compare/v1.4.6...v1.4.7
 [1.4.6]: https://github.com/bymaxone/nest-notification/compare/v1.4.5...v1.4.6
 [1.4.5]: https://github.com/bymaxone/nest-notification/compare/v1.4.4...v1.4.5

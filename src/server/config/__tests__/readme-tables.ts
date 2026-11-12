@@ -10,10 +10,12 @@ import { join } from 'node:path'
 // The README ships to npm, and a table that drifted from the defaults is read by a consumer as the
 // contract; nothing else in the pipeline reads these cells.
 
-const README = readFileSync(join(__dirname, '..', '..', '..', '..', 'README.md'), 'utf8')
+const ROOT = join(__dirname, '..', '..', '..', '..')
 
-/** The README with fenced blocks removed, so a `|` inside a code sample is never a table row. */
-const PROSE = README.replace(/^```[\s\S]*?^```$/gm, '')
+/** A document with fenced blocks removed, so a `|` inside a code sample is never a table row. */
+function proseOf(file: string): string {
+  return readFileSync(join(ROOT, file), 'utf8').replace(/^```[\s\S]*?^```$/gm, '')
+}
 
 /** Splits one table row into its trimmed cells, honouring the `\|` escape inside a cell. */
 function cellsOf(row: string): string[] {
@@ -29,20 +31,21 @@ export function unquote(cell: string): string {
 }
 
 /**
- * Returns the body rows of the README table whose header row starts with `headers`.
+ * Returns the body rows of the table whose header row starts with `headers`.
  *
  * @param headers - The leading header cells that identify the table.
+ * @param file - The document to read, relative to the repository root; the README by default.
  * @returns One array of cells per body row.
  * @throws Error When no table carries those headers, so a renamed header fails loudly.
  */
-export function readmeTable(headers: readonly string[]): string[][] {
-  const lines = PROSE.split('\n')
+export function readmeTable(headers: readonly string[], file = 'README.md'): string[][] {
+  const lines = proseOf(file).split('\n')
   const start = lines.findIndex((line) => {
     const cells = cellsOf(line)
     return line.startsWith('|') && cells.slice(0, headers.length).join('|') === headers.join('|')
   })
   if (start === -1) {
-    throw new Error(`README has no table headed ${headers.join(' | ')}`)
+    throw new Error(`${file} has no table headed ${headers.join(' | ')}`)
   }
   const rows: string[][] = []
   for (const line of lines.slice(start + 2)) {

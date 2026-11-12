@@ -1,5 +1,5 @@
 /**
- * @fileoverview Holds the README SMTP option table to the transport configuration
+ * @fileoverview Holds the SMTP option table of `docs/smtp-provider.md` to the transport configuration
  * `SmtpEmailProvider` builds: port, TLS, credentials, timeouts and the required `host`.
  * @layer infrastructure
  */
@@ -20,10 +20,10 @@ jest.mock(
   { virtual: true }
 )
 
-// The README's SMTP option table is what a consumer reads as the contract. These cases parse it
+// The SMTP option table (docs/smtp-provider.md, which the README links) is what a consumer reads as the contract. These cases parse it
 // and hold each stated default to the transport configuration the provider actually builds.
 
-const table = readmeTable(['Option', 'Default', 'Notes'])
+const table = readmeTable(['Option', 'Default', 'Notes'], 'docs/smtp-provider.md')
 const rows = new Map(
   table.map(([option = '', fallback = '']) => [unquote(option), unquote(fallback)])
 )
@@ -45,7 +45,7 @@ function seconds(cell: string): number {
   return Number(cell.replace(/s$/, '')) * 1000
 }
 
-describe('README SMTP option table', () => {
+describe('SMTP option table', () => {
   beforeEach(() => {
     jest.clearAllMocks()
   })
@@ -57,7 +57,7 @@ describe('README SMTP option table', () => {
     )
   })
 
-  // `host` is the one required option: the README says so, and without it the provider reports
+  // `host` is the one required option: the table says so, and without it the provider reports
   // itself unconfigured and refuses to send.
   it('should document host as required and refuse a send without it', async () => {
     const provider = new SmtpEmailProvider({})

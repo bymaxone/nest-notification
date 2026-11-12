@@ -9,6 +9,7 @@
  */
 import type {
   EmailService,
+  IEmailTemplateRenderer,
   INotificationLogRepository,
   NotificationService,
   OtpService,
@@ -29,6 +30,8 @@ declare global {
 
   /** The Redis client the Production snippet passes to `RedisOtpStorage`. */
   const redis: ConstructorParameters<typeof RedisOtpStorage>[0]['redisClient']
+  /** The renderer the Development snippet defines and the Production snippet reuses. */
+  const templateRenderer: IEmailTemplateRenderer
   /** The Resend API key the snippets read from their own configuration. */
   const apiKey: string
   /** The application's Prisma client, which the library never imports. */
