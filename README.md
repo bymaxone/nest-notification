@@ -69,7 +69,7 @@ Everything that touches the outside world — the email transport, the OTP store
 
 - ✅ **SHA-256 storage keys** — `sha256(sha256(tenantId):sha256(recipient))`: no recipient PII in a key, and the encoding adds no ambiguity of its own, so two pairs never share one by construction
 - ✅ **`tenantIdResolver`** — the audited tenant comes from a trusted source (a JWT claim, a subdomain, a gateway-checked header), not the payload
-- ✅ **Opt-in audit log** — a fire-and-forget `INotificationLogRepository` plus a `NotificationAuditInterceptor`; audit failures never break delivery
+- ✅ **Opt-in audit log** — a fire-and-forget `INotificationLogRepository` plus a `NotificationAuditInterceptor`; audit failures do not break delivery unless `audit.swallowErrors` is `false`
 - ✅ **This library never logs a code** — not to a logger, an audit entry, or an error message it authors, enforced by a regression test. Text a **provider** authors has a documented ceiling: see [Errors](#-errors)
 
 ### 🧩 Developer Experience
@@ -323,7 +323,7 @@ export class SendGridEmailProvider implements IEmailProvider {
 }
 ```
 
-A custom `IOtpStorage` implements `set`, `get`, `consumeAttempt`, `update`, `delete`, `tryAcquireCooldown`, `getCooldown` and `clearCooldown`.
+A custom `IOtpStorage` implements the interface the package exports; the `/testing` subpath runs it against the contract.
 
 > [!IMPORTANT]
 > `consumeAttempt` and `tryAcquireCooldown` **must be atomic** — one indivisible read-modify-write (a Redis Lua script, or a synchronous operation for an in-memory store). Implemented as a `get` followed by an `update`, two concurrent requests both read the same attempt count and the `maxAttempts` ceiling stops being a ceiling.
@@ -332,7 +332,7 @@ Template-engine adapters (Handlebars, MJML, React Email) are under [`docs/templa
 
 ### 6. Audit Log
 
-The library never imports Prisma. You implement `INotificationLogRepository` against your own client and the module calls it fire-and-forget, so the audit sink can never crash the notification flow. A Prisma schema fragment is in [`docs/schemas/notification-log.prisma`](./docs/schemas/notification-log.prisma) and a full repository in [`docs/schemas/prisma-repository.example.md`](./docs/schemas/prisma-repository.example.md).
+The library never imports Prisma. You implement `INotificationLogRepository` against your own client and the module swallows its failures by default (`audit.swallowErrors`), so the audit sink does not crash the notification flow. A Prisma schema fragment is in [`docs/schemas/notification-log.prisma`](./docs/schemas/notification-log.prisma) and a full repository in [`docs/schemas/prisma-repository.example.md`](./docs/schemas/prisma-repository.example.md).
 
 ```typescript
 import { Injectable } from '@nestjs/common'
@@ -610,7 +610,7 @@ When integrating `@bymax-one/nest-notification` in production, verify each of th
 | Provider Secrets   | The Resend API key, the SMTP password and the Redis client live in private fields; serializing a provider omits them, and a failing SMTP session has its password scrubbed from the error |
 | Template Injection | HTML body escaped on interpolation by the bundled renderer — closes stored XSS through a display name                                                                                     |
 | Attachment DoS     | Total attachment size rejected against a budget before the provider is called                                                                                                             |
-| Supply Chain       | `"dependencies": {}`; published with npm provenance (OIDC), CodeQL and OpenSSF Scorecard on every push                                                                                    |
+| Supply Chain       | `"dependencies": {}`; published with npm provenance (OIDC), CodeQL and OpenSSF Scorecard                                                                                                  |
 
 > [!IMPORTANT]
 > This package uses **zero external cryptographic dependencies**. All operations use Node.js native `node:crypto`, eliminating supply chain attack vectors for critical security code.
@@ -785,10 +785,10 @@ Passing the contract does not prove a key encoding safe against every delimiter:
 | -------------------------------- | -------------------------------------------------------------------------- |
 | `NotificationException`          | `HttpException` carrying a stable `code`, a status, and optional `details` |
 | `NotificationExceptionOptions`   | Constructor options bag: `{ status?, message?, cause? }`                   |
-| `NOTIFICATION_ERROR_CODES`       | The 24 stable `notification.*` codes — branch on these, not on messages    |
+| `NOTIFICATION_ERROR_CODES`       | The stable `notification.*` codes — branch on these, not on messages       |
 | `NOTIFICATION_ERROR_DEFINITIONS` | Server-side code → HTTP status + default English message                   |
 
-Codes never change once published; default messages are English, so localize on the `code`. A code marked **reserved** is in the catalog but never thrown by the library. The four OTP verify outcomes are the notable ones: `verify()` returns its failure as a result (`{ valid: false, reason }`) and never throws it, so your controller maps `reason` to the code it answers with. The SMS and push codes stay reserved until those channels exist.
+Codes never change once published; default messages are English, so localize on the `code`. A code marked **reserved** is in the catalog but never thrown by the library. The OTP verify codes are reserved: `verify()` returns its failure as a result (`{ valid: false, reason }`) and never throws it, so your controller maps `reason` to the code it answers with. The SMS and push codes stay reserved until those channels exist.
 
 | Code                                             | Status | Raised by                                                                                                                           |
 | ------------------------------------------------ | ------ | ----------------------------------------------------------------------------------------------------------------------------------- |
