@@ -18,7 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The `SmtpEmailProvider` option table, the TLS rationale and the header-injection guard moved to
   [`docs/smtp-provider.md`](https://github.com/bymaxone/nest-notification/blob/main/docs/smtp-provider.md);
   the README keeps a short section and the link.
-- Three wording corrections: audit failures are swallowed by default (`audit.swallowErrors`), not
+- Wording fixes: audit failures are swallowed by default (`audit.swallowErrors`), not
   never; the OTP verify codes are reserved; and the Supply chain row no longer claims a scan on
   every push.
 
