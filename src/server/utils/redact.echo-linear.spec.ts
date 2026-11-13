@@ -111,6 +111,30 @@ describe('collectEchoedExcerpts answers', () => {
     }
   )
 
+  // A message that quotes several slices of the reference, each followed by something else: the
+  // longest match at a position then sits at a different place than the shorter ones that
+  // overlap it, which is the shape that exercises both directions of the suffix-link walk.
+  it.each([11, 12, 13, 14, 15, 16])(
+    'should give the same excerpts for a message built from slices of the reference (seed %i)',
+    (seed) => {
+      const random = lcg(seed)
+      for (let round = 0; round < 60; round += 1) {
+        const alphabet = ['abc', 'abcd', 'abcdef'][round % 3] as string
+        const reference = randomText(random, 150 + Math.floor(random() * 250), alphabet)
+        let message = ''
+        for (let piece = 0; piece < 6; piece += 1) {
+          const start = Math.floor(random() * reference.length)
+          message += reference.slice(start, start + 8 + Math.floor(random() * 40))
+          message += randomText(random, Math.floor(random() * 4), alphabet)
+        }
+
+        expect(collectEchoedExcerpts(message, reference)).toEqual(
+          referenceExcerpts(message, reference)
+        )
+      }
+    }
+  )
+
   // A long echo of unique content, which is what a relay quoting a real body looks like: the one
   // match is far longer than the window and sits in the middle of the reference.
   it('should find a single long echo in the middle of unrelated content', () => {

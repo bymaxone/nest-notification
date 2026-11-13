@@ -207,9 +207,6 @@ export function collectEchoedExcerpts(text: string, reference: string): string[]
  * @returns One length per position of `text`.
  */
 function longestEchoFrom(text: string, reference: string): Int32Array {
-  if (text.length === 0 || reference.length === 0) {
-    return new Int32Array(text.length)
-  }
   // A suffix automaton of reverse(text): a substring of `text` starting at position p is a
   // substring of the reversed text ending at size - 1 - p, so "the longest prefix at p that the
   // reference contains" is "the longest match ending at the state that prefix of the reversed text
@@ -275,13 +272,13 @@ function longestEchoFrom(text: string, reference: string): Int32Array {
   const byLength = [...states].sort((left, right) => right.length - left.length)
   for (const child of byLength) {
     const parent = child.link
-    if (parent !== null && parent !== root) {
+    if (parent !== null) {
       parent.best = Math.max(parent.best, Math.min(child.best, parent.length))
     }
   }
   for (const child of [...byLength].reverse()) {
     const parent = child.link
-    if (parent !== null && parent !== root) {
+    if (parent !== null) {
       child.best = Math.max(child.best, parent.best)
     }
   }
