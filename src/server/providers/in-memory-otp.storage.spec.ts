@@ -217,3 +217,58 @@ describe('InMemoryOtpStorage — time boundaries', () => {
     expect(await storage.getCooldown(T, R, P)).toBe(45)
   })
 })
+
+describe('InMemoryOtpStorage.deleteIfCode', () => {
+  const entry = (code: string, ttlMs = 60_000) => ({
+    code,
+    expiresAt: Date.now() + ttlMs,
+    attempts: 0,
+    maxAttempts: 5
+  })
+
+  it('should delete when the stored value matches and report it', async () => {
+    const storage = new InMemoryOtpStorage()
+    await storage.set('t', 'r', 'p', entry('111111'))
+
+    expect(await storage.deleteIfCode('t', 'r', 'p', '111111')).toBe(true)
+    expect(await storage.get('t', 'r', 'p')).toBeNull()
+  })
+
+  it('should leave a different stored value alone and report false', async () => {
+    const storage = new InMemoryOtpStorage()
+    await storage.set('t', 'r', 'p', entry('222222'))
+
+    expect(await storage.deleteIfCode('t', 'r', 'p', '111111')).toBe(false)
+    expect(await storage.get('t', 'r', 'p')).not.toBeNull()
+  })
+
+  // An entry whose lifetime ends exactly now is still live, as consumeAttempt treats it.
+  it('should still delete an entry that expires in this very millisecond', async () => {
+    const storage = new InMemoryOtpStorage()
+    const now = Date.now()
+    await storage.set('t', 'r', 'p', { ...entry('111111'), expiresAt: now })
+    const clock = jest.spyOn(Date, 'now').mockReturnValue(now)
+
+    expect(await storage.deleteIfCode('t', 'r', 'p', '111111')).toBe(true)
+    clock.mockRestore()
+  })
+
+  it('should report false for an absent or expired entry', async () => {
+    const storage = new InMemoryOtpStorage()
+    await storage.set('t', 'expired', 'p', entry('111111', -1_000))
+
+    expect(await storage.deleteIfCode('t', 'absent', 'p', '111111')).toBe(false)
+    expect(await storage.deleteIfCode('t', 'expired', 'p', '111111')).toBe(false)
+  })
+
+  it('should let exactly one of many concurrent callers win', async () => {
+    const storage = new InMemoryOtpStorage()
+    await storage.set('t', 'r', 'p', entry('111111'))
+
+    const wins = await Promise.all(
+      Array.from({ length: 25 }, () => storage.deleteIfCode('t', 'r', 'p', '111111'))
+    )
+
+    expect(wins.filter(Boolean)).toHaveLength(1)
+  })
+})

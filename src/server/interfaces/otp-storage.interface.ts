@@ -107,6 +107,33 @@ export interface IOtpStorage {
   delete(tenantId: string, recipient: string, purpose: string): Promise<void>
 
   /**
+   * Atomic compare-and-delete: removes the entry only when the value it still stores equals
+   * `expectedStored`, and reports whether this call removed it. Of N concurrent calls for one
+   * stored value, exactly one returns `true`.
+   *
+   * `expectedStored` is the exact STORED `code` the service read from the entry (the keyed
+   * digest when `otp.codeSecret` is set), never the guess a user typed: no plaintext guess
+   * reaches the storage. The service has already compared the guess in constant time; this
+   * only makes the one-time property hold when several verifications of the right code run
+   * at once. A code regenerated in between stores a different value, so it is left alone and
+   * the call returns `false`.
+   *
+   * Required when `otp.consumeOnVerify` is `true`: the service refuses to start without it,
+   * so a storage that cannot do this atomically never silently keeps the race.
+   *
+   * MUST be atomic.
+   *
+   * @param expectedStored - The stored code value the caller read.
+   * @returns `true` when this call deleted the entry, `false` when it was absent or changed.
+   */
+  deleteIfCode?(
+    tenantId: string,
+    recipient: string,
+    purpose: string,
+    expectedStored: string
+  ): Promise<boolean>
+
+  /**
    * Atomic cooldown acquire for `(tenant, recipient, purpose)`. Sets the cooldown
    * key only if it does not already exist (Redis: `SET NX EX`). Returns `true`
    * when acquired, `false` when a cooldown is already active. Acts as a

@@ -192,6 +192,31 @@ export class InMemoryOtpStorage implements IOtpStorage {
   }
 
   /**
+   * Deletes the entry only when it still stores `expectedStored`. Synchronous inside the
+   * method, so of N concurrent callers exactly one sees the value and removes it.
+   *
+   * @param tenantId - Tenant isolation scope.
+   * @param recipient - Pre-normalized recipient identifier.
+   * @param purpose - OTP purpose.
+   * @param expectedStored - The stored code value the caller read.
+   * @returns `true` when this call removed the entry.
+   */
+  async deleteIfCode(
+    tenantId: string,
+    recipient: string,
+    purpose: string,
+    expectedStored: string
+  ): Promise<boolean> {
+    const key = this.key(tenantId, recipient, purpose)
+    const entry = this.store.get(key)
+    if (!entry || entry.expiresAt < Date.now() || entry.code !== expectedStored) {
+      return false
+    }
+    this.store.delete(key)
+    return true
+  }
+
+  /**
    * Acquires the cooldown lock only when one is not already active.
    *
    * @param tenantId - Tenant isolation scope.

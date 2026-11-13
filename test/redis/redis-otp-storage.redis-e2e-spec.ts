@@ -120,4 +120,48 @@ describe('RedisOtpStorage against a real Redis', () => {
       expect(await redis.keys(`${namespace}:otp_fail:*`)).toHaveLength(0)
     })
   })
+
+  // The one-time property on a real server: the compare-and-delete script is the only thing that
+  // decides the winner, so this is what a read-then-delete would lose.
+  describe('consumeOnVerify through OtpService', () => {
+    const base = { ...ref, tenantId: 'acme', deliverVia: 'manual' as const }
+
+    it('should accept a code exactly once when five verifications run together', async () => {
+      const service = new OtpService(
+        makeOptions({ consumeOnVerify: true, resendCooldownSeconds: 0 }),
+        storage(),
+        makeAudit()
+      )
+      await service.generate(base)
+      const stored = await storage().get('acme', ref.recipient, ref.purpose)
+
+      const results = await Promise.all(
+        Array.from({ length: 5 }, () => service.verify({ ...base, code: stored?.code ?? '' }))
+      )
+
+      expect(results.filter((result) => result.valid)).toHaveLength(1)
+      expect(results.filter((result) => !result.valid)).toEqual(
+        Array.from({ length: 4 }, () => ({ valid: false, reason: 'not_found' }))
+      )
+    })
+
+    it('should leave a regenerated code alone', async () => {
+      const first = storage()
+      await first.set('acme', ref.recipient, ref.purpose, {
+        code: '111111',
+        expiresAt: Date.now() + 60_000,
+        attempts: 0,
+        maxAttempts: 5
+      })
+      await first.set('acme', ref.recipient, ref.purpose, {
+        code: '222222',
+        expiresAt: Date.now() + 60_000,
+        attempts: 0,
+        maxAttempts: 5
+      })
+
+      expect(await first.deleteIfCode('acme', ref.recipient, ref.purpose, '111111')).toBe(false)
+      expect((await first.get('acme', ref.recipient, ref.purpose))?.code).toBe('222222')
+    })
+  })
 })

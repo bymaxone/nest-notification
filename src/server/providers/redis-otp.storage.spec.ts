@@ -94,6 +94,18 @@ class FakeRedis implements RedisLike {
     if (script.includes("'INCR'")) {
       return this.incrWithExpiry(String(args[0]), Number(args[1]))
     }
+    if (script.includes('entry.code')) {
+      // The compare-and-delete script: synchronous, so atomic, like the real one.
+      const target = String(args[0])
+      this.evict(target)
+      const stored = this.data.get(target)
+      if (stored === undefined || (JSON.parse(stored) as OtpEntry).code !== String(args[1])) {
+        return 0
+      }
+      this.data.delete(target)
+      this.expiries.delete(target)
+      return 1
+    }
     const key = String(args[0])
     const now = Number(args[1])
     this.evict(key)
@@ -420,5 +432,31 @@ describe('RedisOtpStorage', () => {
     expect(JSON.stringify(storage)).not.toContain(password)
     expect(JSON.stringify({ ...storage })).not.toContain(password)
     expect(inspect(storage, { depth: null, showHidden: true })).not.toContain(password)
+  })
+})
+
+describe('RedisOtpStorage.deleteIfCode', () => {
+  it('should delete only while the stored code equals the value the caller read', async () => {
+    const redis = new FakeRedis()
+    const storage = new RedisOtpStorage({ redisClient: redis })
+    await storage.set(T, R, P, makeEntry({ code: '222222' }))
+
+    expect(await storage.deleteIfCode(T, R, P, '111111')).toBe(false)
+    expect(redis.dump()).toHaveLength(1)
+    expect(await storage.deleteIfCode(T, R, P, '222222')).toBe(true)
+    expect(redis.dump()).toHaveLength(0)
+    expect(await storage.deleteIfCode(T, R, P, '222222')).toBe(false)
+  })
+
+  it('should let exactly one of many concurrent callers win', async () => {
+    const redis = new FakeRedis()
+    const storage = new RedisOtpStorage({ redisClient: redis })
+    await storage.set(T, R, P, makeEntry())
+
+    const wins = await Promise.all(
+      Array.from({ length: 25 }, () => storage.deleteIfCode(T, R, P, '123456'))
+    )
+
+    expect(wins.filter(Boolean)).toHaveLength(1)
   })
 })

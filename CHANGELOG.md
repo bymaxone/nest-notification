@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **`consumeOnVerify` accepts a code once.** `verify()` read the entry, compared it, and deleted it
+  in separate steps, so several verifications of the right code running together each returned
+  `valid: true`, and a host that creates a session or resets a password on `valid` acted once per
+  winner. With `consumeOnVerify: true` the entry is now removed by
+  one atomic compare-and-delete in the storage, `IOtpStorage.deleteIfCode`, and exactly one verification wins; the others return `not_found`. The method is given the
+  stored value the service read, never the guess, and a code regenerated in between is left alone.
+  With `consumeOnVerify: false` several verifications can still each return `valid: true` until the
+  host calls `consume()`, which the README now states.
+
 - **An OTP is delivered to exactly one mailbox.** The recipient string went to the transport as an
   address list, so `victim@x.com, attacker@evil.example` delivered the code to both, and a list of
   any length made the endpoint send from the host's domain to any number of addresses. With email
@@ -22,6 +31,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `notification.email_invalid_recipient` before the provider is called.
 
 #### Apply to a derived backend
+
+`IOtpStorage` gains the optional `deleteIfCode(tenantId, recipient, purpose, expectedStored)`, and
+the service constructor throws when `otp.consumeOnVerify` is `true` and the storage lacks it: a
+derived backend with a custom storage implements it (an atomic delete that fires only while the
+stored code equals `expectedStored`, returning whether it removed the entry) or sets
+`consumeOnVerify` to `false`. The `./testing` contract covers it.
 
 `EmailChannelOptions` gains the optional `maxRecipients`, and `ResolvedEmailOptions` gains the
 required `maxRecipients`. A backend that builds resolved options by hand adds `maxRecipients: 50`.

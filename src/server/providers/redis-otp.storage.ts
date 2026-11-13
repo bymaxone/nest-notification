@@ -115,6 +115,19 @@ export class RedisOtpStorage implements IOtpStorage {
   `
 
   /**
+   * Atomic compare-and-delete: reads the entry, and deletes it only when its stored `code` equals
+   * the value the caller read, so of N concurrent verifications exactly one removes it.
+   */
+  private static readonly DELETE_IF_CODE_LUA = `
+    local raw = redis.call('GET', KEYS[1])
+    if not raw then return 0 end
+    local entry = cjson.decode(raw)
+    if entry.code ~= ARGV[1] then return 0 end
+    redis.call('DEL', KEYS[1])
+    return 1
+  `
+
+  /**
    * Atomic failure-counter primitive: one `INCR` and the lifetime refresh in a single script, so
    * concurrent failures each receive a distinct count and the counter never outlives its window
    * by a gap between the two commands.
@@ -226,6 +239,30 @@ export class RedisOtpStorage implements IOtpStorage {
    */
   async delete(tenantId: string, recipient: string, purpose: string): Promise<void> {
     await this.#redis.del(this.otpKey(tenantId, recipient, purpose))
+  }
+
+  /**
+   * Deletes the entry only when it still stores `expectedStored`, in one script.
+   *
+   * @param tenantId - Tenant isolation scope.
+   * @param recipient - Pre-normalized recipient identifier.
+   * @param purpose - OTP purpose.
+   * @param expectedStored - The stored code value the caller read (the digest, when keyed).
+   * @returns `true` when this call removed the entry.
+   */
+  async deleteIfCode(
+    tenantId: string,
+    recipient: string,
+    purpose: string,
+    expectedStored: string
+  ): Promise<boolean> {
+    const removed = await this.#redis.eval(
+      RedisOtpStorage.DELETE_IF_CODE_LUA,
+      1,
+      this.otpKey(tenantId, recipient, purpose),
+      expectedStored
+    )
+    return Number(removed) === 1
   }
 
   /**

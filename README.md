@@ -323,7 +323,7 @@ export class SendGridEmailProvider implements IEmailProvider {
 }
 ```
 
-A custom `IOtpStorage` implements the interface the package exports; the `/testing` subpath runs it against the contract.
+A custom `IOtpStorage` implements the interface the package exports, including `deleteIfCode` when you set `consumeOnVerify`; the `/testing` subpath runs it against the contract.
 
 > [!IMPORTANT]
 > `consumeAttempt` and `tryAcquireCooldown` **must be atomic** — one indivisible read-modify-write (a Redis Lua script, or a synchronous operation for an in-memory store). Implemented as a `get` followed by an `update`, two concurrent requests both read the same attempt count and the `maxAttempts` ceiling stops being a ceiling.
@@ -433,31 +433,31 @@ if (error.code === NOTIFICATION_ERROR_CODES.OTP_MAX_ATTEMPTS_EXCEEDED) {
 
 Configure via `forRoot(options)` or `forRootAsync({ useFactory })`. **At least one channel must be configured**, and configuring a channel the library does not implement throws at startup rather than failing on the first send. The full reference is in [`docs/technical_specification.md` §4](./docs/technical_specification.md); the most-used options:
 
-| Section  | Option                  | Default          | Notes                                                                                                                                              |
-| -------- | ----------------------- | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `global` | `redisNamespace`        | `'notification'` | Prefix for store keys.                                                                                                                             |
-| `global` | `defaultLocale`         | `'en'`           | Template locale fallback.                                                                                                                          |
-| `global` | `tenantIdResolver`      | —                | `(req) => tenantId`; the audit source of truth.                                                                                                    |
-| `email`  | `provider`              | — (required)     | Instance or class implementing `IEmailProvider`.                                                                                                   |
-| `email`  | `defaultFrom`           | — (required)     | Must look like an email address.                                                                                                                   |
-| `email`  | `templateRenderer`      | default renderer | Any `IEmailTemplateRenderer`.                                                                                                                      |
-| `email`  | `maxAttachmentBytes`    | `10485760`       | 10 MiB attachment guard.                                                                                                                           |
-| `email`  | `maxRecipients`         | `50`             | Recipients per message, `to` + `cc` + `bcc`, refused above it.                                                                                     |
-| `email`  | `defaultFromName`       | —                | Display name sent with `defaultFrom`.                                                                                                              |
-| `email`  | `defaultReplyTo`        | —                | `Reply-To` applied when a send does not set one.                                                                                                   |
-| `email`  | `defaultTags`           | `[]`             | Tags merged into every send, before the send's own tags.                                                                                           |
-| `otp`    | `storage`               | — (required)     | Instance or class implementing `IOtpStorage`.                                                                                                      |
-| `otp`    | `defaultLength`         | `6`              | 1–32.                                                                                                                                              |
-| `otp`    | `defaultCodeType`       | `'numeric'`      | `numeric` \| `alpha` \| `alphanumeric`.                                                                                                            |
-| `otp`    | `defaultTtlSeconds`     | `600`            | Code lifetime.                                                                                                                                     |
-| `otp`    | `defaultMaxAttempts`    | `5`              | Verify attempts before lock-out.                                                                                                                   |
-| `otp`    | `codeSecret`            | —                | Secret (>= 32 bytes) the stored code is keyed under.                                                                                               |
-| `otp`    | `consumeOnVerify`       | `false`          | `true` deletes the code when `verify()` succeeds; otherwise the entry is marked validated until `consume()` or its TTL.                            |
-| `otp`    | `resendCooldownSeconds` | `60`             | Anti-resend window (atomic `SET NX EX`).                                                                                                           |
-| `otp`    | `perPurpose`            | `{}`             | Per-purpose overrides of the above.                                                                                                                |
-| `audit`  | `repository`            | — (required)     | Any `INotificationLogRepository`.                                                                                                                  |
-| `audit`  | `swallowErrors`         | `true`           | Keep audit failures out of the delivery path. A swallowed failure logs `BYMAX_NOTIFICATION_AUDIT_WRITE_FAILED`, at most once a minute per channel. |
-| `audit`  | `maskRecipient`         | identity         | Minimize recipient PII before persisting.                                                                                                          |
+| Section  | Option                  | Default          | Notes                                                                                                                                                                                                    |
+| -------- | ----------------------- | ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `global` | `redisNamespace`        | `'notification'` | Prefix for store keys.                                                                                                                                                                                   |
+| `global` | `defaultLocale`         | `'en'`           | Template locale fallback.                                                                                                                                                                                |
+| `global` | `tenantIdResolver`      | —                | `(req) => tenantId`; the audit source of truth.                                                                                                                                                          |
+| `email`  | `provider`              | — (required)     | Instance or class implementing `IEmailProvider`.                                                                                                                                                         |
+| `email`  | `defaultFrom`           | — (required)     | Must look like an email address.                                                                                                                                                                         |
+| `email`  | `templateRenderer`      | default renderer | Any `IEmailTemplateRenderer`.                                                                                                                                                                            |
+| `email`  | `maxAttachmentBytes`    | `10485760`       | 10 MiB attachment guard.                                                                                                                                                                                 |
+| `email`  | `maxRecipients`         | `50`             | Recipients per message, `to` + `cc` + `bcc`, refused above it.                                                                                                                                           |
+| `email`  | `defaultFromName`       | —                | Display name sent with `defaultFrom`.                                                                                                                                                                    |
+| `email`  | `defaultReplyTo`        | —                | `Reply-To` applied when a send does not set one.                                                                                                                                                         |
+| `email`  | `defaultTags`           | `[]`             | Tags merged into every send, before the send's own tags.                                                                                                                                                 |
+| `otp`    | `storage`               | — (required)     | Instance or class implementing `IOtpStorage`.                                                                                                                                                            |
+| `otp`    | `defaultLength`         | `6`              | 1–32.                                                                                                                                                                                                    |
+| `otp`    | `defaultCodeType`       | `'numeric'`      | `numeric` \| `alpha` \| `alphanumeric`.                                                                                                                                                                  |
+| `otp`    | `defaultTtlSeconds`     | `600`            | Code lifetime.                                                                                                                                                                                           |
+| `otp`    | `defaultMaxAttempts`    | `5`              | Verify attempts before lock-out.                                                                                                                                                                         |
+| `otp`    | `codeSecret`            | —                | Secret (>= 32 bytes) the stored code is keyed under.                                                                                                                                                     |
+| `otp`    | `consumeOnVerify`       | `false`          | `true` deletes the code when `verify()` succeeds, once however many verifications run together (needs `IOtpStorage.deleteIfCode`); otherwise the entry is marked validated until `consume()` or its TTL. |
+| `otp`    | `resendCooldownSeconds` | `60`             | Anti-resend window (atomic `SET NX EX`).                                                                                                                                                                 |
+| `otp`    | `perPurpose`            | `{}`             | Per-purpose overrides of the above.                                                                                                                                                                      |
+| `audit`  | `repository`            | — (required)     | Any `INotificationLogRepository`.                                                                                                                                                                        |
+| `audit`  | `swallowErrors`         | `true`           | Keep audit failures out of the delivery path. A swallowed failure logs `BYMAX_NOTIFICATION_AUDIT_WRITE_FAILED`, at most once a minute per channel.                                                       |
+| `audit`  | `maskRecipient`         | identity         | Minimize recipient PII before persisting.                                                                                                                                                                |
 
 ---
 
@@ -579,6 +579,12 @@ A code is short: a six-digit code has a million values, so a plain hash of it is
 
 `consumeAttempt` is the only writer of the attempt counter, and `tryAcquireCooldown` (`SET NX EX`) is the only acquirer of the resend window — both inside the storage, in one indivisible step. A service-side `get` followed by an `update` looks equivalent and passes every sequential test, but two concurrent verifies read the same count and each writes back the same increment: five attempts become unbounded. The same shape lets two concurrent resends both pass the cooldown check.
 
+### A code is accepted once, with `consumeOnVerify`
+
+With `otp.consumeOnVerify: true`, `verify()` removes the entry with one atomic compare-and-delete in the storage (`IOtpStorage.deleteIfCode`). Of any number of verifications of the right code running together, exactly one returns `valid: true`; the others return `{ valid: false, reason: 'not_found' }`. The method receives the value the service read from the store (the keyed digest when `otp.codeSecret` is set), never the guess. A custom storage must implement it for this option, and the module refuses to start without it.
+
+With the default, `consumeOnVerify: false`, the entry is marked validated and stays until `consume()` or its TTL, so several verifications that run together can each return `valid: true`. Make the action your app takes on success single-use itself (for example by calling `consume()` and acting only when your own state change succeeds).
+
 ### Failed attempts survive a re-issue
 
 A per-code counter alone lets a re-issue reset the failure count: guess wrongly up to the limit, wait out the resend cooldown, and guess again. So the failed verifications of a `(tenant, recipient, purpose)` are counted in the storage, and `verify()` refuses once that count passes the purpose's attempt ceiling, whichever code is live.
@@ -641,16 +647,16 @@ A one-time password is a credential, so every behavior is pinned so that a regre
 - ✅ **Invariants asserted, not assumed** — the never-log-codes rule is a test (`JSON.stringify(entry).includes(code) === false` on every audit entry, and the thrown exception serialized recursively at every depth), not a review convention
 - ✅ **Published shape verified** — `attw` resolves every entrypoint against the packed tarball, and a dogfood smoke test installs the package into a scratch consumer before any tag is cut
 
-| Gate           | Standard                                                                            |
-| -------------- | ----------------------------------------------------------------------------------- |
-| Type safety    | TypeScript `strict`, zero `any`                                                     |
-| Coverage       | **100%** line/branch/function/statement per file (`pnpm test:cov:all`)              |
-| Mutation       | Stryker score **100%** (`break: 100`), no survivors                                 |
-| Lint           | ESLint flat config + `eslint-plugin-security`, zero warnings                        |
-| Bundle budgets | server < 30 KB · shared < 4 KB · react < 8 KB · testing < 4 KB brotli (`pnpm size`) |
-| Prisma-free    | `pnpm check:no-prisma` — the library never imports `@prisma/client`                 |
-| Export map     | `pnpm check:exports` — `attw` against the packed tarball, ESM and CJS               |
-| Supply chain   | published with npm provenance (OIDC), CodeQL + OpenSSF Scorecard                    |
+| Gate           | Standard                                                                                |
+| -------------- | --------------------------------------------------------------------------------------- |
+| Type safety    | TypeScript `strict`, zero `any`                                                         |
+| Coverage       | **100%** line/branch/function/statement per file (`pnpm test:cov:all`)                  |
+| Mutation       | Stryker score **100%** (`break: 100`), no survivors                                     |
+| Lint           | ESLint flat config + `eslint-plugin-security`, zero warnings                            |
+| Bundle budgets | server < 31.5 KB · shared < 4 KB · react < 8 KB · testing < 4.5 KB brotli (`pnpm size`) |
+| Prisma-free    | `pnpm check:no-prisma` — the library never imports `@prisma/client`                     |
+| Export map     | `pnpm check:exports` — `attw` against the packed tarball, ESM and CJS                   |
+| Supply chain   | published with npm provenance (OIDC), CodeQL + OpenSSF Scorecard                        |
 
 ```bash
 pnpm test          # unit suite
@@ -767,7 +773,7 @@ Every token is a `Symbol()`, exported for an advanced override or a test that re
 
 ### Testing your own storage (`./testing`)
 
-`otpStorageContract(factory, options?)` returns the executable cases your own `IOtpStorage` has to pass: atomic attempt counting, atomic cooldown, TTL that survives an update, and keys scoped by tenant, recipient and purpose. Each case is `{ name, run }`, so it runs in any test runner; `expiryWaitMs` raises the wait of the TTL cases for a backend with coarse expiry.
+`otpStorageContract(factory, options?)` returns the executable cases your own `IOtpStorage` has to pass: atomic attempt counting, atomic cooldown, atomic compare-and-delete (`deleteIfCode`, when implemented), TTL that survives an update, and keys scoped by tenant, recipient and purpose. Each case is `{ name, run }`, so it runs in any test runner; `expiryWaitMs` raises the wait of the TTL cases for a backend with coarse expiry.
 
 ```ts
 import { InMemoryOtpStorage } from '@bymax-one/nest-notification'

@@ -158,7 +158,16 @@ export class OtpService implements OnModuleInit {
     @Optional()
     @Inject(EmailService)
     private readonly emailService?: EmailService
-  ) {}
+  ) {
+    // A one-time code that several concurrent verifications can each accept is not one-time, and
+    // a storage that cannot compare-and-delete atomically would keep that race without a sign.
+    if (options.otp?.consumeOnVerify && storage.deleteIfCode === undefined) {
+      throw new Error(
+        `[BymaxNotificationModule] otp.consumeOnVerify requires an IOtpStorage that implements ` +
+          `deleteIfCode (the ${storage.name} storage does not); implement it, or set consumeOnVerify to false`
+      )
+    }
+  }
 
   /**
    * Whether the OTP channel is configured and its storage is ready.
@@ -220,25 +229,17 @@ export class OtpService implements OnModuleInit {
     // attempt is counted only while a code is live.
     const attempt = await this.countAttempt(scope, cfg.ttlSeconds)
     if (attempt === null) {
-      await this.audit(this.otpAuditEntry('failed', scope, { reason: 'not_found' }))
-      return { valid: false, reason: 'not_found' }
+      return this.rejectNotFound(scope)
     }
     if (attempt !== undefined && attempt > cfg.maxAttempts) {
-      await this.audit(
-        this.otpAuditEntry('max_attempts_exceeded', scope, { reason: 'max_attempts' })
-      )
-      return { valid: false, reason: 'max_attempts' }
+      return this.rejectMaxAttempts(scope)
     }
     const result = await this.storage.consumeAttempt(scope.tenantId, scope.recipient, scope.purpose)
     if (result.status === 'not_found') {
-      await this.audit(this.otpAuditEntry('failed', scope, { reason: 'not_found' }))
-      return { valid: false, reason: 'not_found' }
+      return this.rejectNotFound(scope)
     }
     if (result.status === 'max_attempts') {
-      await this.audit(
-        this.otpAuditEntry('max_attempts_exceeded', scope, { reason: 'max_attempts' })
-      )
-      return { valid: false, reason: 'max_attempts' }
+      return this.rejectMaxAttempts(scope)
     }
     const { entry } = result
     if (!this.matchesStoredCode(entry.code, scope.code, otp.digestCode)) {
@@ -251,6 +252,9 @@ export class OtpService implements OnModuleInit {
         remainingAttempts:
           attempt === undefined ? ofCode : Math.min(ofCode, cfg.maxAttempts - attempt)
       }
+    }
+    if (await this.lostConsume(scope, entry.code, otp.consumeOnVerify)) {
+      return this.rejectNotFound(scope)
     }
     await this.storage.clearFailures?.(scope.tenantId, scope.recipient, scope.purpose)
     await this.finalizeVerifySuccess(scope, entry, otp.consumeOnVerify)
@@ -568,6 +572,46 @@ export class OtpService implements OnModuleInit {
     }
   }
 
+  /** Audits and returns the `not_found` verdict: no live code, or it was consumed by another call. */
+  private async rejectNotFound(scope: OtpVerifyInput): Promise<OtpVerifyResult> {
+    await this.audit(this.otpAuditEntry('failed', scope, { reason: 'not_found' }))
+    return { valid: false, reason: 'not_found' }
+  }
+
+  /** Audits and returns the `max_attempts` verdict. */
+  private async rejectMaxAttempts(scope: OtpVerifyInput): Promise<OtpVerifyResult> {
+    await this.audit(this.otpAuditEntry('max_attempts_exceeded', scope, { reason: 'max_attempts' }))
+    return { valid: false, reason: 'max_attempts' }
+  }
+
+  /**
+   * With `consumeOnVerify`, removes the entry atomically while it still stores the value this
+   * verification read, and reports whether another verification got there first. The one-time
+   * property is decided here, not by a delete that follows: of N concurrent verifications of the
+   * right code exactly one removes the entry. `storedCode` is the STORED value (the digest when
+   * keyed), never the guess.
+   *
+   * @returns `true` when a concurrent verification consumed the code or it was regenerated.
+   */
+  private async lostConsume(
+    scope: OtpVerifyInput,
+    storedCode: string,
+    consumeOnVerify: boolean
+  ): Promise<boolean> {
+    // Presence is guaranteed by the constructor whenever `consumeOnVerify` is set.
+    const deleteIfCode = consumeOnVerify ? this.storage.deleteIfCode : undefined
+    if (!deleteIfCode) {
+      return false
+    }
+    return !(await deleteIfCode.call(
+      this.storage,
+      scope.tenantId,
+      scope.recipient,
+      scope.purpose,
+      storedCode
+    ))
+  }
+
   /** Finalizes a correct verification: consume-and-clear, or mark `validated`. */
   private async finalizeVerifySuccess(
     input: OtpVerifyInput,
@@ -575,7 +619,7 @@ export class OtpService implements OnModuleInit {
     consumeOnVerify: boolean
   ): Promise<void> {
     if (consumeOnVerify) {
-      await this.storage.delete(input.tenantId, input.recipient, input.purpose)
+      // The entry was already removed atomically by `deleteIfCode`.
       await this.storage.clearCooldown(input.tenantId, input.recipient, input.purpose)
     } else {
       await this.storage.update(input.tenantId, input.recipient, input.purpose, {

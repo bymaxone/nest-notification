@@ -142,7 +142,12 @@ describe('forRootAsync smoke (E2E)', () => {
     await notifications.dispatch({
       channel: 'otp',
       tenantId: 'tenant_a',
-      payload: { recipient: 'user@acme.com', purpose: 'login', action: 'generate', deliverVia: 'manual' }
+      payload: {
+        recipient: 'user@acme.com',
+        purpose: 'login',
+        action: 'generate',
+        deliverVia: 'manual'
+      }
     })
 
     const generated = repo.entries.find((entry) => entry.verb === 'generated')
