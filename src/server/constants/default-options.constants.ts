@@ -37,7 +37,8 @@ export const DEFAULT_OTP_OPTIONS = {
 /** Email channel defaults. */
 export const DEFAULT_EMAIL_OPTIONS = {
   defaultTags: [] as ReadonlyArray<{ name: string; value: string }>,
-  maxAttachmentBytes: DEFAULT_MAX_ATTACHMENT_BYTES
+  maxAttachmentBytes: DEFAULT_MAX_ATTACHMENT_BYTES,
+  maxRecipients: 50
 } as const satisfies Partial<EmailChannelOptions>
 
 /** Audit defaults — audit writes are fire-and-forget by default. */

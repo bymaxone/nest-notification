@@ -57,6 +57,30 @@ describe('validateOptions', () => {
     ).toThrow('options.email.defaultFrom must be a non-empty string')
   })
 
+  // A bound of zero, a fraction or a non-number would silently disable or break the guard.
+  it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, '50'])(
+    'should reject an email maxRecipients of %p',
+    (maxRecipients) => {
+      expect(() =>
+        validateOptions({
+          email: {
+            provider: emailProvider,
+            defaultFrom: 'a@b.com',
+            maxRecipients: maxRecipients as never
+          }
+        })
+      ).toThrow('options.email.maxRecipients must be a positive integer')
+    }
+  )
+
+  it('should accept a positive integer maxRecipients', () => {
+    expect(() =>
+      validateOptions({
+        email: { provider: emailProvider, defaultFrom: 'a@b.com', maxRecipients: 10 }
+      })
+    ).not.toThrow()
+  })
+
   // A non-string defaultFrom is rejected by the type half of the guard — pins
   // `typeof email.defaultFrom !== 'string'`. A mutant dropping the type check would
   // reach `defaultFrom.trim()`/`.includes('@')` on a number and throw a different

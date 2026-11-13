@@ -39,7 +39,7 @@ export const NOTIFICATION_ERROR_DEFINITIONS = {
     status: HttpStatus.PAYLOAD_TOO_LARGE,
     message: 'Email attachments exceed size limit'
   },
-  /** Reserved: `to` is not validated, so the library never throws this code. */
+  /** Raised for an OTP recipient that is not one mailbox, and for a message over `maxRecipients`. */
   EMAIL_INVALID_RECIPIENT: {
     code: NOTIFICATION_ERROR_CODES.EMAIL_INVALID_RECIPIENT,
     status: HttpStatus.BAD_REQUEST,

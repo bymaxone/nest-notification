@@ -442,6 +442,7 @@ Configure via `forRoot(options)` or `forRootAsync({ useFactory })`. **At least o
 | `email`  | `defaultFrom`           | — (required)     | Must look like an email address.                                                                                                                   |
 | `email`  | `templateRenderer`      | default renderer | Any `IEmailTemplateRenderer`.                                                                                                                      |
 | `email`  | `maxAttachmentBytes`    | `10485760`       | 10 MiB attachment guard.                                                                                                                           |
+| `email`  | `maxRecipients`         | `50`             | Recipients per message, `to` + `cc` + `bcc`, refused above it.                                                                                     |
 | `email`  | `defaultFromName`       | —                | Display name sent with `defaultFrom`.                                                                                                              |
 | `email`  | `defaultReplyTo`        | —                | `Reply-To` applied when a send does not set one.                                                                                                   |
 | `email`  | `defaultTags`           | `[]`             | Tags merged into every send, before the send's own tags.                                                                                           |
@@ -592,6 +593,7 @@ A per-code counter alone lets a re-issue reset the failure count: guess wrongly 
 
 When integrating `@bymax-one/nest-notification` in production, verify each of the following:
 
+- Validate the email address in your own controller before calling `generate()`. The library refuses a recipient that is not exactly one mailbox, but it cannot tell whether the mailbox belongs to the caller
 - `tenantIdResolver` reads from a **verified** source (JWT claim, subdomain, gateway-signed header) — never the request body
 - `audit.maskRecipient` is configured if audit rows are retained beyond the operational minimum
 - A custom `IOtpStorage` implements `consumeAttempt` and `tryAcquireCooldown` atomically
@@ -689,17 +691,17 @@ pnpm mutation      # Stryker mutation testing
 
 `EmailService.send()` takes these fields. `sendTemplate()` takes `tenantId`, `to`, `from`, `fromName`, `replyTo`, `tags`, `userId`, `auditRedactValues` and `publishProviderText` as below, plus `template`, `data` and an optional `locale` in place of `subject`, `html` and `text`; it has no `cc`, `bcc` or `attachments`.
 
-| Field                         | Notes                                                                                              |
-| ----------------------------- | -------------------------------------------------------------------------------------------------- |
-| `tenantId`                    | Required. Refused when blank or when it contains a control character.                              |
-| `to`, `cc`, `bcc`             | A string or an array. `to` is not validated by the library.                                        |
-| `subject`, `html`, `text`     | The message. `text` is optional.                                                                   |
-| `from`, `fromName`, `replyTo` | Override the `defaultFrom`, `defaultFromName` and `defaultReplyTo` of the channel.                 |
-| `tags`                        | Merged after `defaultTags`.                                                                        |
-| `attachments`                 | `{ filename, content, contentType? }[]`; their total size is checked against `maxAttachmentBytes`. |
-| `userId`                      | Recorded in the audit entry.                                                                       |
-| `auditRedactValues`           | Values scrubbed from the failure's `cause` and `errorMessage`. See [Errors](#-errors).             |
-| `publishProviderText`         | `false` withholds everything the provider wrote. Default `true`.                                   |
+| Field                         | Notes                                                                                                                                      |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `tenantId`                    | Required. Refused when blank or when it contains a control character.                                                                      |
+| `to`, `cc`, `bcc`             | A string or an array, at most `maxRecipients` addresses in all (a `,` or `;` splits a string). The addresses themselves are not validated. |
+| `subject`, `html`, `text`     | The message. `text` is optional.                                                                                                           |
+| `from`, `fromName`, `replyTo` | Override the `defaultFrom`, `defaultFromName` and `defaultReplyTo` of the channel.                                                         |
+| `tags`                        | Merged after `defaultTags`.                                                                                                                |
+| `attachments`                 | `{ filename, content, contentType? }[]`; their total size is checked against `maxAttachmentBytes`.                                         |
+| `userId`                      | Recorded in the audit entry.                                                                                                               |
+| `auditRedactValues`           | Values scrubbed from the failure's `cause` and `errorMessage`. See [Errors](#-errors).                                                     |
+| `publishProviderText`         | `false` withholds everything the provider wrote. Default `true`.                                                                           |
 
 `OtpService.generate()` and `resend()` take:
 
@@ -809,7 +811,7 @@ Codes never change once published; default messages are English, so localize on 
 | `notification.email_provider_not_configured`     | 500    | `EmailService` — the provider reports `isConfigured() === false`                                                                    |
 | `notification.email_send_failed`                 | 502    | `EmailService` — the provider rejected the send                                                                                     |
 | `notification.email_attachments_too_large`       | 413    | `EmailService` — the attachments exceed `maxAttachmentBytes`                                                                        |
-| `notification.email_invalid_recipient`           | 400    | reserved — `to` is not validated; a bad address surfaces as `email_send_failed`                                                     |
+| `notification.email_invalid_recipient`           | 400    | `OtpService.generate` and `resend` — an email recipient that is not one mailbox; `EmailService` — more than `maxRecipients`         |
 | `notification.email_missing_body`                | 400    | `NotificationService.dispatch` — neither a template nor a subject and body                                                          |
 | `notification.template_not_found`                | 500    | `EmailService.sendTemplate` — no template for the locale or the fallback (for `otp_code`, `details.remedy` says how to register it) |
 | `notification.template_render_failed`            | 500    | `EmailService.sendTemplate` — the renderer threw                                                                                    |
@@ -866,7 +868,7 @@ await emailService.send({
 - **No HTTP endpoints.** It ships no controller or route. Your controller resolves the tenant, calls the services, and maps `verify()` results to responses.
 - **No rate limiting by IP.** It bounds failed attempts per recipient and purpose, not requests per client. Rate-limit the OTP endpoints yourself.
 - **No database or ORM.** It never imports `@prisma/client`; persistence is behind `IOtpStorage` and `INotificationLogRepository`, which you implement or take from the bundled adapters.
-- **No address validation.** `to` is not validated, so a bad address surfaces as `email_send_failed` from the provider.
+- **No address validation beyond one rule.** An OTP delivered by email must go to exactly one mailbox (a list, a display name or a CRLF is refused with `email_invalid_recipient`), and a message is capped at `maxRecipients`. Any other bad address surfaces as `email_send_failed` from the provider.
 - **No translations.** Default error messages are English; localize on the `code`.
 - **No template engine beyond `{{var}}`.** Handlebars, MJML and React Email plug in through `IEmailTemplateRenderer`.
 - **No `useClass` / `useExisting` configuration.** `forRootAsync` supports `useFactory` only and rejects the others at startup.

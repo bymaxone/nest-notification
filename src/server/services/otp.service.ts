@@ -44,6 +44,7 @@ import { generateOtpCode } from '../utils/code-generator'
 import { cooldownExpiresAt, toRetryAfterHeader } from '../utils/cooldown-helpers'
 import { describeError } from '../utils/describe-error'
 import { normalizeRecipient } from '../utils/recipient'
+import { assertSingleMailbox } from '../utils/recipient-list'
 import {
   attachCauseIfAbsent,
   coerceRedacted,
@@ -182,6 +183,7 @@ export class OtpService implements OnModuleInit {
     this.assertScope(input)
     const scope = this.keyed(input)
     this.assertDeliverable(input, otp.digestCode)
+    this.assertMailbox(input)
     const cfg = otp.resolveForPurpose(input.purpose)
     await this.acquireCooldownOrThrow(scope, cfg.resendCooldownSeconds)
     const code = generateOtpCode(cfg.length, cfg.codeType)
@@ -506,6 +508,19 @@ export class OtpService implements OnModuleInit {
         remedy:
           'unset otp.codeSecret to read the code from the store, or configure an email channel and deliver by email'
       })
+    }
+  }
+
+  /**
+   * Refuses, before any state exists, an email delivery to a string that is not exactly one
+   * mailbox: the code goes to every address the string names. A manual delivery is the
+   * caller's own, so a phone number or a device id stays a valid recipient.
+   *
+   * @throws NotificationException `EMAIL_INVALID_RECIPIENT`.
+   */
+  private assertMailbox(input: OtpGenerateInput): void {
+    if (this.deliveryOf(input) === 'email') {
+      assertSingleMailbox(input.recipient)
     }
   }
 

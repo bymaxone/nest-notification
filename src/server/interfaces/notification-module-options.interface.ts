@@ -82,6 +82,12 @@ export interface EmailChannelOptions {
    * Default: `10_485_760` (10 MiB).
    */
   maxAttachmentBytes?: number
+  /**
+   * Maximum recipients of one message: `to`, `cc` and `bcc` together, counted after splitting
+   * each string on `,` and `;` the way the transport does. `EmailService` refuses a larger
+   * message with `EMAIL_INVALID_RECIPIENT` before the provider is called. Default: `50`.
+   */
+  maxRecipients?: number
 }
 
 /** OTP channel configuration. Omitted when the OTP channel is not used. */

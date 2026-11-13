@@ -75,6 +75,14 @@ function validateEmailOptions(email: EmailChannelOptions): void {
       '[BymaxNotificationModule] options.email.defaultFrom does not look like an email'
     )
   }
+  if (
+    email.maxRecipients !== undefined &&
+    (!Number.isInteger(email.maxRecipients) || email.maxRecipients < 1)
+  ) {
+    throw new Error(
+      '[BymaxNotificationModule] options.email.maxRecipients must be a positive integer'
+    )
+  }
 }
 
 /**

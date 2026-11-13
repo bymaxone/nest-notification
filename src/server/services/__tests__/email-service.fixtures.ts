@@ -33,6 +33,7 @@ export const makeOptions = (
           defaultFrom: 'noreply@acme.com',
           defaultTags: [],
           maxAttachmentBytes: 1_000_000,
+          maxRecipients: 50,
           ...email
         }
       }
