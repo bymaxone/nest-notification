@@ -27,6 +27,7 @@
 
 import { randomUUID } from 'node:crypto'
 
+import { deleteIfCodeAtomicCase, deleteIfCodeCase } from './otp-storage-contract.consume'
 import {
   failureAtomicCase,
   failureBoundaryCase,
@@ -605,7 +606,9 @@ const CASE_BUILDERS = [
   failureBoundaryCase,
   failureClearCase,
   failureTtlCase,
-  failureAtomicCase
+  failureAtomicCase,
+  deleteIfCodeCase,
+  deleteIfCodeAtomicCase
 ] as const
 
 /**

@@ -50,7 +50,11 @@ async function setup(otpOverrides: Partial<OtpChannelOptions> = {}): Promise<Har
   const repo = new MemoryAuditRepo()
   const renderer = new DefaultTemplateRenderer({
     templates: {
-      'otp_code::en': { subject: 'Your code', html: '<p>Code: {{code}}</p>', text: 'Code: {{code}}' }
+      'otp_code::en': {
+        subject: 'Your code',
+        html: '<p>Code: {{code}}</p>',
+        text: 'Code: {{code}}'
+      }
     }
   })
   const moduleRef = await Test.createTestingModule({

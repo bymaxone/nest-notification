@@ -158,7 +158,16 @@ export class OtpService implements OnModuleInit {
     @Optional()
     @Inject(EmailService)
     private readonly emailService?: EmailService
-  ) {}
+  ) {
+    // A one-time code that several concurrent verifications can each accept is not one-time, and
+    // a storage that cannot compare-and-delete atomically would keep that race without a sign.
+    if (options.otp?.consumeOnVerify && storage.deleteIfCode === undefined) {
+      throw new Error(
+        `[BymaxNotificationModule] otp.consumeOnVerify requires an IOtpStorage that implements ` +
+          `deleteIfCode (the ${storage.name} storage does not); implement it, or set consumeOnVerify to false`
+      )
+    }
+  }
 
   /**
    * Whether the OTP channel is configured and its storage is ready.
@@ -251,6 +260,24 @@ export class OtpService implements OnModuleInit {
         remainingAttempts:
           attempt === undefined ? ofCode : Math.min(ofCode, cfg.maxAttempts - attempt)
       }
+    }
+    // The one-time property is decided here, not by the delete that follows: of N concurrent
+    // verifications of the right code exactly one removes the entry, and the rest find it gone.
+    // `entry.code` is the STORED value (the digest when keyed), never the guess.
+    // Presence is guaranteed by the constructor whenever `consumeOnVerify` is set.
+    const deleteIfCode = otp.consumeOnVerify ? this.storage.deleteIfCode : undefined
+    if (
+      deleteIfCode &&
+      !(await deleteIfCode.call(
+        this.storage,
+        scope.tenantId,
+        scope.recipient,
+        scope.purpose,
+        entry.code
+      ))
+    ) {
+      await this.audit(this.otpAuditEntry('failed', scope, { reason: 'not_found' }))
+      return { valid: false, reason: 'not_found' }
     }
     await this.storage.clearFailures?.(scope.tenantId, scope.recipient, scope.purpose)
     await this.finalizeVerifySuccess(scope, entry, otp.consumeOnVerify)
@@ -575,7 +602,7 @@ export class OtpService implements OnModuleInit {
     consumeOnVerify: boolean
   ): Promise<void> {
     if (consumeOnVerify) {
-      await this.storage.delete(input.tenantId, input.recipient, input.purpose)
+      // The entry was already removed atomically by `deleteIfCode`.
       await this.storage.clearCooldown(input.tenantId, input.recipient, input.purpose)
     } else {
       await this.storage.update(input.tenantId, input.recipient, input.purpose, {
