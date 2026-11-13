@@ -242,6 +242,17 @@ describe('InMemoryOtpStorage.deleteIfCode', () => {
     expect(await storage.get('t', 'r', 'p')).not.toBeNull()
   })
 
+  // An entry whose lifetime ends exactly now is still live, as consumeAttempt treats it.
+  it('should still delete an entry that expires in this very millisecond', async () => {
+    const storage = new InMemoryOtpStorage()
+    const now = Date.now()
+    await storage.set('t', 'r', 'p', { ...entry('111111'), expiresAt: now })
+    const clock = jest.spyOn(Date, 'now').mockReturnValue(now)
+
+    expect(await storage.deleteIfCode('t', 'r', 'p', '111111')).toBe(true)
+    clock.mockRestore()
+  })
+
   it('should report false for an absent or expired entry', async () => {
     const storage = new InMemoryOtpStorage()
     await storage.set('t', 'expired', 'p', entry('111111', -1_000))

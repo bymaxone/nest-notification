@@ -114,6 +114,9 @@ describe('OtpService consumeOnVerify under concurrency', () => {
     const verbs = audit.create.mock.calls.map(([entry]) => entry.verb)
     expect(verbs.filter((verb) => verb === 'verified')).toHaveLength(1)
     expect(verbs.filter((verb) => verb === 'failed')).toHaveLength(1)
+    expect(audit.create).toHaveBeenCalledWith(
+      expect.objectContaining({ verb: 'failed', metadata: { reason: 'not_found' } })
+    )
   })
 })
 

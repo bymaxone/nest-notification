@@ -532,6 +532,57 @@ describe('otpStorageContract', () => {
       )
     })
 
+    // Each case below breaks exactly one half of one obligation, so a check that tested only
+    // one half of its pair would let it through.
+    it('should catch a deleteIfCode that removes the entry but reports false', async () => {
+      const inner = new InMemoryOtpStorage()
+      const silent = delegating(inner, {
+        deleteIfCode: async (tenantId, recipient, purpose, expectedStored): Promise<boolean> => {
+          await inner.deleteIfCode(tenantId, recipient, purpose, expectedStored)
+          return false
+        }
+      })
+
+      await expect(runCase(silent, 'deleteIfCode removes only the stored value')).rejects.toThrow(
+        /did not remove the entry whose stored value it was given/
+      )
+    })
+
+    it('should catch a deleteIfCode that deletes whatever is stored but reports false', async () => {
+      const inner = new InMemoryOtpStorage()
+      const blind = delegating(inner, {
+        deleteIfCode: async (tenantId, recipient, purpose): Promise<boolean> => {
+          await inner.delete(tenantId, recipient, purpose)
+          return false
+        }
+      })
+
+      await expect(runCase(blind, 'deleteIfCode removes only the stored value')).rejects.toThrow(
+        /removed an entry whose stored value differs/
+      )
+    })
+
+    it('should catch a deleteIfCode that reports true but removes nothing', async () => {
+      const inner = new InMemoryOtpStorage()
+      const liar = delegating(inner, { deleteIfCode: async (): Promise<boolean> => true })
+
+      await expect(runCase(liar, 'deleteIfCode removes only the stored value')).rejects.toThrow(
+        /removed an entry whose stored value differs/
+      )
+    })
+
+    it('should catch a deleteIfCode that reports a match without removing it', async () => {
+      const inner = new InMemoryOtpStorage()
+      const claimed = delegating(inner, {
+        deleteIfCode: async (tenantId, recipient, purpose, expectedStored): Promise<boolean> =>
+          (await inner.get(tenantId, recipient, purpose))?.code === expectedStored
+      })
+
+      await expect(runCase(claimed, 'deleteIfCode removes only the stored value')).rejects.toThrow(
+        /did not remove the entry whose stored value it was given/
+      )
+    })
+
     it('should catch a deleteIfCode that never deletes', async () => {
       const inner = new InMemoryOtpStorage()
       const inert = delegating(inner, { deleteIfCode: async (): Promise<boolean> => false })

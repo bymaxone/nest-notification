@@ -11,9 +11,11 @@ import { RACERS, check } from './otp-storage-contract.shared'
 import type { OtpEntry } from '../server/interfaces/otp-storage.interface'
 
 /** The stored value the cases write and compare. */
+// Stryker disable next-line StringLiteral: equivalent — only the distinctness of the two stored values carries meaning, not their spelling
 const STORED = 'stored-value-1'
 
 /** A different stored value, standing for a code regenerated in between. */
+// Stryker disable next-line StringLiteral: equivalent — see STORED
 const REGENERATED = 'stored-value-2'
 
 /** An entry with a live lifetime, holding `code` as its stored value. */
