@@ -198,8 +198,8 @@ export function collectEchoedExcerpts(text: string, reference: string): string[]
  *
  * Computed in time linear in both strings, whatever they contain. Extending every occurrence of a
  * window character by character costs occurrences x extension, which on a repeated run is
- * quadratic: a relay quoting an 80000-character body of one repeated character held the event loop
- * for 21 s. Here the shorter string, the error text, is indexed as a suffix automaton of its own
+ * quadratic: a relay quoting a large body of one repeated character held the event loop for
+ * seconds. Here the shorter string, the error text, is indexed as a suffix automaton of its own
  * reverse and the reference is walked through it once.
  *
  * @param text - The error text, whose positions are measured.
