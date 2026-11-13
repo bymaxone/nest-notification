@@ -135,6 +135,27 @@ describe('collectEchoedExcerpts answers', () => {
     }
   )
 
+  // Two cases found by searching for inputs on which visiting the suffix-link tree out of order
+  // changes the answer: the match has to travel through more than one level before it reaches
+  // the position that needs it.
+  it.each([
+    [
+      'bbcabcbababbcaccacbaaaaacbbaccabcbbbcccccabcababcaacacababacbabccaaccbbcccbbaccbbbabbcbc',
+      'cbbaccabcbbbcccccabcababcaacacababacbabccaaccbbbcbbbcccccabcababcccccabcababcaacacababacbabccaaccbaaabcbbbcccccabcababcaacacababacbabccaa'
+    ],
+    [
+      'ccccabaabdcbbbbcbbaacaaadacbcdbbbbaddaccdbadabaaabddccdcddddbacdbdaaaabcbdbcbdbbbccbcbcbaddbcc',
+      'abcbdbcbdbbbccbcbcbaddbccccbdbbbccbcbcbaddbccdaabdcbbbbcbbaacaaadacbcdbbbbaddaccacddbacdbdaaaabcbdbcbdbbbccbcbcbaddbccda'
+    ]
+  ])(
+    'should give the same excerpts when a match crosses several levels (%#)',
+    (reference, message) => {
+      expect(collectEchoedExcerpts(message, reference)).toEqual(
+        referenceExcerpts(message, reference)
+      )
+    }
+  )
+
   // A long echo of unique content, which is what a relay quoting a real body looks like: the one
   // match is far longer than the window and sits in the middle of the reference.
   it('should find a single long echo in the middle of unrelated content', () => {

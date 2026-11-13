@@ -227,6 +227,7 @@ function longestEchoFrom(text: string, reference: string): Int32Array {
     }
     const target = walker?.next.get(code)
     if (walker !== null && target !== undefined) {
+      // Stryker disable next-line ArithmeticOperator: equivalent — cloning a state whose transition is already solid only adds a duplicate no reader can tell from the original; the answers are unchanged
       if (walker.length + 1 === target.length) {
         current.link = target
       } else {
