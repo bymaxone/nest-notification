@@ -55,7 +55,8 @@ describe('resolveOptions', () => {
     expect(resolved.email).toEqual({
       defaultFrom: 'noreply@example.com',
       defaultTags: [],
-      maxAttachmentBytes: 10_485_760
+      maxAttachmentBytes: 10_485_760,
+      maxRecipients: 50
     })
     expect('defaultFromName' in resolved.email!).toBe(false)
     expect('defaultReplyTo' in resolved.email!).toBe(false)
@@ -69,7 +70,8 @@ describe('resolveOptions', () => {
         defaultFromName: 'App',
         defaultReplyTo: 'reply@example.com',
         defaultTags: [{ name: 'env', value: 'test' }],
-        maxAttachmentBytes: 1024
+        maxAttachmentBytes: 1024,
+        maxRecipients: 7
       }
     })
 
@@ -78,7 +80,8 @@ describe('resolveOptions', () => {
       defaultFromName: 'App',
       defaultReplyTo: 'reply@example.com',
       defaultTags: [{ name: 'env', value: 'test' }],
-      maxAttachmentBytes: 1024
+      maxAttachmentBytes: 1024,
+      maxRecipients: 7
     })
   })
 

@@ -37,6 +37,7 @@ import {
   isEnhancedStatus,
   withoutDeclaredValues
 } from '../utils/delivery-status'
+import { countRecipients } from '../utils/recipient-list'
 import {
   collectEchoedExcerpts,
   collectErrorChainMessages,
@@ -216,12 +217,14 @@ export class EmailService {
    * @returns The provider's message id.
    * @throws NotificationException `EMAIL_PROVIDER_NOT_CONFIGURED`, `INVALID_SCOPE_IDENTIFIER`
    * (a blank tenant or one with a control character), `EMAIL_ATTACHMENTS_TOO_LARGE`,
+   * `EMAIL_INVALID_RECIPIENT` (more recipients than `maxRecipients`),
    * `EMAIL_SEND_FAILED`, or `AUDIT_LOG_FAILED` (only when `audit.swallowErrors` is `false`).
    */
   async send(input: EmailSendInput): Promise<{ messageId: string }> {
     const email = this.requireEmailOptions()
     assertIdentifies('EmailService', 'tenantId', input.tenantId)
     this.guardAttachmentSize(input.attachments, email.maxAttachmentBytes)
+    this.guardRecipientCount(input, email.maxRecipients)
     const sendOptions = this.buildSendOptions(input, email)
     const recipient = this.maskRecipients(input.to)
     const result = await this.deliver(sendOptions, input, recipient)
@@ -328,6 +331,25 @@ export class EmailService {
       throw new NotificationException('EMAIL_PROVIDER_NOT_CONFIGURED')
     }
     return this.options.email
+  }
+
+  /**
+   * Throws `EMAIL_INVALID_RECIPIENT` when to, cc and bcc together address more mailboxes than
+   * the channel allows. The refusal names the limit and never an address.
+   */
+  private guardRecipientCount(
+    input: Pick<EmailSendInput, 'to' | 'cc' | 'bcc'>,
+    limit: number
+  ): void {
+    if (
+      countRecipients(input.to) + countRecipients(input.cc) + countRecipients(input.bcc) >
+      limit
+    ) {
+      throw new NotificationException('EMAIL_INVALID_RECIPIENT', {
+        reason: 'too_many_recipients',
+        limit
+      })
+    }
   }
 
   /** Throws `EMAIL_ATTACHMENTS_TOO_LARGE` when the attachments exceed the byte budget. */

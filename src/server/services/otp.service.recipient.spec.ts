@@ -143,4 +143,63 @@ describe('OtpService recipient normalization', () => {
     ).rejects.toBeInstanceOf(NotificationException)
     expect(storage.size().otps).toBe(0)
   })
+
+  // The code goes to every address the recipient string names, so a list is a second
+  // mailbox the caller chose: it must be refused before a cooldown, a code or a send exists.
+  describe('email delivery to a string that is not one mailbox', () => {
+    // The email channel is what delivers here; the outer service has none, so it delivers by hand.
+    let emailService: OtpService
+    beforeEach(() => {
+      emailService = new OtpService(
+        makeOptions({ defaultMaxAttempts: 3 }),
+        storage,
+        audit,
+        emailServiceStub
+      )
+    })
+
+    it.each([
+      'victim@x.com, attacker@evil.example',
+      'victim@x.com;attacker@evil.example',
+      '"x" <a@x.com>'
+    ])('should send nothing and store nothing for %j', async (recipient) => {
+      await expect(emailService.generate({ ...base, recipient })).rejects.toMatchObject({
+        code: 'notification.email_invalid_recipient'
+      })
+
+      expect(emailSendTemplate).not.toHaveBeenCalled()
+      expect(storage.size()).toEqual({ otps: 0, cooldowns: 0 })
+    })
+
+    // A control character is refused earlier still, by the scope check; either refusal sends nothing.
+    it('should send nothing for a recipient carrying a CRLF', async () => {
+      await expect(
+        emailService.generate({ ...base, recipient: 'a@x.com\r\nBcc: b@y.com' })
+      ).rejects.toMatchObject({ code: 'notification.invalid_scope_identifier' })
+
+      expect(emailSendTemplate).not.toHaveBeenCalled()
+    })
+
+    it('should refuse through resend as well', async () => {
+      await expect(
+        emailService.resend({ ...base, recipient: 'a@x.com,b@y.com' })
+      ).rejects.toMatchObject({ code: 'notification.email_invalid_recipient' })
+      expect(emailSendTemplate).not.toHaveBeenCalled()
+    })
+
+    it('should refuse a recipient that is not a mailbox only when the email channel delivers', async () => {
+      // A phone number is a valid manual recipient: the delivery is the caller's.
+      await expect(
+        emailService.generate({ ...base, recipient: '+15551234567', deliverVia: 'manual' })
+      ).resolves.toMatchObject({ cooldownSeconds: expect.any(Number) })
+    })
+
+    it('should still deliver to one mailbox, as supplied', async () => {
+      await emailService.generate({ ...base, recipient: ' Jane@Acme.com ' })
+
+      expect(emailSendTemplate).toHaveBeenCalledWith(
+        expect.objectContaining({ to: 'Jane@Acme.com' })
+      )
+    })
+  })
 })

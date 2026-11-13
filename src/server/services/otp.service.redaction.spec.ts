@@ -171,7 +171,12 @@ describe('OtpService.generate — delivery-error redaction', () => {
     }
     const resolved: ResolvedNotificationOptions = {
       ...makeOptions(),
-      email: { defaultFrom: 'noreply@acme.com', defaultTags: [], maxAttachmentBytes: 1_000_000 }
+      email: {
+        defaultFrom: 'noreply@acme.com',
+        defaultTags: [],
+        maxAttachmentBytes: 1_000_000,
+        maxRecipients: 50
+      }
     }
     const emailService = new EmailService(resolved, shortEchoProvider, capturingRenderer, audit)
     const service = new OtpService(resolved, storage, audit, emailService)
@@ -219,7 +224,12 @@ describe('OtpService.generate — delivery-error redaction', () => {
     }
     const options: ResolvedNotificationOptions = {
       ...makeOptions(),
-      email: { defaultFrom: 'noreply@acme.com', defaultTags: [], maxAttachmentBytes: 1_000_000 }
+      email: {
+        defaultFrom: 'noreply@acme.com',
+        defaultTags: [],
+        maxAttachmentBytes: 1_000_000,
+        maxRecipients: 50
+      }
     }
     const emailService = new EmailService(options, echoingProvider, renderer, audit)
     const service = new OtpService(options, storage, audit, emailService)

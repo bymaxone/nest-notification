@@ -42,6 +42,7 @@ export interface ResolvedEmailOptions {
   defaultReplyTo?: string
   defaultTags: ReadonlyArray<{ name: string; value: string }>
   maxAttachmentBytes: number
+  maxRecipients: number
 }
 
 /** Resolved OTP section — present only when the OTP channel is configured. */
@@ -111,6 +112,7 @@ function resolveEmail(email: EmailChannelOptions): ResolvedEmailOptions {
     defaultFrom: email.defaultFrom,
     defaultTags: email.defaultTags ?? DEFAULT_EMAIL_OPTIONS.defaultTags,
     maxAttachmentBytes: email.maxAttachmentBytes ?? DEFAULT_EMAIL_OPTIONS.maxAttachmentBytes,
+    maxRecipients: email.maxRecipients ?? DEFAULT_EMAIL_OPTIONS.maxRecipients,
     ...(email.defaultFromName !== undefined ? { defaultFromName: email.defaultFromName } : {}),
     ...(email.defaultReplyTo !== undefined ? { defaultReplyTo: email.defaultReplyTo } : {})
   }

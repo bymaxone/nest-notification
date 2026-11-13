@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **An OTP is delivered to exactly one mailbox.** The recipient string went to the transport as an
+  address list, so `victim@x.com, attacker@evil.example` delivered the code to both, and a list of
+  any length made the endpoint send from the host's domain to any number of addresses. With email
+  delivery, `OtpService.generate()` and `resend()` now refuse, before a cooldown or a code exists,
+  a recipient that is not one plain address (a list, a display name, an angle address, a comment, a
+  quoted local part, an IP literal, whitespace or a control character inside it, or more than 254
+  characters) with `notification.email_invalid_recipient`. The refusal never echoes the value.
+  Internationalized addresses are accepted. Manual delivery is unchanged.
+- **A message addresses at most `email.maxRecipients` mailboxes (default `50`).** `to`, `cc` and
+  `bcc` count together, after a `,` or `;` splits a string, and a larger message is refused with
+  `notification.email_invalid_recipient` before the provider is called.
+
+#### Apply to a derived backend
+
+`EmailChannelOptions` gains the optional `maxRecipients`, and `ResolvedEmailOptions` gains the
+required `maxRecipients`. A backend that builds resolved options by hand adds `maxRecipients: 50`.
+A caller that sent one message to more than 50 recipients, or whose OTP recipient was not one plain
+address, now receives `email_invalid_recipient`; raise `maxRecipients` for a legitimate fan-out.
+
 ## [1.4.8] - 2026-11-12
 
 ### Documentation
