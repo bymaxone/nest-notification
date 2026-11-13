@@ -581,7 +581,7 @@ A code is short: a six-digit code has a million values, so a plain hash of it is
 
 ### A code is accepted once, with `consumeOnVerify`
 
-With `otp.consumeOnVerify: true`, `verify()` removes the entry with one atomic compare-and-delete in the storage (`IOtpStorage.deleteIfCode`, one Lua script on Redis). Of any number of verifications of the right code running together, exactly one returns `valid: true`; the others return `{ valid: false, reason: 'not_found' }`. The method receives the value the service read from the store (the keyed digest when `otp.codeSecret` is set), never the guess. A custom storage must implement it, and the module refuses to start without it.
+With `otp.consumeOnVerify: true`, `verify()` removes the entry with one atomic compare-and-delete in the storage (`IOtpStorage.deleteIfCode`). Of any number of verifications of the right code running together, exactly one returns `valid: true`; the others return `{ valid: false, reason: 'not_found' }`. The method receives the value the service read from the store (the keyed digest when `otp.codeSecret` is set), never the guess. A custom storage must implement it for this option, and the module refuses to start without it.
 
 With the default, `consumeOnVerify: false`, the entry is marked validated and stays until `consume()` or its TTL, so several verifications that run together can each return `valid: true`. Make the action your app takes on success single-use itself (for example by calling `consume()` and acting only when your own state change succeeds).
 
