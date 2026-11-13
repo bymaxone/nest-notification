@@ -41,6 +41,20 @@ describe('assertSingleMailbox', () => {
     )
   })
 
+  // The reason is what a consumer branches on, and it is the only context the refusal carries.
+  it('should name a fixed reason in the response details', () => {
+    let caught: unknown
+    try {
+      assertSingleMailbox('a@x.com,b@y.com')
+    } catch (error) {
+      caught = error
+    }
+
+    expect((caught as NotificationException).getResponse()).toMatchObject({
+      error: { details: { reason: 'not_a_single_mailbox' } }
+    })
+  })
+
   // The refusal is serialized into the HTTP response, and the recipient is what must not be in it.
   it('should never echo the value it refused', () => {
     const secret = 'victim-9f3a@x.com,attacker@evil.example'
@@ -69,6 +83,7 @@ describe('assertSingleMailbox', () => {
   // The rule must not lock out a real user.
   it.each([
     ['a plain address', 'jane@acme.com'],
+    ['a one-character local part', 'a@x.com'],
     ['surrounding whitespace', '  jane@acme.com  '],
     ['a plus tag', 'jane+otp@acme.com'],
     ['special atext characters', "o'brien_{x}!#$%&*/=?^`|~-@acme.co.uk"],

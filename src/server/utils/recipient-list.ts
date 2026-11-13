@@ -39,7 +39,6 @@ export function assertSingleMailbox(recipient: string): void {
   const address = recipient.trim()
   const at = address.indexOf('@')
   const refused =
-    address.length === 0 ||
     address.length > MAX_ADDRESS_LENGTH ||
     NOT_A_PLAIN_MAILBOX.test(address) ||
     at < 1 ||
