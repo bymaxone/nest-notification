@@ -212,11 +212,11 @@ function longestEchoFrom(text: string, reference: string): Int32Array {
   // reference contains" is "the longest match ending at the state that prefix of the reversed text
   // creates".
   const root: EchoState = { length: 0, link: null, next: new Map(), best: 0 }
-  const states: EchoState[] = [root]
+  const states: EchoState[] = []
   const created: EchoState[] = []
   let last = root
-  for (let position = text.length - 1; position >= 0; position -= 1) {
-    const code = text.charCodeAt(position)
+  for (const char of text.split('').reverse()) {
+    const code = char.charCodeAt(0)
     const current: EchoState = { length: last.length + 1, link: root, next: new Map(), best: 0 }
     states.push(current)
     created.push(current)
