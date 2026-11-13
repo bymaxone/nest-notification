@@ -682,4 +682,43 @@ describe('EmailService.sendTemplate redaction', () => {
 
     expect(sendSpy.mock.calls[0]?.[0]?.auditRedactValues).toEqual(['998877'])
   })
+
+  // An error text longer than the detector's scan limit is scrubbed whole. The chain text the
+  // service inspects joins message and stack, so it must be scrubbed field by field: a joined text
+  // is a substring of no single field, and nothing would be removed.
+  it('should scrub an echo longer than the scan limit from the audit entry and the cause', async () => {
+    const provider = makeProvider()
+    const body = `<p>${'reset code 998877 '.repeat(5_000)}</p>`
+    provider.send.mockImplementation(async (options) => {
+      throw new Error(`550 5.7.1 rejected by policy: ${options.html}`)
+    })
+    const audit = makeAudit()
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), audit)
+
+    const caught: unknown = await service
+      .send({ ...baseInput, html: body })
+      .catch((error: unknown) => error)
+
+    const cause = (caught as NotificationException).cause as Error
+    expect(cause.message.includes('998877')).toBe(false)
+    expect(cause.stack?.includes('998877')).toBe(false)
+    expect(JSON.stringify(audit.create.mock.calls)).not.toContain('998877')
+  })
+
+  it('should scrub an over-limit echo that lives only in a nested cause', async () => {
+    const provider = makeProvider()
+    const body = `<p>${'reset code 998877 '.repeat(5_000)}</p>`
+    provider.send.mockImplementation(async (options) => {
+      throw new Error('relay failed', { cause: new Error(`550 body: ${options.html}`) })
+    })
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), makeAudit())
+
+    const caught: unknown = await service
+      .send({ ...baseInput, html: body })
+      .catch((error: unknown) => error)
+
+    const nested = ((caught as NotificationException).cause as Error).cause as Error
+    expect(nested.message.includes('998877')).toBe(false)
+    expect(nested.stack?.includes('998877')).toBe(false)
+  })
 })

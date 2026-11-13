@@ -95,6 +95,18 @@ export function readRedactedMessage(error: unknown, values?: readonly string[]):
  * @returns The chain's message and stack text, newline-joined.
  */
 export function collectErrorChainText(error: unknown): string {
+  return walkChain(error, true).join('\n')
+}
+
+/**
+ * The fields {@link collectErrorChainText} joins, kept apart: the message and the stack of every
+ * link. Echo detection needs them apart, because what it finds is later removed from each field on
+ * its own, and a piece that spans the join is a substring of no field.
+ *
+ * @param error - The failure whose chain to read.
+ * @returns One entry per message and per stack, in chain order.
+ */
+export function collectErrorChainParts(error: unknown): string[] {
   return walkChain(error, true)
 }
 
@@ -111,11 +123,11 @@ export function collectErrorChainText(error: unknown): string {
  * @returns The chain's messages, newline-joined.
  */
 export function collectErrorChainMessages(error: unknown): string {
-  return walkChain(error, false)
+  return walkChain(error, false).join('\n')
 }
 
 /** Shared walker for the two collectors above. */
-function walkChain(error: unknown, includeStack: boolean): string {
+function walkChain(error: unknown, includeStack: boolean): string[] {
   const parts: string[] = []
   const seen = new Set<unknown>()
   let current: unknown = error
@@ -140,7 +152,7 @@ function walkChain(error: unknown, includeStack: boolean): string {
       // next check. Nothing to do here.
     }
   }
-  return parts.join('\n')
+  return parts
 }
 
 /**
