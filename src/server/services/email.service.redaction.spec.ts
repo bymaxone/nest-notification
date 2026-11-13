@@ -721,4 +721,45 @@ describe('EmailService.sendTemplate redaction', () => {
     expect(nested.message.includes('998877')).toBe(false)
     expect(nested.stack?.includes('998877')).toBe(false)
   })
+
+  // The echo can sit in the stack, which is a separate field of the same link, and in more than one
+  // link of the chain: each field is scrubbed on its own.
+  it('should scrub an over-limit echo from a stack and from every link of the chain', async () => {
+    const provider = makeProvider()
+    const body = `<p>${'reset code 998877 '.repeat(5_000)}</p>`
+    provider.send.mockImplementation(async (options) => {
+      const inner = new Error('inner failure')
+      inner.stack = `Error: inner failure\n    at relay (${options.html})`
+      throw new Error(`550 rejected: ${options.html}`, { cause: inner })
+    })
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), makeAudit())
+
+    const caught: unknown = await service
+      .send({ ...baseInput, html: body })
+      .catch((error: unknown) => error)
+
+    const outer = (caught as NotificationException).cause as Error
+    const inner = outer.cause as Error
+    expect(outer.message.includes('998877')).toBe(false)
+    expect(outer.stack?.includes('998877')).toBe(false)
+    expect(inner.message.includes('998877')).toBe(false)
+    expect(inner.stack?.includes('998877')).toBe(false)
+  })
+
+  it('should scrub an over-limit echo of the plain-text body as well', async () => {
+    const provider = makeProvider()
+    const text = 'reset code 998877 '.repeat(5_000)
+    provider.send.mockImplementation(async (options) => {
+      throw new Error(`550 rejected: ${options.text ?? ''}`)
+    })
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), makeAudit())
+
+    const caught: unknown = await service
+      .send({ ...baseInput, text })
+      .catch((error: unknown) => error)
+
+    expect(((caught as NotificationException).cause as Error).message.includes('998877')).toBe(
+      false
+    )
+  })
 })

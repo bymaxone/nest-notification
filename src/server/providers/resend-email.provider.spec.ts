@@ -385,4 +385,23 @@ describe('ResendEmailProvider', () => {
     // Reads on purpose are unaffected: the key still configures the provider.
     expect(provider.isConfigured()).toBe(true)
   })
+
+  describe('an echo longer than the scan limit', () => {
+    it.each([
+      ['html', (text: string) => ({ html: text })],
+      ['plain text', (text: string) => ({ html: '<p>x</p>', text })]
+    ])('should be scrubbed whole when it echoes the %s body', async (_name, bodyOf) => {
+      const body = 'reset code 998877 '.repeat(5_000)
+      mockSend.mockResolvedValue({ data: null, error: { message: `rejected: ${body}` } })
+      const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+      const caught: unknown = await new ResendEmailProvider({ apiKey: 'k' })
+        .send({ ...baseOptions, ...bodyOf(body) })
+        .catch((error: unknown) => error)
+
+      expect(String((caught as Error).message).includes('998877')).toBe(false)
+      expect(String(warnSpy.mock.calls[0]?.[0]).includes('998877')).toBe(false)
+      warnSpy.mockRestore()
+    })
+  })
 })
