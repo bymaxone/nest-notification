@@ -293,6 +293,10 @@ export class EmailService {
    */
   async sendTemplate(input: EmailSendTemplateInput): Promise<{ messageId: string }> {
     assertIdentifies('EmailService', 'tenantId', input.tenantId)
+    // Refused before rendering: a template is not rendered to be thrown away.
+    if (this.options.email) {
+      this.guardRecipientCount(input, this.options.email.maxRecipients)
+    }
     const requestedLocale = input.locale ?? this.options.global.defaultLocale
     const locale = await this.resolveTemplateLocale(input.template, requestedLocale)
     const rendered = await this.renderTemplate(

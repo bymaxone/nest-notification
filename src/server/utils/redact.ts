@@ -150,6 +150,15 @@ function walkChain(error: unknown, includeStack: boolean): string {
  */
 export const MIN_ECHO_LENGTH = 16
 
+/** One state of the suffix automaton `longestEchoFrom` builds over the error text. */
+interface EchoState {
+  length: number
+  link: EchoState | null
+  next: Map<number, EchoState>
+  /** The longest match of the reference that ended at this state or below it. */
+  best: number
+}
+
 /**
  * Collects the substrings of `text` (each at least {@link MIN_ECHO_LENGTH}
  * characters) that literally appear inside `reference` — the shape of a
@@ -167,26 +176,13 @@ export const MIN_ECHO_LENGTH = 16
  * @returns The echoed excerpts, in order of appearance.
  */
 export function collectEchoedExcerpts(text: string, reference: string): string[] {
+  const reach = longestEchoFrom(text, reference)
   const excerpts: string[] = []
   let index = 0
   while (index + MIN_ECHO_LENGTH <= text.length) {
-    const window = text.slice(index, index + MIN_ECHO_LENGTH)
-    // Each occurrence of the window anchors a direct character-by-character
-    // extension — never a substring re-search per added character, whose cost
-    // grows quadratically with the echo and lets a relay quoting a large body
-    // stall the event loop.
-    let longest = 0
-    for (let at = reference.indexOf(window); at !== -1; at = reference.indexOf(window, at + 1)) {
-      let length = MIN_ECHO_LENGTH
-      while (
-        text[index + length] !== undefined &&
-        text[index + length] === reference[at + length]
-      ) {
-        length += 1
-      }
-      longest = Math.max(longest, length)
-    }
-    if (longest === 0) {
+    // `index` is inside `text`, so the position has a measured length.
+    const longest = reach.at(index) as number
+    if (longest < MIN_ECHO_LENGTH) {
       index += 1
       continue
     }
@@ -194,6 +190,103 @@ export function collectEchoedExcerpts(text: string, reference: string): string[]
     index += longest
   }
   return excerpts
+}
+
+/**
+ * For every position of `text`, the length of the longest prefix of `text.slice(position)` that
+ * occurs somewhere in `reference`.
+ *
+ * Computed in time linear in both strings, whatever they contain. Extending every occurrence of a
+ * window character by character costs occurrences x extension, which on a repeated run is
+ * quadratic: a relay quoting an 80000-character body of one repeated character held the event loop
+ * for 21 s. Here the shorter string, the error text, is indexed as a suffix automaton of its own
+ * reverse and the reference is walked through it once.
+ *
+ * @param text - The error text, whose positions are measured.
+ * @param reference - The content the error may be echoing.
+ * @returns One length per position of `text`.
+ */
+function longestEchoFrom(text: string, reference: string): Int32Array {
+  if (text.length === 0 || reference.length === 0) {
+    return new Int32Array(text.length)
+  }
+  // A suffix automaton of reverse(text): a substring of `text` starting at position p is a
+  // substring of the reversed text ending at size - 1 - p, so "the longest prefix at p that the
+  // reference contains" is "the longest match ending at the state that prefix of the reversed text
+  // creates".
+  const root: EchoState = { length: 0, link: null, next: new Map(), best: 0 }
+  const states: EchoState[] = [root]
+  const created: EchoState[] = []
+  let last = root
+  for (let position = text.length - 1; position >= 0; position -= 1) {
+    const code = text.charCodeAt(position)
+    const current: EchoState = { length: last.length + 1, link: root, next: new Map(), best: 0 }
+    states.push(current)
+    created.push(current)
+    let walker: EchoState | null = last
+    while (walker !== null && !walker.next.has(code)) {
+      walker.next.set(code, current)
+      walker = walker.link
+    }
+    const target = walker?.next.get(code)
+    if (walker !== null && target !== undefined) {
+      if (walker.length + 1 === target.length) {
+        current.link = target
+      } else {
+        const clone: EchoState = {
+          length: walker.length + 1,
+          link: target.link,
+          next: new Map(target.next),
+          best: 0
+        }
+        states.push(clone)
+        while (walker !== null && walker.next.get(code) === target) {
+          walker.next.set(code, clone)
+          walker = walker.link
+        }
+        target.link = clone
+        current.link = clone
+      }
+    }
+    last = current
+  }
+  // Walk reverse(reference) through the automaton; at each step `matched` is the longest suffix of
+  // what has been read that is a substring of reverse(text), and `state` holds it.
+  let state = root
+  let matched = 0
+  for (let position = reference.length - 1; position >= 0; position -= 1) {
+    const code = reference.charCodeAt(position)
+    while (state !== root && !state.next.has(code)) {
+      // Only the root has no link, and the loop does not run for it.
+      state = state.link as EchoState
+      matched = state.length
+    }
+    const advanced = state.next.get(code)
+    if (advanced !== undefined) {
+      state = advanced
+      matched += 1
+      state.best = Math.max(state.best, matched)
+    }
+  }
+  // A match at a state is also a match at every state above it in the suffix-link tree, capped by
+  // that state's own length (a suffix of the matched string is matched too); children are visited
+  // before their parents, by decreasing length. A match at an ancestor then reaches every state
+  // below it, because the matched string is a suffix of theirs: parents are visited before children.
+  const byLength = [...states].sort((left, right) => right.length - left.length)
+  for (const child of byLength) {
+    const parent = child.link
+    if (parent !== null && parent !== root) {
+      parent.best = Math.max(parent.best, Math.min(child.best, parent.length))
+    }
+  }
+  for (const child of [...byLength].reverse()) {
+    const parent = child.link
+    if (parent !== null && parent !== root) {
+      child.best = Math.max(child.best, parent.best)
+    }
+  }
+  // `created` follows the reversed text, so its last entry is the suffix of `text` starting at 0.
+  return Int32Array.from(created.map((entry) => entry.best).reverse())
 }
 
 /**

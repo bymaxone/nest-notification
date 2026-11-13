@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **A failed send no longer blocks the event loop on a large or repeated body.** When a provider
+  or relay rejected a send and quoted the message, the echo detector extended every occurrence of
+  every window of the error text, which is quadratic in a repeated run: an 80000-character body of
+  one repeated character held the process for 21.6 s, and the cost was paid again for the plain-text
+  body. The detector now finds the same excerpts in time linear in the error text and the body
+  together: the same 80000-character echo takes 41 ms end to end, and a 1.4 MB body with no echo
+  takes 42 ms instead of about 850 ms. The excerpts it returns are unchanged.
+- **`sendTemplate()` refuses an oversized recipient list before it renders the template.**
+
 - **`consumeOnVerify` accepts a code once.** `verify()` read the entry, compared it, and deleted it
   in separate steps, so several verifications of the right code running together each returned
   `valid: true`, and a host that creates a session or resets a password on `valid` acted once per
