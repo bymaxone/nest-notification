@@ -647,16 +647,16 @@ A one-time password is a credential, so every behavior is pinned so that a regre
 - ✅ **Invariants asserted, not assumed** — the never-log-codes rule is a test (`JSON.stringify(entry).includes(code) === false` on every audit entry, and the thrown exception serialized recursively at every depth), not a review convention
 - ✅ **Published shape verified** — `attw` resolves every entrypoint against the packed tarball, and a dogfood smoke test installs the package into a scratch consumer before any tag is cut
 
-| Gate           | Standard                                                                            |
-| -------------- | ----------------------------------------------------------------------------------- |
-| Type safety    | TypeScript `strict`, zero `any`                                                     |
-| Coverage       | **100%** line/branch/function/statement per file (`pnpm test:cov:all`)              |
-| Mutation       | Stryker score **100%** (`break: 100`), no survivors                                 |
-| Lint           | ESLint flat config + `eslint-plugin-security`, zero warnings                        |
-| Bundle budgets | server < 30 KB · shared < 4 KB · react < 8 KB · testing < 4 KB brotli (`pnpm size`) |
-| Prisma-free    | `pnpm check:no-prisma` — the library never imports `@prisma/client`                 |
-| Export map     | `pnpm check:exports` — `attw` against the packed tarball, ESM and CJS               |
-| Supply chain   | published with npm provenance (OIDC), CodeQL + OpenSSF Scorecard                    |
+| Gate           | Standard                                                                                |
+| -------------- | --------------------------------------------------------------------------------------- |
+| Type safety    | TypeScript `strict`, zero `any`                                                         |
+| Coverage       | **100%** line/branch/function/statement per file (`pnpm test:cov:all`)                  |
+| Mutation       | Stryker score **100%** (`break: 100`), no survivors                                     |
+| Lint           | ESLint flat config + `eslint-plugin-security`, zero warnings                            |
+| Bundle budgets | server < 31.5 KB · shared < 4 KB · react < 8 KB · testing < 4.5 KB brotli (`pnpm size`) |
+| Prisma-free    | `pnpm check:no-prisma` — the library never imports `@prisma/client`                     |
+| Export map     | `pnpm check:exports` — `attw` against the packed tarball, ESM and CJS                   |
+| Supply chain   | published with npm provenance (OIDC), CodeQL + OpenSSF Scorecard                        |
 
 ```bash
 pnpm test          # unit suite
