@@ -201,3 +201,41 @@ describe('collectEchoedExcerpts answers', () => {
     expect(collectEchoedExcerpts('', 'some reference text of reasonable length')).toEqual([])
   })
 })
+
+describe('collectEchoedExcerpts over several fields', () => {
+  it('should find the same excerpts in each field as scanning the fields one by one', () => {
+    const random = lcg(5)
+    const reference = randomText(random, 400, 'abcdefghijklmnop ')
+    const fields = Array.from({ length: 6 }, (_, index) => {
+      const start = Math.floor(random() * 300)
+      return `${randomText(random, 5, 'xyz')}${reference.slice(start, start + 20 + index * 9)}${randomText(random, 4, 'xyz')}`
+    })
+
+    expect(collectEchoedExcerpts(fields, reference)).toEqual(
+      fields.flatMap((field) => referenceExcerpts(field, reference))
+    )
+  })
+
+  // A match that would run from the end of one field into the start of the next must stop at the
+  // end of the field: each excerpt is later removed from the field it came from.
+  it('should never return an excerpt that spans two fields', () => {
+    const reference = 'the quick brown fox jumps over the lazy dog'
+    const fields = ['the quick brown fox ju', 'mps over the lazy dog']
+
+    const excerpts = collectEchoedExcerpts(fields, reference)
+
+    expect(excerpts).toEqual(['the quick brown fox ju', 'mps over the lazy dog'])
+    for (const excerpt of excerpts) {
+      expect(fields.some((field) => field.includes(excerpt))).toBe(true)
+    }
+  })
+
+  it('should return the fields that no longer fit in the scan budget whole', () => {
+    const fits = 'x'.repeat(MAX_ECHO_SCAN_LENGTH - 10)
+    const over = 'reset code 998877 and more'
+
+    const excerpts = collectEchoedExcerpts([fits, over], 'an unrelated body of ordinary length')
+
+    expect(excerpts).toEqual([over])
+  })
+})

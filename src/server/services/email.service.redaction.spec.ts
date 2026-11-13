@@ -762,4 +762,27 @@ describe('EmailService.sendTemplate redaction', () => {
       false
     )
   })
+
+  // A provider chooses how deep its cause chain is. Scanning each field against the whole body
+  // would cost the body's length once per link.
+  it('should read a deep cause chain against a large body in time that does not grow per link', async () => {
+    const provider = makeProvider()
+    const body = `<p>${'lorem ipsum dolor '.repeat(4_500)}</p>`
+    provider.send.mockImplementation(async () => {
+      let error = new Error('relay link 0 failed with a sizeable message')
+      for (let link = 1; link < 400; link += 1) {
+        error = new Error(`relay link ${String(link)} failed with a sizeable message`, {
+          cause: error
+        })
+      }
+      throw error
+    })
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), makeAudit())
+
+    const started = performance.now()
+    await service.send({ ...baseInput, html: body }).catch(() => undefined)
+    const elapsed = performance.now() - started
+
+    expect(elapsed).toBeLessThan(2_000)
+  })
 })

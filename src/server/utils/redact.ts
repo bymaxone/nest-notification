@@ -178,7 +178,7 @@ interface EchoState {
 }
 
 /**
- * Collects the substrings of `text` (each at least {@link MIN_ECHO_LENGTH}
+ * Collects the substrings of the error fields (each at least {@link MIN_ECHO_LENGTH}
  * characters) that literally appear inside `reference` — the shape of a
  * provider or relay echoing message content back inside an error. Each match
  * is grown to the longest run still present in the reference, so an echo
@@ -189,38 +189,61 @@ interface EchoState {
  * detector is defense-in-depth for the undeclared case. A bare secret quoted
  * without surrounding content is shorter than the window and is not caught.
  *
- * @param text - The error text to inspect.
+ * The fields are examined together, in one pass over `reference`, and a match never crosses from
+ * one field into the next: what is returned is later removed from each field on its own, so every
+ * excerpt is a substring of the field it came from. The matcher holds a few hundred bytes per
+ * character it examines, and a provider or relay chooses how much it sends back, so at most
+ * {@link MAX_ECHO_SCAN_LENGTH} characters are examined. A field that does not fit in what is
+ * left is returned whole, as one excerpt: it is scrubbed entirely, which gives up the diagnosis in
+ * an error that large and never lets quoted content through.
+ *
+ * @param fields - One error field (a message or a stack), or the fields of a chain.
  * @param reference - The content the error may be echoing (e.g. a message body).
- * @returns The echoed excerpts, in order of appearance; the whole text when it is longer than
- *   {@link MAX_ECHO_SCAN_LENGTH}.
+ * @returns The echoed excerpts, field by field in order of appearance, preceded by the fields that
+ *   were returned whole.
  */
-export function collectEchoedExcerpts(text: string, reference: string): string[] {
-  // The matcher holds a few hundred bytes per character of `text`, and the text is as long as
-  // whatever the provider or relay chose to send back. Past this size the whole text is treated as
-  // echoed: it is scrubbed entirely, which gives up the diagnosis in an error that large and never
-  // lets quoted content through.
-  if (text.length > MAX_ECHO_SCAN_LENGTH) {
-    return [text]
-  }
-  const reach = longestEchoFrom(text, reference)
-  const excerpts: string[] = []
-  let index = 0
-  while (index + MIN_ECHO_LENGTH <= text.length) {
-    // `index` is inside `text`, so the position has a measured length.
-    const longest = reach.at(index) as number
-    if (longest < MIN_ECHO_LENGTH) {
-      index += 1
-      continue
+export function collectEchoedExcerpts(
+  fields: string | readonly string[],
+  reference: string
+): string[] {
+  const all = typeof fields === 'string' ? [fields] : fields
+  let budget = MAX_ECHO_SCAN_LENGTH
+  const examined: string[] = []
+  const whole: string[] = []
+  for (const field of all) {
+    if (field.length > budget) {
+      whole.push(field)
+    } else {
+      examined.push(field)
+      budget -= field.length
     }
-    excerpts.push(text.slice(index, index + longest))
-    index += longest
+  }
+  // One automaton over every examined field, a separator that is no character between them.
+  const units = examined.flatMap((field) => [...field.split('').map((c) => c.charCodeAt(0)), -1])
+  const reach = longestEchoFrom(units, reference)
+  const excerpts = whole
+  let offset = 0
+  for (const field of examined) {
+    let index = 0
+    while (index + MIN_ECHO_LENGTH <= field.length) {
+      // `index` is inside the field, so the position has a measured length.
+      const longest = reach.at(offset + index) as number
+      if (longest < MIN_ECHO_LENGTH) {
+        index += 1
+        continue
+      }
+      excerpts.push(field.slice(index, index + longest))
+      index += longest
+    }
+    offset += field.length + 1
   }
   return excerpts
 }
 
 /**
- * For every position of `text`, the length of the longest prefix of `text.slice(position)` that
- * occurs somewhere in `reference`.
+ * For every position of `units`, the length of the longest run starting there that occurs
+ * somewhere in `reference`. `units` holds character codes, with -1 between fields: no character of
+ * `reference` is -1, so no run crosses a separator.
  *
  * Computed in time linear in both strings, whatever they contain. Extending every occurrence of a
  * window character by character costs occurrences x extension, which on a repeated run is
@@ -228,11 +251,11 @@ export function collectEchoedExcerpts(text: string, reference: string): string[]
  * seconds. Here the shorter string, the error text, is indexed as a suffix automaton of its own
  * reverse and the reference is walked through it once.
  *
- * @param text - The error text, whose positions are measured.
+ * @param units - The character codes of the error fields, a -1 after each.
  * @param reference - The content the error may be echoing.
- * @returns One length per position of `text`.
+ * @returns One length per position of `units`.
  */
-function longestEchoFrom(text: string, reference: string): Int32Array {
+function longestEchoFrom(units: readonly number[], reference: string): Int32Array {
   // A suffix automaton of reverse(text): a substring of `text` starting at position p is a
   // substring of the reversed text ending at size - 1 - p, so "the longest prefix at p that the
   // reference contains" is "the longest match ending at the state that prefix of the reversed text
@@ -241,8 +264,7 @@ function longestEchoFrom(text: string, reference: string): Int32Array {
   const states: EchoState[] = []
   const created: EchoState[] = []
   let last = root
-  for (const char of text.split('').reverse()) {
-    const code = char.charCodeAt(0)
+  for (const code of [...units].reverse()) {
     const current: EchoState = { length: last.length + 1, link: root, next: new Map(), best: 0 }
     states.push(current)
     created.push(current)

@@ -567,10 +567,11 @@ export class EmailService {
     // the raw-cause path with that plaintext aboard.
     // Each field on its own: what is found is removed from each field separately, so a piece that
     // spans two fields, or a whole over-limit field, must be a substring of the field it came from.
-    const values = collectErrorChainParts(error).flatMap((part) => [
-      ...collectEchoedExcerpts(part, sendOptions.html),
-      ...(sendOptions.text !== undefined ? collectEchoedExcerpts(part, sendOptions.text) : [])
-    ])
+    const parts = collectErrorChainParts(error)
+    const values = collectEchoedExcerpts(parts, sendOptions.html)
+    if (sendOptions.text !== undefined) {
+      values.push(...collectEchoedExcerpts(parts, sendOptions.text))
+    }
     if (declared) {
       values.push(...declared)
     }
