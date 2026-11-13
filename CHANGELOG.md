@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   or relay rejected a send and quoted the message, the echo detector extended every occurrence of
   every window of the error text, which is quadratic in a repeated run, and paid that cost again for
   the plain-text body. The detector now finds the same excerpts in time linear in the error text and
-  the body together. The excerpts it returns are unchanged.
+  the body together, and returns the same excerpts. An error text longer than 64 KiB is scrubbed whole instead of examined piece by piece, because the detector's memory grows with it.
 - **`sendTemplate()` refuses an oversized recipient list before it renders the template.**
 
 - **`consumeOnVerify` accepts a code once.** `verify()` read the entry, compared it, and deleted it

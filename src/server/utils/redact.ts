@@ -150,6 +150,12 @@ function walkChain(error: unknown, includeStack: boolean): string {
  */
 export const MIN_ECHO_LENGTH = 16
 
+/**
+ * Longest error text, in characters, that {@link collectEchoedExcerpts} examines piece by piece.
+ * A longer text is returned whole, as one excerpt.
+ */
+export const MAX_ECHO_SCAN_LENGTH = 65_536
+
 /** One state of the suffix automaton `longestEchoFrom` builds over the error text. */
 interface EchoState {
   length: number
@@ -173,9 +179,17 @@ interface EchoState {
  *
  * @param text - The error text to inspect.
  * @param reference - The content the error may be echoing (e.g. a message body).
- * @returns The echoed excerpts, in order of appearance.
+ * @returns The echoed excerpts, in order of appearance; the whole text when it is longer than
+ *   {@link MAX_ECHO_SCAN_LENGTH}.
  */
 export function collectEchoedExcerpts(text: string, reference: string): string[] {
+  // The matcher holds a few hundred bytes per character of `text`, and the text is as long as
+  // whatever the provider or relay chose to send back. Past this size the whole text is treated as
+  // echoed: it is scrubbed entirely, which gives up the diagnosis in an error that large and never
+  // lets quoted content through.
+  if (text.length > MAX_ECHO_SCAN_LENGTH) {
+    return [text]
+  }
   const reach = longestEchoFrom(text, reference)
   const excerpts: string[] = []
   let index = 0

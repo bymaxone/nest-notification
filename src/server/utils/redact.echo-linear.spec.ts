@@ -5,7 +5,7 @@
  * @layer domain
  */
 
-import { MIN_ECHO_LENGTH, collectEchoedExcerpts } from './redact'
+import { MAX_ECHO_SCAN_LENGTH, MIN_ECHO_LENGTH, collectEchoedExcerpts } from './redact'
 
 /**
  * The definition, written the obvious way: at each position, find every occurrence of the window in
@@ -52,8 +52,8 @@ function randomText(random: () => number, length: number, alphabet: string): str
 describe('collectEchoedExcerpts cost', () => {
   // A relay that quotes a body made of one long run sends every window to every position: the
   // direct definition spent 4.2 s on a 40000-character body and 21.6 s on 80000.
-  it('should scrub an 80000-character repeated body in well under a second', () => {
-    const body = 'a'.repeat(80_000)
+  it('should scrub a repeated body at the largest scanned size in well under a second', () => {
+    const body = 'a'.repeat(MAX_ECHO_SCAN_LENGTH - 20)
     const message = `550 rejected: ${body}`
 
     const started = performance.now()
@@ -65,7 +65,7 @@ describe('collectEchoedExcerpts cost', () => {
   })
 
   it('should stay linear when the body is a short repeated pattern', () => {
-    const body = 'abcdefghij'.repeat(8_000)
+    const body = 'abcdefghij'.repeat(6_000)
     const message = `rejected: ${body}`
 
     const started = performance.now()
@@ -74,6 +74,19 @@ describe('collectEchoedExcerpts cost', () => {
 
     expect(excerpts.join('')).toBe(body)
     expect(elapsed).toBeLessThan(500)
+  })
+
+  // An error that large is relay-controlled, and indexing it costs memory in proportion: it is
+  // scrubbed whole instead, which can only remove more than it needs to.
+  it('should return an error text longer than the scan limit whole', () => {
+    const message = `550 rejected: ${'x'.repeat(MAX_ECHO_SCAN_LENGTH)}`
+
+    expect(collectEchoedExcerpts(message, 'an unrelated body of ordinary length')).toEqual([
+      message
+    ])
+    expect(
+      collectEchoedExcerpts(message.slice(0, MAX_ECHO_SCAN_LENGTH), 'unrelated body text')
+    ).toEqual([])
   })
 
   it('should read a large body with no echo in time proportional to its size', () => {
