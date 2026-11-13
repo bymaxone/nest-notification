@@ -272,17 +272,13 @@ function longestEchoFrom(text: string, reference: string): Int32Array {
   // before their parents, by decreasing length. A match at an ancestor then reaches every state
   // below it, because the matched string is a suffix of theirs: parents are visited before children.
   const byLength = [...states].sort((left, right) => right.length - left.length)
+  // Every listed state has a link: only the root has none, and it is not listed.
   for (const child of byLength) {
-    const parent = child.link
-    if (parent !== null) {
-      parent.best = Math.max(parent.best, Math.min(child.best, parent.length))
-    }
+    const parent = child.link as EchoState
+    parent.best = Math.max(parent.best, Math.min(child.best, parent.length))
   }
   for (const child of [...byLength].reverse()) {
-    const parent = child.link
-    if (parent !== null) {
-      child.best = Math.max(child.best, parent.best)
-    }
+    child.best = Math.max(child.best, (child.link as EchoState).best)
   }
   // `created` follows the reversed text, so its last entry is the suffix of `text` starting at 0.
   return Int32Array.from(created.map((entry) => entry.best).reverse())
