@@ -32,6 +32,13 @@ export const delegating = (inner: IOtpStorage, overrides: Partial<IOtpStorage>):
   ...overrides
 })
 
+/**
+ * Runs the first contract case whose name contains `name` against `storage`.
+ *
+ * @param storage - The storage to exercise.
+ * @param name - A substring of the case name; the first case that contains it is run.
+ * @throws Error When no case matches, or the case reports a violation.
+ */
 export const runCase = async (storage: IOtpStorage, name: string): Promise<void> => {
   const found = otpStorageContract(() => storage, FAST_EXPIRY).find((c) => c.name.includes(name))
   if (!found) {

@@ -28,11 +28,10 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 // headroom: server ~15.5/30 kB, shared ~0.8/4 kB, react ~1.7/8 kB. The budgets
 // sit roughly 2x over the real artifact so a peer dep leaking into the bundle
 // trips the gate well before it ships; revisit when the SMS/Push channels land.
-// Recalibrated for the DEC-152 security fixes, from the real artifact: server 29.92 kB before the
-// recipient rule and the atomic consume, 30.28 kB with the atomic compare-and-delete in both
-// storages and its Lua script; testing 3.65 kB before the compare-and-delete contract cases, 4.01 kB
-// with them. The .mjs ships unminified with JSDoc, so new runtime code counts in full. The budgets are
-// re-derived from each change's own measured size, not raised ahead of it.
+// The budgets sit just above the measured artifact: server 30.28 kB and testing 4.01 kB brotli.
+// The .mjs ships unminified with JSDoc, so every line of runtime code and every contract case
+// counts in full. A budget is re-derived from the artifact of the change that needs it, and not
+// raised ahead of it.
 const BUDGETS = [
   { name: 'server (NestJS module)', path: 'dist/server/index.mjs', brotli: 31.5 * 1024 },
   { name: 'shared (types + constants)', path: 'dist/shared/index.mjs', brotli: 4 * 1024 },
