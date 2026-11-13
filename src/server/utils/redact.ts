@@ -252,6 +252,7 @@ function longestEchoFrom(text: string, reference: string): Int32Array {
   // what has been read that is a substring of reverse(text), and `state` holds it.
   let state = root
   let matched = 0
+  // Stryker disable next-line ArithmeticOperator: equivalent — a start past the end reads two positions that are not characters, a code no transition carries, so the walk stays at the root and the matches are unchanged
   for (let position = reference.length - 1; position >= 0; position -= 1) {
     const code = reference.charCodeAt(position)
     while (state !== root && !state.next.has(code)) {
