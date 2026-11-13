@@ -118,7 +118,6 @@ export class RedisOtpStorage implements IOtpStorage {
    * Atomic compare-and-delete: reads the entry, and deletes it only when its stored `code` equals
    * the value the caller read, so of N concurrent verifications exactly one removes it.
    */
-  // Stryker disable next-line StringLiteral: the Lua body executes only on a real Redis server; unit tests drive a JS fake whose `eval` recognises the script by its text, so an emptied-string mutant is unkillable without a live Redis integration run.
   private static readonly DELETE_IF_CODE_LUA = `
     local raw = redis.call('GET', KEYS[1])
     if not raw then return 0 end
