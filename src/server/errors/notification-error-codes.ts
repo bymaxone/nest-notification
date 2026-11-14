@@ -99,6 +99,11 @@ export const NOTIFICATION_ERROR_DEFINITIONS = {
     message: 'Maximum OTP attempts exceeded'
   },
   /** Reserved: `verify()` returns `{ valid: false, reason: 'invalid_code' }` instead of throwing. */
+  OTP_STORAGE_UNAVAILABLE: {
+    code: NOTIFICATION_ERROR_CODES.OTP_STORAGE_UNAVAILABLE,
+    status: HttpStatus.SERVICE_UNAVAILABLE,
+    message: 'OTP storage unavailable'
+  },
   OTP_INVALID_CODE: {
     code: NOTIFICATION_ERROR_CODES.OTP_INVALID_CODE,
     status: HttpStatus.UNAUTHORIZED,

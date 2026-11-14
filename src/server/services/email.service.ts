@@ -12,7 +12,7 @@
  * `EMAIL_SEND_FAILED`. OTP codes ride inside the body, never in audit metadata.
  */
 
-import { Inject, Injectable, Logger } from '@nestjs/common'
+import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common'
 
 import {
   BYMAX_NOTIFICATION_EMAIL_PROVIDER,
@@ -30,6 +30,7 @@ import type {
   NotificationLogEntry
 } from '../interfaces/notification-log-repository.interface'
 import { AuditWriteWarning } from '../utils/audit-write-warning'
+import { isUnavailableError } from '../utils/availability'
 import type { DeliveryStatus } from '../utils/delivery-status'
 import {
   extractDeliveryStatus,
@@ -178,6 +179,14 @@ function readAttachedStatus(error: unknown): DeliveryStatus | undefined {
   }
 }
 
+/**
+ * The status override of a failed send: 503 when the provider could not be reached or timed out,
+ * nothing (the catalog's 502) when it answered and refused. A caller told 503 may try again later.
+ */
+function unavailableStatus(error: unknown): { status?: HttpStatus } {
+  return isUnavailableError(error) ? { status: HttpStatus.SERVICE_UNAVAILABLE } : {}
+}
+
 /** Transactional email service. */
 @Injectable()
 export class EmailService {
@@ -286,7 +295,10 @@ export class EmailService {
       throw new NotificationException(
         'EMAIL_SEND_FAILED',
         { providerName: this.provider.name },
-        { cause: secretValues.length > 0 ? scrubValuesFromErrorChain(error, secretValues) : error }
+        {
+          cause: secretValues.length > 0 ? scrubValuesFromErrorChain(error, secretValues) : error,
+          ...unavailableStatus(error)
+        }
       )
     }
   }
@@ -549,10 +561,11 @@ export class EmailService {
         ...status
       })
     )
-    throw new NotificationException('EMAIL_SEND_FAILED', {
-      providerName: this.provider.name,
-      ...status
-    })
+    throw new NotificationException(
+      'EMAIL_SEND_FAILED',
+      { providerName: this.provider.name, ...status },
+      unavailableStatus(error)
+    )
   }
 
   /**

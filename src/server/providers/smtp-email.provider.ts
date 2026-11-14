@@ -27,6 +27,7 @@ import type {
   EmailSendResult,
   IEmailProvider
 } from '../interfaces/email-provider.interface'
+import { errorCodeOf } from '../utils/availability'
 import { extractDeliveryStatus, withoutDeclaredValues } from '../utils/delivery-status'
 import { describeError, UNPRINTABLE_ERROR } from '../utils/describe-error'
 import { loadOptionalPeer } from '../utils/load-optional-peer'
@@ -362,6 +363,9 @@ export class SmtpEmailProvider implements IEmailProvider {
       // error would otherwise escape from here — before the branch below has
       // had a chance to withhold anything.
       const raw = readRedactedMessage(error)
+      // The client's own error code (a refused connection, a timeout) crosses to the error this
+      // adapter throws: it is a token, and the status of the failure is read from it.
+      const code = errorCodeOf(error)
       if (publishProviderText === false) {
         // The caller's body carries a credential, so none of the relay's own
         // words may reach a log line or a thrown message — redaction removes
@@ -383,12 +387,16 @@ export class SmtpEmailProvider implements IEmailProvider {
         // string a log rule then has to scan.
         throw Object.assign(new Error('SMTP send failed'), {
           ...(status !== undefined ? { deliveryStatus: status } : {}),
-          ...(enhanced !== undefined ? { deliveryEnhancedStatus: enhanced } : {})
+          ...(enhanced !== undefined ? { deliveryEnhancedStatus: enhanced } : {}),
+          ...(code !== undefined ? { code } : {})
         })
       }
       const reason = this.scrubTransportError(raw, payload, redactValuesList)
       this.logger.warn(`[SMTP_SEND_FAILED] ${reason}`)
-      throw new Error(`SMTP send failed: ${reason}`)
+      throw Object.assign(
+        new Error(`SMTP send failed: ${reason}`),
+        code === undefined ? {} : { code }
+      )
     }
   }
 

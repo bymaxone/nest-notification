@@ -20,6 +20,7 @@ import type {
   EmailSendResult,
   IEmailProvider
 } from '../interfaces/email-provider.interface'
+import { errorCodeOf } from '../utils/availability'
 import { loadOptionalPeer } from '../utils/load-optional-peer'
 import {
   REDACTED_VALUE,
@@ -68,6 +69,31 @@ function settleOrAbort<T>(call: Promise<T>, signal: AbortSignal): Promise<T> {
   })
 }
 
+/**
+ * Marks the error a provider throws with a failure code, when there is one, so the status of the
+ * failure can be read off the code and not off the provider's words.
+ */
+function withCode(error: Error, code: string | undefined): Error {
+  return code === undefined ? error : Object.assign(error, { code })
+}
+
+/**
+ * `EUNAVAILABLE` for an error object the SDK returned that says Resend could not be reached or is
+ * down: no request was made at all (the SDK's `application_error` with no status), or an HTTP 5xx.
+ * Anything else, a rejected request included, is an answer and carries no availability code.
+ */
+function unavailableCodeOf(error: { name?: unknown; statusCode?: unknown }): string | undefined {
+  try {
+    const status: unknown = error.statusCode
+    const requestNotMade = error.name === 'application_error' && status === null
+    return requestNotMade || (typeof status === 'number' && status >= 500)
+      ? 'EUNAVAILABLE'
+      : undefined
+  } catch {
+    return undefined
+  }
+}
+
 /** Default bound on one send, in milliseconds. */
 const DEFAULT_TIMEOUT_MS = 15_000
 
@@ -93,7 +119,7 @@ export interface ResendEmailProviderOptions {
 /** Outcome of `resend.emails.send` — a `{ data, error }` discriminated result. */
 interface ResendSendOutcome {
   data: { id: string } | null
-  error: { message: string } | null
+  error: { message: string; name?: unknown; statusCode?: unknown } | null
 }
 
 /** The exact payload subset {@link ResendEmailProvider} forwards to the SDK. */
@@ -239,12 +265,12 @@ export class ResendEmailProvider implements IEmailProvider {
       const reason = signal.aborted
         ? `Resend request timed out after ${String(timeoutMs)} ms`
         : readRedactedMessage(error)
-      throw this.sendFailure(reason, options)
+      throw this.sendFailure(reason, options, signal.aborted ? 'ETIMEDOUT' : errorCodeOf(error))
     }
     if (result.error) {
       // The SDK's error object is consumer code too, so reading its `message`
       // is guarded rather than dereferenced directly.
-      throw this.sendFailure(readSdkMessage(result.error), options)
+      throw this.sendFailure(readSdkMessage(result.error), options, unavailableCodeOf(result.error))
     }
     if (!result.data?.id) {
       throw new Error('Resend returned no message ID')
@@ -261,18 +287,18 @@ export class ResendEmailProvider implements IEmailProvider {
    * @param options - The send input whose body and declared values to scrub.
    * @returns The `Error` for the caller to throw.
    */
-  private sendFailure(rawMessage: string, options: EmailSendOptions): Error {
+  private sendFailure(rawMessage: string, options: EmailSendOptions, code?: string): Error {
     if (options.publishProviderText === false) {
       // The body carries a credential, so nothing the API wrote may reach a
       // log line or the thrown message. Unlike SMTP there is no reply code to
       // fall back on here, so the failure publishes only that it happened.
       this.logger.warn('[RESEND_SEND_FAILED] (provider text withheld)')
-      return new Error('Resend send failed')
+      return withCode(new Error('Resend send failed'), code)
     }
     // Surface only the provider's message — never the email body.
     const reason = this.scrubSendError(rawMessage, options)
     this.logger.warn(`[RESEND_SEND_FAILED] ${reason}`)
-    return new Error(`Resend send failed: ${reason}`)
+    return withCode(new Error(`Resend send failed: ${reason}`), code)
   }
 
   /**

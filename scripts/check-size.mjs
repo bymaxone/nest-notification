@@ -35,7 +35,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 // counts in full. A budget is re-derived from the artifact of the change that needs it, and not
 // raised ahead of it.
 const BUDGETS = [
-  { name: 'server (NestJS module)', path: 'dist/server/index.mjs', brotli: 31.66 * 1024 },
+  { name: 'server (NestJS module)', path: 'dist/server/index.mjs', brotli: 32.61 * 1024 },
   { name: 'shared (types + constants)', path: 'dist/shared/index.mjs', brotli: 4 * 1024 },
   { name: 'react (hooks)', path: 'dist/react/index.mjs', brotli: 8 * 1024 },
   { name: 'testing (storage contract)', path: 'dist/testing/index.mjs', brotli: 4.5 * 1024 }

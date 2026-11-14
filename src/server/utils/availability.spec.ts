@@ -1,0 +1,170 @@
+/**
+ * @fileoverview Holds the availability classifier to the failures a backing service actually
+ * produces: the messages are those a real ioredis 6.0.0 client printed (refused and DNS failures
+ * with the default retry limit, a command timeout against a server that never answered, a closed
+ * connection, the offline queue switched off) and the replies a Redis server sent, captured
+ * verbatim, plus the error codes Node and nodemailer set. Anything else is not availability.
+ * @layer utils
+ */
+
+import { errorCodeOf, isUnavailableError } from './availability'
+
+class ReplyError extends Error {
+  override name = 'ReplyError'
+}
+class MaxRetriesPerRequestError extends Error {
+  override name = 'MaxRetriesPerRequestError'
+}
+
+const coded = (code: string, message = 'boom'): Error => Object.assign(new Error(message), { code })
+
+describe('isUnavailableError', () => {
+  // Captured from ioredis 6.0.0 against a closed port, a hung server and a closed client.
+  it.each([
+    [
+      'Reached the max retries per request limit (which is 1). Refer to "maxRetriesPerRequest" option for details.'
+    ],
+    ["Stream isn't writeable and enableOfflineQueue options is false"],
+    ['Command timed out'],
+    ['Connection is closed.']
+  ])('should treat the ioredis failure %j as unavailable', (message) => {
+    expect(isUnavailableError(new Error(message))).toBe(true)
+  })
+
+  it('should treat a MaxRetriesPerRequestError as unavailable whatever its text', () => {
+    expect(isUnavailableError(new MaxRetriesPerRequestError('anything'))).toBe(true)
+  })
+
+  // Captured from a Redis server answering a command with an error reply.
+  it.each([
+    "READONLY You can't write against a read only replica.",
+    'LOADING Redis is loading the dataset in memory',
+    'CLUSTERDOWN The cluster is down'
+  ])('should treat the Redis reply %j as unavailable', (message) => {
+    expect(isUnavailableError(new ReplyError(message))).toBe(true)
+  })
+
+  // Replies that name a fault of the caller or of the deployment, not an outage.
+  it.each([
+    'ERR wrong number of arguments',
+    'NOAUTH Authentication required.',
+    "OOM command not allowed when used memory > 'maxmemory'.",
+    'MISCONF Redis is configured to save RDB snapshots',
+    'TRYAGAIN Multiple keys request during rehashing of slot'
+  ])('should not treat the Redis reply %j as unavailable', (message) => {
+    expect(isUnavailableError(new ReplyError(message))).toBe(false)
+  })
+
+  it.each([
+    'ECONNREFUSED',
+    'ECONNRESET',
+    'ETIMEDOUT',
+    'EPIPE',
+    'ENOTFOUND',
+    'EAI_AGAIN',
+    'EHOSTUNREACH',
+    'ENETUNREACH',
+    'ECONNABORTED',
+    'ESOCKETTIMEDOUT',
+    'ECONNECTION',
+    'ESOCKET',
+    'EDNS'
+  ])('should treat the error code %s as unavailable', (code) => {
+    expect(isUnavailableError(coded(code))).toBe(true)
+  })
+
+  it.each(['EAUTH', 'EENVELOPE', 'EMESSAGE', 'ERR_INVALID_ARG_TYPE', 'EACCES', 'ENOENT'])(
+    'should not treat the error code %s as unavailable',
+    (code) => {
+      expect(isUnavailableError(coded(code))).toBe(false)
+    }
+  )
+
+  it('should look down the cause chain', () => {
+    const error = new Error('SMTP send failed', { cause: coded('ECONNREFUSED') })
+
+    expect(isUnavailableError(error)).toBe(true)
+  })
+
+  it('should stop at a loop in the chain', () => {
+    const first = new Error('first')
+    const second = new Error('second', { cause: first })
+    ;(first as { cause?: unknown }).cause = second
+
+    expect(isUnavailableError(first)).toBe(false)
+  })
+
+  it('should read only a bounded part of a very long chain', () => {
+    let error: Error = coded('ECONNREFUSED')
+    for (let link = 0; link < 100_000; link += 1) {
+      error = new Error('wrapper', { cause: error })
+    }
+
+    const started = performance.now()
+    const answer = isUnavailableError(error)
+
+    expect(answer).toBe(false)
+    expect(performance.now() - started).toBeLessThan(2_000)
+  })
+
+  it.each([
+    ['a TypeError', new TypeError("Cannot read properties of undefined (reading 'get')")],
+    ['a plain Error', new Error('Invalid login: 535 5.7.8 authentication failed')],
+    ['a string', 'ECONNREFUSED'],
+    ['null', null],
+    ['undefined', undefined],
+    ['a number', 7]
+  ])('should not treat %s as unavailable', (_name, value) => {
+    expect(isUnavailableError(value)).toBe(false)
+  })
+
+  // The text is matched whole, not as a substring: a defect that merely mentions a phrase is a defect.
+  it('should not match an ioredis phrase inside a longer message', () => {
+    expect(isUnavailableError(new Error('the Connection is closed. flag was never read'))).toBe(
+      false
+    )
+  })
+
+  it('should survive a hostile getter', () => {
+    const hostile = {
+      get code(): string {
+        throw new Error('nope')
+      },
+      get message(): string {
+        throw new Error('nope')
+      }
+    }
+
+    expect(isUnavailableError(hostile)).toBe(false)
+  })
+
+  it('should read the error code of a plain object, as SDKs reject with one', () => {
+    expect(isUnavailableError({ code: 'ETIMEDOUT', message: 'x' })).toBe(true)
+  })
+})
+
+describe('errorCodeOf', () => {
+  it('should answer the code of the error, or of the first cause that has one', () => {
+    expect(errorCodeOf(coded('ECONNREFUSED'))).toBe('ECONNREFUSED')
+    expect(errorCodeOf(new Error('wrapper', { cause: coded('ETIMEDOUT') }))).toBe('ETIMEDOUT')
+  })
+
+  it.each([
+    ['a code with spaces and an address', coded('user jane@acme.com')],
+    ['a lower-case code', coded('econnrefused')],
+    ['a code of 40 characters', coded('E'.repeat(40))],
+    ['a numeric code', Object.assign(new Error('x'), { code: 500 })],
+    ['no code', new Error('x')],
+    ['null', null]
+  ])('should answer nothing for %s', (_name, value) => {
+    expect(errorCodeOf(value)).toBeUndefined()
+  })
+
+  it('should stop at a loop in the chain', () => {
+    const first = new Error('first')
+    const second = new Error('second', { cause: first })
+    ;(first as { cause?: unknown }).cause = second
+
+    expect(errorCodeOf(first)).toBeUndefined()
+  })
+})

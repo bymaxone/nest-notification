@@ -189,3 +189,95 @@ describe('ResendEmailProvider timeout', () => {
     expect(() => new ResendEmailProvider({ apiKey: 'k', timeoutMs: 1 })).not.toThrow()
   })
 })
+
+describe('ResendEmailProvider failure codes', () => {
+  beforeEach(() => {
+    jest.restoreAllMocks()
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    mockResendCtor.mockImplementation(() => ({ emails: { send: mockSend } }))
+    mockSend.mockReset()
+  })
+
+  // The status the service answers with is read off this code, so the provider has to set it.
+  it('should carry ETIMEDOUT on a send that timed out', async () => {
+    mockSend.mockImplementation(() => new Promise(() => undefined))
+
+    const caught: unknown = await new ResendEmailProvider({ apiKey: 'k', timeoutMs: 20 })
+      .send(baseOptions)
+      .catch((error: unknown) => error)
+
+    expect((caught as { code?: string }).code).toBe('ETIMEDOUT')
+  })
+
+  // What the real SDK 6.38.1 returned for a closed port and for an HTTP 503.
+  it.each([
+    [
+      'a request that could not be made',
+      {
+        name: 'application_error',
+        statusCode: null,
+        message: 'Unable to fetch data. The request could not be resolved.'
+      }
+    ],
+    ['an HTTP 503', { name: 'service_unavailable', message: 'down', statusCode: 503 }],
+    ['an HTTP 500', { name: 'internal_server_error', message: 'oops', statusCode: 500 }]
+  ])('should carry EUNAVAILABLE for %s', async (_name, error) => {
+    mockSend.mockResolvedValue({ data: null, error })
+
+    const caught: unknown = await new ResendEmailProvider({ apiKey: 'k' })
+      .send(baseOptions)
+      .catch((thrown: unknown) => thrown)
+
+    expect((caught as { code?: string }).code).toBe('EUNAVAILABLE')
+  })
+
+  it.each([
+    ['a validation error', { name: 'validation_error', message: 'bad from', statusCode: 422 }],
+    ['an authentication failure', { name: 'missing_api_key', message: 'no key', statusCode: 401 }],
+    ['a rate limit', { name: 'rate_limit_exceeded', message: 'slow down', statusCode: 429 }]
+  ])('should carry no availability code for %s', async (_name, error) => {
+    mockSend.mockResolvedValue({ data: null, error })
+
+    const caught: unknown = await new ResendEmailProvider({ apiKey: 'k' })
+      .send(baseOptions)
+      .catch((thrown: unknown) => thrown)
+
+    expect((caught as { code?: string }).code).toBeUndefined()
+  })
+
+  it('should carry the code of a network error the SDK rejects with', async () => {
+    mockSend.mockRejectedValue(Object.assign(new Error('fetch failed'), { code: 'ECONNREFUSED' }))
+
+    const caught: unknown = await new ResendEmailProvider({ apiKey: 'k' })
+      .send(baseOptions)
+      .catch((thrown: unknown) => thrown)
+
+    expect((caught as { code?: string }).code).toBe('ECONNREFUSED')
+  })
+
+  it('should not carry an arbitrary code, only a short token', async () => {
+    mockSend.mockRejectedValue(Object.assign(new Error('x'), { code: 'user jane@acme.com 998877' }))
+
+    const caught: unknown = await new ResendEmailProvider({ apiKey: 'k' })
+      .send(baseOptions)
+      .catch((thrown: unknown) => thrown)
+
+    expect((caught as { code?: string }).code).toBeUndefined()
+  })
+
+  it('should carry no code when reading the SDK error object throws', async () => {
+    const hostile = {
+      message: 'x',
+      get statusCode(): number {
+        throw new Error('nope')
+      }
+    }
+    mockSend.mockResolvedValue({ data: null, error: hostile })
+
+    const caught: unknown = await new ResendEmailProvider({ apiKey: 'k' })
+      .send(baseOptions)
+      .catch((thrown: unknown) => thrown)
+
+    expect((caught as { code?: string }).code).toBeUndefined()
+  })
+})
