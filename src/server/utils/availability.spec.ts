@@ -88,6 +88,9 @@ describe('isUnavailableError', () => {
     'Reached the max retries per request limit (which is 20). Refer to "maxRetriesPerRequest" option for details.'
   ])('should not match %j when it is part of a longer message', (phrase) => {
     expect(isUnavailableError(new Error(`while reading the key: ${phrase}`))).toBe(false)
+    expect(isUnavailableError(new Error(`${phrase} while reading the key`))).toBe(
+      phrase.startsWith('Reached')
+    )
   })
 
   it('should match the retry limit whatever the limit is', () => {
