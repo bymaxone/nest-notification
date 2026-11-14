@@ -164,7 +164,7 @@ export interface SmtpEmailProviderOptions {
    * idle socket, so a relay that keeps trickling bytes could hold a send past all of them; this
    * bounds the whole call. A send that exceeds it fails with `EMAIL_SEND_FAILED` (HTTP 503). The
    * relay may still accept the message: only the answer is missing, so the failure does not say the
-   * message was not sent. The connection is left open for `socketTimeout` to reap.
+   * message was not sent. The connection is left open: `socketTimeout` reaps it once the relay goes idle; a relay that keeps sending holds it until the relay ends the connection or the process exits.
    */
   sendTimeoutMs?: number
 }

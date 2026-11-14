@@ -39,7 +39,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `sendTimeoutMs` (default `60000`, an integer from `1` to `2147483647`), failing with the reason
   `SMTP send timed out after <n> ms` and the code `ETIMEDOUT`, which the service answers with 503.
   Nodemailer cannot abort a send in flight, so a timed-out send may still have been delivered, and
-  the connection is left for `socketTimeout` to reap; the library does not retry.
+  the connection is left open (`socketTimeout` reaps it once the relay goes idle; a relay that keeps sending holds it until the relay ends the connection or the process exits); the library does not retry.
 
 - **A failed send no longer blocks the event loop on a large or repeated body.** When a provider
   or relay rejected a send and quoted the message, the echo detector extended every occurrence of
