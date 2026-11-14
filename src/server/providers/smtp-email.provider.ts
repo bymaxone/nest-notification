@@ -358,15 +358,7 @@ export class SmtpEmailProvider implements IEmailProvider {
     }
   }
 
-  /**
-   * Builds the error this adapter throws for a transport failure, logging the scrubbed reason.
-   *
-   * @param error - What the transport rejected with.
-   * @param payload - The message that was sent.
-   * @param redactValuesList - The caller's declared secrets.
-   * @param publishProviderText - `false` withholds everything the relay wrote.
-   * @returns The `Error` to throw.
-   */
+  /** Builds the error this adapter throws for a transport failure, logging the scrubbed reason. */
   private failure(
     error: unknown,
     payload: SmtpSendPayload,
