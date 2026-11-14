@@ -502,4 +502,61 @@ describe('SmtpEmailProvider failure handling', () => {
     expect(String(warnSpy.mock.calls[0]?.[0]).includes('998877')).toBe(false)
     warnSpy.mockRestore()
   })
+
+  // The status of the failure is read from the error code, so the adapter carries it across.
+  it.each([
+    ['with the provider text', undefined],
+    ['without it', false]
+  ])(
+    'should carry the transport error code onto the error it throws %s',
+    async (_name, publish) => {
+      mockSendMail.mockRejectedValue(
+        Object.assign(new Error('connect ECONNREFUSED 10.0.0.5:587'), { code: 'ECONNREFUSED' })
+      )
+
+      const caught: unknown = await new SmtpEmailProvider({ host: 'h' })
+        .send({ ...baseOptions, ...(publish === false ? { publishProviderText: false } : {}) })
+        .catch((error: unknown) => error)
+
+      expect((caught as { code?: string }).code).toBe('ECONNREFUSED')
+    }
+  )
+
+  it('should carry the code a client sets on the cause of its error', async () => {
+    mockSendMail.mockRejectedValue(
+      new Error('send failed', { cause: Object.assign(new Error('x'), { code: 'ETIMEDOUT' }) })
+    )
+
+    const caught: unknown = await new SmtpEmailProvider({ host: 'h' })
+      .send(baseOptions)
+      .catch((error: unknown) => error)
+
+    expect((caught as { code?: string }).code).toBe('ETIMEDOUT')
+  })
+
+  it('should carry no code when the transport error has none, or one that is not a token', async () => {
+    mockSendMail.mockRejectedValue(Object.assign(new Error('x'), { code: 'user jane@acme.com' }))
+
+    const caught: unknown = await new SmtpEmailProvider({ host: 'h' })
+      .send(baseOptions)
+      .catch((error: unknown) => error)
+
+    expect((caught as { code?: string }).code).toBeUndefined()
+  })
+
+  it.each([
+    ['with the provider text', undefined],
+    ['without it', false]
+  ])(
+    'should not add a code property when the transport error has none %s',
+    async (_name, publish) => {
+      mockSendMail.mockRejectedValue(new Error('550 5.7.1 rejected by policy'))
+
+      const caught = (await new SmtpEmailProvider({ host: 'h' })
+        .send({ ...baseOptions, ...(publish === false ? { publishProviderText: false } : {}) })
+        .catch((error: unknown) => error)) as Error
+
+      expect(Object.prototype.hasOwnProperty.call(caught, 'code')).toBe(false)
+    }
+  )
 })

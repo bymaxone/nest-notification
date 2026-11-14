@@ -27,6 +27,7 @@ import type {
   EmailSendResult,
   IEmailProvider
 } from '../interfaces/email-provider.interface'
+import { errorCodeOf } from '../utils/availability'
 import { extractDeliveryStatus, withoutDeclaredValues } from '../utils/delivery-status'
 import { describeError, UNPRINTABLE_ERROR } from '../utils/describe-error'
 import { loadOptionalPeer } from '../utils/load-optional-peer'
@@ -353,43 +354,66 @@ export class SmtpEmailProvider implements IEmailProvider {
     try {
       return await transport.sendMail(payload)
     } catch (error) {
-      // Credentials, declared secrets and echoed body excerpts are removed in
-      // ONE pass over the raw message — a policy/DLP relay that quotes the
-      // rejected content puts the body (and any secret inside it) into the
-      // error text this line is about to log.
-      // Read through the fail-closed helper: coercing a hostile rejection runs
-      // consumer code, and a `message` getter that throws a secret-bearing
-      // error would otherwise escape from here — before the branch below has
-      // had a chance to withhold anything.
-      const raw = readRedactedMessage(error)
-      if (publishProviderText === false) {
-        // The caller's body carries a credential, so none of the relay's own
-        // words may reach a log line or a thrown message — redaction removes
-        // the shapes it predicts and a re-encoded echo defeats it. Only the
-        // reply codes a fixed grammar can express are published, and they are
-        // the same whatever the body held.
-        // Filtered HERE, not only in EmailService: this adapter is public, and
-        // its own warn line would otherwise write a code that contains the
-        // caller's declared secret — an OTP of `55` sits inside a `550` reply.
-        const { status, enhanced } = withoutDeclaredValues(
-          extractDeliveryStatus(raw),
-          redactValuesList
-        )
-        const codes = [status, enhanced].filter((code) => code !== undefined).join(' ')
-        this.logger.warn(`[SMTP_SEND_FAILED] ${codes || 'no reply code'}`)
-        // The codes ride on the thrown error rather than in its message: the
-        // message is a fixed label, so `EmailService` could not recover them by
-        // parsing it, and interpolating them would put digits back into a
-        // string a log rule then has to scan.
-        throw Object.assign(new Error('SMTP send failed'), {
-          ...(status !== undefined ? { deliveryStatus: status } : {}),
-          ...(enhanced !== undefined ? { deliveryEnhancedStatus: enhanced } : {})
-        })
-      }
-      const reason = this.scrubTransportError(raw, payload, redactValuesList)
-      this.logger.warn(`[SMTP_SEND_FAILED] ${reason}`)
-      throw new Error(`SMTP send failed: ${reason}`)
+      throw this.failure(error, payload, redactValuesList, publishProviderText)
     }
+  }
+
+  /** Builds the error this adapter throws for a transport failure, logging the scrubbed reason. */
+  private failure(
+    error: unknown,
+    payload: SmtpSendPayload,
+    redactValuesList: readonly string[] | undefined,
+    publishProviderText: boolean | undefined
+  ): Error {
+    // Credentials, declared secrets and echoed body excerpts are removed in
+    // ONE pass over the raw message — a policy/DLP relay that quotes the
+    // rejected content puts the body (and any secret inside it) into the
+    // error text this line is about to log.
+    // Read through the fail-closed helper: coercing a hostile rejection runs
+    // consumer code, and a `message` getter that throws a secret-bearing
+    // error would otherwise escape from here — before the branch below has
+    // had a chance to withhold anything.
+    const raw = readRedactedMessage(error)
+    // The client's own error code (a refused connection, a timeout) crosses to the error this
+    // adapter throws: it is a token, and the status of the failure is read from it.
+    const code = errorCodeOf(error)
+    if (publishProviderText === false) {
+      return this.withheldFailure(raw, code, redactValuesList)
+    }
+    const reason = this.scrubTransportError(raw, payload, redactValuesList)
+    this.logger.warn(`[SMTP_SEND_FAILED] ${reason}`)
+    return Object.assign(
+      new Error(`SMTP send failed: ${reason}`),
+      code === undefined ? {} : { code }
+    )
+  }
+
+  /**
+   * The failure of a send whose body carries a credential: none of the relay's own words may reach a
+   * log line or a thrown message — redaction removes the shapes it predicts and a re-encoded echo
+   * defeats it. Only the reply codes a fixed grammar can express are published, and they are the
+   * same whatever the body held.
+   *
+   * Filtered HERE, not only in EmailService: this adapter is public, and its own warn line would
+   * otherwise write a code that contains the caller's declared secret — an OTP of `55` sits inside a
+   * `550` reply.
+   */
+  private withheldFailure(
+    raw: string,
+    code: string | undefined,
+    redactValuesList: readonly string[] | undefined
+  ): Error {
+    const { status, enhanced } = withoutDeclaredValues(extractDeliveryStatus(raw), redactValuesList)
+    const codes = [status, enhanced].filter((reply) => reply !== undefined).join(' ')
+    this.logger.warn(`[SMTP_SEND_FAILED] ${codes || 'no reply code'}`)
+    // The codes ride on the thrown error rather than in its message: the message is a fixed label, so
+    // `EmailService` could not recover them by parsing it, and interpolating them would put digits
+    // back into a string a log rule then has to scan.
+    return Object.assign(new Error('SMTP send failed'), {
+      ...(status !== undefined ? { deliveryStatus: status } : {}),
+      ...(enhanced !== undefined ? { deliveryEnhancedStatus: enhanced } : {}),
+      ...(code !== undefined ? { code } : {})
+    })
   }
 
   /**

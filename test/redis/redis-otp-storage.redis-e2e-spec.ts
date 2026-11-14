@@ -164,4 +164,87 @@ describe('RedisOtpStorage against a real Redis', () => {
       expect((await first.get('acme', ref.recipient, ref.purpose))?.code).toBe('222222')
     })
   })
+
+  // An outage as a real ioredis client reports it, through the real storage and the real service.
+  describe('when the store is unavailable', () => {
+    const base = { ...ref, tenantId: 'acme', deliverVia: 'manual' as const }
+    const serviceOver = (client: Redis): OtpService =>
+      new OtpService(
+        makeOptions({ resendCooldownSeconds: 0 }),
+        new RedisOtpStorage({ redisClient: client, namespace }),
+        makeAudit()
+      )
+
+    it('should answer 503 when nothing listens at the address', async () => {
+      const client = new Redis(1, '127.0.0.1', {
+        maxRetriesPerRequest: 1,
+        retryStrategy: () => 50,
+        lazyConnect: true
+      })
+      client.on('error', () => undefined)
+
+      const caught = await serviceOver(client)
+        .generate(base)
+        .catch((error: unknown) => error)
+      client.disconnect()
+
+      expect(caught).toMatchObject({ code: 'notification.otp_storage_unavailable' })
+      expect((caught as { getStatus(): number }).getStatus()).toBe(503)
+    })
+
+    it('should answer 503 when the client was closed', async () => {
+      const client = new Redis(container.getMappedPort(REDIS_PORT), container.getHost())
+      await client.quit()
+
+      const caught = await serviceOver(client)
+        .verify({ ...base, code: '123456' })
+        .catch((error: unknown) => error)
+
+      expect(caught).toMatchObject({ code: 'notification.otp_storage_unavailable' })
+    })
+
+    it('should answer 503 when the server stops answering and the command times out', async () => {
+      const client = new Redis(container.getMappedPort(REDIS_PORT), container.getHost(), {
+        commandTimeout: 300,
+        maxRetriesPerRequest: 0
+      })
+      await client.ping()
+      await redis.call('CLIENT', 'PAUSE', '1500', 'ALL')
+
+      const caught = await serviceOver(client)
+        .generate(base)
+        .catch((error: unknown) => error)
+      await new Promise((resolve) => setTimeout(resolve, 1600))
+      client.disconnect()
+
+      expect(caught).toMatchObject({ code: 'notification.otp_storage_unavailable' })
+    })
+
+    it('should leave a defect of the store as it is', async () => {
+      const client = new Redis(container.getMappedPort(REDIS_PORT), container.getHost())
+      // A wrong-type value under the key the store reads makes the Lua script error: a reply that
+      // names a fault, not an outage.
+      await client.set(`${namespace}:otp_cd:${ref.purpose}:x`, 'v')
+      const storage = new RedisOtpStorage({ redisClient: client, namespace })
+      jest
+        .spyOn(client, 'eval')
+        .mockRejectedValueOnce(
+          Object.assign(new Error('ERR Error running script'), { name: 'ReplyError' })
+        )
+      const service = new OtpService(
+        makeOptions({ resendCooldownSeconds: 0 }),
+        storage,
+        makeAudit()
+      )
+      await service.generate(base)
+
+      const caught = await service
+        .verify({ ...base, code: '123456' })
+        .catch((error: unknown) => error)
+      client.disconnect()
+
+      expect(caught).toBeInstanceOf(Error)
+      expect(caught).not.toMatchObject({ code: 'notification.otp_storage_unavailable' })
+    })
+  })
 })

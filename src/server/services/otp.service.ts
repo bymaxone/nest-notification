@@ -52,6 +52,7 @@ import {
   readRedactedMessage,
   scrubValuesFromErrorChain
 } from '../utils/redact'
+import { withStorageFailures } from '../utils/storage-failures'
 import { assertIdentifies } from '../utils/tenant-scope'
 import { safeCompare } from '../utils/timing-safe-compare'
 
@@ -137,6 +138,9 @@ export interface OtpStatusResult {
 export class OtpService implements OnModuleInit {
   private readonly logger = new Logger(OtpService.name)
   private warnedFailuresNotCarried = false
+  /** The store every operation goes through: an outage of it answers 503. */
+  private readonly storage: IOtpStorage
+
   /** @internal */
   private warnedTemplate = false
   /** @internal */
@@ -152,7 +156,7 @@ export class OtpService implements OnModuleInit {
     @Inject(BYMAX_NOTIFICATION_OPTIONS)
     private readonly options: ResolvedNotificationOptions,
     @Inject(BYMAX_NOTIFICATION_OTP_STORAGE)
-    private readonly storage: IOtpStorage,
+    store: IOtpStorage,
     @Inject(BYMAX_NOTIFICATION_LOG_REPOSITORY)
     private readonly auditLog: INotificationLogRepository,
     @Optional()
@@ -161,12 +165,13 @@ export class OtpService implements OnModuleInit {
   ) {
     // A one-time code that several concurrent verifications can each accept is not one-time, and
     // a storage that cannot compare-and-delete atomically would keep that race without a sign.
-    if (options.otp?.consumeOnVerify && storage.deleteIfCode === undefined) {
+    if (options.otp?.consumeOnVerify && store.deleteIfCode === undefined) {
       throw new Error(
         `[BymaxNotificationModule] otp.consumeOnVerify requires an IOtpStorage that implements ` +
-          `deleteIfCode (the ${storage.name} storage does not); implement it, or set consumeOnVerify to false`
+          `deleteIfCode (the ${store.name} storage does not); implement it, or set consumeOnVerify to false`
       )
     }
+    this.storage = withStorageFailures(store)
   }
 
   /**

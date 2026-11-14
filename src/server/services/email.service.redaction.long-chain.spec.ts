@@ -7,6 +7,7 @@
  */
 
 import type { NotificationException } from '../errors/notification-exception'
+import * as redact from '../utils/redact'
 import { MAX_ERROR_CHAIN_LINKS } from '../utils/redact'
 
 import {
@@ -106,33 +107,62 @@ describe('EmailService.send redaction of a very large error', () => {
 })
 
 describe('EmailService.send redaction of a very long cause chain', () => {
-  it('should read a 5000-link chain with the real scrub in time that does not grow with its length', async () => {
-    const started = performance.now()
+  // A chain that makes its next link only when `cause` is read, and counts the reads: the work the
+  // failure path does on a chain is the links it reads, which does not depend on a stopwatch.
+  function endlessChain(onRead: () => void): Error {
+    const link = (): Error => {
+      const error = new Error('relay link failed with a sizeable message')
+      error.stack = 'Error: relay link failed'
+      Object.defineProperty(error, 'cause', {
+        get: () => {
+          onRead()
+          return link()
+        }
+      })
+      return error
+    }
+    return link()
+  }
+
+  it('should read the same number of links however long the chain is, and never scrub it', async () => {
+    const scrub = jest.spyOn(redact, 'scrubValuesFromErrorChain')
+    let reads = 0
+
     const { caught, audit } = await sendFailing(() =>
-      chainOf(5_000, (link) => `relay link ${String(link)} failed with a sizeable message`)
+      endlessChain(() => {
+        reads += 1
+      })
     )
-    const elapsed = performance.now() - started
+    const scrubbed = scrub.mock.calls.length
+    scrub.mockRestore()
 
     expectWithheld(caught, audit)
-    // The chain is built inside this call, so the bound covers building 5000 errors as well.
-    expect(elapsed).toBeLessThan(2_000)
+    expect(scrubbed).toBe(0)
+    // The window of the echo scan and the window of the status read are both bounded by the cap.
+    expect(reads).toBeLessThanOrEqual(MAX_ERROR_CHAIN_LINKS * 3)
   })
 
-  it('should cost the same for a chain of 5000 links as for one just past the window', async () => {
-    const time = async (links: number): Promise<number> => {
-      const provider = makeProvider()
-      const error = chainOf(links, (link) => `relay link ${String(link)} failed with a message`)
-      provider.send.mockRejectedValue(error)
-      const service = new EmailService(makeOptions(), provider, makeRenderer(), makeAudit())
-      const started = performance.now()
-      await service.send(baseInput).catch(() => undefined)
-      return performance.now() - started
+  it('should read as many links for a chain of 5000 as for one just past the window', async () => {
+    const readsFor = async (links: number): Promise<number> => {
+      let reads = 0
+      const counted = (depth: number): Error => {
+        const error = new Error('relay link failed')
+        error.stack = 'Error'
+        if (depth > 1) {
+          Object.defineProperty(error, 'cause', {
+            get: () => {
+              reads += 1
+              return counted(depth - 1)
+            }
+          })
+        }
+        return error
+      }
+      await sendFailing(() => counted(links))
+      return reads
     }
 
-    const short = await time(MAX_ERROR_CHAIN_LINKS + 1)
-    const long = await time(5_000)
-
-    expect(long).toBeLessThan(Math.max(short * 20, 100))
+    expect(await readsFor(5_000)).toBe(await readsFor(MAX_ERROR_CHAIN_LINKS + 1))
   })
 
   it('should withhold a long chain even when the caller declared values', async () => {
@@ -183,7 +213,7 @@ describe('EmailService.send redaction of a very long cause chain', () => {
 
   // A single field is as large as the provider chooses: the window is characters, not links, so
   // nothing after the read costs more than the window.
-  it('should withhold a 50 MB first message quickly, with the real scrub and extraction', async () => {
+  it('should withhold a 50 MB first message, reading only the window of it', async () => {
     const huge = '550 5.7.1 '.concat('1234567890'.repeat(5_000_000))
     const provider = makeProvider()
     const error = new Error(huge)
@@ -192,14 +222,15 @@ describe('EmailService.send redaction of a very long cause chain', () => {
     const audit = makeAudit()
     const service = new EmailService(makeOptions(), provider, makeRenderer(), audit)
 
-    const started = performance.now()
     const caught = (await service
       .send(baseInput)
       .catch((thrown: unknown) => thrown)) as NotificationException
-    const elapsed = performance.now() - started
 
+    // Withheld: nothing of the 50 MB reaches the exception or the audit entry, and the reply code
+    // is the only thing read from it.
     expect(caught.cause).toBeUndefined()
     expect(JSON.stringify(audit.create.mock.calls)).toContain(LABEL)
-    expect(elapsed).toBeLessThan(500)
+    expect(JSON.stringify(audit.create.mock.calls).length).toBeLessThan(2_000)
+    expect(JSON.stringify(caught.getResponse()).length).toBeLessThan(2_000)
   })
 })

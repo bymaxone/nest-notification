@@ -75,7 +75,7 @@ Everything that touches the outside world — the email transport, the OTP store
 ### 🧩 Developer Experience
 
 - ✅ **Subpaths** — server, zero-dependency shared types, React hooks, and a `testing` storage contract
-- ✅ **Stable error catalog** — 24 namespaced codes shared byte-for-byte between server and frontend, so you localize on the `code`
+- ✅ **Stable error catalog** — namespaced codes shared byte-for-byte between server and frontend, so you localize on the `code`
 - ✅ **Dual-format output** — ESM + CJS + declarations for both, verified against the packed tarball on every PR
 - ✅ **Typed end to end** — TypeScript `strict` with `exactOptionalPropertyTypes` and `noUncheckedIndexedAccess`; zero `any`
 
@@ -655,7 +655,7 @@ A one-time password is a credential, so every behavior is pinned so that a regre
 | Coverage       | **100%** line/branch/function/statement per file (`pnpm test:cov:all`)                   |
 | Mutation       | Stryker score **100%** (`break: 100`), no survivors                                      |
 | Lint           | ESLint flat config + `eslint-plugin-security`, zero warnings                             |
-| Bundle budgets | server < 31.66 KB · shared < 4 KB · react < 8 KB · testing < 4.5 KB brotli (`pnpm size`) |
+| Bundle budgets | server < 32.86 KB · shared < 4 KB · react < 8 KB · testing < 4.5 KB brotli (`pnpm size`) |
 | Prisma-free    | `pnpm check:no-prisma` — the library never imports `@prisma/client`                      |
 | Export map     | `pnpm check:exports` — `attw` against the packed tarball, ESM and CJS                    |
 | Supply chain   | published with npm provenance (OIDC), CodeQL + OpenSSF Scorecard                         |
@@ -814,10 +814,12 @@ Passing the contract does not prove a key encoding safe against every delimiter:
 
 Codes never change once published; default messages are English, so localize on the `code`. A code marked **reserved** is in the catalog but never thrown by the library. The OTP verify codes are reserved: `verify()` returns its failure as a result (`{ valid: false, reason }`) and never throws it, so your controller maps `reason` to the code it answers with. The SMS and push codes stay reserved until those channels exist.
 
+**Which status says what.** A caller's mistake is 4xx. A backing service that is unavailable is **503**, and the caller may try again later: `OTP_STORAGE_UNAVAILABLE` when the OTP store cannot be reached, is closed, timed out, or is a Redis replica or still loading, and `EMAIL_SEND_FAILED` with status 503 when the email provider could not be reached or timed out (the same code answers 502 when the provider answered and refused). A configuration fault or a defect is 500, and a defect in a store you implemented is passed through unchanged, so it is never mistaken for an outage. `AUDIT_LOG_FAILED` is 500: the audit repository is yours, and the library cannot tell its outage from a bug.
+
 | Code                                             | Status | Raised by                                                                                                                           |
 | ------------------------------------------------ | ------ | ----------------------------------------------------------------------------------------------------------------------------------- |
 | `notification.email_provider_not_configured`     | 500    | `EmailService` — the provider reports `isConfigured() === false`                                                                    |
-| `notification.email_send_failed`                 | 502    | `EmailService` — the provider rejected the send                                                                                     |
+| `notification.email_send_failed`                 | 502    | `EmailService` — the provider rejected the send (503 when it could not be reached or timed out)                                     |
 | `notification.email_attachments_too_large`       | 413    | `EmailService` — the attachments exceed `maxAttachmentBytes`                                                                        |
 | `notification.email_invalid_recipient`           | 400    | `OtpService.generate` and `resend` — an email recipient that is not one mailbox; `EmailService` — more than `maxRecipients`         |
 | `notification.email_missing_body`                | 400    | `NotificationService.dispatch` — neither a template nor a subject and body                                                          |
@@ -831,6 +833,7 @@ Codes never change once published; default messages are English, so localize on 
 | `notification.otp_expired`                       | 410    | reserved — an expired code is reported as `not_found`                                                                               |
 | `notification.otp_max_attempts_exceeded`         | 429    | reserved — `verify()` returns `{ valid: false, reason: 'max_attempts' }`                                                            |
 | `notification.otp_invalid_code`                  | 401    | reserved — `verify()` returns `{ valid: false, reason: 'invalid_code' }`                                                            |
+| `notification.otp_storage_unavailable`           | 503    | `OtpService` — the store's backing service is unreachable, closed or timed out                                                      |
 | `notification.otp_invalid_length`                | 400    | module options validation and the code generator                                                                                    |
 | `notification.sms_provider_not_configured`       | 500    | reserved — the SMS channel is not implemented                                                                                       |
 | `notification.sms_send_failed`                   | 502    | reserved — the SMS channel is not implemented                                                                                       |

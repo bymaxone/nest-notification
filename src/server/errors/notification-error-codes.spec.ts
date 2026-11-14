@@ -85,6 +85,11 @@ const EXPECTED_CATALOG = {
     status: HttpStatus.TOO_MANY_REQUESTS,
     message: 'Maximum OTP attempts exceeded'
   },
+  OTP_STORAGE_UNAVAILABLE: {
+    code: 'notification.otp_storage_unavailable',
+    status: HttpStatus.SERVICE_UNAVAILABLE,
+    message: 'OTP storage unavailable'
+  },
   OTP_INVALID_CODE: {
     code: 'notification.otp_invalid_code',
     status: HttpStatus.UNAUTHORIZED,

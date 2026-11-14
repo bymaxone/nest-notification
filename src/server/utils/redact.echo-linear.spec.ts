@@ -56,31 +56,63 @@ function randomText(random: () => number, length: number, alphabet: string): str
   return Array.from({ length }, () => alphabet[Math.floor(random() * alphabet.length)]).join('')
 }
 
+/**
+ * The number of `Map` reads, writes and probes made while `run` executes. The matcher's work is
+ * these operations, so counting them says how much work was done, which does not depend on how
+ * busy the machine is the way a stopwatch does.
+ */
+function mapOperations(run: () => void): number {
+  let operations = 0
+  const counting = (name: 'get' | 'set' | 'has'): jest.SpyInstance => {
+    const original = Map.prototype[name] as (...args: unknown[]) => unknown
+    return jest.spyOn(Map.prototype, name).mockImplementation(function (
+      this: Map<unknown, unknown>,
+      ...args: unknown[]
+    ) {
+      operations += 1
+      return original.apply(this, args)
+    } as never)
+  }
+  const spies = [counting('get'), counting('set'), counting('has')]
+  try {
+    run()
+  } finally {
+    spies.forEach((spy) => spy.mockRestore())
+  }
+  return operations
+}
+
+/** Map operations per character of input the matcher may spend; it measures about 2 to 6. */
+const OPERATIONS_PER_CHARACTER = 12
+
 describe('collectEchoedExcerpts cost', () => {
   // A relay that quotes a body made of one long run sends every window to every position, which
   // is the input on which the cost of the direct definition grows with the square of its size.
-  it('should scrub a repeated body at the largest scanned size in a few seconds at most', () => {
+  it('should scrub a repeated body at the largest scanned size with work linear in its size', () => {
     const body = 'a'.repeat(MAX_ECHO_SCAN_LENGTH - 20)
     const message = `550 rejected: ${body}`
+    let excerpts: string[] = []
 
-    const started = performance.now()
-    const excerpts = collectEchoedExcerpts(message, body)
-    const elapsed = performance.now() - started
+    const operations = mapOperations(() => {
+      excerpts = collectEchoedExcerpts(message, body)
+    })
 
     expect(excerpts).toEqual([body])
-    expect(elapsed).toBeLessThan(3_000)
+    expect(operations).toBeLessThan(OPERATIONS_PER_CHARACTER * (message.length + body.length))
   })
 
   it('should stay linear when the body is a short repeated pattern', () => {
     const body = 'abcdefghij'.repeat(6_000)
     const message = `rejected: ${body}`
 
-    const started = performance.now()
-    const excerpts = collectEchoedExcerpts(message, body)
-    const elapsed = performance.now() - started
+    let excerpts: string[] = []
+
+    const operations = mapOperations(() => {
+      excerpts = collectEchoedExcerpts(message, body)
+    })
 
     expect(excerpts.join('')).toBe(body)
-    expect(elapsed).toBeLessThan(3_000)
+    expect(operations).toBeLessThan(OPERATIONS_PER_CHARACTER * (message.length + body.length))
   })
 
   // An error that large is relay-controlled, and indexing it costs memory in proportion: it is
@@ -96,15 +128,17 @@ describe('collectEchoedExcerpts cost', () => {
     ).toEqual([])
   })
 
-  it('should read a large body with no echo in time proportional to its size', () => {
+  it('should read a large body with no echo with work proportional to its size', () => {
     const body = 'lorem ipsum dolor '.repeat(80_000)
+    const message = '550 5.7.1 message rejected by policy'
+    let excerpts: string[] = []
 
-    const started = performance.now()
-    const excerpts = collectEchoedExcerpts('550 5.7.1 message rejected by policy', body)
-    const elapsed = performance.now() - started
+    const operations = mapOperations(() => {
+      excerpts = collectEchoedExcerpts(message, body)
+    })
 
     expect(excerpts).toEqual([])
-    expect(elapsed).toBeLessThan(3_000)
+    expect(operations).toBeLessThan(OPERATIONS_PER_CHARACTER * (message.length + body.length))
   })
 })
 
@@ -324,15 +358,27 @@ describe('inspectErrorChain', () => {
     expect(window.parts).toHaveLength(MAX_ERROR_CHAIN_LINKS * 2)
   })
 
-  it('should read a chain of 100000 links by reading only the window', () => {
-    const started = performance.now()
-    const window = inspectErrorChain(chain(100_000))
-    const elapsed = performance.now() - started
+  // A chain that makes its next link only when `cause` is read, and counts the reads: how many
+  // links were read is the work done, and it cannot depend on how loaded the machine is.
+  it('should read only the window of a chain that never ends', () => {
+    let reads = 0
+    const link = (): Error => {
+      const error = new Error('link')
+      error.stack = 'Error'
+      Object.defineProperty(error, 'cause', {
+        get: () => {
+          reads += 1
+          return link()
+        }
+      })
+      return error
+    }
+
+    const window = inspectErrorChain(link())
 
     expect(window.withheld).toBe(true)
     expect(window.parts).toHaveLength(MAX_ERROR_CHAIN_LINKS * 2)
-    // Building the chain is in the measurement; reading it is not what grows.
-    expect(elapsed).toBeLessThan(3_000)
+    expect(reads).toBeLessThanOrEqual(MAX_ERROR_CHAIN_LINKS)
   })
 
   it('should withhold a chain whose text is longer than the scan limit', () => {
@@ -366,15 +412,13 @@ describe('inspectErrorChain character window', () => {
     const huge = new Error('1234567890'.repeat(5_000_000))
     huge.stack = 'Error'
 
-    const started = performance.now()
     const window = inspectErrorChain(huge)
     const messages = collectErrorChainMessages(huge)
-    const elapsed = performance.now() - started
 
+    // What was kept is the window and no more: nothing after the read can cost more than that.
     expect(window.withheld).toBe(true)
     expect(window.parts[0]).toHaveLength(MAX_ECHO_SCAN_LENGTH)
     expect(messages).toHaveLength(MAX_ECHO_SCAN_LENGTH)
-    expect(elapsed).toBeLessThan(500)
   })
 
   it('should spend the window across the fields of a chain and cut the one that crosses it', () => {

@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **A backing service that is unavailable is answered with 503, not 500.** When the OTP store
+  could not be reached, the error of the Redis client went straight to the HTTP layer as an
+  unclassified 500, and a failed email send was always 502, whether the provider refused the message or
+  could not be reached at all. `OtpService` now wraps its store, and a refused connection, a closed
+  client, a timed-out command, an exhausted retry limit or a replica that cannot write becomes
+  `notification.otp_storage_unavailable` (503) with the original error as the log-safe `cause`;
+  every other failure of a store, a defect included, passes through unchanged. A failed email send
+  keeps `notification.email_send_failed` and answers 503 when the provider could not be reached or
+  timed out (a refused connection, a DNS failure, a timeout, or Resend answering 5xx), 502 when it
+  answered and refused. The reference providers carry the client's error code onto the error they
+  throw, so the status is read from a code and not from the provider's words.
+
 ### Security
 
 - **A Resend send no longer waits for as long as the platform allows.** `ResendEmailProvider` set no
@@ -47,6 +61,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `notification.email_invalid_recipient` before the provider is called.
 
 #### Apply to a derived backend
+
+`NOTIFICATION_ERROR_CODES` and `NOTIFICATION_ERROR_DEFINITIONS` gain `OTP_STORAGE_UNAVAILABLE`
+(`notification.otp_storage_unavailable`, 503): a frontend that maps
+every code adds it. A custom `IEmailProvider` that wants its unreachable or timed-out failures
+answered with 503 sets a `code` such as `ECONNREFUSED`, `ETIMEDOUT` or `EUNAVAILABLE` on the error
+it throws; without one the failure stays 502.
 
 `ResendEmailProviderOptions` gains the optional `timeoutMs`. A backend that builds a
 `ResendEmailProvider` needs no change; one that substitutes its own Resend client accepts a second
