@@ -505,9 +505,10 @@ export class SmtpEmailProvider implements IEmailProvider {
    * The configured credentials that qualify as secret material, if any, and the base64 forms the
    * AUTH exchange carries them in: the user and the password as AUTH LOGIN sends them, and the
    * AUTH PLAIN token, which has an empty authorization identity. A relay that quotes the exchange
-   * shows those, and a literal match cannot see them. The token is its own value: its bytes sit at
-   * a different alignment, so neither of the other two encodings appears inside it, and it must
-   * not be derived from them.
+   * shows those, and a literal match cannot see them. The token is its own value: base64 groups
+   * three bytes, so the token's bytes usually sit at another alignment than the user's or the
+   * password's, and then neither of their encodings appears inside it. It cannot be derived from
+   * them.
    */
   private credentialValues(): string[] {
     const { user, pass } = this.#options.credentials ?? {}
