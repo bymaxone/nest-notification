@@ -27,6 +27,7 @@
 
 import { randomUUID } from 'node:crypto'
 
+import type { IOtpStorage, OtpEntry } from '../server/interfaces/otp-storage.interface'
 import { deleteIfCodeAtomicCase, deleteIfCodeCase } from './otp-storage-contract.consume'
 import {
   failureAtomicCase,
@@ -42,7 +43,6 @@ import type {
   ContractScope,
   OtpStorageContractCase
 } from './otp-storage-contract.shared'
-import type { IOtpStorage, OtpEntry } from '../server/interfaces/otp-storage.interface'
 export type { OtpStorageContractCase } from './otp-storage-contract.shared'
 
 // The identifiers below are arbitrary fixtures: every case reads and writes

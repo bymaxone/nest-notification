@@ -6,9 +6,9 @@
  * @layer testing
  */
 
+import type { OtpEntry } from '../server/interfaces/otp-storage.interface'
 import type { ContractContext, OtpStorageContractCase } from './otp-storage-contract.shared'
 import { RACERS, check } from './otp-storage-contract.shared'
-import type { OtpEntry } from '../server/interfaces/otp-storage.interface'
 
 /** The stored value the cases write and compare. */
 // Stryker disable next-line StringLiteral: equivalent — only the distinctness of the two stored values carries meaning, not their spelling

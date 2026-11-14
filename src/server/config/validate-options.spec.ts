@@ -73,10 +73,12 @@ describe('validateOptions', () => {
     }
   )
 
-  it('should accept a positive integer maxRecipients', () => {
+  // The smallest legal bound is one recipient per message; pins the `< 1` comparison so a
+  // `<= 1` boundary, which would reject it, cannot survive.
+  it.each([1, 10])('should accept a positive integer maxRecipients of %p', (maxRecipients) => {
     expect(() =>
       validateOptions({
-        email: { provider: emailProvider, defaultFrom: 'a@b.com', maxRecipients: 10 }
+        email: { provider: emailProvider, defaultFrom: 'a@b.com', maxRecipients }
       })
     ).not.toThrow()
   })

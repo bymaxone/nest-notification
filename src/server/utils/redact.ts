@@ -4,8 +4,8 @@
  * @layer domain
  */
 
-import { describeError } from './describe-error'
 import { NotificationException } from '../errors/notification-exception'
+import { describeError } from './describe-error'
 
 /** Marker substituted for a secret value wherever it is redacted. */
 export const REDACTED_VALUE = '[redacted]'

@@ -10,13 +10,13 @@
 
 import { HttpException, HttpStatus } from '@nestjs/common'
 
+import type { NotificationErrorResponse } from '../../shared/types/notification-error.types'
+import { describeError } from '../utils/describe-error'
 import {
   NOTIFICATION_ERROR_DEFINITION_MAP,
   type NotificationErrorDefinition,
   type NotificationErrorKey
 } from './notification-error-codes'
-import type { NotificationErrorResponse } from '../../shared/types/notification-error.types'
-import { describeError } from '../utils/describe-error'
 
 /**
  * Defensive fallback used only when a caller (e.g. untyped JS) passes a key that

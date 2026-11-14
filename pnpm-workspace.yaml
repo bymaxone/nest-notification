@@ -109,3 +109,11 @@ overrides:
   # one is gone. Nothing caps the floor — @babel/helper-compilation-targets
   # declares ^4.24.0.
   browserslist: '^4.28.7'
+  # glob >=9.0.0 <14.0.2 (GHSA-3g3m-2fjr-6pw4) and minimatch >=7.0.0 <11.0.1
+  # (GHSA-g3hv-75wg-m249). Reached only through test, mutation and lint tooling, never the
+  # published package. The floors sit at the fixed versions; drop these four entries when the
+  # parents' own ranges are above them.
+  'glob@10': '^14.0.2'
+  'glob@13': '^14.0.2'
+  'minimatch@9': '^11.0.1'
+  'minimatch@10': '^11.0.1'

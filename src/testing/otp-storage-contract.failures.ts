@@ -5,9 +5,9 @@
  * @layer testing
  */
 
+import type { IOtpStorage } from '../server/interfaces/otp-storage.interface'
 import type { ContractContext, OtpStorageContractCase } from './otp-storage-contract.shared'
 import { RACERS, check, wait } from './otp-storage-contract.shared'
-import type { IOtpStorage } from '../server/interfaces/otp-storage.interface'
 
 /** The three optional failure methods, present together or not at all. */
 interface FailureStorage extends IOtpStorage {
