@@ -46,10 +46,48 @@ function readSdkMessage(error: { message: string }): string {
   }
 }
 
+/**
+ * Settles with `call`, or rejects as soon as `signal` aborts, whichever comes first. The SDK is
+ * also handed the signal, but an older SDK ignores it, and this keeps the bound on every supported
+ * version. The abort listener is removed when the call settles, so a send that answers in time
+ * leaves nothing waiting on the timer, and a call that settles later is still handled.
+ *
+ * @param call - The SDK call.
+ * @param signal - The signal whose abort ends the wait.
+ * @returns What `call` resolves with.
+ */
+function settleOrAbort<T>(call: Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = (): void => {
+      reject(signal.reason)
+    }
+    signal.addEventListener('abort', onAbort, { once: true })
+    call.then(resolve, reject).finally(() => {
+      signal.removeEventListener('abort', onAbort)
+    })
+  })
+}
+
+/** Default bound on one send, in milliseconds. */
+const DEFAULT_TIMEOUT_MS = 15_000
+
+/**
+ * Largest bound a timer can hold: past 2^31 - 1 milliseconds Node clamps the duration to 1 ms and
+ * the call aborts at once, so such a value is refused instead of accepted.
+ */
+const MAX_TIMEOUT_MS = 2_147_483_647
+
 /** Construction options for {@link ResendEmailProvider}. */
 export interface ResendEmailProviderOptions {
   /** Resend API key. When absent the provider is not configured and `send()` throws. */
   apiKey?: string
+  /**
+   * Longest one `send()` may take, in milliseconds, from the request to the end of the response
+   * body. An integer from `1` to `2147483647`; default `15000`. A send that exceeds it fails with
+   * `EMAIL_SEND_FAILED`. The message may still have been accepted by Resend: only the answer is
+   * missing, so the failure does not say the message was not sent.
+   */
+  timeoutMs?: number
 }
 
 /** Outcome of `resend.emails.send` — a `{ data, error }` discriminated result. */
@@ -73,9 +111,16 @@ interface ResendSendPayload {
   attachments: EmailSendOptions['attachments']
 }
 
+/** The request options of the SDK this adapter uses: the signal that aborts the call. */
+interface ResendRequestOptions {
+  signal: AbortSignal
+}
+
 /** The slim surface of the `resend` SDK this adapter relies on. */
 interface ResendLike {
-  emails: { send(payload: ResendSendPayload): Promise<ResendSendOutcome> }
+  emails: {
+    send(payload: ResendSendPayload, options: ResendRequestOptions): Promise<ResendSendOutcome>
+  }
 }
 
 /** Constructor signature of the SDK's `Resend` class. */
@@ -126,6 +171,15 @@ export class ResendEmailProvider implements IEmailProvider {
   readonly #options: ResendEmailProviderOptions
 
   constructor(options: ResendEmailProviderOptions = {}) {
+    const timeout = options.timeoutMs
+    if (
+      timeout !== undefined &&
+      !(Number.isInteger(timeout) && timeout >= 1 && timeout <= MAX_TIMEOUT_MS)
+    ) {
+      throw new Error(
+        `ResendEmailProvider: timeoutMs must be a positive integer of at most ${String(MAX_TIMEOUT_MS)}`
+      )
+    }
     this.#options = options
   }
 
@@ -150,21 +204,29 @@ export class ResendEmailProvider implements IEmailProvider {
   async send(options: EmailSendOptions): Promise<EmailSendResult> {
     const client = await this.getClient()
     const from = this.formatFrom(options.from, options.fromName)
+    const timeoutMs = this.#options.timeoutMs ?? DEFAULT_TIMEOUT_MS
+    const signal = AbortSignal.timeout(timeoutMs)
     let result: ResendSendOutcome
     try {
-      result = await client.emails.send({
-        from,
-        to: options.to,
-        subject: options.subject,
-        html: options.html,
-        text: options.text,
-        replyTo: options.replyTo,
-        cc: options.cc,
-        bcc: options.bcc,
-        tags: options.tags,
-        headers: options.headers,
-        attachments: options.attachments
-      })
+      result = await settleOrAbort(
+        client.emails.send(
+          {
+            from,
+            to: options.to,
+            subject: options.subject,
+            html: options.html,
+            text: options.text,
+            replyTo: options.replyTo,
+            cc: options.cc,
+            bcc: options.bcc,
+            tags: options.tags,
+            headers: options.headers,
+            attachments: options.attachments
+          },
+          { signal }
+        ),
+        signal
+      )
     } catch (error) {
       // The SDK can REJECT instead of resolving `{ error }` — a transport or
       // fetch failure whose message quotes the request body carries the same
@@ -172,7 +234,12 @@ export class ResendEmailProvider implements IEmailProvider {
       // Read through the fail-closed helper: coercion runs consumer code, and a
       // hostile `message` getter would otherwise escape with its own text
       // before `sendFailure` could withhold anything.
-      throw this.sendFailure(readRedactedMessage(error), options)
+      // The bound fired: the SDK's own abort error and the race's mean the same thing, and neither
+      // carries anything of the request, so the reason is a fixed sentence.
+      const reason = signal.aborted
+        ? `Resend request timed out after ${String(timeoutMs)} ms`
+        : readRedactedMessage(error)
+      throw this.sendFailure(reason, options)
     }
     if (result.error) {
       // The SDK's error object is consumer code too, so reading its `message`

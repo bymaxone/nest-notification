@@ -260,6 +260,8 @@ const redis = new Redis(process.env.REDIS_URL!)
 export class AppModule {}
 ```
 
+`ResendEmailProvider` bounds every send with `timeoutMs` (default `15000`, an integer from `1` to `2147483647`), from the request to the end of the response body. A send that exceeds it fails with `EMAIL_SEND_FAILED` and the reason `Resend request timed out after <n> ms`. **A timed-out send may still have been delivered:** only the answer is missing, so do not treat the failure as proof the message was not sent. The library does not retry a failed send; an application that retries one (from a queue job, for example) should pass an idempotency key, which `resend` 6.x accepts as `idempotencyKey`, because the earlier attempt may already have been delivered.
+
 For async configuration (e.g. reading secrets from `ConfigService`), use `forRootAsync`:
 
 ```typescript
@@ -647,16 +649,16 @@ A one-time password is a credential, so every behavior is pinned so that a regre
 - ✅ **Invariants asserted, not assumed** — the never-log-codes rule is a test (`JSON.stringify(entry).includes(code) === false` on every audit entry, and the thrown exception serialized recursively at every depth), not a review convention
 - ✅ **Published shape verified** — `attw` resolves every entrypoint against the packed tarball, and a dogfood smoke test installs the package into a scratch consumer before any tag is cut
 
-| Gate           | Standard                                                                                |
-| -------------- | --------------------------------------------------------------------------------------- |
-| Type safety    | TypeScript `strict`, zero `any`                                                         |
-| Coverage       | **100%** line/branch/function/statement per file (`pnpm test:cov:all`)                  |
-| Mutation       | Stryker score **100%** (`break: 100`), no survivors                                     |
-| Lint           | ESLint flat config + `eslint-plugin-security`, zero warnings                            |
-| Bundle budgets | server < 31.5 KB · shared < 4 KB · react < 8 KB · testing < 4.5 KB brotli (`pnpm size`) |
-| Prisma-free    | `pnpm check:no-prisma` — the library never imports `@prisma/client`                     |
-| Export map     | `pnpm check:exports` — `attw` against the packed tarball, ESM and CJS                   |
-| Supply chain   | published with npm provenance (OIDC), CodeQL + OpenSSF Scorecard                        |
+| Gate           | Standard                                                                                 |
+| -------------- | ---------------------------------------------------------------------------------------- |
+| Type safety    | TypeScript `strict`, zero `any`                                                          |
+| Coverage       | **100%** line/branch/function/statement per file (`pnpm test:cov:all`)                   |
+| Mutation       | Stryker score **100%** (`break: 100`), no survivors                                      |
+| Lint           | ESLint flat config + `eslint-plugin-security`, zero warnings                             |
+| Bundle budgets | server < 31.66 KB · shared < 4 KB · react < 8 KB · testing < 4.5 KB brotli (`pnpm size`) |
+| Prisma-free    | `pnpm check:no-prisma` — the library never imports `@prisma/client`                      |
+| Export map     | `pnpm check:exports` — `attw` against the packed tarball, ESM and CJS                    |
+| Supply chain   | published with npm provenance (OIDC), CodeQL + OpenSSF Scorecard                         |
 
 ```bash
 pnpm test          # unit suite
