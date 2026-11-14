@@ -696,7 +696,7 @@ export type {
 } from './types'
 ```
 
-> **Public vs internal API:** only the symbols above are public and covered by semver. Everything
+> **Public vs internal API:** only the symbols above are public and covered by the compatibility note of each release. Everything
 > else under `src/` — option resolution internals, the default-options constants, the error-code
 > definition map's internals — is internal and may change in a patch. The audit interceptor and the
 > crypto helpers (`hashTenantRecipient`, `generateOtpCode`, `safeCompare`) are **deliberately

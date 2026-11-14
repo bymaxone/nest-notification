@@ -2,10 +2,16 @@
 
 All notable changes to `@bymax-one/nest-notification` will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+Versioning is **not** strict [SemVer](https://semver.org/spec/v2.0.0.html) while this API is
+pre-stable: breaking changes ship in minor and patch releases by explicit `@bymax-one` policy, so a
+version number carries no compatibility information. The **Apply to a derived backend** note, on
+the entries that carry one, is the compatibility contract — read it, not the number.
 
 ## [Unreleased]
+
+## [1.4.9] - 2026-11-14
 
 ### Fixed
 
@@ -44,11 +50,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   already did.
 
 - **An SMTP send no longer waits for as long as a trickling relay allows.** The other timeouts
-  each bound a phase or an idle socket, so a relay that kept sending bytes could hold a send past all of them. `SmtpEmailProvider` now bounds the whole call with
-  `sendTimeoutMs` (default `60000`, an integer from `1` to `2147483647`), failing with the reason
-  `SMTP send timed out after <n> ms` and the code `ETIMEDOUT`, which the service answers with 503.
-  Nodemailer cannot abort a send in flight, so a timed-out send may still have been delivered, and
-  the connection is left open (`socketTimeout` reaps it once the relay goes idle; a relay that keeps sending holds it until the relay ends the connection or the process exits); the library does not retry.
+  each bound a phase or an idle socket, so a relay that kept sending bytes could hold a send past
+  all of them. `SmtpEmailProvider` now bounds the whole call with `sendTimeoutMs` (default `60000`,
+  an integer from `1` to `2147483647`) and fails with the code `ETIMEDOUT`, which the service
+  answers with 503. The thrown text is `SMTP send failed: SMTP send timed out after <n> ms`, or the
+  fixed `SMTP send failed` when the message body carries a credential. Nodemailer cannot abort a
+  send in flight, so a timed-out send may still have been delivered. The connection is left open:
+  `socketTimeout` reaps it once the relay goes idle, and a relay that keeps sending holds it until
+  the relay ends the connection or the process exits. The library does not retry.
 
 - **A failed send no longer blocks the event loop on a large or repeated body.** When a provider
   or relay rejected a send and quoted the message, the echo detector extended every occurrence of
@@ -90,11 +99,25 @@ it throws; without one the failure stays 502.
 `ResendEmailProvider` needs no change; one that substitutes its own Resend client accepts a second
 argument, `{ signal }`, on `emails.send` and may honour it.
 
+`SmtpEmailProviderOptions` gains the optional `sendTimeoutMs`. A backend that builds an
+`SmtpEmailProvider` needs no change. **A timed-out send, from `SmtpEmailProvider` and from
+`ResendEmailProvider` alike, may still have been delivered**, so a job that retries a failed send
+can deliver the same message twice. Make the job idempotent, or pass an idempotency key where the
+provider accepts one. The library does not retry.
+
+A custom `IOtpStorage` needs no change for the 503: `OtpService` wraps it, and a failure whose
+error carries a network `code` the service recognises (`ECONNREFUSED` and `ETIMEDOUT` are two of
+them), or whose text is one it recognises, is answered with 503, with the storage's own error as
+the `cause`. A failure with any other code or text keeps passing through as before.
+
 `IOtpStorage` gains the optional `deleteIfCode(tenantId, recipient, purpose, expectedStored)`, and
 the service constructor throws when `otp.consumeOnVerify` is `true` and the storage lacks it: a
 derived backend with a custom storage implements it (an atomic delete that fires only while the
 stored code equals `expectedStored`, returning whether it removed the entry) or sets
-`consumeOnVerify` to `false`. The `./testing` contract covers it.
+`consumeOnVerify` to `false`. The `./testing` contract covers it. The bundled `InMemoryOtpStorage` and
+`RedisOtpStorage` implement it, so a backend that uses them needs no change. A storage that
+implements it gives `consumeOnVerify: true` exactly one winning verification; with
+`consumeOnVerify` left `false` the storage needs no change.
 
 `EmailChannelOptions` gains the optional `maxRecipients`, and `ResolvedEmailOptions` gains the
 required `maxRecipients`. A backend that builds resolved options by hand adds `maxRecipients: 50`.
@@ -1153,7 +1176,8 @@ rejected at startup rather than failing on the first send.
 
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.4.8...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.4.9...HEAD
+[1.4.9]: https://github.com/bymaxone/nest-notification/compare/v1.4.8...v1.4.9
 [1.4.8]: https://github.com/bymaxone/nest-notification/compare/v1.4.7...v1.4.8
 [1.4.7]: https://github.com/bymaxone/nest-notification/compare/v1.4.6...v1.4.7
 [1.4.6]: https://github.com/bymaxone/nest-notification/compare/v1.4.5...v1.4.6
