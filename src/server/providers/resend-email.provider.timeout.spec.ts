@@ -171,4 +171,21 @@ describe('ResendEmailProvider timeout', () => {
     const signal = timeout.mock.results[0]?.value as AbortSignal
     expect(getEventListeners(signal, 'abort')).toHaveLength(0)
   })
+
+  // The listener that raced the SDK goes when it fires, for a call that never settles as well.
+  it('should leave no abort listener behind after a send that timed out', async () => {
+    const timeout = jest.spyOn(AbortSignal, 'timeout')
+    mockSend.mockImplementation(() => new Promise(() => undefined))
+
+    await new ResendEmailProvider({ apiKey: 'k', timeoutMs: 20 })
+      .send(baseOptions)
+      .catch(() => undefined)
+
+    const signal = timeout.mock.results[0]?.value as AbortSignal
+    expect(getEventListeners(signal, 'abort')).toHaveLength(0)
+  })
+
+  it('should accept a bound of one millisecond', () => {
+    expect(() => new ResendEmailProvider({ apiKey: 'k', timeoutMs: 1 })).not.toThrow()
+  })
 })

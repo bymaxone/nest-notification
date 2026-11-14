@@ -59,7 +59,7 @@ function readSdkMessage(error: { message: string }): string {
 function settleOrAbort<T>(call: Promise<T>, signal: AbortSignal): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const onAbort = (): void => {
-      reject(new Error('aborted'))
+      reject(signal.reason)
     }
     signal.addEventListener('abort', onAbort, { once: true })
     call.then(resolve, reject).finally(() => {
