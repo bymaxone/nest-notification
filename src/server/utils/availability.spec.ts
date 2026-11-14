@@ -94,17 +94,35 @@ describe('isUnavailableError', () => {
     expect(isUnavailableError(first)).toBe(false)
   })
 
-  it('should read only a bounded part of a very long chain', () => {
-    let error: Error = coded('ECONNREFUSED')
-    for (let link = 0; link < 100_000; link += 1) {
-      error = new Error('wrapper', { cause: error })
+  // A chain that makes its next link only when `cause` is read, and counts the reads.
+  it('should read only a bounded part of a chain that never ends', () => {
+    let reads = 0
+    const link = (): Error => {
+      const error = new Error('wrapper')
+      Object.defineProperty(error, 'cause', {
+        get: () => {
+          reads += 1
+          return link()
+        }
+      })
+      return error
     }
 
-    const started = performance.now()
-    const answer = isUnavailableError(error)
+    expect(isUnavailableError(link())).toBe(false)
+    expect(reads).toBeLessThanOrEqual(8)
+  })
 
-    expect(answer).toBe(false)
-    expect(performance.now() - started).toBeLessThan(2_000)
+  it('should find an unavailability inside the window and not beyond it', () => {
+    const chain = (depth: number): Error => {
+      let error: Error = coded('ECONNREFUSED')
+      for (let link = 0; link < depth; link += 1) {
+        error = new Error('wrapper', { cause: error })
+      }
+      return error
+    }
+
+    expect(isUnavailableError(chain(7))).toBe(true)
+    expect(isUnavailableError(chain(8))).toBe(false)
   })
 
   it.each([

@@ -49,12 +49,11 @@ describe('ResendEmailProvider timeout', () => {
     mockSend.mockImplementation(() => new Promise(() => undefined))
     const provider = new ResendEmailProvider({ apiKey: 'k', timeoutMs: 50 })
 
-    const started = performance.now()
+    // A send that never answers settles only because the bound fired: the call returning at all, with
+    // the fixed reason, is the proof, and no stopwatch is needed.
     await expect(provider.send(baseOptions)).rejects.toThrow(
       'Resend send failed: Resend request timed out after 50 ms'
     )
-
-    expect(performance.now() - started).toBeLessThan(1_000)
   })
 
   it('should pass the SDK a signal that aborts at the bound', async () => {
