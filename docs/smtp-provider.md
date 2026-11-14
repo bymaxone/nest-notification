@@ -34,6 +34,9 @@ BymaxNotificationModule.forRoot({
 | `credentials`                                             | — (open relay)                         | `{ user, pass }`. Supplying it declares the deployment logs in.              |
 | `tls`                                                     | —                                      | `rejectUnauthorized` / `servername` / `ca`, for a relay behind a private CA. |
 | `connectionTimeout` / `greetingTimeout` / `socketTimeout` | `10s` / `10s` / `20s`                  | Bounded on purpose — Nodemailer's own defaults run into minutes.             |
+| `sendTimeoutMs`                                           | `60000`                                | Bounds the whole `send()`, in ms. It may still be delivered; see below.      |
+
+`sendTimeoutMs` is an integer from `1` to `2147483647`. The timeouts above bound a phase or an idle socket, so a relay that keeps trickling bytes could hold a send past all of them; this bounds the whole call. A send that exceeds it fails with `EMAIL_SEND_FAILED` and the code `ETIMEDOUT`. Nodemailer cannot abort a send in flight: the message may still be delivered, and the connection is left for `socketTimeout` to reap.
 
 > **Note**
 > `isConfigured()` answers on the real configuration, not on "a transport object exists". Omitting `credentials` marks the relay as open and is fine; supplying them half-loaded — an `SMTP_PASS` that never made it into the environment — reports **not configured** and fails the send closed, rather than silently attempting an anonymous delivery a permissive relay might accept.

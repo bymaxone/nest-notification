@@ -300,6 +300,8 @@ const relay = new SmtpEmailProvider({
 > [!WARNING]
 > STARTTLS is mandatory by default for any non-loopback host, because a network attacker can strip the plaintext `STARTTLS` capability and read the OTP body. Opt out only with `requireTls: false`. The option table, the TLS rationale and the header-injection guard are in [`docs/smtp-provider.md`](./docs/smtp-provider.md).
 
+`SmtpEmailProvider` also bounds the whole call with `sendTimeoutMs` (default `60000`, an integer from `1` to `2147483647`). The other timeouts bound a phase or an idle socket, so a relay that keeps trickling bytes could hold a send past all of them. A send that exceeds the bound fails with `EMAIL_SEND_FAILED` and the reason `SMTP send timed out after <n> ms`. **A timed-out send may still have been delivered:** nodemailer cannot abort a send in flight, so only the answer is missing; do not treat the failure as proof the message was not sent. The library leaves the connection open, so a pooled transport keeps its other sends and `socketTimeout` reaps the socket of the stalled one.
+
 ### 5. Bring Your Own Provider
 
 Every external boundary is an interface: implement it and pass the instance (or class) to `forRoot`. The bundled adapters are reference implementations, not requirements; SendGrid, Mailgun or AWS SES over HTTP are an `IEmailProvider` away.
@@ -655,7 +657,7 @@ A one-time password is a credential, so every behavior is pinned so that a regre
 | Coverage       | **100%** line/branch/function/statement per file (`pnpm test:cov:all`)                   |
 | Mutation       | Stryker score **100%** (`break: 100`), no survivors                                      |
 | Lint           | ESLint flat config + `eslint-plugin-security`, zero warnings                             |
-| Bundle budgets | server < 32.86 KB · shared < 4 KB · react < 8 KB · testing < 4.5 KB brotli (`pnpm size`) |
+| Bundle budgets | server < 32.95 KB · shared < 4 KB · react < 8 KB · testing < 4.5 KB brotli (`pnpm size`) |
 | Prisma-free    | `pnpm check:no-prisma` — the library never imports `@prisma/client`                      |
 | Export map     | `pnpm check:exports` — `attw` against the packed tarball, ESM and CJS                    |
 | Supply chain   | published with npm provenance (OIDC), CodeQL + OpenSSF Scorecard                         |
