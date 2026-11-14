@@ -328,3 +328,55 @@ describe('inspectErrorChain', () => {
     expect(messages.split('\n')).toHaveLength(MAX_ERROR_CHAIN_LINKS)
   })
 })
+
+describe('inspectErrorChain character window', () => {
+  it('should keep only the window of a 50 MB message, and withhold', () => {
+    const huge = new Error('1234567890'.repeat(5_000_000))
+    huge.stack = 'Error'
+
+    const started = performance.now()
+    const window = inspectErrorChain(huge)
+    const messages = collectErrorChainMessages(huge)
+    const elapsed = performance.now() - started
+
+    expect(window.withheld).toBe(true)
+    expect(window.parts[0]).toHaveLength(MAX_ECHO_SCAN_LENGTH)
+    expect(messages).toHaveLength(MAX_ECHO_SCAN_LENGTH)
+    expect(elapsed).toBeLessThan(500)
+  })
+
+  it('should spend the window across the fields of a chain and cut the one that crosses it', () => {
+    const first = new Error('a'.repeat(MAX_ECHO_SCAN_LENGTH - 10))
+    first.stack = ''
+    const second = new Error('b'.repeat(100), { cause: first })
+    second.stack = ''
+
+    const window = inspectErrorChain(second)
+
+    expect(window.withheld).toBe(true)
+    expect(window.parts.join('')).toHaveLength(MAX_ECHO_SCAN_LENGTH)
+  })
+
+  it('should read the message and the stack of a link once each', () => {
+    let messageReads = 0
+    let stackReads = 0
+    const error = new Error('base')
+    Object.defineProperty(error, 'message', {
+      get: () => {
+        messageReads += 1
+        return 'counted message'
+      }
+    })
+    Object.defineProperty(error, 'stack', {
+      get: () => {
+        stackReads += 1
+        return 'counted stack'
+      }
+    })
+
+    inspectErrorChain(error)
+
+    expect(messageReads).toBe(1)
+    expect(stackReads).toBe(1)
+  })
+})

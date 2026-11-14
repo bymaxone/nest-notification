@@ -129,8 +129,7 @@ export interface ErrorChainWindow {
  */
 export function inspectErrorChain(error: unknown): ErrorChainWindow {
   const { parts, truncated } = walkChain(error, true)
-  const length = parts.reduce((total, part) => total + part.length, 0)
-  return { parts, withheld: truncated || length > MAX_ECHO_SCAN_LENGTH }
+  return { parts, withheld: truncated }
 }
 
 /**
@@ -149,25 +148,39 @@ export function collectErrorChainMessages(error: unknown): string {
   return walkChain(error, false).parts.join('\n')
 }
 
-/** Shared walker for the readers above; stops after {@link MAX_ERROR_CHAIN_LINKS} links. */
+/**
+ * Shared walker for the readers above. It stops after {@link MAX_ERROR_CHAIN_LINKS} links and
+ * keeps at most {@link MAX_ECHO_SCAN_LENGTH} characters in all: a field that does not fit is cut
+ * to what is left BEFORE anything joins or scans it, and a cut sets `truncated`. So what the
+ * callers do with the result never costs more than the window, however large a field is.
+ */
 function walkChain(error: unknown, includeStack: boolean): { parts: string[]; truncated: boolean } {
   const parts: string[] = []
   const seen = new Set<unknown>()
   let current: unknown = error
   let truncated = false
+  let remaining = MAX_ECHO_SCAN_LENGTH
+  /** Keeps the part of a field that fits in the window; a field is read once, by the caller. */
+  const take = (text: string): string => {
+    const kept = text.length > remaining ? text.slice(0, remaining) : text
+    truncated ||= kept.length < text.length
+    remaining -= kept.length
+    return kept
+  }
   while (current !== null && current !== undefined && !seen.has(current)) {
     if (seen.size === MAX_ERROR_CHAIN_LINKS) {
       truncated = true
       break
     }
     seen.add(current)
-    parts.push(readRedactedMessage(current))
+    parts.push(take(readRedactedMessage(current)))
     if (!isSafeError(current)) {
       break
     }
     try {
-      if (includeStack && typeof current.stack === 'string') {
-        parts.push(current.stack)
+      const stack: unknown = includeStack ? current.stack : undefined
+      if (typeof stack === 'string') {
+        parts.push(take(stack))
       }
     } catch {
       // A hostile `stack` getter contributes nothing.

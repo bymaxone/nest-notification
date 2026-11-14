@@ -181,4 +181,26 @@ describe('EmailService.send redaction of a very long cause chain', () => {
 
     expect(caught).toMatchObject({ code: 'notification.email_send_failed' })
   }, 60_000)
+
+  // A single field is as large as the provider chooses: the window is characters, not links, so
+  // nothing after the read costs more than the window.
+  it('should withhold a 50 MB first message quickly, with the real scrub and extraction', async () => {
+    const huge = '550 5.7.1 '.concat('1234567890'.repeat(5_000_000))
+    const provider = makeProvider()
+    const error = new Error(huge)
+    error.stack = 'Error'
+    provider.send.mockRejectedValue(error)
+    const audit = makeAudit()
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), audit)
+
+    const started = performance.now()
+    const caught = (await service
+      .send(baseInput)
+      .catch((thrown: unknown) => thrown)) as NotificationException
+    const elapsed = performance.now() - started
+
+    expect(caught.cause).toBeUndefined()
+    expect(JSON.stringify(audit.create.mock.calls)).toContain(LABEL)
+    expect(elapsed).toBeLessThan(500)
+  })
 })
