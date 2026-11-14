@@ -106,9 +106,9 @@ can deliver the same message twice. Make the job idempotent, or pass an idempote
 provider accepts one. The library does not retry.
 
 A custom `IOtpStorage` needs no change for the 503: `OtpService` wraps it, and a failure whose
-error carries a `code` such as `ECONNREFUSED` or `ETIMEDOUT`, or whose text is one the service
-recognises, is answered with 503, with the storage's own error as the `cause`. Any other failure
-keeps passing through as before.
+error carries a network `code` the service recognises (`ECONNREFUSED` and `ETIMEDOUT` are two of
+them), or whose text is one it recognises, is answered with 503, with the storage's own error as
+the `cause`. A failure with any other code or text keeps passing through as before.
 
 `IOtpStorage` gains the optional `deleteIfCode(tenantId, recipient, purpose, expectedStored)`, and
 the service constructor throws when `otp.consumeOnVerify` is `true` and the storage lacks it: a
