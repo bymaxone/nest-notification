@@ -34,6 +34,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   raced against it, so an older SDK that ignores the signal is bounded too. A timed-out send may
   still have been delivered; the library does not retry.
 
+- **An SMTP failure no longer carries the credentials in their base64 form.** The provider removed
+  the configured user and password from a relay's error text, but only as written. A relay or a
+  client library that quotes the AUTH exchange shows `AUTH PLAIN <token>` or the two LOGIN lines in
+  base64, which a literal match cannot see, so they reached the thrown message and the log line.
+  The base64 forms of the user, of the password and of the AUTH PLAIN token (an empty authorization
+  identity, the user, the password, as nodemailer sends it) are now removed from both, and from the
+  error thrown while the transport is built. A short credential over-redacts a message, as it
+  already did.
+
 - **An SMTP send no longer waits for as long as a trickling relay allows.** The other timeouts
   each bound a phase or an idle socket, so a relay that kept sending bytes could hold a send past all of them. `SmtpEmailProvider` now bounds the whole call with
   `sendTimeoutMs` (default `60000`, an integer from `1` to `2147483647`), failing with the reason
