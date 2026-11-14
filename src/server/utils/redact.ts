@@ -264,6 +264,7 @@ export function collectEchoedExcerpts(
     }
   }
   // One automaton over every examined field, a separator that is no character between them.
+  // Stryker disable next-line UnaryOperator: equivalent — the excerpt is clamped to its own field, so a run that crossed a separator would yield the same excerpt
   const units = examined.flatMap((field) => [...field.split('').map((c) => c.charCodeAt(0)), -1])
   const reach = longestEchoFrom(units, reference)
   const excerpts = whole
