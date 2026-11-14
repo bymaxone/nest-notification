@@ -5,7 +5,14 @@
  * @layer domain
  */
 
-import { MAX_ECHO_SCAN_LENGTH, MIN_ECHO_LENGTH, collectEchoedExcerpts } from './redact'
+import {
+  MAX_ECHO_SCAN_LENGTH,
+  MAX_ERROR_CHAIN_LINKS,
+  MIN_ECHO_LENGTH,
+  collectEchoedExcerpts,
+  collectErrorChainMessages,
+  inspectErrorChain
+} from './redact'
 
 /**
  * The definition, written the obvious way: at each position, find every occurrence of the window in
@@ -256,5 +263,68 @@ describe('collectEchoedExcerpts over several fields', () => {
     expect(collectEchoedExcerpts([fits, ...many], 'an unrelated body of text')).toHaveLength(
       many.length
     )
+  })
+})
+
+/** A chain of `links` errors with one-line stacks. */
+function chain(links: number, size = 10): Error {
+  let error = new Error('x'.repeat(size))
+  error.stack = 'Error'
+  for (let link = 1; link < links; link += 1) {
+    error = new Error(`link ${String(link)} `.padEnd(size, 'x'), { cause: error })
+    error.stack = 'Error'
+  }
+  return error
+}
+
+describe('inspectErrorChain', () => {
+  it('should read every link of a chain inside the window, message and stack apart', () => {
+    const window = inspectErrorChain(chain(MAX_ERROR_CHAIN_LINKS))
+
+    expect(window.withheld).toBe(false)
+    expect(window.parts).toHaveLength(MAX_ERROR_CHAIN_LINKS * 2)
+  })
+
+  it('should stop after the window and withhold a chain that continues past it', () => {
+    const window = inspectErrorChain(chain(MAX_ERROR_CHAIN_LINKS + 1))
+
+    expect(window.withheld).toBe(true)
+    expect(window.parts).toHaveLength(MAX_ERROR_CHAIN_LINKS * 2)
+  })
+
+  it('should read a chain of 100000 links by reading only the window', () => {
+    const started = performance.now()
+    const window = inspectErrorChain(chain(100_000))
+    const elapsed = performance.now() - started
+
+    expect(window.withheld).toBe(true)
+    expect(window.parts).toHaveLength(MAX_ERROR_CHAIN_LINKS * 2)
+    // Building the chain is in the measurement; reading it is not what grows.
+    expect(elapsed).toBeLessThan(3_000)
+  })
+
+  it('should withhold a chain whose text is longer than the scan limit', () => {
+    expect(inspectErrorChain(new Error('x'.repeat(MAX_ECHO_SCAN_LENGTH + 1))).withheld).toBe(true)
+    expect(inspectErrorChain(new Error('x'.repeat(100))).withheld).toBe(false)
+  })
+
+  it('should not withhold a chain that loops back on itself', () => {
+    const first = new Error('first')
+    const second = new Error('second', { cause: first })
+    ;(first as { cause?: unknown }).cause = second
+
+    const window = inspectErrorChain(first)
+
+    expect(window.withheld).toBe(false)
+    expect(window.parts.filter((part) => part === 'first' || part === 'second')).toEqual([
+      'first',
+      'second'
+    ])
+  })
+
+  it('should read only the window of messages for the reply-code grammar', () => {
+    const messages = collectErrorChainMessages(chain(MAX_ERROR_CHAIN_LINKS * 4))
+
+    expect(messages.split('\n')).toHaveLength(MAX_ERROR_CHAIN_LINKS)
   })
 })

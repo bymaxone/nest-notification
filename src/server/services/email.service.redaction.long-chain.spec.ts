@@ -1,13 +1,13 @@
 /**
  * @fileoverview Specs for EmailService redaction when the provider's error is very large or its
- * cause chain is very long: an echo past the detector's scan limit is scrubbed whole, field by
- * field, and the failure path stays bounded in time, stack and memory. The ordinary redaction specs
- * live in `email.service.redaction.spec.ts`; shared fixtures in `__tests__/email-service.fixtures.ts`.
+ * cause chain is very long: a chain past the examined window publishes none of the provider's text,
+ * and the failure path costs the same however long the chain is. The ordinary redaction specs live
+ * in `email.service.redaction.spec.ts`; shared fixtures in `__tests__/email-service.fixtures.ts`.
  * @layer application
  */
 
 import type { NotificationException } from '../errors/notification-exception'
-import * as redact from '../utils/redact'
+import { MAX_ERROR_CHAIN_LINKS } from '../utils/redact'
 
 import {
   baseInput,
@@ -18,133 +18,166 @@ import {
 } from './__tests__/email-service.fixtures'
 import { EmailService } from './email.service'
 
+const LABEL = '[provider text withheld]'
+/** A body, and a secret inside it, big enough to pass the detector's scan limit on its own. */
+const SECRET = '998877'
+const BODY = `<p>${`reset code ${SECRET} `.repeat(5_000)}</p>`
+
+/**
+ * Builds a chain of `links` errors, the innermost carrying `inner`. Each stack is one short line,
+ * so the size of a chain does not depend on how deep the test runner's own call stack is.
+ */
+function chainOf(links: number, message: (link: number) => string, inner = 'inner'): Error {
+  let error = new Error(inner)
+  error.stack = `Error: ${inner}`
+  for (let link = 1; link < links; link += 1) {
+    const text = message(link)
+    error = new Error(text, { cause: error })
+    error.stack = `Error: ${text}`
+  }
+  return error
+}
+
+async function sendFailing(
+  failure: (html: string) => Error,
+  input: { html?: string; text?: string; auditRedactValues?: string[] } = {}
+) {
+  const provider = makeProvider()
+  provider.send.mockImplementation(async (options) => {
+    throw failure(options.html)
+  })
+  const audit = makeAudit()
+  const service = new EmailService(makeOptions(), provider, makeRenderer(), audit)
+  const caught = (await service
+    .send({ ...baseInput, html: BODY, ...input })
+    .catch((error: unknown) => error)) as NotificationException
+  return { caught, audit }
+}
+
+/** Nothing of the body, nor the provider's own words, is on the exception or the audit entry. */
+function expectWithheld(caught: NotificationException, audit: ReturnType<typeof makeAudit>): void {
+  expect(caught).toMatchObject({ code: 'notification.email_send_failed' })
+  expect(caught.cause).toBeUndefined()
+  expect(JSON.stringify(caught.getResponse())).not.toContain(SECRET)
+  expect(audit.create).toHaveBeenCalledWith(
+    expect.objectContaining({
+      verb: 'failed',
+      errorMessage: LABEL
+    })
+  )
+  expect(JSON.stringify(audit.create.mock.calls)).not.toContain(SECRET)
+}
+
 describe('EmailService.send redaction of a very large error', () => {
-  // An error text longer than the detector's scan limit is scrubbed whole. The chain text the
-  // service inspects joins message and stack, so it must be scrubbed field by field: a joined text
-  // is a substring of no single field, and nothing would be removed.
-  it('should scrub an echo longer than the scan limit from the audit entry and the cause', async () => {
-    const provider = makeProvider()
-    const body = `<p>${'reset code 998877 '.repeat(5_000)}</p>`
-    provider.send.mockImplementation(async (options) => {
-      throw new Error(`550 5.7.1 rejected by policy: ${options.html}`)
-    })
-    const audit = makeAudit()
-    const service = new EmailService(makeOptions(), provider, makeRenderer(), audit)
+  // An echo past the detector's scan limit cannot be examined: the whole text is withheld, which
+  // can only remove more than needed.
+  it('should withhold an echo longer than the scan limit from the audit entry and the cause', async () => {
+    const { caught, audit } = await sendFailing((html) => new Error(`550 5.7.1 rejected: ${html}`))
 
-    const caught: unknown = await service
-      .send({ ...baseInput, html: body })
-      .catch((error: unknown) => error)
-
-    const cause = (caught as NotificationException).cause as Error
-    expect(cause.message.includes('998877')).toBe(false)
-    expect(cause.stack?.includes('998877')).toBe(false)
-    expect(JSON.stringify(audit.create.mock.calls)).not.toContain('998877')
+    expectWithheld(caught, audit)
   })
 
-  it('should scrub an over-limit echo that lives only in a nested cause', async () => {
-    const provider = makeProvider()
-    const body = `<p>${'reset code 998877 '.repeat(5_000)}</p>`
-    provider.send.mockImplementation(async (options) => {
-      throw new Error('relay failed', { cause: new Error(`550 body: ${options.html}`) })
-    })
-    const service = new EmailService(makeOptions(), provider, makeRenderer(), makeAudit())
-
-    const caught: unknown = await service
-      .send({ ...baseInput, html: body })
-      .catch((error: unknown) => error)
-
-    const nested = ((caught as NotificationException).cause as Error).cause as Error
-    expect(nested.message.includes('998877')).toBe(false)
-    expect(nested.stack?.includes('998877')).toBe(false)
-  })
-
-  // The echo can sit in the stack, which is a separate field of the same link, and in more than one
-  // link of the chain: each field is scrubbed on its own.
-  it('should scrub an over-limit echo from a stack and from every link of the chain', async () => {
-    const provider = makeProvider()
-    const body = `<p>${'reset code 998877 '.repeat(5_000)}</p>`
-    provider.send.mockImplementation(async (options) => {
-      const inner = new Error('inner failure')
-      inner.stack = `Error: inner failure\n    at relay (${options.html})`
-      throw new Error(`550 rejected: ${options.html}`, { cause: inner })
-    })
-    const service = new EmailService(makeOptions(), provider, makeRenderer(), makeAudit())
-
-    const caught: unknown = await service
-      .send({ ...baseInput, html: body })
-      .catch((error: unknown) => error)
-
-    const outer = (caught as NotificationException).cause as Error
-    const inner = outer.cause as Error
-    expect(outer.message.includes('998877')).toBe(false)
-    expect(outer.stack?.includes('998877')).toBe(false)
-    expect(inner.message.includes('998877')).toBe(false)
-    expect(inner.stack?.includes('998877')).toBe(false)
-  })
-
-  it('should scrub an over-limit echo of the plain-text body as well', async () => {
-    const provider = makeProvider()
-    const text = 'reset code 998877 '.repeat(5_000)
-    provider.send.mockImplementation(async (options) => {
-      throw new Error(`550 rejected: ${options.text ?? ''}`)
-    })
-    const service = new EmailService(makeOptions(), provider, makeRenderer(), makeAudit())
-
-    const caught: unknown = await service
-      .send({ ...baseInput, text })
-      .catch((error: unknown) => error)
-
-    expect(((caught as NotificationException).cause as Error).message.includes('998877')).toBe(
-      false
+  it('should withhold an over-limit echo that lives only in a nested cause', async () => {
+    const { caught, audit } = await sendFailing(
+      (html) => new Error('relay failed', { cause: new Error(`550 body: ${html}`) })
     )
+
+    expectWithheld(caught, audit)
   })
 
-  // A provider chooses how deep its cause chain is. Scanning each field against the whole body
-  // would cost the body's length once per link.
-  it('should read a deep cause chain against a large body in time that does not grow per link', async () => {
-    const provider = makeProvider()
-    const body = `<p>${'lorem ipsum dolor '.repeat(4_500)}</p>`
-    provider.send.mockImplementation(async () => {
-      let error = new Error('relay link 0 failed with a sizeable message')
-      for (let link = 1; link < 400; link += 1) {
-        error = new Error(`relay link ${String(link)} failed with a sizeable message`, {
-          cause: error
-        })
-      }
-      throw error
+  it('should withhold an over-limit echo that lives in a stack', async () => {
+    const { caught, audit } = await sendFailing((html) => {
+      const error = new Error('relay failed')
+      error.stack = `Error: relay failed\n    at relay (${html})`
+      return error
     })
-    const service = new EmailService(makeOptions(), provider, makeRenderer(), makeAudit())
 
+    expectWithheld(caught, audit)
+  })
+
+  it('should withhold an over-limit echo of the plain-text body as well', async () => {
+    const text = `reset code ${SECRET} `.repeat(5_000)
+    const { caught, audit } = await sendFailing((_html) => new Error(`550 rejected: ${text}`), {
+      text
+    })
+
+    expectWithheld(caught, audit)
+  })
+})
+
+describe('EmailService.send redaction of a very long cause chain', () => {
+  it('should read a 5000-link chain with the real scrub in time that does not grow with its length', async () => {
     const started = performance.now()
-    await service.send({ ...baseInput, html: body }).catch(() => undefined)
+    const { caught, audit } = await sendFailing(() =>
+      chainOf(5_000, (link) => `relay link ${String(link)} failed with a sizeable message`)
+    )
     const elapsed = performance.now() - started
 
+    expectWithheld(caught, audit)
+    // The chain is built inside this call, so the bound covers building 5000 errors as well; the
+    // quadratic scrub this replaced took 33 s.
     expect(elapsed).toBeLessThan(2_000)
   })
 
-  // The fields past the scan budget come back whole, one value each, and the chain has no length cap
-  // of its own: the list of values must be built without spreading it into a call, which overflows
-  // the stack at roughly 130000 arguments. The scrub itself is stubbed: it is quadratic in this
-  // chain's length and not what the case is about.
-  it('should still fail the send cleanly when a very long chain returns many whole fields', async () => {
-    const scrub = jest
-      .spyOn(redact, 'scrubValuesFromErrorChain')
-      .mockImplementation((error) => error)
-    const provider = makeProvider()
-    provider.send.mockImplementation(async () => {
-      let error = new Error('x'.repeat(70_000))
-      for (let link = 0; link < 250_000; link += 1) {
-        error = new Error(`relay link ${String(link)} message`, { cause: error })
-        error.stack = ''
-      }
-      throw error
-    })
-    const service = new EmailService(makeOptions(), provider, makeRenderer(), makeAudit())
+  it('should cost the same for a chain of 5000 links as for one just past the window', async () => {
+    const time = async (links: number): Promise<number> => {
+      const provider = makeProvider()
+      const error = chainOf(links, (link) => `relay link ${String(link)} failed with a message`)
+      provider.send.mockRejectedValue(error)
+      const service = new EmailService(makeOptions(), provider, makeRenderer(), makeAudit())
+      const started = performance.now()
+      await service.send(baseInput).catch(() => undefined)
+      return performance.now() - started
+    }
 
-    const caught: unknown = await service
-      .send({ ...baseInput, html: '<p>an ordinary body</p>', text: 'an ordinary body' })
-      .catch((error: unknown) => error)
-    scrub.mockRestore()
+    const short = await time(MAX_ERROR_CHAIN_LINKS + 1)
+    const long = await time(5_000)
+
+    expect(long).toBeLessThan(Math.max(short * 20, 100))
+  })
+
+  it('should withhold a long chain even when the caller declared values', async () => {
+    const { caught, audit } = await sendFailing(
+      () => chainOf(5_000, (link) => `relay link ${String(link)} failed`),
+      { auditRedactValues: ['declared-secret-1'] }
+    )
+
+    expect(caught.cause).toBeUndefined()
+    expect(JSON.stringify(audit.create.mock.calls)).toContain(LABEL)
+  })
+
+  it('should read exactly as many links as the window allows and no more', async () => {
+    const within = await sendFailing(() =>
+      chainOf(MAX_ERROR_CHAIN_LINKS, (link) => `link ${String(link)} says ${SECRET} was rejected`)
+    )
+    const past = await sendFailing(() =>
+      chainOf(
+        MAX_ERROR_CHAIN_LINKS + 1,
+        (link) => `link ${String(link)} says ${SECRET} was rejected`
+      )
+    )
+
+    // Inside the window the cause is kept, with nothing echoed to scrub; one link past it, withheld.
+    expect(within.caught.cause).toBeDefined()
+    expect(past.caught.cause).toBeUndefined()
+  })
+
+  it('should still publish the reply code found inside the window', async () => {
+    const { caught } = await sendFailing(() =>
+      chainOf(5_000, (link) =>
+        link === 4_990 ? '550 5.7.1 rejected by policy' : 'relay link failed'
+      )
+    )
+
+    expect(caught.getResponse()).toMatchObject({
+      error: { details: { status: 550, enhanced: '5.7.1' } }
+    })
+  })
+
+  it('should fail cleanly for a chain of 50000 links', async () => {
+    const { caught } = await sendFailing(() =>
+      chainOf(50_000, (link) => `relay link ${String(link)} failed`)
+    )
 
     expect(caught).toMatchObject({ code: 'notification.email_send_failed' })
   }, 60_000)

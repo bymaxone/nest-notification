@@ -83,8 +83,16 @@ export function readRedactedMessage(error: unknown, values?: readonly string[]):
 }
 
 /**
- * Concatenates the readable text of an error and its whole `cause` chain —
- * message and stack at every link — for echo DISCOVERY. A provider failure can
+ * Most links of a `cause` chain the readers below follow. A provider chooses how deep its chain
+ * is, and every operation on the chain after the walk (detection, the scrub, the reply-code
+ * grammar) would otherwise grow with that choice; past this many links the chain is not read
+ * further and callers withhold the provider's text.
+ */
+export const MAX_ERROR_CHAIN_LINKS = 32
+
+/**
+ * Concatenates the readable text of an error and its `cause` chain — message and stack at every
+ * link, up to {@link MAX_ERROR_CHAIN_LINKS} links — for echo DISCOVERY. A provider failure can
  * carry a generic outer message while the echoed body content sits only in a
  * nested `cause`'s message or stack, and discovery that reads the top-level
  * message alone would choose the raw-cause path with that plaintext aboard.
@@ -95,19 +103,34 @@ export function readRedactedMessage(error: unknown, values?: readonly string[]):
  * @returns The chain's message and stack text, newline-joined.
  */
 export function collectErrorChainText(error: unknown): string {
-  return walkChain(error, true).join('\n')
+  return walkChain(error, true).parts.join('\n')
+}
+
+/** What {@link inspectErrorChain} read from a chain, and whether it can be examined at all. */
+export interface ErrorChainWindow {
+  /** The message and the stack of each link read, kept apart, in chain order. */
+  parts: string[]
+  /**
+   * `true` when the chain is longer than {@link MAX_ERROR_CHAIN_LINKS} or its text is longer than
+   * {@link MAX_ECHO_SCAN_LENGTH}: it is too large to examine for an echo, so the caller must not
+   * publish any of it. The cost of reading a chain is bounded by those two limits, whatever the
+   * chain's length.
+   */
+  withheld: boolean
 }
 
 /**
- * The fields {@link collectErrorChainText} joins, kept apart: the message and the stack of every
- * link. Echo detection needs them apart, because what it finds is later removed from each field on
- * its own, and a piece that spans the join is a substring of no field.
+ * Reads the bounded window of a failure's `cause` chain for echo detection. The fields are kept
+ * apart because what detection finds is later removed from each field on its own, and a piece that
+ * spans the join is a substring of no field.
  *
  * @param error - The failure whose chain to read.
- * @returns One entry per message and per stack, in chain order.
+ * @returns The fields read and whether the chain is too large to examine.
  */
-export function collectErrorChainParts(error: unknown): string[] {
-  return walkChain(error, true)
+export function inspectErrorChain(error: unknown): ErrorChainWindow {
+  const { parts, truncated } = walkChain(error, true)
+  const length = parts.reduce((total, part) => total + part.length, 0)
+  return { parts, withheld: truncated || length > MAX_ECHO_SCAN_LENGTH }
 }
 
 /**
@@ -120,18 +143,23 @@ export function collectErrorChainParts(error: unknown): string[] {
  * bytes might this chain be carrying".
  *
  * @param error - The failure whose chain to read.
- * @returns The chain's messages, newline-joined.
+ * @returns The messages of the first {@link MAX_ERROR_CHAIN_LINKS} links, newline-joined.
  */
 export function collectErrorChainMessages(error: unknown): string {
-  return walkChain(error, false).join('\n')
+  return walkChain(error, false).parts.join('\n')
 }
 
-/** Shared walker for the two collectors above. */
-function walkChain(error: unknown, includeStack: boolean): string[] {
+/** Shared walker for the readers above; stops after {@link MAX_ERROR_CHAIN_LINKS} links. */
+function walkChain(error: unknown, includeStack: boolean): { parts: string[]; truncated: boolean } {
   const parts: string[] = []
   const seen = new Set<unknown>()
   let current: unknown = error
+  let truncated = false
   while (current !== null && current !== undefined && !seen.has(current)) {
+    if (seen.size === MAX_ERROR_CHAIN_LINKS) {
+      truncated = true
+      break
+    }
     seen.add(current)
     parts.push(readRedactedMessage(current))
     if (!isSafeError(current)) {
@@ -152,7 +180,7 @@ function walkChain(error: unknown, includeStack: boolean): string[] {
       // next check. Nothing to do here.
     }
   }
-  return parts
+  return { parts, truncated }
 }
 
 /**

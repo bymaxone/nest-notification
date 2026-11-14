@@ -41,7 +41,7 @@ import { countRecipients } from '../utils/recipient-list'
 import {
   collectEchoedExcerpts,
   collectErrorChainMessages,
-  collectErrorChainParts,
+  inspectErrorChain,
   readRedactedMessage,
   scrubValuesFromErrorChain
 } from '../utils/redact'
@@ -262,14 +262,22 @@ export class EmailService {
     try {
       return await this.provider.send(sendOptions)
     } catch (error) {
-      if (input.publishProviderText === false) {
+      // A chain too large to examine, like a send that asked for it, publishes none of the
+      // provider's text: reading it, scanning it and scrubbing it would all grow with a length
+      // the provider chose.
+      const chain = inspectErrorChain(error)
+      if (input.publishProviderText === false || chain.withheld) {
         await this.failWithoutProviderText(error, input, recipient)
       }
       // Declared secrets plus detected BODY ECHOES: a relay that quotes the
       // rejected content back puts the rendered body — and any secret inside
       // it — into the provider error, detectably, even when the caller
       // declared nothing.
-      const secretValues = this.gatherRedactionValues(error, input.auditRedactValues, sendOptions)
+      const secretValues = this.gatherRedactionValues(
+        chain.parts,
+        input.auditRedactValues,
+        sendOptions
+      )
       await this.audit(
         this.auditEntry('failed', input.tenantId, recipient, input.userId, {
           errorMessage: readRedactedMessage(error, secretValues)
@@ -557,19 +565,16 @@ export class EmailService {
    * empty and the raw error passes through untouched.
    */
   private gatherRedactionValues(
-    error: unknown,
+    parts: readonly string[],
     declared: readonly string[] | undefined,
     sendOptions: EmailSendOptions
   ): readonly string[] {
-    // The WHOLE chain is inspected — message and stack at every `cause` link —
-    // because a wrapper with a generic outer message can carry the echo only in
-    // a nested cause, and discovery reading the top level alone would choose
-    // the raw-cause path with that plaintext aboard.
-    // Each field on its own: what is found is removed from each field separately, so a piece that
-    // spans two fields, or a whole over-limit field, must be a substring of the field it came from.
-    const parts = collectErrorChainParts(error)
-    // Array literals, not `push(...list)`: a long chain returns one value per field that did not fit
-    // the scan budget, and spreading that many arguments into a call overflows the stack.
+    // The WHOLE bounded window of the chain is inspected — message and stack at every `cause` link —
+    // because a wrapper with a generic outer message can carry the echo only in a nested cause, and
+    // discovery reading the top level alone would choose the raw-cause path with that plaintext
+    // aboard. Each field on its own: what is found is removed from each field separately, so a piece
+    // that spans two fields must be a substring of the field it came from.
+    // Array literals, not `push(...list)`: spreading a list into a call overflows the stack.
     return [
       ...collectEchoedExcerpts(parts, sendOptions.html),
       ...(sendOptions.text !== undefined ? collectEchoedExcerpts(parts, sendOptions.text) : []),
