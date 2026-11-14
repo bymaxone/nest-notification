@@ -63,7 +63,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 #### Apply to a derived backend
 
 `NOTIFICATION_ERROR_CODES` and `NOTIFICATION_ERROR_DEFINITIONS` gain `OTP_STORAGE_UNAVAILABLE`
-(`notification.otp_storage_unavailable`, 503), so the catalog has 25 codes: a frontend that maps
+(`notification.otp_storage_unavailable`, 503): a frontend that maps
 every code adds it. A custom `IEmailProvider` that wants its unreachable or timed-out failures
 answered with 503 sets a `code` such as `ECONNREFUSED`, `ETIMEDOUT` or `EUNAVAILABLE` on the error
 it throws; without one the failure stays 502.

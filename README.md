@@ -75,7 +75,7 @@ Everything that touches the outside world — the email transport, the OTP store
 ### 🧩 Developer Experience
 
 - ✅ **Subpaths** — server, zero-dependency shared types, React hooks, and a `testing` storage contract
-- ✅ **Stable error catalog** — 25 namespaced codes shared byte-for-byte between server and frontend, so you localize on the `code`
+- ✅ **Stable error catalog** — namespaced codes shared byte-for-byte between server and frontend, so you localize on the `code`
 - ✅ **Dual-format output** — ESM + CJS + declarations for both, verified against the packed tarball on every PR
 - ✅ **Typed end to end** — TypeScript `strict` with `exactOptionalPropertyTypes` and `noUncheckedIndexedAccess`; zero `any`
 
