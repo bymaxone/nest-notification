@@ -118,4 +118,17 @@ describe('SMTP option table', () => {
       config['socketTimeout']
     ]).toEqual(documented)
   })
+
+  // The bound on a whole send is a number of milliseconds; the cell is held to the timer the
+  // provider arms for a send that sets no bound of its own.
+  it('should document the send timeout', async () => {
+    const timer = jest.spyOn(globalThis, 'setTimeout')
+
+    await transportFor({ host: 'smtp.acme.com' })
+
+    const armed = timer.mock.calls.map(([, delay]) => delay)
+    timer.mockRestore()
+    expect(armed).toContain(Number(rows.get('sendTimeoutMs')))
+    expect(notes.get('sendTimeoutMs')).toMatch(/may still be delivered/)
+  })
 })
