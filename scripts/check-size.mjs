@@ -28,8 +28,9 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 // headroom: server ~15.5/30 kB, shared ~0.8/4 kB, react ~1.7/8 kB. The budgets
 // sit roughly 2x over the real artifact so a peer dep leaking into the bundle
 // trips the gate well before it ships; revisit when the SMS/Push channels land.
-// Each budget is the artifact's brotli size plus about 50 bytes, rounded up to 0.01 KiB, so it
-// follows the measured artifact and is not set ahead of it.
+// The server budget is the artifact's brotli size plus about 50 bytes, rounded up to 0.01 KiB, so
+// it follows the measured artifact and is not set ahead of it; the other budgets keep the margin
+// the calibration above describes.
 // The .mjs ships unminified with JSDoc, so every line of runtime code and every contract case
 // counts in full. A budget is re-derived from the artifact of the change that needs it, and not
 // raised ahead of it.
