@@ -90,7 +90,9 @@ function isUnavailableLink(error: unknown): boolean {
 export function isUnavailableError(error: unknown): boolean {
   const seen = new Set<unknown>()
   let current: unknown = error
-  for (let link = 0; link < MAX_LINKS && current !== null && current !== undefined; link += 1) {
+  // `read` answers `undefined` for `null` and `undefined`, so the end of a chain walks itself out:
+  // the next link is `undefined`, which has been seen once the walk reaches it twice.
+  for (let remaining = MAX_LINKS; remaining > 0; remaining -= 1) {
     if (seen.has(current)) {
       return false
     }
@@ -120,7 +122,7 @@ const CODE_TOKEN = /^[A-Z][A-Z0-9_]{1,31}$/
 export function errorCodeOf(error: unknown): string | undefined {
   const seen = new Set<unknown>()
   let current: unknown = error
-  for (let link = 0; link < MAX_LINKS && current !== null && current !== undefined; link += 1) {
+  for (let remaining = MAX_LINKS; remaining > 0; remaining -= 1) {
     if (seen.has(current)) {
       return undefined
     }

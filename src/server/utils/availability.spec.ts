@@ -80,6 +80,26 @@ describe('isUnavailableError', () => {
     }
   )
 
+  // The texts are matched whole: the same words inside a longer message are not an outage.
+  it.each([
+    'Connection is closed.',
+    'Command timed out',
+    "Stream isn't writeable and enableOfflineQueue options is false",
+    'Reached the max retries per request limit (which is 20). Refer to "maxRetriesPerRequest" option for details.'
+  ])('should not match %j when it is part of a longer message', (phrase) => {
+    expect(isUnavailableError(new Error(`while reading the key: ${phrase}`))).toBe(false)
+  })
+
+  it('should match the retry limit whatever the limit is', () => {
+    expect(
+      isUnavailableError(new Error('Reached the max retries per request limit (which is 20).'))
+    ).toBe(true)
+  })
+
+  it('should not match a Redis reply word inside a longer message', () => {
+    expect(isUnavailableError(new Error('the READONLY flag is documented'))).toBe(false)
+  })
+
   it('should look down the cause chain', () => {
     const error = new Error('SMTP send failed', { cause: coded('ECONNREFUSED') })
 
@@ -184,5 +204,54 @@ describe('errorCodeOf', () => {
     ;(first as { cause?: unknown }).cause = second
 
     expect(errorCodeOf(first)).toBeUndefined()
+  })
+})
+
+/** An error whose `cause` points back at itself, counting every read of the link. */
+function loopingError(onRead: () => void): Error {
+  const first = new Error('first')
+  const second = new Error('second')
+  for (const [from, to] of [
+    [first, second],
+    [second, first]
+  ] as const) {
+    Object.defineProperty(from, 'cause', {
+      get: () => {
+        onRead()
+        return to
+      }
+    })
+  }
+  return first
+}
+
+describe('a chain that loops', () => {
+  it('should be read once round, not until the window is spent', () => {
+    let reads = 0
+
+    expect(isUnavailableError(loopingError(() => (reads += 1)))).toBe(false)
+
+    expect(reads).toBeLessThanOrEqual(2)
+  })
+
+  it('should be read once round when looking for a code as well', () => {
+    let reads = 0
+
+    expect(errorCodeOf(loopingError(() => (reads += 1)))).toBeUndefined()
+
+    expect(reads).toBeLessThanOrEqual(2)
+  })
+
+  it('should read exactly the window of a code chain, no more and no fewer', () => {
+    const chain = (depth: number): Error => {
+      let error: Error = coded('ETIMEDOUT')
+      for (let link = 0; link < depth; link += 1) {
+        error = new Error('wrapper', { cause: error })
+      }
+      return error
+    }
+
+    expect(errorCodeOf(chain(7))).toBe('ETIMEDOUT')
+    expect(errorCodeOf(chain(8))).toBeUndefined()
   })
 })

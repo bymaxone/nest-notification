@@ -543,4 +543,20 @@ describe('SmtpEmailProvider failure handling', () => {
 
     expect((caught as { code?: string }).code).toBeUndefined()
   })
+
+  it.each([
+    ['with the provider text', undefined],
+    ['without it', false]
+  ])(
+    'should not add a code property when the transport error has none %s',
+    async (_name, publish) => {
+      mockSendMail.mockRejectedValue(new Error('550 5.7.1 rejected by policy'))
+
+      const caught = (await new SmtpEmailProvider({ host: 'h' })
+        .send({ ...baseOptions, ...(publish === false ? { publishProviderText: false } : {}) })
+        .catch((error: unknown) => error)) as Error
+
+      expect(Object.prototype.hasOwnProperty.call(caught, 'code')).toBe(false)
+    }
+  )
 })

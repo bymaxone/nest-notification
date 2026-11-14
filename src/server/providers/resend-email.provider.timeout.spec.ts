@@ -279,4 +279,33 @@ describe('ResendEmailProvider failure codes', () => {
 
     expect((caught as { code?: string }).code).toBeUndefined()
   })
+
+  it.each([
+    [
+      'an application_error that carries a status',
+      { name: 'application_error', statusCode: 400, message: 'x' }
+    ],
+    [
+      'a null status on another kind of error',
+      { name: 'validation_error', statusCode: null, message: 'x' }
+    ]
+  ])('should carry no availability code for %s', async (_name, error) => {
+    mockSend.mockResolvedValue({ data: null, error })
+
+    const caught = (await new ResendEmailProvider({ apiKey: 'k' })
+      .send(baseOptions)
+      .catch((thrown: unknown) => thrown)) as Error
+
+    expect(Object.prototype.hasOwnProperty.call(caught, 'code')).toBe(false)
+  })
+
+  it('should not add a code property when there is no code', async () => {
+    mockSend.mockRejectedValue(new Error('rate limited'))
+
+    const caught = (await new ResendEmailProvider({ apiKey: 'k' })
+      .send(baseOptions)
+      .catch((thrown: unknown) => thrown)) as Error
+
+    expect(Object.prototype.hasOwnProperty.call(caught, 'code')).toBe(false)
+  })
 })
