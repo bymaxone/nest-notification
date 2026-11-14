@@ -114,8 +114,7 @@ describe('EmailService.send redaction of a very long cause chain', () => {
     const elapsed = performance.now() - started
 
     expectWithheld(caught, audit)
-    // The chain is built inside this call, so the bound covers building 5000 errors as well; the
-    // quadratic scrub this replaced took 33 s.
+    // The chain is built inside this call, so the bound covers building 5000 errors as well.
     expect(elapsed).toBeLessThan(2_000)
   })
 

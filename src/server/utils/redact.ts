@@ -300,10 +300,25 @@ export function collectEchoedExcerpts(
  * @returns One length per position of `units`.
  */
 function longestEchoFrom(units: readonly number[], reference: string): Int32Array {
-  // A suffix automaton of reverse(text): a substring of `text` starting at position p is a
-  // substring of the reversed text ending at size - 1 - p, so "the longest prefix at p that the
-  // reference contains" is "the longest match ending at the state that prefix of the reversed text
-  // creates".
+  const { root, states, created } = buildEchoAutomaton(units)
+  walkReference(root, reference)
+  propagateMatches(states)
+  // `created` follows the reversed text, so its last entry is the suffix of `units` starting at 0.
+  return Int32Array.from(created.map((entry) => entry.best).reverse())
+}
+
+/**
+ * A suffix automaton of reverse(`units`): a run of `units` starting at position p is a run of the
+ * reversed sequence ending at size - 1 - p, so "the longest run at p that the reference contains"
+ * is "the longest match ending at the state that prefix of the reversed sequence creates".
+ *
+ * @returns The root, every other state, and the state each prefix of the reversed sequence made.
+ */
+function buildEchoAutomaton(units: readonly number[]): {
+  root: EchoState
+  states: EchoState[]
+  created: EchoState[]
+} {
   const root: EchoState = { length: 0, link: null, next: new Map(), best: 0 }
   const states: EchoState[] = []
   const created: EchoState[] = []
@@ -312,36 +327,53 @@ function longestEchoFrom(units: readonly number[], reference: string): Int32Arra
     const current: EchoState = { length: last.length + 1, link: root, next: new Map(), best: 0 }
     states.push(current)
     created.push(current)
-    let walker: EchoState | null = last
-    while (walker !== null && !walker.next.has(code)) {
-      walker.next.set(code, current)
-      walker = walker.link
-    }
-    const target = walker?.next.get(code)
-    if (walker !== null && target !== undefined) {
-      // Stryker disable next-line ArithmeticOperator: equivalent — cloning a state whose transition is already solid only adds a duplicate no reader can tell from the original; the answers are unchanged
-      if (walker.length + 1 === target.length) {
-        current.link = target
-      } else {
-        const clone: EchoState = {
-          length: walker.length + 1,
-          link: target.link,
-          next: new Map(target.next),
-          best: 0
-        }
-        states.push(clone)
-        while (walker !== null && walker.next.get(code) === target) {
-          walker.next.set(code, clone)
-          walker = walker.link
-        }
-        target.link = clone
-        current.link = clone
-      }
-    }
+    extendAutomaton(states, last, current, code)
     last = current
   }
-  // Walk reverse(reference) through the automaton; at each step `matched` is the longest suffix of
-  // what has been read that is a substring of reverse(text), and `state` holds it.
+  return { root, states, created }
+}
+
+/** Adds `current`, the state of one more character, to the automaton: the standard extension. */
+function extendAutomaton(
+  states: EchoState[],
+  last: EchoState,
+  current: EchoState,
+  code: number
+): void {
+  let walker: EchoState | null = last
+  while (walker !== null && !walker.next.has(code)) {
+    walker.next.set(code, current)
+    walker = walker.link
+  }
+  const target = walker?.next.get(code)
+  if (walker === null || target === undefined) {
+    return
+  }
+  // Stryker disable next-line ArithmeticOperator: equivalent — cloning a state whose transition is already solid only adds a duplicate no reader can tell from the original; the answers are unchanged
+  if (walker.length + 1 === target.length) {
+    current.link = target
+    return
+  }
+  const clone: EchoState = {
+    length: walker.length + 1,
+    link: target.link,
+    next: new Map(target.next),
+    best: 0
+  }
+  states.push(clone)
+  while (walker !== null && walker.next.get(code) === target) {
+    walker.next.set(code, clone)
+    walker = walker.link
+  }
+  target.link = clone
+  current.link = clone
+}
+
+/**
+ * Walks reverse(`reference`) through the automaton; at each step `matched` is the longest suffix of
+ * what has been read that is a run of the reversed sequence, and its state records it in `best`.
+ */
+function walkReference(root: EchoState, reference: string): void {
   let state = root
   let matched = 0
   // Stryker disable next-line ArithmeticOperator: equivalent — a start past the end reads two positions that are not characters, a code no transition carries, so the walk stays at the root and the matches are unchanged
@@ -359,10 +391,15 @@ function longestEchoFrom(units: readonly number[], reference: string): Int32Arra
       state.best = Math.max(state.best, matched)
     }
   }
-  // A match at a state is also a match at every state above it in the suffix-link tree, capped by
-  // that state's own length (a suffix of the matched string is matched too); children are visited
-  // before their parents, by decreasing length. A match at an ancestor then reaches every state
-  // below it, because the matched string is a suffix of theirs: parents are visited before children.
+}
+
+/**
+ * A match at a state is also a match at every state above it in the suffix-link tree, capped by
+ * that state's own length (a suffix of the matched string is matched too); children are visited
+ * before their parents, by decreasing length. A match at an ancestor then reaches every state
+ * below it, because the matched string is a suffix of theirs: parents are visited before children.
+ */
+function propagateMatches(states: readonly EchoState[]): void {
   const byLength = [...states].sort((left, right) => right.length - left.length)
   // Every listed state has a link: only the root has none, and it is not listed.
   for (const child of byLength) {
@@ -372,8 +409,6 @@ function longestEchoFrom(units: readonly number[], reference: string): Int32Arra
   for (const child of [...byLength].reverse()) {
     child.best = Math.max(child.best, (child.link as EchoState).best)
   }
-  // `created` follows the reversed text, so its last entry is the suffix of `text` starting at 0.
-  return Int32Array.from(created.map((entry) => entry.best).reverse())
 }
 
 /**

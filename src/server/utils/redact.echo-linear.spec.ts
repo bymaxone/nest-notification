@@ -1,7 +1,7 @@
 /**
  * @fileoverview Holds `collectEchoedExcerpts` to a cost that grows with the size of its inputs and
  * not with the number of places a repeated run occurs in them, and to the same answers as the
- * straightforward definition it replaced.
+ * direct definition kept below as `referenceExcerpts`.
  * @layer domain
  */
 
@@ -57,8 +57,8 @@ function randomText(random: () => number, length: number, alphabet: string): str
 }
 
 describe('collectEchoedExcerpts cost', () => {
-  // A relay that quotes a body made of one long run sends every window to every position: the
-  // direct definition spent 4.2 s on a 40000-character body and 21.6 s on 80000.
+  // A relay that quotes a body made of one long run sends every window to every position, which
+  // is the input on which the cost of the direct definition grows with the square of its size.
   it('should scrub a repeated body at the largest scanned size in a few seconds at most', () => {
     const body = 'a'.repeat(MAX_ECHO_SCAN_LENGTH - 20)
     const message = `550 rejected: ${body}`
