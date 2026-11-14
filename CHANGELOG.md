@@ -34,9 +34,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   raced against it, so an older SDK that ignores the signal is bounded too. A timed-out send may
   still have been delivered; the library does not retry.
 
-- **An SMTP send no longer waits for as long as a trickling relay allows.** The connection, greeting
-  and socket timeouts each bound a phase or an idle socket, so a relay that kept sending bytes
-  could hold a send past all of them. `SmtpEmailProvider` now bounds the whole call with
+- **An SMTP send no longer waits for as long as a trickling relay allows.** The other timeouts
+  each bound a phase or an idle socket, so a relay that kept sending bytes could hold a send past all of them. `SmtpEmailProvider` now bounds the whole call with
   `sendTimeoutMs` (default `60000`, an integer from `1` to `2147483647`), failing with the reason
   `SMTP send timed out after <n> ms` and the code `ETIMEDOUT`, which the service answers with 503.
   Nodemailer cannot abort a send in flight, so a timed-out send may still have been delivered, and
