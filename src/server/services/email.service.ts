@@ -41,7 +41,7 @@ import { countRecipients } from '../utils/recipient-list'
 import {
   collectEchoedExcerpts,
   collectErrorChainMessages,
-  collectErrorChainText,
+  inspectErrorChain,
   readRedactedMessage,
   scrubValuesFromErrorChain
 } from '../utils/redact'
@@ -262,14 +262,22 @@ export class EmailService {
     try {
       return await this.provider.send(sendOptions)
     } catch (error) {
-      if (input.publishProviderText === false) {
+      // A chain too large to examine, like a send that asked for it, publishes none of the
+      // provider's text: reading it, scanning it and scrubbing it would all grow with a length
+      // the provider chose.
+      const chain = inspectErrorChain(error)
+      if (input.publishProviderText === false || chain.withheld) {
         await this.failWithoutProviderText(error, input, recipient)
       }
       // Declared secrets plus detected BODY ECHOES: a relay that quotes the
       // rejected content back puts the rendered body — and any secret inside
       // it — into the provider error, detectably, even when the caller
       // declared nothing.
-      const secretValues = this.gatherRedactionValues(error, input.auditRedactValues, sendOptions)
+      const secretValues = this.gatherRedactionValues(
+        chain.parts,
+        input.auditRedactValues,
+        sendOptions
+      )
       await this.audit(
         this.auditEntry('failed', input.tenantId, recipient, input.userId, {
           errorMessage: readRedactedMessage(error, secretValues)
@@ -293,6 +301,10 @@ export class EmailService {
    */
   async sendTemplate(input: EmailSendTemplateInput): Promise<{ messageId: string }> {
     assertIdentifies('EmailService', 'tenantId', input.tenantId)
+    // Refused before rendering: a template is not rendered to be thrown away.
+    if (this.options.email) {
+      this.guardRecipientCount(input, this.options.email.maxRecipients)
+    }
     const requestedLocale = input.locale ?? this.options.global.defaultLocale
     const locale = await this.resolveTemplateLocale(input.template, requestedLocale)
     const rendered = await this.renderTemplate(
@@ -553,22 +565,20 @@ export class EmailService {
    * empty and the raw error passes through untouched.
    */
   private gatherRedactionValues(
-    error: unknown,
+    parts: readonly string[],
     declared: readonly string[] | undefined,
     sendOptions: EmailSendOptions
   ): readonly string[] {
-    // The WHOLE chain is inspected — message and stack at every `cause` link —
-    // because a wrapper with a generic outer message can carry the echo only in
-    // a nested cause, and discovery reading the top level alone would choose
-    // the raw-cause path with that plaintext aboard.
-    const errorText = collectErrorChainText(error)
-    const values = collectEchoedExcerpts(errorText, sendOptions.html)
-    if (sendOptions.text !== undefined) {
-      values.push(...collectEchoedExcerpts(errorText, sendOptions.text))
-    }
-    if (declared) {
-      values.push(...declared)
-    }
-    return values
+    // The WHOLE bounded window of the chain is inspected — message and stack at every `cause` link —
+    // because a wrapper with a generic outer message can carry the echo only in a nested cause, and
+    // discovery reading the top level alone would choose the raw-cause path with that plaintext
+    // aboard. Each field on its own: what is found is removed from each field separately, so a piece
+    // that spans two fields must be a substring of the field it came from.
+    // Array literals, not `push(...list)`: spreading a list into a call overflows the stack.
+    return [
+      ...collectEchoedExcerpts(parts, sendOptions.html),
+      ...(sendOptions.text !== undefined ? collectEchoedExcerpts(parts, sendOptions.text) : []),
+      ...(declared ?? [])
+    ]
   }
 }

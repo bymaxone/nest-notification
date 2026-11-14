@@ -83,8 +83,16 @@ export function readRedactedMessage(error: unknown, values?: readonly string[]):
 }
 
 /**
- * Concatenates the readable text of an error and its whole `cause` chain —
- * message and stack at every link — for echo DISCOVERY. A provider failure can
+ * Most links of a `cause` chain the readers below follow. A provider chooses how deep its chain
+ * is, and every operation on the chain after the walk (detection, the scrub, the reply-code
+ * grammar) would otherwise grow with that choice; past this many links the chain is not read
+ * further and callers withhold the provider's text.
+ */
+export const MAX_ERROR_CHAIN_LINKS = 32
+
+/**
+ * Concatenates the readable text of an error and its `cause` chain — message and stack at every
+ * link, up to {@link MAX_ERROR_CHAIN_LINKS} links — for echo DISCOVERY. A provider failure can
  * carry a generic outer message while the echoed body content sits only in a
  * nested `cause`'s message or stack, and discovery that reads the top-level
  * message alone would choose the raw-cause path with that plaintext aboard.
@@ -95,7 +103,33 @@ export function readRedactedMessage(error: unknown, values?: readonly string[]):
  * @returns The chain's message and stack text, newline-joined.
  */
 export function collectErrorChainText(error: unknown): string {
-  return walkChain(error, true)
+  return walkChain(error, true).parts.join('\n')
+}
+
+/** What {@link inspectErrorChain} read from a chain, and whether it can be examined at all. */
+export interface ErrorChainWindow {
+  /** The message and the stack of each link read, kept apart, in chain order. */
+  parts: string[]
+  /**
+   * `true` when the chain is longer than {@link MAX_ERROR_CHAIN_LINKS} or its text is longer than
+   * {@link MAX_ECHO_SCAN_LENGTH}: it is too large to examine for an echo, so the caller must not
+   * publish any of it. The cost of reading a chain is bounded by those two limits, whatever the
+   * chain's length.
+   */
+  withheld: boolean
+}
+
+/**
+ * Reads the bounded window of a failure's `cause` chain for echo detection. The fields are kept
+ * apart because what detection finds is later removed from each field on its own, and a piece that
+ * spans the join is a substring of no field.
+ *
+ * @param error - The failure whose chain to read.
+ * @returns The fields read and whether the chain is too large to examine.
+ */
+export function inspectErrorChain(error: unknown): ErrorChainWindow {
+  const { parts, truncated } = walkChain(error, true)
+  return { parts, withheld: truncated }
 }
 
 /**
@@ -108,26 +142,46 @@ export function collectErrorChainText(error: unknown): string {
  * bytes might this chain be carrying".
  *
  * @param error - The failure whose chain to read.
- * @returns The chain's messages, newline-joined.
+ * @returns The messages of the first {@link MAX_ERROR_CHAIN_LINKS} links, newline-joined.
  */
 export function collectErrorChainMessages(error: unknown): string {
-  return walkChain(error, false)
+  return walkChain(error, false).parts.join('\n')
 }
 
-/** Shared walker for the two collectors above. */
-function walkChain(error: unknown, includeStack: boolean): string {
+/**
+ * Shared walker for the readers above. It stops after {@link MAX_ERROR_CHAIN_LINKS} links and
+ * keeps at most {@link MAX_ECHO_SCAN_LENGTH} characters in all: a field that does not fit is cut
+ * to what is left BEFORE anything joins or scans it, and a cut sets `truncated`. So what the
+ * callers do with the result never costs more than the window, however large a field is.
+ */
+function walkChain(error: unknown, includeStack: boolean): { parts: string[]; truncated: boolean } {
   const parts: string[] = []
   const seen = new Set<unknown>()
   let current: unknown = error
+  let truncated = false
+  let remaining = MAX_ECHO_SCAN_LENGTH
+  /** Keeps the part of a field that fits in the window; a field is read once, by the caller. */
+  const take = (text: string): string => {
+    // A slice that reaches past the end of the text is the text.
+    const kept = text.slice(0, remaining)
+    truncated ||= kept.length < text.length
+    remaining -= kept.length
+    return kept
+  }
   while (current !== null && current !== undefined && !seen.has(current)) {
+    if (seen.size === MAX_ERROR_CHAIN_LINKS) {
+      truncated = true
+      break
+    }
     seen.add(current)
-    parts.push(readRedactedMessage(current))
+    parts.push(take(readRedactedMessage(current)))
     if (!isSafeError(current)) {
       break
     }
     try {
-      if (includeStack && typeof current.stack === 'string') {
-        parts.push(current.stack)
+      const stack: unknown = includeStack ? current.stack : undefined
+      if (typeof stack === 'string') {
+        parts.push(take(stack))
       }
     } catch {
       // A hostile `stack` getter contributes nothing.
@@ -140,7 +194,7 @@ function walkChain(error: unknown, includeStack: boolean): string {
       // next check. Nothing to do here.
     }
   }
-  return parts.join('\n')
+  return { parts, truncated }
 }
 
 /**
@@ -151,7 +205,22 @@ function walkChain(error: unknown, includeStack: boolean): string {
 export const MIN_ECHO_LENGTH = 16
 
 /**
- * Collects the substrings of `text` (each at least {@link MIN_ECHO_LENGTH}
+ * Longest error text, in characters, that {@link collectEchoedExcerpts} examines piece by piece.
+ * A longer text is returned whole, as one excerpt.
+ */
+export const MAX_ECHO_SCAN_LENGTH = 65_536
+
+/** One state of the suffix automaton `longestEchoFrom` builds over the error text. */
+interface EchoState {
+  length: number
+  link: EchoState | null
+  next: Map<number, EchoState>
+  /** The longest match of the reference that ended at this state or below it. */
+  best: number
+}
+
+/**
+ * Collects the substrings of the error fields (each at least {@link MIN_ECHO_LENGTH}
  * characters) that literally appear inside `reference` — the shape of a
  * provider or relay echoing message content back inside an error. Each match
  * is grown to the longest run still present in the reference, so an echo
@@ -162,38 +231,186 @@ export const MIN_ECHO_LENGTH = 16
  * detector is defense-in-depth for the undeclared case. A bare secret quoted
  * without surrounding content is shorter than the window and is not caught.
  *
- * @param text - The error text to inspect.
+ * The fields are examined together, in one pass over `reference`, and a match never crosses from
+ * one field into the next: what is returned is later removed from each field on its own, so every
+ * excerpt is a substring of the field it came from. The matcher holds a few hundred bytes per
+ * character it examines, and a provider or relay chooses how much it sends back, so at most
+ * {@link MAX_ECHO_SCAN_LENGTH} characters are examined. A field that does not fit in what is
+ * left is returned whole, as one excerpt: it is scrubbed entirely, which gives up the diagnosis in
+ * an error that large and never lets quoted content through.
+ *
+ * @param fields - One error field (a message or a stack), or the fields of a chain.
  * @param reference - The content the error may be echoing (e.g. a message body).
- * @returns The echoed excerpts, in order of appearance.
+ * @returns The echoed excerpts, field by field in order of appearance, preceded by the fields that
+ *   were returned whole.
  */
-export function collectEchoedExcerpts(text: string, reference: string): string[] {
-  const excerpts: string[] = []
-  let index = 0
-  while (index + MIN_ECHO_LENGTH <= text.length) {
-    const window = text.slice(index, index + MIN_ECHO_LENGTH)
-    // Each occurrence of the window anchors a direct character-by-character
-    // extension — never a substring re-search per added character, whose cost
-    // grows quadratically with the echo and lets a relay quoting a large body
-    // stall the event loop.
-    let longest = 0
-    for (let at = reference.indexOf(window); at !== -1; at = reference.indexOf(window, at + 1)) {
-      let length = MIN_ECHO_LENGTH
-      while (
-        text[index + length] !== undefined &&
-        text[index + length] === reference[at + length]
-      ) {
-        length += 1
+export function collectEchoedExcerpts(
+  fields: string | readonly string[],
+  reference: string
+): string[] {
+  const all = typeof fields === 'string' ? [fields] : fields
+  let budget = MAX_ECHO_SCAN_LENGTH
+  const examined: string[] = []
+  const whole: string[] = []
+  for (const field of all) {
+    if (field.length > budget) {
+      // Too short to hold an echo, it is not worth returning.
+      if (field.length >= MIN_ECHO_LENGTH) {
+        whole.push(field)
       }
-      longest = Math.max(longest, length)
+    } else {
+      examined.push(field)
+      budget -= field.length
     }
-    if (longest === 0) {
-      index += 1
-      continue
+  }
+  // One automaton over every examined field, a separator that is no character between them.
+  // Stryker disable next-line UnaryOperator: equivalent — the excerpt is clamped to its own field, so a run that crossed a separator would yield the same excerpt
+  const units = examined.flatMap((field) => [...field.split('').map((c) => c.charCodeAt(0)), -1])
+  const reach = longestEchoFrom(units, reference)
+  const excerpts = whole
+  let offset = 0
+  for (const field of examined) {
+    let index = 0
+    while (index + MIN_ECHO_LENGTH <= field.length) {
+      // `index` is inside the field, so the position has a measured length.
+      const longest = reach.at(offset + index) as number
+      if (longest < MIN_ECHO_LENGTH) {
+        index += 1
+        continue
+      }
+      excerpts.push(field.slice(index, index + longest))
+      index += longest
     }
-    excerpts.push(text.slice(index, index + longest))
-    index += longest
+    offset += field.length + 1
   }
   return excerpts
+}
+
+/**
+ * For every position of `units`, the length of the longest run starting there that occurs
+ * somewhere in `reference`. `units` holds character codes, with -1 between fields: no character of
+ * `reference` is -1, so no run crosses a separator.
+ *
+ * Computed in time linear in both strings, whatever they contain. Extending every occurrence of a
+ * window character by character costs occurrences x extension, which on a repeated run is
+ * quadratic: a relay quoting a large body of one repeated character held the event loop for
+ * seconds. Here the shorter string, the error text, is indexed as a suffix automaton of its own
+ * reverse and the reference is walked through it once.
+ *
+ * @param units - The character codes of the error fields, a -1 after each.
+ * @param reference - The content the error may be echoing.
+ * @returns One length per position of `units`.
+ */
+function longestEchoFrom(units: readonly number[], reference: string): Int32Array {
+  const { root, states, created } = buildEchoAutomaton(units)
+  walkReference(root, reference)
+  propagateMatches(states)
+  // `created` follows the reversed text, so its last entry is the suffix of `units` starting at 0.
+  return Int32Array.from(created.map((entry) => entry.best).reverse())
+}
+
+/**
+ * A suffix automaton of reverse(`units`): a run of `units` starting at position p is a run of the
+ * reversed sequence ending at size - 1 - p, so "the longest run at p that the reference contains"
+ * is "the longest match ending at the state that prefix of the reversed sequence creates".
+ *
+ * @returns The root, every other state, and the state each prefix of the reversed sequence made.
+ */
+function buildEchoAutomaton(units: readonly number[]): {
+  root: EchoState
+  states: EchoState[]
+  created: EchoState[]
+} {
+  const root: EchoState = { length: 0, link: null, next: new Map(), best: 0 }
+  const states: EchoState[] = []
+  const created: EchoState[] = []
+  let last = root
+  for (const code of [...units].reverse()) {
+    const current: EchoState = { length: last.length + 1, link: root, next: new Map(), best: 0 }
+    states.push(current)
+    created.push(current)
+    extendAutomaton(states, last, current, code)
+    last = current
+  }
+  return { root, states, created }
+}
+
+/** Adds `current`, the state of one more character, to the automaton: the standard extension. */
+function extendAutomaton(
+  states: EchoState[],
+  last: EchoState,
+  current: EchoState,
+  code: number
+): void {
+  let walker: EchoState | null = last
+  while (walker !== null && !walker.next.has(code)) {
+    walker.next.set(code, current)
+    walker = walker.link
+  }
+  const target = walker?.next.get(code)
+  if (walker === null || target === undefined) {
+    return
+  }
+  // Stryker disable next-line ArithmeticOperator,BlockStatement: equivalent — cloning a state whose transition is already solid only adds a duplicate no reader can tell from the original; the answers are unchanged
+  if (walker.length + 1 === target.length) {
+    current.link = target
+    return
+  }
+  const clone: EchoState = {
+    length: walker.length + 1,
+    link: target.link,
+    next: new Map(target.next),
+    best: 0
+  }
+  states.push(clone)
+  while (walker !== null && walker.next.get(code) === target) {
+    walker.next.set(code, clone)
+    walker = walker.link
+  }
+  target.link = clone
+  current.link = clone
+}
+
+/**
+ * Walks reverse(`reference`) through the automaton; at each step `matched` is the longest suffix of
+ * what has been read that is a run of the reversed sequence, and its state records it in `best`.
+ */
+function walkReference(root: EchoState, reference: string): void {
+  let state = root
+  let matched = 0
+  // Stryker disable next-line ArithmeticOperator: equivalent — a start past the end reads two positions that are not characters, a code no transition carries, so the walk stays at the root and the matches are unchanged
+  for (let position = reference.length - 1; position >= 0; position -= 1) {
+    const code = reference.charCodeAt(position)
+    while (state !== root && !state.next.has(code)) {
+      // Only the root has no link, and the loop does not run for it.
+      state = state.link as EchoState
+      matched = state.length
+    }
+    const advanced = state.next.get(code)
+    if (advanced !== undefined) {
+      state = advanced
+      matched += 1
+      state.best = Math.max(state.best, matched)
+    }
+  }
+}
+
+/**
+ * A match at a state is also a match at every state above it in the suffix-link tree, capped by
+ * that state's own length (a suffix of the matched string is matched too); children are visited
+ * before their parents, by decreasing length. A match at an ancestor then reaches every state
+ * below it, because the matched string is a suffix of theirs: parents are visited before children.
+ */
+function propagateMatches(states: readonly EchoState[]): void {
+  const byLength = [...states].sort((left, right) => right.length - left.length)
+  // Every listed state has a link: only the root has none, and it is not listed.
+  for (const child of byLength) {
+    const parent = child.link as EchoState
+    parent.best = Math.max(parent.best, Math.min(child.best, parent.length))
+  }
+  for (const child of [...byLength].reverse()) {
+    child.best = Math.max(child.best, (child.link as EchoState).best)
+  }
 }
 
 /**

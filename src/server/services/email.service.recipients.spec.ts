@@ -117,3 +117,33 @@ describe('EmailService recipient bound', () => {
     })
   })
 })
+
+describe('EmailService.sendTemplate recipient bound', () => {
+  // Without an email channel there is no bound to apply: the refusal is the channel's own.
+  it('should leave the missing-channel refusal to send() when no email channel is configured', async () => {
+    const service = new EmailService(makeOptions(null), makeProvider(), makeRenderer(), makeAudit())
+
+    await expect(
+      service.sendTemplate({ tenantId: 'acme', to: addresses(100), template: 'welcome', data: {} })
+    ).rejects.toMatchObject({ code: 'notification.email_provider_not_configured' })
+  })
+
+  // Rendering a large template only to refuse the message is CPU nobody asked for.
+  it('should refuse an oversized list before it renders the template', async () => {
+    const provider = makeProvider()
+    const renderer = makeRenderer()
+    const service = new EmailService(
+      makeOptions({ maxRecipients: 2 }),
+      provider,
+      renderer,
+      makeAudit()
+    )
+
+    await expect(
+      service.sendTemplate({ tenantId: 'acme', to: addresses(3), template: 'welcome', data: {} })
+    ).rejects.toMatchObject({ code: 'notification.email_invalid_recipient' })
+
+    expect(renderer.render).not.toHaveBeenCalled()
+    expect(provider.send).not.toHaveBeenCalled()
+  })
+})

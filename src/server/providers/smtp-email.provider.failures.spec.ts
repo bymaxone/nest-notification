@@ -486,4 +486,20 @@ describe('SmtpEmailProvider failure handling', () => {
       'SMTP send failed: 421 service not available'
     )
   })
+
+  // An error text past the detector's scan limit is scrubbed whole, so none of the echoed body can
+  // reach the warn line or the thrown message.
+  it('should scrub an echo longer than the scan limit out of a transport error', async () => {
+    const body = `<p>${'reset code 998877 '.repeat(5_000)}</p>`
+    mockSendMail.mockRejectedValue(new Error(`550 5.7.1 rejected by policy: ${body}`))
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+    const caught: unknown = await new SmtpEmailProvider({ host: 'h' })
+      .send({ ...baseOptions, html: body })
+      .catch((error: unknown) => error)
+
+    expect(String((caught as Error).message).includes('998877')).toBe(false)
+    expect(String(warnSpy.mock.calls[0]?.[0]).includes('998877')).toBe(false)
+    warnSpy.mockRestore()
+  })
 })
