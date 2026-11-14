@@ -95,7 +95,8 @@ describe('ResendEmailProvider', () => {
     const result = await provider.send({ ...baseOptions, fromName: 'Acme' })
 
     expect(mockSend).toHaveBeenCalledWith(
-      expect.objectContaining({ from: 'Acme <noreply@acme.com>' })
+      expect.objectContaining({ from: 'Acme <noreply@acme.com>' }),
+      { signal: expect.any(AbortSignal) }
     )
     expect(result).toEqual({ messageId: 'msg_123' })
   })
@@ -104,7 +105,9 @@ describe('ResendEmailProvider', () => {
   it('should use the bare from address when fromName is absent', async () => {
     await new ResendEmailProvider({ apiKey: 'k' }).send(baseOptions)
 
-    expect(mockSend).toHaveBeenCalledWith(expect.objectContaining({ from: 'noreply@acme.com' }))
+    expect(mockSend).toHaveBeenCalledWith(expect.objectContaining({ from: 'noreply@acme.com' }), {
+      signal: expect.any(AbortSignal)
+    })
   })
 
   // With neither fromName nor from, the from header falls back to an empty string.
@@ -113,7 +116,9 @@ describe('ResendEmailProvider', () => {
 
     await new ResendEmailProvider({ apiKey: 'k' }).send(withoutFrom)
 
-    expect(mockSend).toHaveBeenCalledWith(expect.objectContaining({ from: '' }))
+    expect(mockSend).toHaveBeenCalledWith(expect.objectContaining({ from: '' }), {
+      signal: expect.any(AbortSignal)
+    })
   })
 
   // A display name with NO address must not emit the broken `Name <undefined>` /
@@ -123,7 +128,9 @@ describe('ResendEmailProvider', () => {
 
     await new ResendEmailProvider({ apiKey: 'k' }).send({ ...withoutFrom, fromName: 'Acme' })
 
-    expect(mockSend).toHaveBeenCalledWith(expect.objectContaining({ from: '' }))
+    expect(mockSend).toHaveBeenCalledWith(expect.objectContaining({ from: '' }), {
+      signal: expect.any(AbortSignal)
+    })
   })
 
   // The SDK client is instantiated once and reused across sends (lazy + cached).

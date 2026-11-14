@@ -28,12 +28,14 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 // headroom: server ~15.5/30 kB, shared ~0.8/4 kB, react ~1.7/8 kB. The budgets
 // sit roughly 2x over the real artifact so a peer dep leaking into the bundle
 // trips the gate well before it ships; revisit when the SMS/Push channels land.
-// The budgets sit just above the measured artifact: server 30.28 kB and testing 4.01 kB brotli.
+// The budgets sit just above the measured artifact. Server: 32068 bytes brotli before the Resend
+// timeout, 32361 with it; the budget is that count plus about 50 bytes, rounded up to 0.01 KiB.
+// Testing: 4.01 KiB.
 // The .mjs ships unminified with JSDoc, so every line of runtime code and every contract case
 // counts in full. A budget is re-derived from the artifact of the change that needs it, and not
 // raised ahead of it.
 const BUDGETS = [
-  { name: 'server (NestJS module)', path: 'dist/server/index.mjs', brotli: 31.5 * 1024 },
+  { name: 'server (NestJS module)', path: 'dist/server/index.mjs', brotli: 31.66 * 1024 },
   { name: 'shared (types + constants)', path: 'dist/shared/index.mjs', brotli: 4 * 1024 },
   { name: 'react (hooks)', path: 'dist/react/index.mjs', brotli: 8 * 1024 },
   { name: 'testing (storage contract)', path: 'dist/testing/index.mjs', brotli: 4.5 * 1024 }
