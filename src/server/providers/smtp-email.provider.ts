@@ -48,6 +48,37 @@ const DEFAULT_GREETING_TIMEOUT_MS = 10_000
 /** Default idle-socket timeout during the SMTP conversation, in milliseconds. */
 const DEFAULT_SOCKET_TIMEOUT_MS = 20_000
 
+/** Default bound on one whole send, in milliseconds. */
+const DEFAULT_SEND_TIMEOUT_MS = 60_000
+
+/** Longest bound a timer holds: Node clamps a longer one to 1 ms. */
+const MAX_SEND_TIMEOUT_MS = 2_147_483_647
+
+/**
+ * Settles with `call`, or rejects once `timeoutMs` has passed, whichever comes first. Nodemailer
+ * cannot abort a send in flight, so only the caller stops waiting: the outcome of `call` after that
+ * is still observed here, so a late rejection is never unhandled. The timer is cleared when `call`
+ * settles, so a send that answers in time leaves nothing armed.
+ *
+ * @param call - The transport's send.
+ * @param timeoutMs - The longest to wait, in milliseconds.
+ * @returns What `call` resolves with.
+ */
+function settleOrTimeout<T>(call: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(
+        Object.assign(new Error(`SMTP send timed out after ${String(timeoutMs)} ms`), {
+          code: 'ETIMEDOUT'
+        })
+      )
+    }, timeoutMs)
+    call.then(resolve, reject).finally(() => {
+      clearTimeout(timer)
+    })
+  })
+}
+
 /**
  * Hosts that cannot be reached across a network, and for which an unencrypted
  * session is therefore not exposed to a STARTTLS-stripping attacker. Used to decide
@@ -127,6 +158,15 @@ export interface SmtpEmailProviderOptions {
   greetingTimeout?: number
   /** Idle-socket timeout in milliseconds. Defaults to `20000`. */
   socketTimeout?: number
+  /**
+   * Longest one `send()` may take, in milliseconds, from the call to the transport's answer. An
+   * integer from `1` to `2147483647`; default `60000`. The three timeouts above bound a phase or an
+   * idle socket, so a relay that keeps trickling bytes could hold a send past all of them; this
+   * bounds the whole call. A send that exceeds it fails with `EMAIL_SEND_FAILED` (HTTP 503). The
+   * relay may still accept the message: only the answer is missing, so the failure does not say the
+   * message was not sent. The connection is left open for `socketTimeout` to reap.
+   */
+  sendTimeoutMs?: number
 }
 
 /**
@@ -268,8 +308,18 @@ export class SmtpEmailProvider implements IEmailProvider {
   /**
    * @param options - Adapter options; `host` is required to actually send, and
    *   `credentials` must be complete whenever supplied at all.
+   * @throws Error When `sendTimeoutMs` is not an integer from `1` to `2147483647`.
    */
   constructor(options: SmtpEmailProviderOptions = {}) {
+    const timeout = options.sendTimeoutMs
+    if (
+      timeout !== undefined &&
+      !(Number.isInteger(timeout) && timeout >= 1 && timeout <= MAX_SEND_TIMEOUT_MS)
+    ) {
+      throw new Error(
+        `SmtpEmailProvider: sendTimeoutMs must be a positive integer of at most ${String(MAX_SEND_TIMEOUT_MS)}`
+      )
+    }
     this.#options = options
   }
 
@@ -352,7 +402,10 @@ export class SmtpEmailProvider implements IEmailProvider {
     publishProviderText?: boolean
   ): Promise<{ messageId?: string }> {
     try {
-      return await transport.sendMail(payload)
+      return await settleOrTimeout(
+        transport.sendMail(payload),
+        this.#options.sendTimeoutMs ?? DEFAULT_SEND_TIMEOUT_MS
+      )
     } catch (error) {
       throw this.failure(error, payload, redactValuesList, publishProviderText)
     }

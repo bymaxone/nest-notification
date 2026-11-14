@@ -13,7 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   could not be reached, the error of the Redis client went straight to the HTTP layer as an
   unclassified 500, and a failed email send was always 502, whether the provider refused the message or
   could not be reached at all. `OtpService` now wraps its store, and a refused connection, a closed
-  client, a timed-out command, an exhausted retry limit or a replica that cannot write becomes
+  client, a timed-out command, an exhausted retry limit, a replica that cannot write or serve
+  (`READONLY`, `LOADING`, `MASTERDOWN`), or a cluster that is down or asks for a retry
+  (`CLUSTERDOWN`, `TRYAGAIN`) becomes
   `notification.otp_storage_unavailable` (503) with the original error as the log-safe `cause`;
   every other failure of a store, a defect included, passes through unchanged. A failed email send
   keeps `notification.email_send_failed` and answers 503 when the provider could not be reached or
@@ -31,6 +33,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Resend request timed out after <n> ms`. The SDK is given the abort signal and the call is also
   raced against it, so an older SDK that ignores the signal is bounded too. A timed-out send may
   still have been delivered; the library does not retry.
+
+- **An SMTP send no longer waits for as long as a trickling relay allows.** The connection, greeting
+  and socket timeouts each bound a phase or an idle socket, so a relay that kept sending bytes
+  could hold a send past all of them. `SmtpEmailProvider` now bounds the whole call with
+  `sendTimeoutMs` (default `60000`, an integer from `1` to `2147483647`), failing with the reason
+  `SMTP send timed out after <n> ms` and the code `ETIMEDOUT`, which the service answers with 503.
+  Nodemailer cannot abort a send in flight, so a timed-out send may still have been delivered, and
+  the connection is left for `socketTimeout` to reap; the library does not retry.
 
 - **A failed send no longer blocks the event loop on a large or repeated body.** When a provider
   or relay rejected a send and quoted the message, the echo detector extended every occurrence of

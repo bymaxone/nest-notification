@@ -41,8 +41,11 @@ const UNAVAILABLE_MESSAGES: readonly RegExp[] = [
   /^Reached the max retries per request limit \(which is \d+\)\./
 ]
 
-/** Error replies a Redis server gives while it cannot serve: a replica, a loading dataset, a down cluster. */
-const UNAVAILABLE_REPLY = /^(?:READONLY|LOADING|CLUSTERDOWN)\b/
+/**
+ * Error replies a Redis server gives while it cannot serve: a replica, a loading dataset, a replica
+ * cut off from its master, a down cluster, or a cluster asking the client to retry the command.
+ */
+const UNAVAILABLE_REPLY = /^(?:READONLY|LOADING|MASTERDOWN|CLUSTERDOWN|TRYAGAIN)\b/
 
 /** The ioredis error name for a command that ran out of reconnection attempts. */
 const MAX_RETRIES_NAME = 'MaxRetriesPerRequestError'

@@ -39,7 +39,10 @@ describe('isUnavailableError', () => {
   it.each([
     "READONLY You can't write against a read only replica.",
     'LOADING Redis is loading the dataset in memory',
-    'CLUSTERDOWN The cluster is down'
+    'CLUSTERDOWN The cluster is down',
+    "MASTERDOWN Link with MASTER is down and replica-serve-stale-data is set to 'no'.",
+    // A transient reply: the server asks the client to try the same command again later.
+    'TRYAGAIN Multiple keys request during rehashing of slot'
   ])('should treat the Redis reply %j as unavailable', (message) => {
     expect(isUnavailableError(new ReplyError(message))).toBe(true)
   })
@@ -49,10 +52,22 @@ describe('isUnavailableError', () => {
     'ERR wrong number of arguments',
     'NOAUTH Authentication required.',
     "OOM command not allowed when used memory > 'maxmemory'.",
-    'MISCONF Redis is configured to save RDB snapshots',
-    'TRYAGAIN Multiple keys request during rehashing of slot'
+    'MISCONF Redis is configured to save RDB snapshots'
   ])('should not treat the Redis reply %j as unavailable', (message) => {
     expect(isUnavailableError(new ReplyError(message))).toBe(false)
+  })
+
+  // The reply names are matched as the first word of the message: a defect whose text only mentions
+  // one of them, or a longer word that begins with it, is a defect and stays a 500.
+  it.each([
+    'the TRYAGAIN reply was mishandled',
+    'ERR unknown command TRYAGAIN',
+    'TRYAGAINLATER please',
+    'MASTERDOWNGRADE is not supported',
+    'try again later'
+  ])('should not treat the text %j as a Redis outage', (message) => {
+    expect(isUnavailableError(new ReplyError(message))).toBe(false)
+    expect(isUnavailableError(new Error(message))).toBe(false)
   })
 
   it.each([
