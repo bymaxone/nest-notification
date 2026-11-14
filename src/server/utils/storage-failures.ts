@@ -30,6 +30,16 @@ const OPERATIONS = [
 ] as const
 
 /**
+ * The operations of `IOtpStorage` that {@link OPERATIONS} does not name. It is `never` while the
+ * list covers the interface, and a spec fails to compile when it is not, so an operation added to
+ * the interface cannot be left out of the wrapper without anyone noticing.
+ */
+export type UncoveredStorageOperation = Exclude<
+  keyof IOtpStorage,
+  'name' | 'isConfigured' | (typeof OPERATIONS)[number]
+>
+
+/**
  * Turns a failure of the store into what the caller should see.
  *
  * @param storage - The store that failed.

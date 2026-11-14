@@ -109,12 +109,14 @@ export function isUnavailableError(error: unknown): boolean {
 const CODE_TOKEN = /^[A-Z][A-Z0-9_]{1,31}$/
 
 /**
- * The first error code found on an error or its first few causes, when it is a short token.
+ * The error code to carry from a failure of a client: the first availability code on the error or
+ * its first few causes, otherwise the first code that is a short token.
  *
  * A provider wraps the failure of its client in an error of its own, and the wrapper has to carry
- * the code across or the status of the failure can no longer be told from its text. Only a
- * token is carried: a code is never allowed to smuggle the provider's words, a recipient or a
- * secret into a place that is logged and serialized.
+ * the code across or the status of the failure can no longer be told from its text. An outage code
+ * deeper in the chain wins over an earlier code that names another fault, so the wrapper does not
+ * hide an outage behind it. Only a token is carried: a code is never allowed to smuggle the
+ * provider's words, a recipient or a secret into a place that is logged and serialized.
  *
  * @param error - The failure the client raised.
  * @returns The code, or `undefined` when none is a token.
@@ -122,16 +124,20 @@ const CODE_TOKEN = /^[A-Z][A-Z0-9_]{1,31}$/
 export function errorCodeOf(error: unknown): string | undefined {
   const seen = new Set<unknown>()
   let current: unknown = error
+  let first: string | undefined
   for (let remaining = MAX_LINKS; remaining > 0; remaining -= 1) {
     if (seen.has(current)) {
-      return undefined
+      break
     }
     seen.add(current)
     const code = read(current, 'code')
     if (typeof code === 'string' && CODE_TOKEN.test(code)) {
-      return code
+      if (UNAVAILABLE_CODES.has(code)) {
+        return code
+      }
+      first ??= code
     }
     current = read(current, 'cause')
   }
-  return undefined
+  return first
 }

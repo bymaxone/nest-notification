@@ -8,7 +8,12 @@
 import type { IOtpStorage } from '../interfaces/otp-storage.interface'
 import { InMemoryOtpStorage } from '../providers/in-memory-otp.storage'
 
-import { withStorageFailures } from './storage-failures'
+import { withStorageFailures, type UncoveredStorageOperation } from './storage-failures'
+
+/** Compiles only while the type is exactly `never`. */
+type Expect<T extends true> = T
+type IsNever<T> = [T] extends [never] ? true : false
+type _EveryOperationIsWrapped = Expect<IsNever<UncoveredStorageOperation>>
 
 describe('withStorageFailures', () => {
   it('should keep the name and the operations the store has, and no others', () => {

@@ -201,6 +201,22 @@ describe('errorCodeOf', () => {
     expect(errorCodeOf(value)).toBeUndefined()
   })
 
+  // The first code names another fault, the second is an outage: the outage is what is carried.
+  it('should prefer an availability code deeper in the chain over an earlier code', () => {
+    const error = Object.assign(new Error('auth'), {
+      code: 'EAUTH',
+      cause: coded('ECONNREFUSED')
+    })
+
+    expect(errorCodeOf(error)).toBe('ECONNREFUSED')
+  })
+
+  it('should carry the first code when none of them is an outage', () => {
+    const error = Object.assign(new Error('auth'), { code: 'EAUTH', cause: coded('EENVELOPE') })
+
+    expect(errorCodeOf(error)).toBe('EAUTH')
+  })
+
   it('should stop at a loop in the chain', () => {
     const first = new Error('first')
     const second = new Error('second', { cause: first })
