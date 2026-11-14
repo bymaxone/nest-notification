@@ -155,17 +155,25 @@ describe('collectEchoedExcerpts answers', () => {
     }
   )
 
-  // Two cases found by searching for inputs on which visiting the suffix-link tree out of order
-  // changes the answer: the match has to travel through more than one level before it reaches
-  // the position that needs it.
+  // Four cases found by searching, against the matcher as it is now, for inputs on which visiting the
+  // suffix-link tree out of order changes the answer: the match has to travel through more than one
+  // level before it reaches the position that needs it.
   it.each([
     [
-      'bbcabcbababbcaccacbaaaaacbbaccabcbbbcccccabcababcaacacababacbabccaaccbbcccbbaccbbbabbcbc',
-      'cbbaccabcbbbcccccabcababcaacacababacbabccaaccbbbcbbbcccccabcababcccccabcababcaacacababacbabccaaccbaaabcbbbcccccabcababcaacacababacbabccaa'
+      'abaaaabbbbbbaabaaabbaaaabaaaaabbababaaabbabbbbabbbaabaaabbbbaaaaaaaaabbabaababbaabababaaabbbbabbaaab',
+      'ababaaabbabbbbabbbbbbaaaabaaaaabbababaaabbabbbbabbbaabaaababaabbbbbbaabaaabbaaaabaaaaabbababaaabbabbbbabbbababaaabbabbbbabbbaababb'
     ],
     [
-      'ccccabaabdcbbbbcbbaacaaadacbcdbbbbaddaccdbadabaaabddccdcddddbacdbdaaaabcbdbcbdbbbccbcbcbaddbcc',
-      'abcbdbcbdbbbccbcbcbaddbccccbdbbbccbcbcbaddbccdaabdcbbbbcbbaacaaadacbcdbbbbaddaccacddbacdbdaaaabcbdbcbdbbbccbcbcbaddbccda'
+      'bdbbcbcbbbdbcbbadcbdbaacbdbbcdbacbbcadaddcbcddacdbdbccbddcabccaaabcbcaaacbccbccabbaacabdcadbbddaabbabcddaaaabbbdcccdcdaddbbcbbddabaadadadbaaabbcdaaddbaacdaaa',
+      'aabcbcaaacbccbccabbaacabdcadbbddaabbabcdddcabccaaabcbcaaacbccbccabbaacabdcadbbddbcaaacbccbccabbaacabdcadbbaadbccbddcabccaaabcbcaaacbccbccabbaacabdcadbbdd'
+    ],
+    [
+      'abababbabaababbbbaabbbbabbaabbbbbbaaabbaaabaabaaabbbabaabaaabaaabbbbbbbbaabab',
+      'baaabbaaabaabaaabbbabaabaaabaaabbbbbbbbaababaababbaabbbbbbaaabbaaabaabaaabbbabaabaaabaaabbbbaaabbaaabaabaaabbbabaabbabbaabbbbbbaaabbaaabaabaaabbbabaabaaab'
+    ],
+    [
+      'acdadbacdadabaacaadbaabccccbabcdccccccdcdcccadababdddccbaaaacaccdabbaaddbbaca',
+      'dababdddccbaaaacaccdabbaaddbbacaccbaaaacaccdabbaaddbbacacadddccbaaaacaccdabbaaddbbacaaccdabbaaddbbacacc'
     ]
   ])(
     'should give the same excerpts when a match crosses several levels (%#)',
@@ -276,6 +284,30 @@ function chain(links: number, size = 10): Error {
   }
   return error
 }
+
+describe('collectEchoedExcerpts across fields, edge cases', () => {
+  // The separator between fields is a code no character has: a reference that contains the
+  // character U+0001 between two pieces must not let a match run from one field into the next.
+  it('should not let a match cross a field even when the reference holds a control character', () => {
+    const first = 'the quick brown fox ju'
+    const second = 'mps over the lazy dog'
+    const reference = `${first}\u0001${second}`
+
+    expect(collectEchoedExcerpts([first, second], reference)).toEqual([first, second])
+  })
+
+  // The list of examined fields starts empty: a field is examined only because it fits.
+  it('should find nothing when no field echoes a reference that holds arbitrary text', () => {
+    expect(collectEchoedExcerpts(['no echo here at all'], 'Stryker was here, and more')).toEqual([])
+  })
+
+  it('should keep a field that exactly fills the window and cut nothing', () => {
+    const exact = 'x'.repeat(MAX_ECHO_SCAN_LENGTH)
+
+    expect(collectEchoedExcerpts(exact, 'unrelated reference text')).toEqual([])
+    expect(inspectErrorChain(Object.assign(new Error(exact), { stack: '' })).withheld).toBe(false)
+  })
+})
 
 describe('inspectErrorChain', () => {
   it('should read every link of a chain inside the window, message and stack apart', () => {

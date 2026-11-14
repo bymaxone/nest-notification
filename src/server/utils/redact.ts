@@ -162,7 +162,8 @@ function walkChain(error: unknown, includeStack: boolean): { parts: string[]; tr
   let remaining = MAX_ECHO_SCAN_LENGTH
   /** Keeps the part of a field that fits in the window; a field is read once, by the caller. */
   const take = (text: string): string => {
-    const kept = text.length > remaining ? text.slice(0, remaining) : text
+    // A slice that reaches past the end of the text is the text.
+    const kept = text.slice(0, remaining)
     truncated ||= kept.length < text.length
     remaining -= kept.length
     return kept
@@ -349,7 +350,7 @@ function extendAutomaton(
   if (walker === null || target === undefined) {
     return
   }
-  // Stryker disable next-line ArithmeticOperator: equivalent — cloning a state whose transition is already solid only adds a duplicate no reader can tell from the original; the answers are unchanged
+  // Stryker disable next-line ArithmeticOperator,BlockStatement: equivalent — cloning a state whose transition is already solid only adds a duplicate no reader can tell from the original; the answers are unchanged
   if (walker.length + 1 === target.length) {
     current.link = target
     return
