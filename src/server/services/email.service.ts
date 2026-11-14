@@ -568,13 +568,12 @@ export class EmailService {
     // Each field on its own: what is found is removed from each field separately, so a piece that
     // spans two fields, or a whole over-limit field, must be a substring of the field it came from.
     const parts = collectErrorChainParts(error)
-    const values = collectEchoedExcerpts(parts, sendOptions.html)
-    if (sendOptions.text !== undefined) {
-      values.push(...collectEchoedExcerpts(parts, sendOptions.text))
-    }
-    if (declared) {
-      values.push(...declared)
-    }
-    return values
+    // Array literals, not `push(...list)`: a long chain returns one value per field that did not fit
+    // the scan budget, and spreading that many arguments into a call overflows the stack.
+    return [
+      ...collectEchoedExcerpts(parts, sendOptions.html),
+      ...(sendOptions.text !== undefined ? collectEchoedExcerpts(parts, sendOptions.text) : []),
+      ...(declared ?? [])
+    ]
   }
 }

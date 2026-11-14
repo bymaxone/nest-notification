@@ -7,6 +7,7 @@
  */
 
 import { NotificationException } from '../errors/notification-exception'
+import * as redact from '../utils/redact'
 
 import {
   baseInput,
@@ -785,4 +786,31 @@ describe('EmailService.sendTemplate redaction', () => {
 
     expect(elapsed).toBeLessThan(2_000)
   })
+
+  // The fields past the scan budget come back whole, one value each, and the chain has no length cap
+  // of its own: the list of values must be built without spreading it into a call, which overflows
+  // the stack at roughly 130000 arguments. The scrub itself is stubbed: it is quadratic in this
+  // chain's length and not what the case is about.
+  it('should still fail the send cleanly when a very long chain returns many whole fields', async () => {
+    const scrub = jest
+      .spyOn(redact, 'scrubValuesFromErrorChain')
+      .mockImplementation((error) => error)
+    const provider = makeProvider()
+    provider.send.mockImplementation(async () => {
+      let error = new Error('x'.repeat(70_000))
+      for (let link = 0; link < 250_000; link += 1) {
+        error = new Error(`relay link ${String(link)} message`, { cause: error })
+        error.stack = ''
+      }
+      throw error
+    })
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), makeAudit())
+
+    const caught: unknown = await service
+      .send({ ...baseInput, html: '<p>an ordinary body</p>', text: 'an ordinary body' })
+      .catch((error: unknown) => error)
+    scrub.mockRestore()
+
+    expect(caught).toMatchObject({ code: 'notification.email_send_failed' })
+  }, 60_000)
 })

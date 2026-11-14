@@ -212,7 +212,10 @@ export function collectEchoedExcerpts(
   const whole: string[] = []
   for (const field of all) {
     if (field.length > budget) {
-      whole.push(field)
+      // Too short to hold an echo, it is not worth returning.
+      if (field.length >= MIN_ECHO_LENGTH) {
+        whole.push(field)
+      }
     } else {
       examined.push(field)
       budget -= field.length
