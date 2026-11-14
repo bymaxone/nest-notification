@@ -11,13 +11,13 @@
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common'
 import type { OnModuleInit } from '@nestjs/common'
 
+import type { NotificationChannel } from '../../shared/types/notification-channel.types'
+import { NotificationException } from '../errors/notification-exception'
+import type { OtpVerifyResult } from '../interfaces/otp-storage.interface'
 import { EmailService } from './email.service'
 import type { EmailSendInput, EmailSendTemplateInput } from './email.service'
 import { OtpService } from './otp.service'
 import type { OtpGenerateInput, OtpGenerateResult } from './otp.service'
-import type { NotificationChannel } from '../../shared/types/notification-channel.types'
-import { NotificationException } from '../errors/notification-exception'
-import type { OtpVerifyResult } from '../interfaces/otp-storage.interface'
 
 /** An email tag pair. */
 type EmailTag = { name: string; value: string }

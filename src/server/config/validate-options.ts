@@ -7,7 +7,6 @@
  * schema library (zod/class-validator) — the rules are simple and explicit.
  */
 
-import { OTP_MAX_LENGTH, OTP_MIN_LENGTH, VALID_CODE_TYPES } from './default-options'
 import { NotificationException } from '../errors/notification-exception'
 import type {
   BymaxNotificationModuleOptions,
@@ -15,6 +14,7 @@ import type {
   OtpChannelOptions
 } from '../interfaces/notification-module-options.interface'
 import { MIN_CODE_SECRET_BYTES } from '../utils/code-digest'
+import { OTP_MAX_LENGTH, OTP_MIN_LENGTH, VALID_CODE_TYPES } from './default-options'
 
 /**
  * Validates module options, throwing on the first problem found.

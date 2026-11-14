@@ -26,8 +26,6 @@ import {
   BYMAX_NOTIFICATION_OPTIONS,
   BYMAX_NOTIFICATION_OTP_STORAGE
 } from '../bymax-notification.constants'
-import { EmailService } from './email.service'
-import type { EmailSendTemplateInput } from './email.service'
 import type { ResolvedNotificationOptions, ResolvedOtpOptions } from '../config/resolved-options'
 import { CANONICAL_EMAIL_TEMPLATES } from '../constants/canonical-templates'
 import { NotificationException } from '../errors/notification-exception'
@@ -55,6 +53,8 @@ import {
 import { withStorageFailures } from '../utils/storage-failures'
 import { assertIdentifies } from '../utils/tenant-scope'
 import { safeCompare } from '../utils/timing-safe-compare'
+import { EmailService } from './email.service'
+import type { EmailSendTemplateInput } from './email.service'
 
 /** Milliseconds in one second. */
 const MS_PER_SECOND = 1000

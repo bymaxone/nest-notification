@@ -9,9 +9,9 @@
  * error kept as the log-safe `cause`, and every other failure passes through as the same object.
  */
 
-import { isUnavailableError } from './availability'
 import { NotificationException } from '../errors/notification-exception'
 import type { IOtpStorage } from '../interfaces/otp-storage.interface'
+import { isUnavailableError } from './availability'
 
 /** The operations of an `IOtpStorage` that return a promise, required and optional alike. */
 const OPERATIONS = [
