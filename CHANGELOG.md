@@ -10,13 +10,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 - **A Resend send no longer waits for as long as the platform allows.** `ResendEmailProvider` set no
-  timeout of its own: an endpoint that never answered held the request for about five minutes,
-  and one that sent headers and stalled the body was still waiting after a minute. Every send now
+  timeout of its own, so an endpoint that never answered, or sent headers and stalled the body,
+  held the request for as long as the platform allowed. Every send now
   fails at `timeoutMs` (default `15000`, an integer from `1` to `2147483647`; a larger value would
   make Node abort at once), covering the request and the response body, with the fixed reason
   `Resend request timed out after <n> ms`. The SDK is given the abort signal and the call is also
   raced against it, so an older SDK that ignores the signal is bounded too. A timed-out send may
-  still have been delivered, which the README now states; the library does not retry.
+  still have been delivered; the library does not retry.
 
 - **A failed send no longer blocks the event loop on a large or repeated body.** When a provider
   or relay rejected a send and quoted the message, the echo detector extended every occurrence of
