@@ -22,7 +22,7 @@ import { Inject, Injectable, Logger, Optional } from '@nestjs/common'
 import type { OnModuleInit } from '@nestjs/common'
 
 import {
-  BYMAX_NOTIFICATION_LOG_REPOSITORY,
+  BYMAX_NOTIFICATION_AUDIT_SINK,
   BYMAX_NOTIFICATION_OPTIONS,
   BYMAX_NOTIFICATION_OTP_STORAGE
 } from '../bymax-notification.constants'
@@ -157,7 +157,7 @@ export class OtpService implements OnModuleInit {
     private readonly options: ResolvedNotificationOptions,
     @Inject(BYMAX_NOTIFICATION_OTP_STORAGE)
     store: IOtpStorage,
-    @Inject(BYMAX_NOTIFICATION_LOG_REPOSITORY)
+    @Inject(BYMAX_NOTIFICATION_AUDIT_SINK)
     private readonly auditLog: INotificationLogRepository,
     @Optional()
     @Inject(EmailService)

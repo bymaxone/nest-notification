@@ -382,6 +382,8 @@ BymaxNotificationModule.forRoot({
 
 To capture HTTP-level `sent` / `failed` entries automatically, apply `NotificationAuditInterceptor` with `@UseInterceptors(...)` on a controller or handler, or wire it globally.
 
+**Control characters are escaped before your repository sees an entry.** An entry carries values a caller chose (a recipient, a user id, an error text, a template name), and a line feed in one of them starts a second record in a log or a store that writes lines. Every string of an entry, and every key and string value of its `metadata`, reaches `create` with the C0 and C1 controls, the Unicode line and paragraph separators and the bidirectional controls written as visible sequences (`\n`, `\r`, `\t`, `\uXXXX`); a backslash is left as it is. Metadata nested deeper than four levels, a cycle, and a value that is not a plain object, an array or a primitive arrive as `[depth limit]`, `[circular]` or `[non-plain value]`. The module does this for every writer it wires, and the `BYMAX_NOTIFICATION_LOG_REPOSITORY` token still resolves to your own repository. A host that builds `OtpService`, `EmailService` or `NotificationAuditInterceptor` itself, with `new`, bypasses the wiring and has its own repository's `create` escape the strings of the entry the same way. The length of a value is not bounded here.
+
 ### 7. Frontend Integration (React)
 
 The `./react` subpath is browser-only state and UX — it drives the OTP-input box and a countdown. **Verifying the code is your app's job**: the hooks carry no HTTP client and no Node builtins, so nothing about your API shape is assumed.
@@ -665,7 +667,7 @@ A one-time password is a credential, so every behavior is pinned so that a regre
 | Coverage       | **100%** line/branch/function/statement per file (`pnpm test:cov:all`)                   |
 | Mutation       | Stryker score **100%** (`break: 100`), no survivors                                      |
 | Lint           | ESLint flat config + `eslint-plugin-security`, zero warnings                             |
-| Bundle budgets | server < 33.94 KB · shared < 4 KB · react < 8 KB · testing < 4.5 KB brotli (`pnpm size`) |
+| Bundle budgets | server < 34.48 KB · shared < 4 KB · react < 8 KB · testing < 4.5 KB brotli (`pnpm size`) |
 | Prisma-free    | `pnpm check:no-prisma` — the library never imports `@prisma/client`                      |
 | Export map     | `pnpm check:exports` — `attw` against the packed tarball, ESM and CJS                    |
 | Supply chain   | published with npm provenance (OIDC), CodeQL + OpenSSF Scorecard                         |

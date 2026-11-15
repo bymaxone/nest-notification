@@ -13,6 +13,18 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 ### Fixed
 
+- **A control character in a value no longer starts a second audit record.** An audit entry carries
+  values a caller chose: a recipient, a user id, an error text, an email template name. The
+  interceptor, `OtpService` and `EmailService` wrote them as they came, so a line feed in one of
+  them started a record nobody wrote in any log or store that writes lines, and a bidirectional
+  control could make a line read as another. The entry is now escaped once, where every writer's
+  entry passes: every string of it, and every key and string value of its `metadata`, reaches
+  `INotificationLogRepository.create` with the C0 and C1 controls, the Unicode line and paragraph
+  separators and the bidirectional controls written as visible sequences (`\n`, `\r`, `\t`,
+  `\uXXXX`). Metadata nested deeper than four levels, a cycle and a value that is not a plain
+  object, an array or a primitive arrive as a fixed marker. The `BYMAX_NOTIFICATION_LOG_REPOSITORY`
+  token still resolves to the host's own repository.
+
 - **A purpose is a short name, and anything else is refused.** `purpose` is part of every storage
   key, of the audit entry and of the template data, and nothing checked it: it could be empty,
   carry a newline that forges a log record, carry glob characters that make a key pattern
@@ -61,6 +73,13 @@ rule. The default message of `INVALID_SCOPE_IDENTIFIER` in
 recipient or purpose identifier is not valid" where it said "Tenant or recipient identifier does
 not identify anybody", so a host that matched on the old text updates; matching on the `code`
 is unaffected.
+
+A custom `INotificationLogRepository` now receives entries in which a control character in any
+string, or in a key or string value of `metadata`, arrives as a visible escape sequence, and a
+subtree of `metadata` that is too deep, circular or not a plain value arrives as a marker; a host
+whose values never contain one sees no difference. The module wraps the repository for the
+interceptor, `OtpService` and `EmailService`; a host that builds one of them by hand with `new`
+passes its own repository straight through and escapes in its `create`. No declaration changes.
 
 ## [1.4.9] - 2026-11-14
 

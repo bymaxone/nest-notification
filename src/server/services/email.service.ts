@@ -16,7 +16,7 @@ import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common'
 
 import {
   BYMAX_NOTIFICATION_EMAIL_PROVIDER,
-  BYMAX_NOTIFICATION_LOG_REPOSITORY,
+  BYMAX_NOTIFICATION_AUDIT_SINK,
   BYMAX_NOTIFICATION_OPTIONS,
   BYMAX_NOTIFICATION_TEMPLATE_RENDERER
 } from '../bymax-notification.constants'
@@ -206,7 +206,7 @@ export class EmailService {
     private readonly provider: IEmailProvider,
     @Inject(BYMAX_NOTIFICATION_TEMPLATE_RENDERER)
     private readonly renderer: IEmailTemplateRenderer,
-    @Inject(BYMAX_NOTIFICATION_LOG_REPOSITORY)
+    @Inject(BYMAX_NOTIFICATION_AUDIT_SINK)
     private readonly auditLog: INotificationLogRepository
   ) {}
 

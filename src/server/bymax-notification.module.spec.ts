@@ -3,6 +3,7 @@ import type { DynamicModule, Provider } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 
 import {
+  BYMAX_NOTIFICATION_AUDIT_SINK,
   BYMAX_NOTIFICATION_EMAIL_PROVIDER,
   BYMAX_NOTIFICATION_LOG_REPOSITORY,
   BYMAX_NOTIFICATION_OPTIONS,
@@ -71,14 +72,16 @@ describe('BymaxNotificationModule.forRoot', () => {
     expect(module.global).toBe(true)
   })
 
-  // Email-only config registers the 4 token providers + EmailService + NotificationService.
+  // Email-only config registers the 5 token providers (the options, the audit repository and its
+  // escaping wrapper, the email provider and the renderer) + EmailService + NotificationService.
   it('should register the token providers and email/notification services for email-only', () => {
     const module = BymaxNotificationModule.forRoot({ email: validEmail })
 
-    expect(module.providers).toHaveLength(6)
+    expect(module.providers).toHaveLength(7)
     expect(module.exports).toEqual([
       BYMAX_NOTIFICATION_OPTIONS,
       BYMAX_NOTIFICATION_LOG_REPOSITORY,
+      BYMAX_NOTIFICATION_AUDIT_SINK,
       BYMAX_NOTIFICATION_EMAIL_PROVIDER,
       BYMAX_NOTIFICATION_TEMPLATE_RENDERER,
       EmailService,

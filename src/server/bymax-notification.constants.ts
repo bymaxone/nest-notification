@@ -28,3 +28,10 @@ export const BYMAX_NOTIFICATION_TEMPLATE_RENDERER = Symbol('BYMAX_NOTIFICATION_T
 
 /** Token for the registered `INotificationLogRepository`. */
 export const BYMAX_NOTIFICATION_LOG_REPOSITORY = Symbol('BYMAX_NOTIFICATION_LOG_REPOSITORY')
+
+/**
+ * Internal token of the repository every audit writer uses: the one the host configured, wrapped so
+ * that the entries it receives are escaped. The public {@link BYMAX_NOTIFICATION_LOG_REPOSITORY}
+ * still resolves to the host's own instance. Not part of the package's public API.
+ */
+export const BYMAX_NOTIFICATION_AUDIT_SINK = Symbol('BYMAX_NOTIFICATION_AUDIT_SINK')
