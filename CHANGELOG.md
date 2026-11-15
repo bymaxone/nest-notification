@@ -11,6 +11,15 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 ## [Unreleased]
 
+### Fixed
+
+- **Resolving a template placeholder no longer reads the whole data object.** `DefaultTemplateRenderer`
+  copied every own enumerable property of the data into a new map to find one value, and a nested path
+  did it for each segment. The work grew with the size of the object,
+  and a getter on a property the template never names ran, so one that threw broke a render that did
+  not ask for it. The renderer now reads only the property that is named, and only when it is an own
+  enumerable one: the same keys resolve as before, and inherited and prototype keys stay out of reach.
+
 ## [1.4.9] - 2026-11-14
 
 ### Fixed

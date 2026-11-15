@@ -156,14 +156,13 @@ export class DefaultTemplateRenderer implements IEmailTemplateRenderer {
   }
 
   /**
-   * Builds a variable resolver for one render call. Lookups go through a `Map`
-   * built from own enumerable entries (never bracket indexing) so neither flat
-   * nor nested resolution can reach inherited/prototype keys.
+   * Builds a variable resolver for one render call. A key resolves only when the object holds it as
+   * an own enumerable property, so neither flat nor nested resolution can reach inherited or
+   * prototype keys, and only the property that is named is read.
    */
   private buildResolver(data: Record<string, unknown>): (path: string) => unknown {
     if (!this.enableNestedPaths) {
-      const values = new Map(Object.entries(data))
-      return (path: string): unknown => values.get(path)
+      return (path: string): unknown => this.ownValue(data, path)
     }
     return (path: string): unknown => this.resolveNested(data, path)
   }
@@ -176,9 +175,19 @@ export class DefaultTemplateRenderer implements IEmailTemplateRenderer {
       if (current === null || current === undefined || typeof current !== 'object') {
         return undefined
       }
-      current = new Map(Object.entries(current as Record<string, unknown>)).get(key)
+      current = this.ownValue(current as Record<string, unknown>, key)
     }
     return current
+  }
+
+  /**
+   * The value of `key` when `object` holds it as an own enumerable property, otherwise `undefined`.
+   * Called through `Object.prototype` so an object without a prototype works too.
+   */
+  private ownValue(object: Record<string, unknown>, key: string): unknown {
+    return Object.prototype.propertyIsEnumerable.call(object, key)
+      ? Reflect.get(object, key)
+      : undefined
   }
 
   /**
