@@ -14,6 +14,7 @@ import type {
   OtpChannelOptions
 } from '../interfaces/notification-module-options.interface'
 import { MIN_CODE_SECRET_BYTES } from '../utils/code-digest'
+import { purposeProblem } from '../utils/tenant-scope'
 import { OTP_MAX_LENGTH, OTP_MIN_LENGTH, VALID_CODE_TYPES } from './default-options'
 
 /**
@@ -128,6 +129,14 @@ function validateOtpOptions(otp: OtpChannelOptions): void {
   }
   if (otp.defaultMaxAttempts !== undefined && otp.defaultMaxAttempts < 1) {
     throw new Error('[BymaxNotificationModule] options.otp.defaultMaxAttempts must be at least 1')
+  }
+  for (const key of Object.keys(otp.perPurpose ?? {})) {
+    const problem = purposeProblem(key)
+    if (problem !== undefined) {
+      throw new Error(
+        `[BymaxNotificationModule] options.otp.perPurpose has the key ${JSON.stringify(key)}, which is not a valid purpose: ${problem}`
+      )
+    }
   }
   if (otp.resendCooldownSeconds !== undefined && otp.resendCooldownSeconds < 0) {
     throw new Error(

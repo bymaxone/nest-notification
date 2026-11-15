@@ -583,6 +583,10 @@ A code is short: a six-digit code has a million values, so a plain hash of it is
 
 The recipient is normalized before it is hashed. Surrounding whitespace is trimmed, and an email (an identifier with an ASCII `@`) is lower-cased and its domain is given the spelling the resolver gives it, so `Jane@Acme.com`, `jane@acme.com` and `jane@ａｃｍｅ.com` (fullwidth letters) are one recipient, and so are `jane@bücher.de` and `jane@xn--bcher-kva.de`. A domain the mapping would change in any other way keeps the spelling it was written in, lower-cased: an address literal, a host a URL parser reads as an address (`0x7f.1`), and a domain with anything in it that is not part of a name. The local part gets no Unicode normalization: two local parts that differ in a compatibility character (`ﬁle` and `file`) are two mailboxes at a provider that accepts them, and one key for both would let a code mailed to one verify for the other. A plus tag is kept for the same reason of not guessing a provider's rules: `jane+1@acme.com` and `jane@acme.com` are two recipients, each with its own cooldown and attempt counter, although many providers deliver both to one mailbox. A host that must limit per mailbox limits per user id, not per recipient.
 
+### Purposes are yours
+
+A purpose names a flow (`email_verification`, `password_reset`): 1 to 64 characters from `A-Z a-z 0-9 : _ -`. Every OTP operation and both reference storages refuse anything else with `notification.invalid_scope_identifier` (HTTP 400), and a `perPurpose` key outside that set stops the module at startup. The refusal never carries the value. The limits of a recipient are kept per `(tenant, recipient, purpose)`, and a purpose with no `perPurpose` entry uses the defaults, so a caller who can choose the purpose can ask for a fresh cooldown and a fresh attempt counter each time. Purposes are yours: a literal from `NOTIFICATION_PURPOSES` or your own list, never taken from the request.
+
 ### Attempt ceilings and cooldowns are atomic
 
 `consumeAttempt` is the only writer of the attempt counter, and `tryAcquireCooldown` (`SET NX EX`) is the only acquirer of the resend window — both inside the storage, in one indivisible step. A service-side `get` followed by an `update` looks equivalent and passes every sequential test, but two concurrent verifies read the same count and each writes back the same increment: five attempts become unbounded. The same shape lets two concurrent resends both pass the cooldown check.
@@ -661,7 +665,7 @@ A one-time password is a credential, so every behavior is pinned so that a regre
 | Coverage       | **100%** line/branch/function/statement per file (`pnpm test:cov:all`)                   |
 | Mutation       | Stryker score **100%** (`break: 100`), no survivors                                      |
 | Lint           | ESLint flat config + `eslint-plugin-security`, zero warnings                             |
-| Bundle budgets | server < 33.55 KB · shared < 4 KB · react < 8 KB · testing < 4.5 KB brotli (`pnpm size`) |
+| Bundle budgets | server < 33.94 KB · shared < 4 KB · react < 8 KB · testing < 4.5 KB brotli (`pnpm size`) |
 | Prisma-free    | `pnpm check:no-prisma` — the library never imports `@prisma/client`                      |
 | Export map     | `pnpm check:exports` — `attw` against the packed tarball, ESM and CJS                    |
 | Supply chain   | published with npm provenance (OIDC), CodeQL + OpenSSF Scorecard                         |

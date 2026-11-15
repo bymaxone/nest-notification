@@ -73,13 +73,15 @@ const OTHER_CODE = '222222'
 // Stryker disable StringLiteral: equivalent — the composed key strings are arbitrary; only their distinctness and their uniqueness per run carry meaning, neither of which a spelling change alters
 function makeScope(): ContractScope {
   const run = randomUUID()
+  // A purpose is at most 64 characters of A-Z a-z 0-9 : _ -, so its run id is the first 12 hex digits.
+  const purposeRun = run.replaceAll('-', '').slice(0, 12)
   return {
     tenantA: `${KEY_PREFIX}_${run}_${TENANT_A}`,
     tenantB: `${KEY_PREFIX}_${run}_${TENANT_B}`,
     recipient: `${run}_${RECIPIENT_LOCAL}`,
     absentRecipient: `${run}_${ABSENT_LOCAL}`,
-    purpose: `${KEY_PREFIX}_${run}_${PURPOSE_MAIN}`,
-    otherPurpose: `${KEY_PREFIX}_${run}_${PURPOSE_OTHER}`,
+    purpose: `${KEY_PREFIX}_${purposeRun}_${PURPOSE_MAIN}`,
+    otherPurpose: `${KEY_PREFIX}_${purposeRun}_${PURPOSE_OTHER}`,
     // Same characters, two different (tenant, recipient) splits. A key built by
     // joining the raw values around `:` maps both onto one string, and so does one
     // built around `::`, which the single-colon pair alone does not expose.

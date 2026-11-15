@@ -207,4 +207,36 @@ describe('validateOptions', () => {
       'options.audit.repository is required'
     )
   })
+
+  // A perPurpose key is matched against the purpose a call carries, and a call carrying a purpose
+  // that is not a plain name is refused: a key that is not one could never match, so the
+  // configuration is refused when the module starts and not on the first request.
+  describe('the keys of otp.perPurpose', () => {
+    const withKey = (key: string): BymaxNotificationModuleOptions => ({
+      otp: { storage: otpStorage, perPurpose: { [key]: { length: 8 } } }
+    })
+
+    it.each(['email_verification', 'password_reset', 'auth:login', 'step-2', 'a'.repeat(64)])(
+      'should accept the key %j',
+      (key) => {
+        expect(() => validateOptions(withKey(key))).not.toThrow()
+      }
+    )
+
+    it.each([
+      ['an empty key', '', 'empty'],
+      ['a key of 65 characters', 'a'.repeat(65), 'longer than 64 characters'],
+      ['a key with a dot', 'auth.login', 'contains a character outside A-Z a-z 0-9 : _ -'],
+      ['a key with a space', 'auth login', 'contains a character outside A-Z a-z 0-9 : _ -'],
+      ['a key with a newline', 'a\nb', 'contains a character outside A-Z a-z 0-9 : _ -']
+    ])('should refuse %s', (_label, key, reason) => {
+      expect(() => validateOptions(withKey(key))).toThrow(
+        `[BymaxNotificationModule] options.otp.perPurpose has the key ${JSON.stringify(key)}, which is not a valid purpose: ${reason}`
+      )
+    })
+
+    it('should accept an otp section without perPurpose', () => {
+      expect(() => validateOptions({ otp: { storage: otpStorage } })).not.toThrow()
+    })
+  })
 })

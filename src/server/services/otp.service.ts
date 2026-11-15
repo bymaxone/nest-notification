@@ -51,7 +51,7 @@ import {
   scrubValuesFromErrorChain
 } from '../utils/redact'
 import { withStorageFailures } from '../utils/storage-failures'
-import { assertIdentifies } from '../utils/tenant-scope'
+import { assertIdentifies, assertPurpose } from '../utils/tenant-scope'
 import { safeCompare } from '../utils/timing-safe-compare'
 import { EmailService } from './email.service'
 import type { EmailSendTemplateInput } from './email.service'
@@ -642,11 +642,12 @@ export class OtpService implements OnModuleInit {
    * consumer-supplied {@link IOtpStorage} is not required to, and a blank scope would
    * then be shared by every caller that sent one.
    *
-   * @throws NotificationException `INVALID_SCOPE_IDENTIFIER` when either is blank.
+   * @throws NotificationException `INVALID_SCOPE_IDENTIFIER` when either is blank or the purpose is not a plain name.
    */
   private assertScope(ref: OtpRecipientRef): void {
     assertIdentifies('OtpService', 'tenantId', ref.tenantId)
     assertIdentifies('OtpService', 'recipient', ref.recipient)
+    assertPurpose('OtpService', ref.purpose)
   }
 
   /**

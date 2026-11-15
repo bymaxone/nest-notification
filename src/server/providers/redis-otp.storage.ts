@@ -28,6 +28,7 @@ import type {
   OtpEntry
 } from '../interfaces/otp-storage.interface'
 import { hashTenantRecipient } from '../utils/hash'
+import { assertPurpose } from '../utils/tenant-scope'
 
 /** The slim Redis surface {@link RedisOtpStorage} relies on (ioredis is structurally compatible). */
 export interface RedisLike {
@@ -369,16 +370,19 @@ export class RedisOtpStorage implements IOtpStorage {
 
   /** Builds the OTP entry key: `{namespace}:otp:{purpose}:{hashTenantRecipient(...)}`. */
   private otpKey(tenantId: string, recipient: string, purpose: string): string {
+    assertPurpose('RedisOtpStorage', purpose)
     return `${this.namespace}:otp:${purpose}:${hashTenantRecipient(tenantId, recipient)}`
   }
 
   /** Builds the failure-counter key: `{namespace}:otp_fail:{purpose}:{hashTenantRecipient(...)}`. */
   private failureKey(tenantId: string, recipient: string, purpose: string): string {
+    assertPurpose('RedisOtpStorage', purpose)
     return `${this.namespace}:otp_fail:${purpose}:${hashTenantRecipient(tenantId, recipient)}`
   }
 
   /** Builds the cooldown key: `{namespace}:otp_cd:{purpose}:{hashTenantRecipient(...)}`. */
   private cooldownKey(tenantId: string, recipient: string, purpose: string): string {
+    assertPurpose('RedisOtpStorage', purpose)
     return `${this.namespace}:otp_cd:${purpose}:${hashTenantRecipient(tenantId, recipient)}`
   }
 }

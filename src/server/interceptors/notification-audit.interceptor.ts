@@ -42,7 +42,7 @@ import type { NotificationRequest } from '../interfaces/notification-module-opti
 import type { DispatchInput } from '../services/notification.service'
 import { AuditWriteWarning } from '../utils/audit-write-warning'
 import { describeError } from '../utils/describe-error'
-import { assertIdentifies } from '../utils/tenant-scope'
+import { assertIdentifies, purposeProblem } from '../utils/tenant-scope'
 
 /** Marker `providerName` distinguishing interceptor-level entries from service-level ones. */
 /** Prefix quoted in guard failures raised by this interceptor. */
@@ -230,8 +230,16 @@ export class NotificationAuditInterceptor implements NestInterceptor {
     return input.payload.recipient
   }
 
-  /** Extracts the audit `purpose`: the OTP purpose, or the email template name. */
+  /**
+   * Extracts the audit `purpose`: the OTP purpose, or the email template name. The interceptor sees
+   * the payload before the service refuses it and audits a refused call too, so an OTP purpose that
+   * is not a plain name is left out of the entry: a control character in it would forge a log
+   * record and its length is unbounded.
+   */
   private extractPurpose(input: DispatchInput): string | undefined {
-    return input.channel === 'otp' ? input.payload.purpose : input.payload.template
+    if (input.channel !== 'otp') {
+      return input.payload.template
+    }
+    return purposeProblem(input.payload.purpose) === undefined ? input.payload.purpose : undefined
   }
 }

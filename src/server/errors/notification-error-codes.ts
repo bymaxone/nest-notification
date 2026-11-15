@@ -158,7 +158,7 @@ export const NOTIFICATION_ERROR_DEFINITIONS = {
   INVALID_SCOPE_IDENTIFIER: {
     code: NOTIFICATION_ERROR_CODES.INVALID_SCOPE_IDENTIFIER,
     status: HttpStatus.BAD_REQUEST,
-    message: 'Tenant or recipient identifier does not identify anybody'
+    message: 'A tenant, recipient or purpose identifier is not valid'
   }
 } as const satisfies Record<string, NotificationErrorDefinition>
 
