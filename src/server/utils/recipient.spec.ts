@@ -34,4 +34,170 @@ describe('normalizeRecipient', () => {
   it('should fold without consulting the locale', () => {
     expect(normalizeRecipient('I@Acme.com')).toBe('i@acme.com')
   })
+
+  // The domain is compared by the resolver after IDNA/UTS #46 mapping, which folds compatibility
+  // characters to the ASCII domain: spellings that differ only there are one domain, so one key.
+  describe('the domain of an email', () => {
+    it.each([
+      ['jane@\uFF41\uFF43\uFF4D\uFF45.com', 'jane@acme.com'],
+      ['Jane@\uFF21\uFF23\uFF2D\uFF25.COM', 'jane@acme.com'],
+      ['jane@acme\uFF0Ecom', 'jane@acme.com'],
+      ['jane@\uFB01rst.example', 'jane@first.example'],
+      ['jane@\u2460.example', 'jane@1.example'],
+      ['jane@acme.com', 'jane@acme.com']
+    ])('should fold the compatibility characters of the domain in %j to %j', (input, expected) => {
+      expect(normalizeRecipient(input)).toBe(expected)
+    })
+
+    // An internationalized domain has one spelling whichever way it is written: Unicode, upper case
+    // or punycode.
+    it.each([
+      ['jane@b\u00FCcher.de', 'jane@xn--bcher-kva.de'],
+      ['jane@B\u00DCCHER.DE', 'jane@xn--bcher-kva.de'],
+      ['jane@xn--bcher-kva.de', 'jane@xn--bcher-kva.de'],
+      ['jane@e\u0301.com', 'jane@xn--9ca.com'],
+      ['jane@\u00E9.com', 'jane@xn--9ca.com']
+    ])('should give the internationalized domain in %j one spelling, %j', (input, expected) => {
+      expect(normalizeRecipient(input)).toBe(expected)
+    })
+
+    // The mapping is non-transitional, as the resolver's is: sharp s stays itself, so this domain
+    // and the one spelled with ss are two domains.
+    it('should keep a domain with a sharp s apart from the one spelled with ss', () => {
+      expect(normalizeRecipient('jane@stra\u00DFe.de')).toBe('jane@xn--strae-oqa.de')
+      expect(normalizeRecipient('jane@stra\u00DFe.de')).not.toBe(
+        normalizeRecipient('jane@strasse.de')
+      )
+    })
+
+    // A host whose last label is a number is read as an IPv4 address by the URL host parser, which
+    // would give `0x7f.1` the spelling `127.0.0.1`. A top-level domain is never a number, so such a
+    // host is not a domain name and stays as written (lower case).
+    it.each([
+      'jane@0x7f.1',
+      'jane@127.1',
+      'jane@1.2.3.4.5',
+      'jane@0X7F.0.0.1',
+      'jane@127.0.0.1.',
+      'jane@127',
+      'jane@0x7f',
+      'jane@10.0xff',
+      'jane@1.23'
+    ])('should not read the numeric host in %j as an address', (input) => {
+      expect(normalizeRecipient(input)).toBe(input.toLowerCase())
+    })
+
+    // An address literal is not a domain name. The IPv4 literal in brackets is rejected by the
+    // mapping and keeps its own spelling, so it never shares a key with the bare address.
+    it('should keep the bracketed IPv4 literal apart from the bare address', () => {
+      expect(normalizeRecipient('user@[127.0.0.1]')).toBe('user@[127.0.0.1]')
+      expect(normalizeRecipient('user@[127.0.0.1]')).not.toBe(normalizeRecipient('user@127.0.0.1'))
+    })
+
+    // An IPv6 literal is written in its canonical form, so the spellings of one address share a key;
+    // the RFC 5321 form with the IPv6: tag is rejected by the mapping and keeps its own spelling.
+    it.each([
+      ['user@[0:0:0:0:0:0:0:1]', 'user@[::1]'],
+      ['user@[::1]', 'user@[::1]'],
+      ['user@[FE80::1]', 'user@[fe80::1]'],
+      ['user@[2001:DB8:0:0:0:0:0:1]', 'user@[2001:db8::1]'],
+      ['user@[IPv6:2001:DB8::1]', 'user@[ipv6:2001:db8::1]'],
+      ['user@[IPv6:::1]', 'user@[ipv6:::1]']
+    ])('should give the address literal in %j the spelling %j', (input, expected) => {
+      expect(normalizeRecipient(input)).toBe(expected)
+    })
+
+    it('should keep an IPv6 literal apart from an IPv4 one', () => {
+      expect(normalizeRecipient('user@[::ffff:127.0.0.1]')).not.toBe(
+        normalizeRecipient('user@[127.0.0.1]')
+      )
+      expect(normalizeRecipient('user@[::ffff:127.0.0.1]')).not.toBe(
+        normalizeRecipient('user@127.0.0.1')
+      )
+    })
+
+    // Only the LAST label decides: a number elsewhere in a real domain does not stop the mapping.
+    it('should map a domain that has a numeric label before its last one', () => {
+      expect(normalizeRecipient('jane@123.b\u00FCcher.de')).toBe('jane@123.xn--bcher-kva.de')
+    })
+
+    // A domain the mapping rejects keeps its own spelling (compatibility-folded, lower case): it is
+    // never given the spelling of another domain.
+    it.each([
+      ['jane@ex\u200Cample.com', 'jane@ex\u200Cample.com'],
+      ['jane@a b.com', 'jane@a b.com'],
+      ['jane@', 'jane@']
+    ])('should keep the rejected domain in %j as written', (input, expected) => {
+      expect(normalizeRecipient(input)).toBe(expected)
+    })
+
+    // Distinct domains never share a key, valid or not.
+    it('should give every one of these distinct domains a key of its own', () => {
+      const domains = [
+        'acme.com',
+        'acme.org',
+        'acme.com.',
+        'sub.acme.com',
+        'b\u00FCcher.de',
+        'stra\u00DFe.de',
+        'strasse.de',
+        '127.0.0.1',
+        '0x7f.1',
+        '[127.0.0.1]',
+        '[::1]',
+        '[IPv6:::1]',
+        'ex\u200Cample.com',
+        'example.com',
+        'a b.com',
+        'ab.com'
+      ]
+
+      const keys = domains.map((domain) => normalizeRecipient(`jane@${domain}`))
+
+      expect(new Set(keys).size).toBe(domains.length)
+    })
+
+    // Everything before the last @ is the local part and is left as written, so a compatibility
+    // character between two @ signs is not folded.
+    it('should leave what precedes the last @ unfolded', () => {
+      expect(normalizeRecipient('A@\uFB01@Acme.com')).toBe('a@\uFB01@acme.com')
+    })
+
+    // An address with more than one '@' is cut at the last one: what follows it is the domain.
+    it('should treat what follows the last @ as the domain', () => {
+      expect(normalizeRecipient('a@b@\uFF41\uFF43\uFF4D\uFF45.com')).toBe('a@b@acme.com')
+    })
+  })
+
+  // A mailbox is named by its local part as written: two local parts that differ in a compatibility
+  // character are two mailboxes at a provider that accepts them, and must not share one key, or a code
+  // mailed to one would verify for the other.
+  describe('the local part of an email', () => {
+    it.each([
+      ['\uFB01le@acme.com', '\uFB01le@acme.com'],
+      ['user\u2460@acme.com', 'user\u2460@acme.com'],
+      ['\u210C@acme.com', '\u210C@acme.com'],
+      ['\uFF2A\uFF41\uFF4E\uFF45@acme.com', '\uFF4A\uFF41\uFF4E\uFF45@acme.com']
+    ])(
+      'should not fold the compatibility characters of the local part in %j',
+      (input, expected) => {
+        expect(normalizeRecipient(input)).toBe(expected)
+      }
+    )
+
+    it('should keep a local part with a compatibility character apart from its plain spelling', () => {
+      expect(normalizeRecipient('\uFB01le@acme.com')).not.toBe(normalizeRecipient('file@acme.com'))
+    })
+
+    it('should keep a plus tag, so a tagged address is a key of its own', () => {
+      expect(normalizeRecipient('Jane+tag@Acme.com')).toBe('jane+tag@acme.com')
+      expect(normalizeRecipient('jane+tag@acme.com')).not.toBe(normalizeRecipient('jane@acme.com'))
+    })
+  })
+
+  // Only an ASCII @ makes an identifier an email: a fullwidth @ is not one, so its two sides are
+  // never folded across a mailbox boundary.
+  it('should only trim an identifier whose @ is a fullwidth one', () => {
+    expect(normalizeRecipient('  Jane\uFF20\uFF21cme.com ')).toBe('Jane\uFF20\uFF21cme.com')
+  })
 })

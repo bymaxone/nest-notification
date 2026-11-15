@@ -579,6 +579,10 @@ A code is short: a six-digit code has a million values, so a plain hash of it is
 - **Changing or removing the secret** makes the digests already stored unverifiable (`invalid_code`); those codes must be requested again. Downgrading the library below the version that introduced the option does the same.
 - A custom `IOtpStorage` is unaffected: `OtpEntry.code` is an opaque string to it.
 
+### Which spellings share a key
+
+The recipient is normalized before it is hashed. Surrounding whitespace is trimmed, and an email (an identifier with an ASCII `@`) is lower-cased and its domain is given the spelling the resolver gives it, so `Jane@Acme.com`, `jane@acme.com` and `jane@ａｃｍｅ.com` (fullwidth letters) are one recipient, and so are `jane@bücher.de` and `jane@xn--bcher-kva.de`. The local part gets no Unicode normalization: two local parts that differ in a compatibility character (`ﬁle` and `file`) are two mailboxes at a provider that accepts them, and one key for both would let a code mailed to one verify for the other. A plus tag is kept for the same reason of not guessing a provider's rules: `jane+1@acme.com` and `jane@acme.com` are two recipients, each with its own cooldown and attempt counter, although many providers deliver both to one mailbox. A host that must limit per mailbox limits per user id, not per recipient.
+
 ### Attempt ceilings and cooldowns are atomic
 
 `consumeAttempt` is the only writer of the attempt counter, and `tryAcquireCooldown` (`SET NX EX`) is the only acquirer of the resend window — both inside the storage, in one indivisible step. A service-side `get` followed by an `update` looks equivalent and passes every sequential test, but two concurrent verifies read the same count and each writes back the same increment: five attempts become unbounded. The same shape lets two concurrent resends both pass the cooldown check.
@@ -657,7 +661,7 @@ A one-time password is a credential, so every behavior is pinned so that a regre
 | Coverage       | **100%** line/branch/function/statement per file (`pnpm test:cov:all`)                   |
 | Mutation       | Stryker score **100%** (`break: 100`), no survivors                                      |
 | Lint           | ESLint flat config + `eslint-plugin-security`, zero warnings                             |
-| Bundle budgets | server < 33.28 KB · shared < 4 KB · react < 8 KB · testing < 4.5 KB brotli (`pnpm size`) |
+| Bundle budgets | server < 33.41 KB · shared < 4 KB · react < 8 KB · testing < 4.5 KB brotli (`pnpm size`) |
 | Prisma-free    | `pnpm check:no-prisma` — the library never imports `@prisma/client`                      |
 | Export map     | `pnpm check:exports` — `attw` against the packed tarball, ESM and CJS                    |
 | Supply chain   | published with npm provenance (OIDC), CodeQL + OpenSSF Scorecard                         |
