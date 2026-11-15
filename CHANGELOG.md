@@ -16,7 +16,9 @@ the entries that carry one, is the compatibility contract — read it, not the n
 - **One recipient, one key, whatever the spelling of its domain.** Two spellings of one mailbox's
   domain reached two keys, so each had its own resend cooldown and attempt counter. The domain of an
   email is now given the spelling a resolver gives it (UTS #46 mapping, non-transitional): fullwidth
-  and ligature forms and the punycode form of an internationalized domain are one key. The local part
+  and ligature forms and the punycode form of an internationalized domain are one key, and a domain
+  the mapping would change in any other way (an address literal, a host read as an address, text
+  with URL syntax in it) is only folded and lower-cased. The local part
   gets no Unicode normalization, because two local parts that differ in a compatibility character are
   two mailboxes and one key for both would let a code mailed to one verify for the other; plus tags
   stay separate keys, which the README now says, with the advice to limit per user id. A recipient

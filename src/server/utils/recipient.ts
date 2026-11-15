@@ -15,35 +15,51 @@
 import { domainToASCII } from 'node:url'
 
 /**
- * Whether the last label of a domain is a number, which the URL host parser reads as an IPv4
- * address in any base (`0x7f.1` is `127.0.0.1`). A top-level domain is never a number, so such a
- * host is not a domain name and is not folded: two spellings stay two keys.
+ * What a domain is made of before the mapping may read it: letters, numbers, marks, hyphen, dot and
+ * underscore. `domainToASCII` reads its input as the host of a URL, which has syntax: `#`, `/`, `?`
+ * and `\\` end the host, `%` is an escape, a tab or a newline is dropped.
  */
-const NUMERIC_LAST_LABEL = /(?:^|\.)(?:0x[0-9a-f]*|[0-9]+)\.?$/i
+const PLAIN_DOMAIN = /^[\p{L}\p{N}\p{M}_.-]+$/u
+
+/** A label made of ASCII characters only. */
+const ASCII_LABEL = /^\p{ASCII}*$/u
 
 /**
- * What a domain is made of before the mapping may read it: letters, numbers, marks, hyphen, dot and
- * underscore, or an address literal in brackets. `domainToASCII` reads its input as the host of a
- * URL, which has syntax: `#`, `/`, `?` and `\\` end the host, `%` is an escape, a tab or a newline is
- * dropped. Text with any other character is not given to it, so it cannot be cut short, decoded or
- * mended into the spelling of another domain.
+ * Whether `mapped`, what `domainToASCII` returned for `folded`, is nothing but the lower case and the
+ * punycode of its labels: the same number of labels, each ASCII label the lower case of the input
+ * one, each other label a punycode label. A mapping that cut the host short, decoded an escape,
+ * dropped a character or read the host as an address (`0x7f.1` is `127.0.0.1`) has a label that is
+ * not that, so it is not used and the domain keeps its own spelling. A domain is never given the
+ * spelling of another one.
  */
-const PLAIN_DOMAIN = /^(?:[\p{L}\p{N}\p{M}_.-]+|\[[0-9a-f:.]+\])$/iu
+function isLabelWiseMapping(folded: string, mapped: string): boolean {
+  const expected = folded
+    .split('.')
+    .map((label) => (ASCII_LABEL.test(label) ? label.toLowerCase() : null))
+  const output = mapped.split('.')
+  return (
+    expected.length === output.length &&
+    output.every((label, index) => {
+      const want = expected.at(index)
+      return want === null ? label.startsWith('xn--') : label === want
+    })
+  )
+}
 
 /**
  * The domain of an email as the resolver sees it. IDNA mapping (UTS #46, non-transitional, so `ß`
  * stays) gives one spelling to a Unicode domain, its compatibility forms (fullwidth letters,
- * ligatures) and its punycode form. Text that is not plain domain text, a domain the mapping
- * rejects, and a numeric host fall back to compatibility folding and lower case, so they are never
- * merged with a different domain.
+ * ligatures) and its punycode form. Text that is not plain domain text, and a mapping that is not
+ * label by label the lower case and the punycode of the input, fall back to compatibility folding
+ * and lower case, so a domain is never merged with a different one.
  */
 function normalizeDomain(domain: string): string {
   const folded = domain.normalize('NFKC')
-  if (!PLAIN_DOMAIN.test(folded) || NUMERIC_LAST_LABEL.test(folded)) {
+  if (!PLAIN_DOMAIN.test(folded)) {
     return folded.toLowerCase()
   }
   const mapped = domainToASCII(folded)
-  return mapped !== '' ? mapped : folded.toLowerCase()
+  return isLabelWiseMapping(folded, mapped) ? mapped : folded.toLowerCase()
 }
 
 /**

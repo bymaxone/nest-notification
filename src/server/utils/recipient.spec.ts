@@ -56,7 +56,8 @@ describe('normalizeRecipient', () => {
       ['jane@B\u00DCCHER.DE', 'jane@xn--bcher-kva.de'],
       ['jane@xn--bcher-kva.de', 'jane@xn--bcher-kva.de'],
       ['jane@e\u0301.com', 'jane@xn--9ca.com'],
-      ['jane@\u00E9.com', 'jane@xn--9ca.com']
+      ['jane@\u00E9.com', 'jane@xn--9ca.com'],
+      ['jane@\u0915\u094D\u0937.com', 'jane@xn--11b2ezc.com']
     ])('should give the internationalized domain in %j one spelling, %j', (input, expected) => {
       expect(normalizeRecipient(input)).toBe(expected)
     })
@@ -94,13 +95,13 @@ describe('normalizeRecipient', () => {
       expect(normalizeRecipient('user@[127.0.0.1]')).not.toBe(normalizeRecipient('user@127.0.0.1'))
     })
 
-    // An IPv6 literal is written in its canonical form, so the spellings of one address share a key;
-    // the RFC 5321 form with the IPv6: tag is rejected by the mapping and keeps its own spelling.
+    // An address literal is not a domain name: it keeps its own spelling, lower case, so the spellings of
+    // one address stay apart and none is given the spelling of another host.
     it.each([
-      ['user@[0:0:0:0:0:0:0:1]', 'user@[::1]'],
+      ['user@[0:0:0:0:0:0:0:1]', 'user@[0:0:0:0:0:0:0:1]'],
       ['user@[::1]', 'user@[::1]'],
       ['user@[FE80::1]', 'user@[fe80::1]'],
-      ['user@[2001:DB8:0:0:0:0:0:1]', 'user@[2001:db8::1]'],
+      ['user@[2001:DB8:0:0:0:0:0:1]', 'user@[2001:db8:0:0:0:0:0:1]'],
       ['user@[IPv6:2001:DB8::1]', 'user@[ipv6:2001:db8::1]'],
       ['user@[IPv6:::1]', 'user@[ipv6:::1]']
     ])('should give the address literal in %j the spelling %j', (input, expected) => {
@@ -119,6 +120,7 @@ describe('normalizeRecipient', () => {
     // Only the LAST label decides: a number elsewhere in a real domain does not stop the mapping.
     it('should map a domain that has a numeric label before its last one', () => {
       expect(normalizeRecipient('jane@123.b\u00FCcher.de')).toBe('jane@123.xn--bcher-kva.de')
+      expect(normalizeRecipient('jane@a.123.b\u00FCcher.de')).toBe('jane@a.123.xn--bcher-kva.de')
     })
 
     // A domain the mapping rejects keeps its own spelling (compatibility-folded, lower case): it is
@@ -126,6 +128,8 @@ describe('normalizeRecipient', () => {
     it.each([
       ['jane@ex\u200Cample.com', 'jane@ex\u200Cample.com'],
       ['jane@a b.com', 'jane@a b.com'],
+      // Plain domain text that breaks the bidirectional rule: the mapping returns nothing for it.
+      ['jane@\u05D0A.COM', 'jane@\u05D0a.com'],
       ['jane@', 'jane@']
     ])('should keep the rejected domain in %j as written', (input, expected) => {
       expect(normalizeRecipient(input)).toBe(expected)
@@ -199,6 +203,71 @@ describe('normalizeRecipient', () => {
           expect(normalizeRecipient(`jane@${domain}`)).not.toBe(
             normalizeRecipient('jane@127.0.0.1')
           )
+        }
+      )
+
+      // A mark the mapping ignores hides the number from a test of the input, and the mapping then
+      // returns the address. What decides is the host the mapping returns.
+      it.each([
+        '0x7f.1\uFE0F',
+        '127.1\u180B',
+        '1.23\u034F',
+        '0x7f\uFE0F',
+        '127.0.0.1\uFE0F',
+        '10.0xff\u034F'
+      ])(
+        'should not read the host in %j as an address once the mapping drops its mark',
+        (domain) => {
+          const key = normalizeRecipient(`jane@${domain}`)
+
+          expect(key).toBe(`jane@${domain.toLowerCase()}`)
+          expect(key).not.toBe(normalizeRecipient('jane@127.0.0.1'))
+        }
+      )
+
+      // The same marks in an ordinary name keep their own spelling too: the mapping drops them, which
+      // is not a lower case or a punycode form of the label, so the domain is never given the spelling
+      // of another one.
+      it.each(['\uFE0F', '\u180B', '\u034F'])(
+        'should keep the domain with the ignorable mark %j as written',
+        (mark) => {
+          expect(normalizeRecipient(`jane@a${mark}.com`)).toBe(`jane@a${mark}.com`)
+          expect(normalizeRecipient(`jane@a${mark}.com`)).not.toBe(normalizeRecipient('jane@a.com'))
+        }
+      )
+
+      // The class, not the list: whatever ASCII character is put into a domain, at either end or at any
+      // place inside it, the key is neither the key of the domain without it nor the key of the part
+      // before it, for a domain written in ASCII and for one written in Unicode.
+      it('should never give a domain with an extra ASCII character the key of a shorter one', () => {
+        const merged: string[] = []
+        for (const base of ['victim.com', 'b\u00FCcher.de', 'b\u00FCcher', 'a.b\u00FCcher.de']) {
+          const plain = normalizeRecipient(`jane@${base}`)
+          for (let code = 0; code <= 0x7f; code += 1) {
+            const character = String.fromCharCode(code)
+            for (let at = 0; at <= base.length; at += 1) {
+              // Surrounding whitespace is trimmed before any of this, by design.
+              if (at === base.length && /\s/.test(character)) {
+                continue
+              }
+              const domain = base.slice(0, at) + character + base.slice(at)
+              const key = normalizeRecipient(`jane@${domain}`)
+              const before = at === 0 ? '' : normalizeRecipient(`jane@${base.slice(0, at)}`)
+              if (key === plain || key === before) {
+                merged.push(JSON.stringify(domain))
+              }
+            }
+          }
+        }
+
+        expect(merged).toEqual([])
+      })
+
+      // An escape at the start of a Unicode domain would be decoded into the spelling of another one.
+      it.each(['%41b\u00FCcher.de', 'b\u00FCcher%41.de', 'b\u00FCcher.%64e', 'b\u00FC%63her.de'])(
+        'should keep the escape in %j as written',
+        (domain) => {
+          expect(normalizeRecipient(`jane@${domain}`)).toBe(`jane@${domain.toLowerCase()}`)
         }
       )
 
