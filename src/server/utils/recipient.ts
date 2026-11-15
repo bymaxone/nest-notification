@@ -22,15 +22,28 @@ import { domainToASCII } from 'node:url'
 const NUMERIC_LAST_LABEL = /(?:^|\.)(?:0x[0-9a-f]*|[0-9]+)\.?$/i
 
 /**
+ * What a domain is made of before the mapping may read it: letters, numbers, marks, hyphen, dot and
+ * underscore, or an address literal in brackets. `domainToASCII` reads its input as the host of a
+ * URL, which has syntax: `#`, `/`, `?` and `\\` end the host, `%` is an escape, a tab or a newline is
+ * dropped. Text with any other character is not given to it, so it cannot be cut short, decoded or
+ * mended into the spelling of another domain.
+ */
+const PLAIN_DOMAIN = /^(?:[\p{L}\p{N}\p{M}_.-]+|\[[0-9a-f:.]+\])$/iu
+
+/**
  * The domain of an email as the resolver sees it. IDNA mapping (UTS #46, non-transitional, so `ß`
  * stays) gives one spelling to a Unicode domain, its compatibility forms (fullwidth letters,
- * ligatures) and its punycode form. A domain the mapping rejects, or a numeric host, falls back to
- * compatibility folding and lower case, so it is never merged with a different domain.
+ * ligatures) and its punycode form. Text that is not plain domain text, a domain the mapping
+ * rejects, and a numeric host fall back to compatibility folding and lower case, so they are never
+ * merged with a different domain.
  */
 function normalizeDomain(domain: string): string {
   const folded = domain.normalize('NFKC')
+  if (!PLAIN_DOMAIN.test(folded) || NUMERIC_LAST_LABEL.test(folded)) {
+    return folded.toLowerCase()
+  }
   const mapped = domainToASCII(folded)
-  return mapped !== '' && !NUMERIC_LAST_LABEL.test(folded) ? mapped : folded.toLowerCase()
+  return mapped !== '' ? mapped : folded.toLowerCase()
 }
 
 /**

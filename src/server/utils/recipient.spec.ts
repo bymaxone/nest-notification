@@ -163,6 +163,63 @@ describe('normalizeRecipient', () => {
       expect(normalizeRecipient('A@\uFB01@Acme.com')).toBe('a@\uFB01@acme.com')
     })
 
+    // The mapping reads its input as the host of a URL, which has syntax: `#`, `/`, `?` and `\\` end
+    // it, `%` is an escape, a tab or a newline is dropped. A domain with any of these must keep its
+    // own spelling, or it shares the key of the domain it truncates to and a code mailed under one
+    // verifies for the other.
+    describe('a domain with URL syntax', () => {
+      it.each([
+        'victim.com#.evil.com',
+        'victim.com/.evil.com',
+        'victim.com?x.evil.com',
+        'victim.com\\.evil.com',
+        'victim.com:80',
+        'victim.com%2eevil.com',
+        '%76ictim.com',
+        'victim%2ecom',
+        'vic\ttim.com',
+        'victim.com\n.evil.com',
+        'victim.com\uFF03.evil.com',
+        'victim.com\uFF0F.evil.com',
+        'victim.com\uFF1F.evil.com',
+        'victim.com\uFF05.evil.com',
+        'victim.com\uFF1A80',
+        'victim.com\u2100'
+      ])('should keep the domain in %j apart from the one it would truncate to', (domain) => {
+        const key = normalizeRecipient(`jane@${domain}`)
+
+        expect(key).toBe(`jane@${domain.normalize('NFKC').toLowerCase()}`)
+        expect(key).not.toBe(normalizeRecipient('jane@victim.com'))
+        expect(key).not.toBe(normalizeRecipient('jane@evil.com'))
+      })
+
+      it.each(['0x7f.1#', '0x7f.1/x', '127.0.0.1#.evil.com', '127.0.0.1?'])(
+        'should not read %j as the address it begins with',
+        (domain) => {
+          expect(normalizeRecipient(`jane@${domain}`)).not.toBe(
+            normalizeRecipient('jane@127.0.0.1')
+          )
+        }
+      )
+
+      // What is left is letters, numbers, marks, hyphen, dot and underscore: the mapping still runs.
+      it('should still map a domain made of plain domain characters', () => {
+        expect(normalizeRecipient('jane@Sub_1.b\u00FCcher-x.de')).toBe(
+          'jane@sub_1.xn--bcher-x-n2a.de'
+        )
+      })
+
+      // A character that is not part of a name (a soft hyphen, a zero-width joiner) is not dropped
+      // by the mapping: the domain keeps its own spelling, so it never shares a key with another.
+      it.each(['a\u00AD.com', 'a\u200Db.com', 'a\u200Eb.com'])(
+        'should keep the domain in %j as written',
+        (domain) => {
+          expect(normalizeRecipient(`jane@${domain}`)).toBe(`jane@${domain}`)
+          expect(normalizeRecipient(`jane@${domain}`)).not.toBe(normalizeRecipient('jane@ab.com'))
+        }
+      )
+    })
+
     // An address with more than one '@' is cut at the last one: what follows it is the domain.
     it('should treat what follows the last @ as the domain', () => {
       expect(normalizeRecipient('a@b@\uFF41\uFF43\uFF4D\uFF45.com')).toBe('a@b@acme.com')
