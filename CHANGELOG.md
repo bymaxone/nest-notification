@@ -19,6 +19,8 @@ the entries that carry one, is the compatibility contract — read it, not the n
   and a getter on a property the template never names ran, so one that threw broke a render that did
   not ask for it. The renderer now reads only the property that is named, and only when it is an own
   enumerable one: the same keys resolve as before, and inherited and prototype keys stay out of reach.
+  A getter on a named key now runs each time the placeholder is read, not once per render for a flat
+  placeholder, so a getter whose value changes between reads can differ between occurrences.
 
 ## [1.4.9] - 2026-11-14
 
