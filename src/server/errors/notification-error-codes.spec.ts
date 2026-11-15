@@ -138,7 +138,7 @@ const EXPECTED_CATALOG = {
   INVALID_SCOPE_IDENTIFIER: {
     code: 'notification.invalid_scope_identifier',
     status: HttpStatus.BAD_REQUEST,
-    message: 'Tenant or recipient identifier does not identify anybody'
+    message: 'A tenant, recipient or purpose identifier is not valid'
   }
 }
 

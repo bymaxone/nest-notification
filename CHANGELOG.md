@@ -13,6 +13,15 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 ### Fixed
 
+- **A purpose is a short name, and anything else is refused.** `purpose` is part of every storage
+  key, of the audit entry and of the template data, and nothing checked it: it could be empty,
+  carry a newline that forges a log record, carry glob characters that make a key pattern
+  unreliable, or be as long as the caller liked. A purpose is now 1 to 64 characters from
+  `A-Z a-z 0-9 : _ -`, checked by every OTP operation and by both reference storages before a key
+  is built. The refusal is `notification.invalid_scope_identifier` (400), names the boundary and
+  the parameter and never the value. A `perPurpose` key outside that set stops the module at
+  startup. The README now says what the limits are scoped on and that purposes are the host's own.
+
 - **One recipient, one key, whatever the spelling of its domain.** Two spellings of one mailbox's
   domain reached two keys, so each had its own resend cooldown and attempt counter. The domain of an
   email is now given the spelling a resolver gives it (UTS #46 mapping, non-transitional): fullwidth
@@ -33,6 +42,23 @@ the entries that carry one, is the compatibility contract — read it, not the n
   enumerable one: the same keys resolve as before, and inherited and prototype keys stay out of reach.
   A getter on a named key now runs each time the placeholder is read, not once per render for a flat
   placeholder, so a getter whose value changes between reads can differ between occurrences.
+
+#### Apply to a derived backend
+
+A purpose is now 1 to 64 characters from `A-Z a-z 0-9 : _ -`. `OtpService.generate`, `resend`,
+`verify`, `consume` and `getStatus`, and the keys of `RedisOtpStorage` and `InMemoryOtpStorage`,
+refuse any other with `notification.invalid_scope_identifier` (HTTP 400), where a purpose with a
+space, a dot, a slash, a non-ASCII character, an empty string or more than 64 characters used to
+work. A host that used such a purpose renames it; a code issued under one before the upgrade
+cannot be verified after it, which only matters for the minutes of its lifetime. The
+`NOTIFICATION_PURPOSES` and any snake_case name are unaffected. A `perPurpose` key outside the
+set now fails when the module starts. A custom `IOtpStorage` needs no change: the service checks
+before it calls the store, and the purposes `./testing` generates for its cases now fit the
+rule. The default message of `INVALID_SCOPE_IDENTIFIER` in
+`NOTIFICATION_ERROR_DEFINITIONS` is a literal type in the declarations and now reads "A tenant,
+recipient or purpose identifier is not valid" where it said "Tenant or recipient identifier does
+not identify anybody", so a host that matched on the old text updates; matching on the `code`
+is unaffected.
 
 ## [1.4.9] - 2026-11-14
 

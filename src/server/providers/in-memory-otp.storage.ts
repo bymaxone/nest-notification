@@ -19,6 +19,7 @@ import type {
   OtpEntry
 } from '../interfaces/otp-storage.interface'
 import { hashTenantRecipient } from '../utils/hash'
+import { assertPurpose } from '../utils/tenant-scope'
 
 /** Number of milliseconds in one second. */
 const MS_PER_SECOND = 1000
@@ -314,6 +315,7 @@ export class InMemoryOtpStorage implements IOtpStorage {
    * stays unambiguous too.
    */
   private key(tenantId: string, recipient: string, purpose: string): string {
+    assertPurpose('InMemoryOtpStorage', purpose)
     return `${hashTenantRecipient(tenantId, recipient)}::${purpose}`
   }
 }

@@ -42,8 +42,10 @@ export const NOTIFICATION_ERROR_CODES = {
   AUDIT_LOG_FAILED: 'notification.audit_log_failed',
   CHANNEL_DISABLED: 'notification.channel_disabled',
   /**
-   * A `tenantId` or `recipient` that identifies nobody reached a scoping
-   * boundary — empty, whitespace-only, or not a string at all. Distinct from
+   * A `tenantId`, `recipient` or `purpose` that cannot scope an OTP reached a
+   * scoping boundary: empty, whitespace-only, not a string at all, carrying a
+   * control character, or, for a purpose, longer than 64 characters or made of
+   * anything but `A-Z a-z 0-9 : _ -`. Distinct from
    * {@link EMAIL_INVALID_RECIPIENT}, which is about a malformed address rather
    * than a value that cannot scope anything.
    */

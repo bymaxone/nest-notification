@@ -1,5 +1,5 @@
 /**
- * @fileoverview Rejects a tenant or recipient value that identifies nobody.
+ * @fileoverview Rejects a tenant, recipient or purpose value that cannot scope an OTP.
  * @layer domain
  *
  * Two places need this and they are not the same boundary, which is why it lives
@@ -74,5 +74,53 @@ export function assertIdentifies(owner: string, label: string, value: string): v
   }
   if (CONTROL_CHARACTER.test(value)) {
     throw refuse(owner, label, 'contains a control character')
+  }
+}
+
+/** The longest purpose a scope accepts. */
+export const MAX_PURPOSE_LENGTH = 64
+
+/** What a purpose is made of: ASCII letters and digits, colon, underscore and hyphen. */
+const PURPOSE_CHARACTERS = /^[A-Za-z0-9:_-]+$/
+
+/**
+ * Why `value` cannot be a purpose, or `undefined` when it can.
+ *
+ * A purpose is a short name the host chooses, part of every storage key, of the audit entry and of
+ * the template data: non-empty, at most {@link MAX_PURPOSE_LENGTH} characters, from `A-Z a-z 0-9 : _ -`.
+ * Anything else (a control character that forges a log record, a glob character that makes a key
+ * pattern unreliable, an unbounded length) is not a name. The reason is in a fixed vocabulary and
+ * never carries the value.
+ *
+ * @param value - The candidate purpose.
+ * @returns The reason it is refused, or `undefined`.
+ */
+export function purposeProblem(value: unknown): string | undefined {
+  if (typeof value !== 'string') {
+    return `expected a string, received ${typeof value}`
+  }
+  if (value === '') {
+    return 'empty'
+  }
+  if (value.length > MAX_PURPOSE_LENGTH) {
+    return `longer than ${String(MAX_PURPOSE_LENGTH)} characters`
+  }
+  return PURPOSE_CHARACTERS.test(value)
+    ? undefined
+    : 'contains a character outside A-Z a-z 0-9 : _ -'
+}
+
+/**
+ * Asserts that a value can be a purpose. The refusal names the boundary and the parameter, never
+ * the value: it is serialized into the HTTP response.
+ *
+ * @param owner - Component quoted in `details`, to name the failing boundary.
+ * @param value - The candidate purpose.
+ * @throws NotificationException `INVALID_SCOPE_IDENTIFIER` when {@link purposeProblem} finds a reason.
+ */
+export function assertPurpose(owner: string, value: string): void {
+  const problem = purposeProblem(value)
+  if (problem !== undefined) {
+    throw refuse(owner, 'purpose', problem)
   }
 }
