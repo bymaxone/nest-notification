@@ -20,7 +20,9 @@ the entries that carry one, is the compatibility contract — read it, not the n
   `A-Z a-z 0-9 : _ -`, checked by every OTP operation and by both reference storages before a key
   is built. The refusal is `notification.invalid_scope_identifier` (400), names the boundary and
   the parameter and never the value. A `perPurpose` key outside that set stops the module at
-  startup. The README now says what the limits are scoped on and that purposes are the host's own.
+  startup. The audit interceptor, which sees the payload before the service refuses it, leaves a
+  purpose that is not a plain name out of the entry it writes. The README now says what the limits
+  are scoped on and that purposes are the host's own.
 
 - **One recipient, one key, whatever the spelling of its domain.** Two spellings of one mailbox's
   domain reached two keys, so each had its own resend cooldown and attempt counter. The domain of an
