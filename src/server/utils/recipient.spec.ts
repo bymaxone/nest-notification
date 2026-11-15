@@ -4,6 +4,8 @@
  * @layer domain
  */
 
+import { domainToASCII } from 'node:url'
+
 import { normalizeRecipient } from './recipient'
 
 describe('normalizeRecipient', () => {
@@ -192,7 +194,7 @@ describe('normalizeRecipient', () => {
       ])('should keep the domain in %j apart from the one it would truncate to', (domain) => {
         const key = normalizeRecipient(`jane@${domain}`)
 
-        expect(key).toBe(`jane@${domain.normalize('NFKC').toLowerCase()}`)
+        expect(key).toBe(`jane@${domain.toLowerCase()}`)
         expect(key).not.toBe(normalizeRecipient('jane@victim.com'))
         expect(key).not.toBe(normalizeRecipient('jane@evil.com'))
       })
@@ -235,6 +237,36 @@ describe('normalizeRecipient', () => {
           expect(normalizeRecipient(`jane@a${mark}.com`)).not.toBe(normalizeRecipient('jane@a.com'))
         }
       )
+
+      // Compatibility normalization is not the resolver's mapping: it turns the lunate sigma into a
+      // final sigma, which is a different domain, where the mapping gives the ordinary sigma. The key
+      // is the mapping of the domain as written, so each of these has its own and the lunate one is
+      // the ordinary sigma's.
+      it('should key a domain with a lunate sigma as the ordinary sigma, not as the final one', () => {
+        const lunate = normalizeRecipient('jane@a\u03F2b.com')
+
+        expect(lunate).toBe('jane@xn--ab-vbc.com')
+        expect(lunate).toBe(normalizeRecipient('jane@a\u03C3b.com'))
+        expect(lunate).not.toBe(normalizeRecipient('jane@a\u03C2b.com'))
+      })
+
+      // The invariant under every character: a key is either the mapping the resolver applies to the
+      // domain as written, or the domain as written in lower case. Never a form made in between.
+      it('should key a domain with any one character as its mapping or as written', () => {
+        const wrong: string[] = []
+        for (let code = 0x80; code <= 0xffff; code += 1) {
+          if (code >= 0xd800 && code <= 0xdfff) {
+            continue
+          }
+          const domain = `a${String.fromCodePoint(code)}b.com`
+          const key = normalizeRecipient(`jane@${domain}`)
+          if (key !== `jane@${domainToASCII(domain)}` && key !== `jane@${domain.toLowerCase()}`) {
+            wrong.push(`U+${code.toString(16)}`)
+          }
+        }
+
+        expect(wrong).toEqual([])
+      })
 
       // The class, not the list: whatever ASCII character is put into a domain, at either end or at any
       // place inside it, the key is neither the key of the domain without it nor the key of the part

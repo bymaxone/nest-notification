@@ -581,7 +581,7 @@ A code is short: a six-digit code has a million values, so a plain hash of it is
 
 ### Which spellings share a key
 
-The recipient is normalized before it is hashed. Surrounding whitespace is trimmed, and an email (an identifier with an ASCII `@`) is lower-cased and its domain is given the spelling the resolver gives it, so `Jane@Acme.com`, `jane@acme.com` and `jane@ａｃｍｅ.com` (fullwidth letters) are one recipient, and so are `jane@bücher.de` and `jane@xn--bcher-kva.de`. A domain the mapping would change in any other way is only compatibility-folded and lower-cased: an address literal, a host a URL parser reads as an address (`0x7f.1`), and a domain with anything in it that is not part of a name. The local part gets no Unicode normalization: two local parts that differ in a compatibility character (`ﬁle` and `file`) are two mailboxes at a provider that accepts them, and one key for both would let a code mailed to one verify for the other. A plus tag is kept for the same reason of not guessing a provider's rules: `jane+1@acme.com` and `jane@acme.com` are two recipients, each with its own cooldown and attempt counter, although many providers deliver both to one mailbox. A host that must limit per mailbox limits per user id, not per recipient.
+The recipient is normalized before it is hashed. Surrounding whitespace is trimmed, and an email (an identifier with an ASCII `@`) is lower-cased and its domain is given the spelling the resolver gives it, so `Jane@Acme.com`, `jane@acme.com` and `jane@ａｃｍｅ.com` (fullwidth letters) are one recipient, and so are `jane@bücher.de` and `jane@xn--bcher-kva.de`. A domain the mapping would change in any other way keeps the spelling it was written in, lower-cased: an address literal, a host a URL parser reads as an address (`0x7f.1`), and a domain with anything in it that is not part of a name. The local part gets no Unicode normalization: two local parts that differ in a compatibility character (`ﬁle` and `file`) are two mailboxes at a provider that accepts them, and one key for both would let a code mailed to one verify for the other. A plus tag is kept for the same reason of not guessing a provider's rules: `jane+1@acme.com` and `jane@acme.com` are two recipients, each with its own cooldown and attempt counter, although many providers deliver both to one mailbox. A host that must limit per mailbox limits per user id, not per recipient.
 
 ### Attempt ceilings and cooldowns are atomic
 
@@ -661,7 +661,7 @@ A one-time password is a credential, so every behavior is pinned so that a regre
 | Coverage       | **100%** line/branch/function/statement per file (`pnpm test:cov:all`)                   |
 | Mutation       | Stryker score **100%** (`break: 100`), no survivors                                      |
 | Lint           | ESLint flat config + `eslint-plugin-security`, zero warnings                             |
-| Bundle budgets | server < 33.59 KB · shared < 4 KB · react < 8 KB · testing < 4.5 KB brotli (`pnpm size`) |
+| Bundle budgets | server < 33.55 KB · shared < 4 KB · react < 8 KB · testing < 4.5 KB brotli (`pnpm size`) |
 | Prisma-free    | `pnpm check:no-prisma` — the library never imports `@prisma/client`                      |
 | Export map     | `pnpm check:exports` — `attw` against the packed tarball, ESM and CJS                    |
 | Supply chain   | published with npm provenance (OIDC), CodeQL + OpenSSF Scorecard                         |
