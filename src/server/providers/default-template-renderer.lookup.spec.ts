@@ -112,7 +112,7 @@ describe('DefaultTemplateRenderer property lookup', () => {
     expect(reads).toBe(1)
   })
 
-  // The keys that resolve are the own enumerable ones, as before.
+  // The keys that resolve are the own enumerable string keys.
   describe('which keys resolve', () => {
     it.each(['constructor', 'toString', 'hasOwnProperty', 'valueOf', '__proto__'])(
       'should not resolve the inherited key %s',
