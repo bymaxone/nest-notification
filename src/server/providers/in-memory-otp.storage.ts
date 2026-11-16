@@ -24,10 +24,11 @@ import { assertPurpose } from '../utils/tenant-scope'
 /** Number of milliseconds in one second. */
 const MS_PER_SECOND = 1000
 
-/** Aggregate sizes of the two internal maps — exposed by the {@link InMemoryOtpStorage.size} helper. */
+/** Aggregate sizes of the three internal maps — exposed by the {@link InMemoryOtpStorage.size} helper. */
 export interface InMemoryStorageSize {
   otps: number
   cooldowns: number
+  failures: number
 }
 
 /** Process-local `IOtpStorage` for dev/test. */
@@ -275,7 +276,7 @@ export class InMemoryOtpStorage implements IOtpStorage {
   }
 
   /**
-   * Test helper — wipes all entries and cooldowns. Not part of `IOtpStorage`.
+   * Test helper — wipes all entries, cooldowns and failure counters. Not part of `IOtpStorage`.
    */
   clear(): void {
     this.store.clear()
@@ -284,12 +285,17 @@ export class InMemoryOtpStorage implements IOtpStorage {
   }
 
   /**
-   * Test helper — current map sizes. Not part of `IOtpStorage`.
+   * Test helper — current map sizes. Not part of `IOtpStorage`. Like the cooldowns, a failure
+   * counter that has lapsed stays counted until it is read or cleared.
    *
-   * @returns The number of stored OTP entries and active cooldowns.
+   * @returns The number of stored OTP entries, cooldowns and failure counters.
    */
   size(): InMemoryStorageSize {
-    return { otps: this.store.size, cooldowns: this.cooldowns.size }
+    return {
+      otps: this.store.size,
+      cooldowns: this.cooldowns.size,
+      failures: this.failures.size
+    }
   }
 
   /** The unexpired failure count for a key, dropping a lapsed counter. Synchronous. */

@@ -34,7 +34,7 @@ describe('otpStorageContract', () => {
       await contractCase.run()
     }
 
-    expect(storage.size()).toEqual({ otps: 0, cooldowns: 0 })
+    expect(storage.size()).toEqual({ otps: 0, cooldowns: 0, failures: 0 })
   })
 
   // Building the case list must not touch the storage: a consumer registers the
@@ -140,7 +140,7 @@ describe('otpStorageContract', () => {
     await runCase(storage, 'keeps the tenant and recipient boundary when composing a key')
     await runCase(storage, 'keeps the tenant and recipient boundary when composing a cooldown key')
 
-    expect(storage.size()).toEqual({ otps: 0, cooldowns: 0 })
+    expect(storage.size()).toEqual({ otps: 0, cooldowns: 0, failures: 0 })
   })
 
   // Every remaining case gets the same treatment: a storage that violates
@@ -694,6 +694,6 @@ describe('otpStorageContract', () => {
     // The entry the failing case wrote must be gone despite the throw.
     // The scope is random per invocation, so the assertion asks the storage
     // whether ANY key survived rather than naming one.
-    expect(storage.size()).toEqual({ otps: 0, cooldowns: 0 })
+    expect(storage.size()).toEqual({ otps: 0, cooldowns: 0, failures: 0 })
   })
 })

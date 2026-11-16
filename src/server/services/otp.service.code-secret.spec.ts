@@ -197,7 +197,7 @@ describe('OtpService with otp.codeSecret', () => {
         const service = build()
         await service.generate({ ...base, ...input }).catch(() => undefined)
 
-        expect(storage.size()).toEqual({ otps: 0, cooldowns: 0 })
+        expect(storage.size()).toEqual({ otps: 0, cooldowns: 0, failures: 0 })
         expect(audit.create).not.toHaveBeenCalled()
       }
     )

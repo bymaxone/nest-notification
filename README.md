@@ -603,7 +603,7 @@ With the default, `consumeOnVerify: false`, the entry is marked validated and st
 
 A per-code counter alone lets a re-issue reset the failure count: guess wrongly up to the limit, wait out the resend cooldown, and guess again. So the failed verifications of a `(tenant, recipient, purpose)` are counted in the storage, and `verify()` refuses once that count passes the purpose's attempt ceiling, whichever code is live.
 
-- Every verification attempt against a live code adds one to the count, before its code is compared, and restarts the counter's lifetime to the purpose's code lifetime (`ttlSeconds`); a counter that is not touched for that long lapses, which starts the count again from zero.
+- Every verification attempt against a live code adds one to the count, before its code is compared, and restarts the counter's lifetime to the purpose's code lifetime (`ttlSeconds`); a counter that is not touched for that long lapses, which starts the count again from zero. Because every attempt restarts the lifetime, attempts spaced closer apart than `ttlSeconds` never let the counter lapse; only a success, `consume()` or `ttlSeconds` of silence resets it, which is the stricter behaviour against a slow attack.
 - A successful verification and `consume()` clear it (the attempt that succeeded included), so the next flow starts with a full budget.
 - Once the count passes the ceiling, `verify()` returns `{ valid: false, reason: 'max_attempts' }` for any code, a freshly issued one included, until the counter lapses. The stored count alone decides, so the lockout ends exactly when the counter lapses. Because the increment is atomic and happens first, guesses that arrive together each get their own number and only those within the ceiling are compared. `remainingAttempts` reports the nearer of the code's own budget and the count's. This also means that someone who keeps sending wrong guesses for a recipient keeps that recipient locked out, so rate-limit the OTP endpoints by IP in your controller.
 - `RedisOtpStorage` keeps the counter under `{namespace}:otp_fail:{purpose}:{hash}`, incremented by one script; `InMemoryOtpStorage` does the same in memory.
@@ -667,7 +667,7 @@ A one-time password is a credential, so every behavior is pinned so that a regre
 | Coverage       | **100%** line/branch/function/statement per file (`pnpm test:cov:all`)                   |
 | Mutation       | Stryker score **100%** (`break: 100`), no survivors                                      |
 | Lint           | ESLint flat config + `eslint-plugin-security`, zero warnings                             |
-| Bundle budgets | server < 34.60 KB · shared < 4 KB · react < 8 KB · testing < 4.5 KB brotli (`pnpm size`) |
+| Bundle budgets | server < 34.61 KB · shared < 4 KB · react < 8 KB · testing < 4.5 KB brotli (`pnpm size`) |
 | Prisma-free    | `pnpm check:no-prisma` — the library never imports `@prisma/client`                      |
 | Export map     | `pnpm check:exports` — `attw` against the packed tarball, ESM and CJS                    |
 | Supply chain   | published with npm provenance (OIDC), CodeQL + OpenSSF Scorecard                         |
