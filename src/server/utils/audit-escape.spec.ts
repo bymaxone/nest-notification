@@ -211,6 +211,14 @@ describe('escapeAuditEntry', () => {
       expect(result).toEqual({ 'k\\n': 'first', 'k\\n#2': 'second', 'k\\n#2#2': 'third' })
     })
 
+    it('should try the next number when the first suffix is taken', () => {
+      const result = escapeAuditEntry(
+        entry({ metadata: { 'a\n': 'first', 'a\\n#2': 'second', 'a\\n': 'third' } })
+      ).metadata
+
+      expect(result).toEqual({ 'a\\n': 'first', 'a\\n#2': 'second', 'a\\n#3': 'third' })
+    })
+
     it('should not rename a key that does not collide', () => {
       expect(escapeAuditEntry(entry({ metadata: { a: 1, b: 2 } })).metadata).toEqual({ a: 1, b: 2 })
     })

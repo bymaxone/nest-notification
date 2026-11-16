@@ -20,7 +20,7 @@ const entry: NotificationLogEntry = {
   recipient: 'a@x.com\nforged',
   providerName: 'memory',
   userId: 'u\r',
-  errorMessage: 'boom next'
+  errorMessage: 'boom\u2028next'
 }
 
 function inner(): { repository: INotificationLogRepository; received: NotificationLogEntry[] } {
