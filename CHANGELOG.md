@@ -21,7 +21,7 @@ the entries that carry one, is the compatibility contract — read it, not the n
   entry passes: every string of it, and every key and string value of its `metadata`, reaches
   `INotificationLogRepository.create` with the C0 and C1 controls, the Unicode line and paragraph
   separators and the bidirectional controls written as visible sequences (`\n`, `\r`, `\t`,
-  `\uXXXX`). Metadata that is nested too deep, a cycle and a value that is not a plain
+  `\uXXXX`); a key that escapes to the text of an earlier key takes a `#2`, `#3` suffix. Metadata that is nested too deep, a cycle and a value that is not a plain
   object, an array or a primitive arrive as a fixed marker. The `BYMAX_NOTIFICATION_LOG_REPOSITORY`
   token still resolves to the host's own repository.
 

@@ -203,6 +203,18 @@ describe('escapeAuditEntry', () => {
       expect(text).toContain(DEPTH_LIMIT_MARKER)
     })
 
+    it('should keep both values when two keys escape to the same text', () => {
+      const result = escapeAuditEntry(
+        entry({ metadata: { 'k\n': 'first', 'k\\n': 'second', 'k\\n#2': 'third' } })
+      ).metadata
+
+      expect(result).toEqual({ 'k\\n': 'first', 'k\\n#2': 'second', 'k\\n#2#2': 'third' })
+    })
+
+    it('should not rename a key that does not collide', () => {
+      expect(escapeAuditEntry(entry({ metadata: { a: 1, b: 2 } })).metadata).toEqual({ a: 1, b: 2 })
+    })
+
     // metadata is level 1: its fourth nested container is at level 4, the last one that is kept.
     it('should keep an object at the deepest level that is kept, and mark the next one', () => {
       const result = escapeAuditEntry(

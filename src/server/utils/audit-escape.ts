@@ -66,18 +66,26 @@ function isPlainObject(value: object): boolean {
   return prototype === Object.prototype || prototype === null
 }
 
-/** The escaped copy of the entries of `record`, keys included. */
+/**
+ * The escaped copy of the entries of `record`, keys included. Escaping leaves a backslash as it
+ * is, so two keys can escape to the same text; the later one takes a `#n` suffix rather than
+ * replacing the value of the earlier.
+ */
 function escapeRecord(
   record: Record<string, unknown>,
   level: number,
   ancestors: WeakSet<object>
 ): Record<string, unknown> {
-  return Object.fromEntries(
-    Object.entries(record).map(([key, value]) => [
-      escapeAuditString(key),
-      escapeValue(value, level + 1, ancestors)
-    ])
-  )
+  const escaped = new Map<string, unknown>()
+  for (const [key, value] of Object.entries(record)) {
+    const base = escapeAuditString(key)
+    let name = base
+    for (let attempt = 2; escaped.has(name); attempt++) {
+      name = `${base}#${attempt}`
+    }
+    escaped.set(name, escapeValue(value, level + 1, ancestors))
+  }
+  return Object.fromEntries(escaped)
 }
 
 /** The escaped copy of one value found at nesting `level`. */
