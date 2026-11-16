@@ -12,9 +12,8 @@
 # The rules this file exists to keep
 #   1. Pack ONCE, in `build`. Every gate that looks at the package runs against that tarball, never
 #      against `dist/`: what the gates saw is what gets published, byte for byte.
-#      In this repository the bundle-size budget and the dogfood smoke test cannot read a tarball yet:
-#      they read `dist/`, and a step before them extracts the tarball and fails on any difference
-#      between that `dist/` and the one inside it. The type-resolution check reads the tarball itself.
+#      In this repository the type-resolution check, the bundle-size budget and the dogfood smoke
+#      test all read the tarball, through `PACKAGE_TARBALL`.
 #   2. `build` records the tarball's sha256 as a job output. `publish` downloads the artifact, checks
 #      the digest, and publishes that exact file: `npm publish ./<file>.tgz`, never `npm publish`
 #      from a directory, which would pack again.
@@ -193,22 +192,9 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           tar -tzf "$out/$file" | sed 's/^/  /'
 
-      - name: The gates read the dist that is in the tarball
-        # The bundle-size budget and the dogfood smoke test read `dist/` of the working tree, not the
-        # tarball. This step proves that directory is the one inside the file that is published: any
-        # difference fails the build, so what those two gates saw is what ships.
-        env:
-          TARBALL: ${{ steps.pack.outputs.tarball }}
-        run: |
-          set -euo pipefail
-          extracted="$RUNNER_TEMP/extracted"
-          mkdir -p "$extracted"
-          tar -xzf "$RUNNER_TEMP/package/$TARBALL" -C "$extracted"
-          diff -r dist "$extracted/package/dist"
-
       - name: Gates on the package
-        # The type-resolution check reads the tarball. The bundle-size budget and the dogfood smoke
-        # test read `dist/`, which the step above proved is the one in the tarball.
+        # The type-resolution check, the bundle-size budget and the dogfood smoke test read the
+        # tarball: `PACKAGE_TARBALL` makes the last two unpack it and measure and import what is in it.
         env:
           TARBALL: ${{ steps.pack.outputs.tarball }}
         run: |

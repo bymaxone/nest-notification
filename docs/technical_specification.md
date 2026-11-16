@@ -1642,7 +1642,7 @@ Implemented in `src/server/providers/redis-otp.storage.ts`.
 
 #### 5.2.2 Alternative implementation: `InMemoryOtpStorage`
 
-Implemented in `src/server/providers/in-memory-otp.storage.ts`: two `Map`s (entries and cooldowns) keyed by `` `${hashTenantRecipient(tenantId, recipient)}::${purpose}` ``. `consumeAttempt` is atomic by construction (no `await` between the read and the write) and entries expire on read. Beyond the contract it exposes `clear()` and `size(): InMemoryStorageSize` (`{ otps, cooldowns }`), useful in tests. **Do not use in multi-instance production** — entries are local to the process.
+Implemented in `src/server/providers/in-memory-otp.storage.ts`: three `Map`s (entries, cooldowns and failure counters) keyed by `` `${hashTenantRecipient(tenantId, recipient)}::${purpose}` ``. `consumeAttempt` is atomic by construction (no `await` between the read and the write) and entries expire on read. Beyond the contract it exposes `clear()` and `size(): InMemoryStorageSize` (`{ otps, cooldowns, failures }`), useful in tests. **Do not use in multi-instance production** — entries are local to the process.
 
 #### 5.2.3 Example adapter: DynamoDB
 

@@ -13,7 +13,11 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { brotliCompressSync, constants } from 'node:zlib'
 
+import { openPackage } from './package-under-test.mjs'
+
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+// The tarball when PACKAGE_TARBALL names one, the working tree's `dist/` otherwise.
+const PACKAGE = openPackage(ROOT)
 
 // Budgets are in bytes (KiB units, `n * 1024`) measured against the brotli'd
 // .mjs bundle — what a consumer's bundler/CDN ships. Brotli, not gzip, to match
@@ -51,7 +55,7 @@ let failed = 0
 const rows = []
 
 for (const { name, path, brotli: limit } of BUDGETS) {
-  const abs = resolve(ROOT, path)
+  const abs = resolve(PACKAGE.root, path)
   // Read directly and handle the read error — no stat-then-read check, which
   // would be a TOCTOU file-system race (CodeQL js/file-system-race).
   let raw
