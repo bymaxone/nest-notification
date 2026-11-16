@@ -143,6 +143,14 @@ describe('escapeAuditEntry', () => {
     expect(escapeAuditEntry(once)).toEqual(once)
   })
 
+  // The markers are part of what a host reads in its log: their text is pinned here and in the README.
+  it('should name the markers as documented', () => {
+    expect(DEPTH_LIMIT_MARKER).toBe('[depth limit]')
+    expect(CIRCULAR_MARKER).toBe('[circular]')
+    expect(NON_PLAIN_MARKER).toBe('[non-plain value]')
+    expect(MAX_METADATA_DEPTH).toBe(4)
+  })
+
   describe('metadata', () => {
     it('should escape a string value', () => {
       expect(escapeAuditEntry(entry({ metadata: { note: 'x\ny' } })).metadata).toEqual({
@@ -193,6 +201,27 @@ describe('escapeAuditEntry', () => {
 
       expect(text).not.toContain('\\n')
       expect(text).toContain(DEPTH_LIMIT_MARKER)
+    })
+
+    // metadata is level 1: its fourth nested container is at level 4, the last one that is kept.
+    it('should keep an object at the deepest level that is kept, and mark the next one', () => {
+      const result = escapeAuditEntry(
+        entry({ metadata: { a: { b: { c: { s: 'x\ny', d: { s: 'z\nw' } } } } } })
+      ).metadata
+
+      expect(result).toEqual({ a: { b: { c: { s: 'x\\ny', d: DEPTH_LIMIT_MARKER } } } })
+    })
+
+    it('should count the arrays as levels too', () => {
+      const result = escapeAuditEntry(entry({ metadata: { list: [[['x\ny']]] } })).metadata
+
+      expect(result).toEqual({ list: [[['x\\ny']]] })
+    })
+
+    it('should mark an array that lies deeper than the limit', () => {
+      const result = escapeAuditEntry(entry({ metadata: { list: [[[['x\ny']]]] } })).metadata
+
+      expect(result).toEqual({ list: [[[DEPTH_LIMIT_MARKER]]] })
     })
 
     it('should keep a subtree exactly at the depth limit', () => {
