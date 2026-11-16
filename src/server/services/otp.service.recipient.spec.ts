@@ -168,7 +168,7 @@ describe('OtpService recipient normalization', () => {
       })
 
       expect(emailSendTemplate).not.toHaveBeenCalled()
-      expect(storage.size()).toEqual({ otps: 0, cooldowns: 0 })
+      expect(storage.size()).toEqual({ otps: 0, cooldowns: 0, failures: 0 })
     })
 
     // A control character is refused earlier still, by the scope check; either refusal sends nothing.

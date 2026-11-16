@@ -150,14 +150,48 @@ describe('InMemoryOtpStorage', () => {
     expect(storage.size().otps).toBe(4)
   })
 
-  // The clear() helper zeroes both maps.
+  // The failure counters live in a map of their own, so size() has to count it: a test that
+  // asserts nothing is left behind cannot otherwise see a counter that leaked.
+  it('should count the failure counters in size', async () => {
+    await storage.recordFailure(T, R, P, 60)
+    await storage.recordFailure(T, R, P, 60)
+    await storage.recordFailure(T, 'john@acme.com', P, 60)
+
+    expect(storage.size()).toEqual({ otps: 0, cooldowns: 0, failures: 2 })
+  })
+
+  it('should drop a failure counter from size once it is cleared', async () => {
+    await storage.recordFailure(T, R, P, 60)
+
+    await storage.clearFailures(T, R, P)
+
+    expect(storage.size().failures).toBe(0)
+  })
+
+  it('should drop a lapsed failure counter from size once it is read', async () => {
+    jest.useFakeTimers()
+    try {
+      jest.setSystemTime(1_000_000)
+      await storage.recordFailure(T, R, P, 10)
+      jest.setSystemTime(1_000_000 + 10_000)
+
+      expect(storage.size().failures).toBe(1)
+      expect(await storage.getFailures(T, R, P)).toBe(0)
+      expect(storage.size().failures).toBe(0)
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  // The clear() helper zeroes every map.
   it('should wipe all state with the clear helper', async () => {
     await storage.set(T, R, P, makeEntry())
     await storage.tryAcquireCooldown(T, R, P, 60)
+    await storage.recordFailure(T, R, P, 60)
 
     storage.clear()
 
-    expect(storage.size()).toEqual({ otps: 0, cooldowns: 0 })
+    expect(storage.size()).toEqual({ otps: 0, cooldowns: 0, failures: 0 })
   })
 })
 

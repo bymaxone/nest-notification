@@ -48,6 +48,10 @@ the entries that carry one, is the compatibility contract — read it, not the n
   whose domain is not plain ASCII gets a different key, so a code issued before the upgrade is not
   found after it.
 
+- **`InMemoryOtpStorage.size()` counts the failure counters.** The helper reported the entries and
+  the cooldowns and not the failure counters, so a test asserting that nothing is left behind could
+  not see a counter that leaked; it now returns `failures` as well.
+
 - **Resolving a template placeholder no longer reads the whole data object.** `DefaultTemplateRenderer`
   copied every own enumerable property of the data into a new map to find one value, and a nested path
   did it for each segment. The work grew with the size of the object,
@@ -80,6 +84,10 @@ subtree of `metadata` that is too deep, circular or not a plain value arrives as
 whose values never contain one sees no difference. The module wraps the repository for the
 interceptor, `OtpService` and `EmailService`; a host that builds one of them by hand with `new`
 passes its own repository straight through and escapes in its `create`. No declaration changes.
+
+`InMemoryOtpStorage.size()` returns a `failures` field, and the exported
+`InMemoryStorageSize` type gains it as a required property: code that reads the result is
+unaffected, code that builds a value of that type adds the field.
 
 ## [1.4.9] - 2026-11-14
 
