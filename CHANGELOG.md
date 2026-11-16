@@ -50,8 +50,7 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 - **`InMemoryOtpStorage.size()` counts the failure counters.** The helper reported the entries and
   the cooldowns and not the failure counters, so a test asserting that nothing is left behind could
-  not see a counter that leaked; it now returns `failures` as well, and the README states that the
-  counter's lifetime restarts on every attempt.
+  not see a counter that leaked; it now returns `failures` as well.
 
 - **Resolving a template placeholder no longer reads the whole data object.** `DefaultTemplateRenderer`
   copied every own enumerable property of the data into a new map to find one value, and a nested path

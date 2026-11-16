@@ -742,15 +742,15 @@ pnpm mutation      # Stryker mutation testing
 
 ### Reference adapters
 
-| Export                          | Implements                   | Use for                                                                 |
-| ------------------------------- | ---------------------------- | ----------------------------------------------------------------------- |
-| `ResendEmailProvider`           | `IEmailProvider`             | Production email via Resend                                             |
-| `SmtpEmailProvider`             | `IEmailProvider`             | Any SMTP relay, and Mailpit/MailHog in tests                            |
-| `NoOpEmailProvider`             | `IEmailProvider`             | Dev/test — logs a masked recipient only                                 |
-| `RedisOtpStorage`               | `IOtpStorage`                | Production OTP state (atomic via Lua)                                   |
-| `InMemoryOtpStorage`            | `IOtpStorage`                | Dev/test — single-process only; `.size()` returns `{ otps, cooldowns }` |
-| `DefaultTemplateRenderer`       | `IEmailTemplateRenderer`     | `{{var}}` interpolation with HTML escaping                              |
-| `NoOpNotificationLogRepository` | `INotificationLogRepository` | Audit configured but intentionally discarded                            |
+| Export                          | Implements                   | Use for                                                                     |
+| ------------------------------- | ---------------------------- | --------------------------------------------------------------------------- |
+| `ResendEmailProvider`           | `IEmailProvider`             | Production email via Resend                                                 |
+| `SmtpEmailProvider`             | `IEmailProvider`             | Any SMTP relay, and Mailpit/MailHog in tests                                |
+| `NoOpEmailProvider`             | `IEmailProvider`             | Dev/test — logs a masked recipient only                                     |
+| `RedisOtpStorage`               | `IOtpStorage`                | Production OTP state (atomic via Lua)                                       |
+| `InMemoryOtpStorage`            | `IOtpStorage`                | Dev/test — single-process only; `.size()` reports how many entries it holds |
+| `DefaultTemplateRenderer`       | `IEmailTemplateRenderer`     | `{{var}}` interpolation with HTML escaping                                  |
+| `NoOpNotificationLogRepository` | `INotificationLogRepository` | Audit configured but intentionally discarded                                |
 
 ### Utilities
 
