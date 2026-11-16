@@ -23,7 +23,7 @@ import { tmpdir } from 'node:os'
 import { resolve, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { listTarball, openPackage } from './package-under-test.mjs'
+import { isAllowedEntry, listTarball, openPackage } from './package-under-test.mjs'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 // The tarball when PACKAGE_TARBALL names one, the working tree's `dist/` otherwise: with a
@@ -155,12 +155,7 @@ try {
       .map((l) => l.replace(SIZE_STRIP_RE, '').trim())
       .filter((l) => Boolean(l) && !l.startsWith('npm notice') && !/^sha\d+:/i.test(l))
   }
-  const unexpected = contentLines.filter(
-    (f) =>
-      !ALLOWED_TARBALL_PATHS.some(
-        (entry) => f === entry || (entry.endsWith('/') && f.startsWith(entry))
-      )
-  )
+  const unexpected = contentLines.filter((f) => !isAllowedEntry(f, ALLOWED_TARBALL_PATHS))
   if (unexpected.length === 0) {
     pass(`Tarball contains only dist/ + meta files (${contentLines.length} entries)`)
   } else {

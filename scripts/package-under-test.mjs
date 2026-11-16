@@ -32,6 +32,10 @@ export function openPackage(root) {
     process.exit(2)
   }
   process.on('exit', () => rmSync(dir, { recursive: true, force: true }))
+  // A signal ends the process without running an exit handler unless something exits for it.
+  for (const signal of ['SIGINT', 'SIGTERM']) {
+    process.on(signal, () => process.exit(1))
+  }
   const unpacked = spawnSync('tar', ['-xzf', tarball, '-C', dir], { encoding: 'utf8' })
   if (unpacked.status !== 0) {
     console.error(`Cannot unpack ${tarball}: ${unpacked.stderr || unpacked.error?.message}`)
@@ -54,4 +58,20 @@ export function listTarball(tarball) {
     .split('\n')
     .filter((entry) => entry !== '' && !entry.endsWith('/'))
     .map((entry) => (entry.startsWith('package/') ? entry.slice('package/'.length) : entry))
+}
+
+/**
+ * Whether a path listed in the tarball is one the package may hold: a meta file by name, or a file
+ * under an allowed directory. A path with an empty, `.` or `..` segment is refused whatever its
+ * prefix, so the check does not depend on what `tar` does with it when it unpacks.
+ *
+ * @param {string} entry A path from {@link listTarball}, without the leading `package/`.
+ * @param {readonly string[]} allowed File names, and directories written with a trailing `/`.
+ * @returns {boolean} `true` when the entry is allowed.
+ */
+export function isAllowedEntry(entry, allowed) {
+  if (entry.split('/').some((segment) => segment === '' || segment === '.' || segment === '..')) {
+    return false
+  }
+  return allowed.some((name) => entry === name || (name.endsWith('/') && entry.startsWith(name)))
 }

@@ -62,7 +62,11 @@ for (const { name, path, brotli: limit } of BUDGETS) {
   try {
     raw = readFileSync(abs)
   } catch {
-    console.error(`Missing build artifact: ${path} — run \`pnpm build\` first.`)
+    console.error(
+      PACKAGE.tarball
+        ? `Missing build artifact: ${path} is not in ${PACKAGE.tarball}`
+        : `Missing build artifact: ${path} — run \`pnpm build\` first.`
+    )
     process.exit(2)
   }
   const compressed = brotliCompressSync(raw, BROTLI_OPTS).length
