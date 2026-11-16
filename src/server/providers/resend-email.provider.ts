@@ -20,6 +20,7 @@ import type {
   EmailSendResult,
   IEmailProvider
 } from '../interfaces/email-provider.interface'
+import { escapeAuditString } from '../utils/audit-escape'
 import { errorCodeOf } from '../utils/availability'
 import { loadOptionalPeer } from '../utils/load-optional-peer'
 import {
@@ -297,7 +298,7 @@ export class ResendEmailProvider implements IEmailProvider {
     }
     // Surface only the provider's message — never the email body.
     const reason = this.scrubSendError(rawMessage, options)
-    this.logger.warn(`[RESEND_SEND_FAILED] ${reason}`)
+    this.logger.warn(`[RESEND_SEND_FAILED] ${escapeAuditString(reason)}`)
     return withCode(new Error(`Resend send failed: ${reason}`), code)
   }
 

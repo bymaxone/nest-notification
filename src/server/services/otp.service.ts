@@ -36,6 +36,7 @@ import type {
 } from '../interfaces/notification-log-repository.interface'
 import type { OtpPurposeConfig } from '../interfaces/notification-module-options.interface'
 import type { IOtpStorage, OtpEntry, OtpVerifyResult } from '../interfaces/otp-storage.interface'
+import { escapeAuditString } from '../utils/audit-escape'
 import { AuditWriteWarning } from '../utils/audit-write-warning'
 import { isCodeDigest } from '../utils/code-digest'
 import { generateOtpCode } from '../utils/code-generator'
@@ -469,7 +470,7 @@ export class OtpService implements OnModuleInit {
     } catch (error) {
       this.logger.warn(
         `[${TEMPLATE_WARNING_CODE}] Could not check whether the email template '${DEFAULT_OTP_TEMPLATE}' resolves ` +
-          `(${describeError(error)}); if it does not, the first generate() that delivers by email fails with TEMPLATE_NOT_FOUND.`
+          `(${escapeAuditString(describeError(error))}); if it does not, the first generate() that delivers by email fails with TEMPLATE_NOT_FOUND.`
       )
     }
   }

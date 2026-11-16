@@ -4,6 +4,7 @@ import { Logger } from '@nestjs/common'
 
 import type { EmailSendOptions } from '../interfaces/email-provider.interface'
 
+import { BIDI_OVERRIDE, hasRawControl } from './__tests__/has-raw-control'
 import { ResendEmailProvider } from './resend-email.provider'
 
 // `mock`-prefixed names are allowed inside the hoisted jest.mock factory.
@@ -232,6 +233,38 @@ describe('ResendEmailProvider', () => {
     await expect(new ResendEmailProvider({ apiKey: 'k' }).send(withoutText)).rejects.toThrow(
       'Resend send failed: quota exceeded'
     )
+  })
+
+  // The SDK's message is not ours: a line feed in it would start a second record in any log that
+  // writes lines. The warn line carries the reason with every control written as a visible
+  // sequence; the thrown message keeps the text as it came.
+  it('should write a control character of an SDK error as a visible sequence', async () => {
+    const message = `rate\nforged [RESEND_SEND_FAILED] ok${BIDI_OVERRIDE}`
+    mockSend.mockResolvedValue({ data: null, error: { message } })
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+    await expect(
+      new ResendEmailProvider({ apiKey: 're_logescape_key' }).send(baseOptions)
+    ).rejects.toThrow(`Resend send failed: ${message}`)
+    const logged = String(warnSpy.mock.calls[0]?.[0])
+    expect(hasRawControl(logged)).toBe(false)
+    expect(logged).toBe('[RESEND_SEND_FAILED] rate\\nforged [RESEND_SEND_FAILED] ok\\u202e')
+    warnSpy.mockRestore()
+  })
+
+  // The escape runs AFTER the scrub: a declared secret with a line feed is still matched as written.
+  it('should scrub a declared value that holds a line feed before escaping', async () => {
+    mockSend.mockResolvedValue({ data: null, error: { message: 'rejected: pass\nword' } })
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+    await expect(
+      new ResendEmailProvider({ apiKey: 're_logescape_key' }).send({
+        ...baseOptions,
+        redactValues: ['pass\nword']
+      })
+    ).rejects.toThrow('Resend send failed: rejected: [redacted]')
+    expect(String(warnSpy.mock.calls[0]?.[0])).toBe('[RESEND_SEND_FAILED] rejected: [redacted]')
+    warnSpy.mockRestore()
   })
 
   // Declared secrets travel as `redactValues` and are scrubbed even when the
