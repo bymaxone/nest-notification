@@ -28,7 +28,7 @@ import { catchError, concatMap, from, map, throwError } from 'rxjs'
 import type { Observable } from 'rxjs'
 
 import {
-  BYMAX_NOTIFICATION_LOG_REPOSITORY,
+  BYMAX_NOTIFICATION_AUDIT_SINK,
   BYMAX_NOTIFICATION_OPTIONS
 } from '../bymax-notification.constants'
 import type { ResolvedNotificationOptions } from '../config/resolved-options'
@@ -80,7 +80,7 @@ export class NotificationAuditInterceptor implements NestInterceptor {
   constructor(
     @Inject(BYMAX_NOTIFICATION_OPTIONS)
     private readonly options: ResolvedNotificationOptions,
-    @Inject(BYMAX_NOTIFICATION_LOG_REPOSITORY)
+    @Inject(BYMAX_NOTIFICATION_AUDIT_SINK)
     private readonly auditLog: INotificationLogRepository
   ) {}
 

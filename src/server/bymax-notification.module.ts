@@ -22,6 +22,7 @@ import type {
 } from '@nestjs/common'
 
 import {
+  BYMAX_NOTIFICATION_AUDIT_SINK,
   BYMAX_NOTIFICATION_EMAIL_PROVIDER,
   BYMAX_NOTIFICATION_LOG_REPOSITORY,
   BYMAX_NOTIFICATION_OPTIONS,
@@ -40,6 +41,7 @@ import type {
 } from './interfaces/notification-module-options.interface'
 import type { IOtpStorage } from './interfaces/otp-storage.interface'
 import { DefaultTemplateRenderer } from './providers/default-template-renderer'
+import { EscapingLogRepository } from './providers/escaping-log-repository'
 import { NoOpNotificationLogRepository } from './providers/no-op-notification-log.repository'
 import { EmailService } from './services/email.service'
 import { NotificationService } from './services/notification.service'
@@ -141,6 +143,7 @@ export class BymaxNotificationModule {
       exports: [
         BYMAX_NOTIFICATION_OPTIONS,
         BYMAX_NOTIFICATION_LOG_REPOSITORY,
+        BYMAX_NOTIFICATION_AUDIT_SINK,
         BYMAX_NOTIFICATION_EMAIL_PROVIDER,
         BYMAX_NOTIFICATION_TEMPLATE_RENDERER,
         BYMAX_NOTIFICATION_OTP_STORAGE,
@@ -174,7 +177,7 @@ export class BymaxNotificationModule {
           BYMAX_NOTIFICATION_OPTIONS,
           BYMAX_NOTIFICATION_EMAIL_PROVIDER,
           BYMAX_NOTIFICATION_TEMPLATE_RENDERER,
-          BYMAX_NOTIFICATION_LOG_REPOSITORY
+          BYMAX_NOTIFICATION_AUDIT_SINK
         ]
       },
       {
@@ -189,7 +192,7 @@ export class BymaxNotificationModule {
         inject: [
           BYMAX_NOTIFICATION_OPTIONS,
           BYMAX_NOTIFICATION_OTP_STORAGE,
-          BYMAX_NOTIFICATION_LOG_REPOSITORY,
+          BYMAX_NOTIFICATION_AUDIT_SINK,
           // Stryker disable next-line BooleanLiteral: the EmailService token is ALWAYS registered in async mode (as a factory that resolves to `undefined` when email is absent), so Nest resolves it whether optional is true or false — `optional: false` would still inject `undefined`, never throw, making the flag observationally inert here.
           { token: EmailService, optional: true }
         ]
@@ -224,6 +227,7 @@ export class BymaxNotificationModule {
           raw.audit ? instantiate(raw.audit.repository) : new NoOpNotificationLogRepository(),
         inject: [RAW_NOTIFICATION_OPTIONS]
       },
+      auditSinkProvider(),
       {
         provide: BYMAX_NOTIFICATION_EMAIL_PROVIDER,
         useFactory: (raw: BymaxNotificationModuleOptions): IEmailProvider | null =>
@@ -256,7 +260,8 @@ export class BymaxNotificationModule {
       { provide: BYMAX_NOTIFICATION_OPTIONS, useValue: resolved },
       options.audit?.repository
         ? resolveAsProvider(BYMAX_NOTIFICATION_LOG_REPOSITORY, options.audit.repository)
-        : { provide: BYMAX_NOTIFICATION_LOG_REPOSITORY, useClass: NoOpNotificationLogRepository }
+        : { provide: BYMAX_NOTIFICATION_LOG_REPOSITORY, useClass: NoOpNotificationLogRepository },
+      auditSinkProvider()
     ]
     if (resolved.email && options.email) {
       providers.push(resolveAsProvider(BYMAX_NOTIFICATION_EMAIL_PROVIDER, options.email.provider))
@@ -301,6 +306,20 @@ function activeChannels(resolved: Readonly<ResolvedNotificationOptions>): string
     channels.push('otp')
   }
   return channels
+}
+
+/**
+ * The provider of the repository every audit writer uses: the configured one, wrapped so that the
+ * entries it receives are escaped. It is built from the public token, which keeps resolving to the
+ * host's own instance.
+ */
+function auditSinkProvider(): FactoryProvider {
+  return {
+    provide: BYMAX_NOTIFICATION_AUDIT_SINK,
+    useFactory: (repository: INotificationLogRepository): INotificationLogRepository =>
+      new EscapingLogRepository(repository),
+    inject: [BYMAX_NOTIFICATION_LOG_REPOSITORY]
+  }
 }
 
 /** Builds the template-renderer provider, defaulting to {@link DefaultTemplateRenderer}. */
