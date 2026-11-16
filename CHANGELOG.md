@@ -50,11 +50,11 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 - **A control character in a relay's reply no longer starts a second log line.** The warning an
   SMTP or Resend send failure logs carries the reason the relay or the API gave, after the
-  credentials and declared secrets are removed from it, and so does the startup warning for a
-  template renderer that throws. A line feed in that text started a record nobody wrote, and a
-  bidirectional control could make a line read as another. The three lines now write the same
-  controls the audit entry does as visible sequences, after the removal, so a declared value that
-  holds a line feed is still matched as written.
+  credentials and declared secrets are removed from it; the startup warning for a template
+  renderer that throws carries the error's text. A line feed in that text started a record nobody
+  wrote, and a bidirectional control could make a line read as another. These lines now write the
+  same controls the audit entry does as visible sequences, after the removal, so a declared value
+  that holds a line feed is still matched as written.
 
 - **`InMemoryOtpStorage.size()` counts the failure counters.** The helper reported the entries and
   the cooldowns and not the failure counters, so a test asserting that nothing is left behind could
