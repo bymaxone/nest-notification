@@ -2,7 +2,7 @@
  * @fileoverview In-memory `IOtpStorage` for development and unit tests.
  * @layer infrastructure
  *
- * Backed by two native `Map`s. It is atomic by construction: `consumeAttempt`
+ * Backed by native `Map`s. It is atomic by construction: `consumeAttempt`
  * performs its read → checks → increment → write with NO `await` in between, so
  * Node's single-threaded event loop cannot interleave two calls and overshoot
  * `maxAttempts`.

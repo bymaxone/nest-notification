@@ -11,6 +11,8 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 ## [Unreleased]
 
+## [1.4.10] - 2026-11-16
+
 ### Fixed
 
 - **A control character in a value no longer starts a second audit record.** An audit entry carries
@@ -1266,7 +1268,8 @@ rejected at startup rather than failing on the first send.
 
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.4.9...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.4.10...HEAD
+[1.4.10]: https://github.com/bymaxone/nest-notification/compare/v1.4.9...v1.4.10
 [1.4.9]: https://github.com/bymaxone/nest-notification/compare/v1.4.8...v1.4.9
 [1.4.8]: https://github.com/bymaxone/nest-notification/compare/v1.4.7...v1.4.8
 [1.4.7]: https://github.com/bymaxone/nest-notification/compare/v1.4.6...v1.4.7

@@ -23,7 +23,12 @@ import { tmpdir } from 'node:os'
 import { resolve, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { isAllowedEntry, listTarball, openPackage } from './package-under-test.mjs'
+
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+// The tarball when PACKAGE_TARBALL names one, the working tree's `dist/` otherwise: with a
+// tarball every section below reads the file that `npm publish` uploads.
+const PACKAGE = openPackage(ROOT)
 // Created lazily inside section 6 so an earlier `process.exit(2)` leaks no temp dir.
 let consumerDir
 
@@ -73,8 +78,12 @@ const section = (title) => console.log(`\n-- ${title}`)
 // -- 1. Build artifact presence ----------------------------------------------
 section('1. Build artifacts')
 for (const f of EXPECTED_DIST_FILES) {
-  if (!existsSync(resolve(ROOT, f))) {
-    console.error(`Missing build artifact: ${f} — run \`pnpm build\` first.`)
+  if (!existsSync(resolve(PACKAGE.root, f))) {
+    console.error(
+      PACKAGE.tarball
+        ? `Missing build artifact: ${f} is not in ${PACKAGE.tarball}`
+        : `Missing build artifact: ${f} — run \`pnpm build\` first.`
+    )
     process.exit(2)
   }
   pass(f)
@@ -82,17 +91,17 @@ for (const f of EXPECTED_DIST_FILES) {
 
 // -- 2. ESM named exports ----------------------------------------------------
 section('2. ESM named exports — server')
-const serverEsm = await import(resolve(ROOT, 'dist/server/index.mjs'))
+const serverEsm = await import(resolve(PACKAGE.root, 'dist/server/index.mjs'))
 for (const name of EXPECTED_SERVER_EXPORTS) {
   name in serverEsm ? pass(`export ${name}`) : fail(`Missing export: ${name}`)
 }
 
 section('3. ESM named exports — shared')
-const sharedEsm = await import(resolve(ROOT, 'dist/shared/index.mjs'))
+const sharedEsm = await import(resolve(PACKAGE.root, 'dist/shared/index.mjs'))
 for (const name of EXPECTED_SHARED_EXPORTS) {
   name in sharedEsm ? pass(`export ${name}`) : fail(`Missing export: ${name}`)
 }
-const testingEsmExports = await import(resolve(ROOT, 'dist/testing/index.mjs'))
+const testingEsmExports = await import(resolve(PACKAGE.root, 'dist/testing/index.mjs'))
 for (const name of EXPECTED_TESTING_EXPORTS) {
   name in testingEsmExports ? pass(`export ${name}`) : fail(`Missing export: ${name}`)
 }
@@ -100,17 +109,17 @@ for (const name of EXPECTED_TESTING_EXPORTS) {
 // -- 4. CJS exports ----------------------------------------------------------
 section('4. CJS exports')
 const req = createRequire(import.meta.url)
-const serverCjs = req(resolve(ROOT, 'dist/server/index.cjs'))
+const serverCjs = req(resolve(PACKAGE.root, 'dist/server/index.cjs'))
 for (const name of EXPECTED_SERVER_EXPORTS) {
   name in serverCjs ? pass(`cjs server ${name}`) : fail(`Missing CJS export: ${name}`)
 }
-const sharedCjs = req(resolve(ROOT, 'dist/shared/index.cjs'))
+const sharedCjs = req(resolve(PACKAGE.root, 'dist/shared/index.cjs'))
 for (const name of EXPECTED_SHARED_EXPORTS) {
   name in sharedCjs ? pass(`cjs shared ${name}`) : fail(`Missing CJS export (shared): ${name}`)
 }
 // The CJS condition is a separate build output: an ESM-only assertion would let
 // a broken `require('@bymax-one/nest-notification/testing')` through the gate.
-const testingCjs = req(resolve(ROOT, 'dist/testing/index.cjs'))
+const testingCjs = req(resolve(PACKAGE.root, 'dist/testing/index.cjs'))
 for (const name of EXPECTED_TESTING_EXPORTS) {
   // Read through a descriptor rather than a dynamic index: the value must be
   // callable, and the lint rule against index sinks is right that a bare
@@ -122,29 +131,38 @@ for (const name of EXPECTED_TESTING_EXPORTS) {
 }
 
 // -- 5. Tarball contents -----------------------------------------------------
-section('5. Tarball contents (npm pack --dry-run)')
+section(
+  PACKAGE.tarball ? '5. Tarball contents (tar -tzf)' : '5. Tarball contents (npm pack --dry-run)'
+)
 try {
-  const packOut = execSync('npm pack --dry-run 2>&1', { cwd: ROOT, encoding: 'utf8' })
-  const SIZE_RE = /\s+[\d.]+\s*(?:[Mm][Bb]|[Kk][Bb]?|[Bb])\s+\S+/
-  const SIZE_STRIP_RE = /.*npm notice\s+[\d.]+\s*(?:[Mm][Bb]|[Kk][Bb]?|[Bb])\s+/
-  const contentLines = packOut
-    .split('\n')
-    .filter((l) => l.includes('npm notice') && SIZE_RE.test(l))
-    .map((l) => l.replace(SIZE_STRIP_RE, '').trim())
-    .filter((l) => Boolean(l) && !l.startsWith('npm notice') && !/^sha\d+:/i.test(l))
-  const unexpected = contentLines.filter(
-    (f) =>
-      !ALLOWED_TARBALL_PATHS.some(
-        (entry) => f === entry || (entry.endsWith('/') && f.startsWith(entry))
-      )
-  )
+  let contentLines
+  if (PACKAGE.tarball) {
+    // The list of the file itself, not of a pack the working tree would make.
+    contentLines = listTarball(PACKAGE.tarball)
+    if (contentLines === undefined) {
+      throw new Error(`tar -tzf could not list ${PACKAGE.tarball}`)
+    }
+    for (const f of EXPECTED_DIST_FILES) {
+      contentLines.includes(f) ? pass(`tarball holds ${f}`) : fail(`Tarball is missing ${f}`)
+    }
+  } else {
+    const packOut = execSync('npm pack --dry-run 2>&1', { cwd: ROOT, encoding: 'utf8' })
+    const SIZE_RE = /\s+[\d.]+\s*(?:[Mm][Bb]|[Kk][Bb]?|[Bb])\s+\S+/
+    const SIZE_STRIP_RE = /.*npm notice\s+[\d.]+\s*(?:[Mm][Bb]|[Kk][Bb]?|[Bb])\s+/
+    contentLines = packOut
+      .split('\n')
+      .filter((l) => l.includes('npm notice') && SIZE_RE.test(l))
+      .map((l) => l.replace(SIZE_STRIP_RE, '').trim())
+      .filter((l) => Boolean(l) && !l.startsWith('npm notice') && !/^sha\d+:/i.test(l))
+  }
+  const unexpected = contentLines.filter((f) => !isAllowedEntry(f, ALLOWED_TARBALL_PATHS))
   if (unexpected.length === 0) {
     pass(`Tarball contains only dist/ + meta files (${contentLines.length} entries)`)
   } else {
     for (const f of unexpected) fail(`Unexpected file in tarball: ${f}`)
   }
 } catch (err) {
-  fail(`npm pack --dry-run failed: ${err instanceof Error ? err.message : String(err)}`)
+  fail(`Listing the tarball failed: ${err instanceof Error ? err.message : String(err)}`)
 }
 
 // -- 6. Consumer file: link smoke --------------------------------------------
@@ -161,7 +179,10 @@ try {
         // `react` is an OPTIONAL peer dep — install it explicitly so the `./react`
         // subpath (which imports `react` eagerly) resolves. Required peers
         // (`@nestjs/*`, `rxjs`, `reflect-metadata`) are auto-installed by pnpm.
-        dependencies: { '@bymax-one/nest-notification': `file:${ROOT}`, react: '^19.0.0' }
+        dependencies: {
+          '@bymax-one/nest-notification': `file:${PACKAGE.tarball ?? ROOT}`,
+          react: '^19.0.0'
+        }
       },
       null,
       2
@@ -229,7 +250,7 @@ try {
     ? pass('forRoot({ email, otp }) returns a wired DynamicModule')
     : fail('forRoot did not return a wired DynamicModule descriptor')
 
-  const testingEsm = await import(resolve(ROOT, 'dist/testing/index.mjs'))
+  const testingEsm = await import(resolve(PACKAGE.root, 'dist/testing/index.mjs'))
   const contractCases = testingEsm.otpStorageContract(() => {
     throw new Error('the factory must not run while only building the case list')
   })
@@ -237,7 +258,7 @@ try {
     ? pass(`testing export otpStorageContract builds ${contractCases.length} cases`)
     : fail('otpStorageContract did not return cases')
 
-  const reactEsm = await import(resolve(ROOT, 'dist/react/index.mjs'))
+  const reactEsm = await import(resolve(PACKAGE.root, 'dist/react/index.mjs'))
   for (const [hook, fn] of [
     ['useOtpInput', reactEsm.useOtpInput],
     ['useOtpCountdown', reactEsm.useOtpCountdown]
