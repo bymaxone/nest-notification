@@ -37,7 +37,7 @@ export const CIRCULAR_MARKER = '[circular]'
 export const NON_PLAIN_MARKER = '[non-plain value]'
 
 /** Controls (C0, DEL, C1), the line and paragraph separators and the bidirectional controls. */
-const ESCAPED = /[\p{Cc}\p{Zl}\p{Zp}؜‎‏‪-‮⁦-⁩]/gu
+const ESCAPED = /[\p{Cc}\p{Zl}\p{Zp}\u061C\u200E\u200F\u202A-\u202E\u2066-\u2069]/gu
 
 const NAMED: ReadonlyMap<string, string> = new Map([
   ['\n', '\\n'],
