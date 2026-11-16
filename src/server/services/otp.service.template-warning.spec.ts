@@ -11,6 +11,7 @@ import { resolveOptions } from '../config/resolved-options'
 import type { ResolvedNotificationOptions } from '../config/resolved-options'
 import type { IEmailProvider } from '../interfaces/email-provider.interface'
 import type { IEmailTemplateRenderer } from '../interfaces/email-template-renderer.interface'
+import { BIDI_OVERRIDE, hasRawControl } from '../providers/__tests__/has-raw-control'
 import { InMemoryOtpStorage } from '../providers/in-memory-otp.storage'
 
 import { makeAudit, makeProvider, makeRenderer } from './__tests__/email-service.fixtures'
@@ -153,6 +154,21 @@ describe('OtpService startup warning for an unresolved default template', () => 
       "[BYMAX_NOTIFICATION_OTP_TEMPLATE_NOT_RESOLVED] Could not check whether the email template 'otp_code' resolves " +
         '(store down); if it does not, the first generate() that delivers by email fails with TEMPLATE_NOT_FOUND.'
     ])
+  })
+
+  // The renderer's error text is not ours: a line feed in it would start a second record in any
+  // log that writes lines, so the line carries it with every control written as a visible sequence.
+  it('should write a control character of the renderer error as a visible sequence', async () => {
+    const { service, renderer } = build()
+    renderer.hasTemplate.mockRejectedValue(new Error(`store\ndown ${BIDI_OVERRIDE}`))
+
+    service.onModuleInit()
+    await settle()
+
+    const lines = ours()
+    expect(lines).toHaveLength(1)
+    expect(hasRawControl(String(lines[0]))).toBe(false)
+    expect(lines[0]).toContain('(store\\ndown \\u202e)')
   })
 
   // One line per process, however often the hook runs.

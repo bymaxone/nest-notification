@@ -12,6 +12,7 @@ import * as vm from 'node:vm'
 import { Logger } from '@nestjs/common'
 
 import { baseOptions } from './__tests__/smtp-email-provider.fixtures'
+import { BIDI_OVERRIDE, hasRawControl } from './__tests__/has-raw-control'
 import { SmtpEmailProvider } from './smtp-email.provider'
 
 // `mock`-prefixed names are allowed inside the hoisted jest.mock factory.
@@ -66,6 +67,37 @@ describe('SmtpEmailProvider failure handling', () => {
     expect(logged).toContain('550 5.7.1 rejected by policy')
     expect(logged).toContain('[redacted]')
     expect(logged).not.toContain('Secret 123456')
+    warnSpy.mockRestore()
+  })
+
+  // The relay's reply is not ours: a line feed in it would start a second record in any log that
+  // writes lines, and a bidirectional control would make a line read as another. The warn line
+  // carries the reason with every control written as a visible sequence; the thrown message is
+  // the caller's API and keeps the text as it came.
+  it('should write a control character of a transport reply as a visible sequence', async () => {
+    const reply = `550 no\nforged [SMTP_SEND_FAILED] ok${BIDI_OVERRIDE}`
+    mockSendMail.mockRejectedValue(new Error(reply))
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+    await expect(new SmtpEmailProvider({ host: 'h' }).send(baseOptions)).rejects.toThrow(
+      `SMTP send failed: ${reply}`
+    )
+    const logged = String(warnSpy.mock.calls[0]?.[0])
+    expect(hasRawControl(logged)).toBe(false)
+    expect(logged).toBe('[SMTP_SEND_FAILED] 550 no\\nforged [SMTP_SEND_FAILED] ok\\u202e')
+    warnSpy.mockRestore()
+  })
+
+  // The escape runs AFTER the scrub: a declared secret that holds a line feed is still matched
+  // as written. Escaping first would leave '\\n' in the reason and the secret would survive.
+  it('should scrub a declared value that holds a line feed before escaping', async () => {
+    mockSendMail.mockRejectedValue(new Error('550 rejected: pass\nword'))
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+    await expect(
+      new SmtpEmailProvider({ host: 'h' }).send({ ...baseOptions, redactValues: ['pass\nword'] })
+    ).rejects.toThrow('SMTP send failed: 550 rejected: [redacted]')
+    expect(String(warnSpy.mock.calls[0]?.[0])).toBe('[SMTP_SEND_FAILED] 550 rejected: [redacted]')
     warnSpy.mockRestore()
   })
 

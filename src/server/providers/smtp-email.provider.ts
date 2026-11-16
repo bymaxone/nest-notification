@@ -27,6 +27,7 @@ import type {
   EmailSendResult,
   IEmailProvider
 } from '../interfaces/email-provider.interface'
+import { escapeAuditString } from '../utils/audit-escape'
 import { errorCodeOf } from '../utils/availability'
 import { extractDeliveryStatus, withoutDeclaredValues } from '../utils/delivery-status'
 import { describeError, UNPRINTABLE_ERROR } from '../utils/describe-error'
@@ -434,7 +435,7 @@ export class SmtpEmailProvider implements IEmailProvider {
       return this.withheldFailure(raw, code, redactValuesList)
     }
     const reason = this.scrubTransportError(raw, payload, redactValuesList)
-    this.logger.warn(`[SMTP_SEND_FAILED] ${reason}`)
+    this.logger.warn(`[SMTP_SEND_FAILED] ${escapeAuditString(reason)}`)
     return Object.assign(
       new Error(`SMTP send failed: ${reason}`),
       code === undefined ? {} : { code }

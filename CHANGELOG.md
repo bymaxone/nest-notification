@@ -48,6 +48,14 @@ the entries that carry one, is the compatibility contract — read it, not the n
   whose domain is not plain ASCII gets a different key, so a code issued before the upgrade is not
   found after it.
 
+- **A control character in a relay's reply no longer starts a second log line.** The warning an
+  SMTP or Resend send failure logs carries the reason the relay or the API gave, after the
+  credentials and declared secrets are removed from it, and so does the startup warning for a
+  template renderer that throws. A line feed in that text started a record nobody wrote, and a
+  bidirectional control could make a line read as another. The three lines now write the same
+  controls the audit entry does as visible sequences, after the removal, so a declared value that
+  holds a line feed is still matched as written.
+
 - **`InMemoryOtpStorage.size()` counts the failure counters.** The helper reported the entries and
   the cooldowns and not the failure counters, so a test asserting that nothing is left behind could
   not see a counter that leaked; it now returns `failures` as well.
@@ -88,6 +96,10 @@ passes its own repository straight through and escapes in its `create`. No decla
 `InMemoryOtpStorage.size()` returns a `failures` field, and the exported
 `InMemoryStorageSize` type gains it as a required property: code that reads the result is
 unaffected, code that builds a value of that type adds the field.
+
+The log lines of the SMTP and Resend providers and of the template startup check now hold a
+reason with control characters written as visible sequences; the error those providers throw
+keeps its text as it came, so a host that logs it writes its own line and escapes it there.
 
 ## [1.4.9] - 2026-11-14
 
