@@ -85,7 +85,7 @@ whose values never contain one sees no difference. The module wraps the reposito
 interceptor, `OtpService` and `EmailService`; a host that builds one of them by hand with `new`
 passes its own repository straight through and escapes in its `create`. No declaration changes.
 
-`InMemoryOtpStorage.size()` returns a third field, `failures`, and the exported
+`InMemoryOtpStorage.size()` returns a `failures` field, and the exported
 `InMemoryStorageSize` type gains it as a required property: code that reads the result is
 unaffected, code that builds a value of that type adds the field.
 
