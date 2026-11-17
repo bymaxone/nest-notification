@@ -435,6 +435,42 @@ if (error.code === NOTIFICATION_ERROR_CODES.OTP_MAX_ATTEMPTS_EXCEEDED) {
 
 ---
 
+## 🏭 Production
+
+What the library leaves to you, and what to set before real traffic. The option tables are in the Configuration section and in [`docs/smtp-provider.md`](./docs/smtp-provider.md); nothing here restates a default.
+
+### The Redis client is yours: bound it, and close it
+
+`RedisOtpStorage` uses the client you give it. It never connects it, configures it or quits it. A client with no bounds turns a Redis outage into requests that hang. With a connect timeout, a command timeout and a bounded retry policy, the same outage reaches the caller as the library's `503`: a command that fails because the server cannot be reached is answered as unavailable.
+
+```typescript
+import Redis from 'ioredis'
+import { RedisOtpStorage } from '@bymax-one/nest-notification'
+
+const client = new Redis(process.env.REDIS_URL!, {
+  connectTimeout: 5_000,
+  commandTimeout: 2_000,
+  maxRetriesPerRequest: 1,
+  retryStrategy: (attempt) => Math.min(attempt * 200, 2_000)
+})
+
+const storage = new RedisOtpStorage({ redisClient: client })
+```
+
+Close the client in your own shutdown hook, after Nest has closed the application, so no OTP operation is still running when its connection goes.
+
+### Bound every send
+
+`ResendEmailProvider` takes `timeoutMs` and `SmtpEmailProvider` takes `sendTimeoutMs`, plus the phase timeouts, each with its default in the option tables. A send that times out fails with `EMAIL_SEND_FAILED`, and **may still have been delivered**: make the job that retries it idempotent, as the Apply note of 1.4.9 says.
+
+### Shut down cleanly
+
+Call `app.enableShutdownHooks()`, or close the application yourself, and Nest calls `onModuleDestroy` on the providers. `SmtpEmailProvider` closes its transport there. That matters once you set `pool`: a pool keeps sockets to the relay open, and without a close they keep the process alive. `close()` is also public and idempotent. A send already in flight on a pooled transport finishes; one still waiting for a connection fails with `Connection pool was closed`. A `send()` after `close()` builds a new transport, which you have to close again if you keep the provider alive. A failing close is logged as `[SMTP_CLOSE_FAILED]` with no text from the relay and does not stop the other hooks.
+
+### Store codes as digests
+
+Without `otp.codeSecret`, codes are stored in plaintext and the startup warning `BYMAX_NOTIFICATION_PLAINTEXT_OTP_CODES` says so. In production set it to a secret of at least 32 bytes; see [Stored codes are keyed digests](#stored-codes-are-keyed-digests-when-you-set-otpcodesecret).
+
 ## ⚙️ Configuration
 
 Configure via `forRoot(options)` or `forRootAsync({ useFactory })`. **At least one channel must be configured**, and configuring a channel the library does not implement throws at startup rather than failing on the first send. The full reference is in [`docs/technical_specification.md` §4](./docs/technical_specification.md); the most-used options:
@@ -668,7 +704,7 @@ A one-time password is a credential, so every behavior is pinned so that a regre
 | Coverage       | **100%** line/branch/function/statement per file (`pnpm test:cov:all`)                   |
 | Mutation       | Stryker score **100%** (`break: 100`), no survivors                                      |
 | Lint           | ESLint flat config + `eslint-plugin-security`, zero warnings                             |
-| Bundle budgets | server < 34.73 KB · shared < 4 KB · react < 8 KB · testing < 4.5 KB brotli (`pnpm size`) |
+| Bundle budgets | server < 35.34 KB · shared < 4 KB · react < 8 KB · testing < 4.5 KB brotli (`pnpm size`) |
 | Prisma-free    | `pnpm check:no-prisma` — the library never imports `@prisma/client`                      |
 | Export map     | `pnpm check:exports` — `attw` against the packed tarball, ESM and CJS                    |
 | Supply chain   | published with npm provenance (OIDC), CodeQL + OpenSSF Scorecard                         |

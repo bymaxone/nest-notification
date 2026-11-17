@@ -13,6 +13,15 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 ### Added
 
+- **`SmtpEmailProvider` can pool its connections, and closes with the application.** The new
+  option `pool` (`maxConnections` and `maxMessages`, each optional) turns Nodemailer's pooled mode
+  on, a limit left out keeping Nodemailer's default; without it the transport is configured as
+  before. The provider gains `close()`, which closes the transport it built (a send in flight on a
+  pooled transport finishes, one waiting for a connection fails, and a later `send()` builds a new
+  transport), and implements `onModuleDestroy`, so Nest closes it when the application closes. A
+  close that throws is logged as `[SMTP_CLOSE_FAILED]` with no text from the relay and is not
+  rethrown.
+
 - **`otp.strictPurposes` refuses a purpose that nobody registered.** The limits of a recipient are
   kept per `(tenant, recipient, purpose)` and a purpose with no `perPurpose` entry uses the
   defaults, so a host that lets a caller choose the purpose lets the caller ask for a fresh
@@ -25,12 +34,19 @@ the entries that carry one, is the compatibility contract — read it, not the n
 ### Documentation
 
 - The README states how deep the audit metadata is kept, and a spec holds the number to the code.
+- The README has a Production section: a bounded `ioredis` client and who closes it, the send
+  timeouts, the shutdown, and storing codes as digests.
 
 #### Apply to a derived backend
 
 `OtpChannelOptions` gains the optional `strictPurposes`, off by default, so a backend that does
 not set it needs no change; one that sets it registers each purpose it uses that is not one of
 the canonical purposes as a key of `perPurpose` (an empty object keeps the defaults).
+
+`SmtpEmailProviderOptions` gains the optional `pool`, the exported `SmtpPoolOptions` type is new,
+and `SmtpEmailProvider` gains `close()` and `onModuleDestroy()`. A backend that builds the
+provider without `pool` needs no change; one that sets it should let Nest close the application,
+or call `close()` itself.
 
 ## [1.4.10] - 2026-11-16
 

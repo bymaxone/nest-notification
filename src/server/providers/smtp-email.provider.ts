@@ -20,6 +20,7 @@
  */
 
 import { Injectable, Logger } from '@nestjs/common'
+import type { OnModuleDestroy } from '@nestjs/common'
 
 import type {
   EmailAttachment,
@@ -33,6 +34,23 @@ import { extractDeliveryStatus, withoutDeclaredValues } from '../utils/delivery-
 import { describeError, UNPRINTABLE_ERROR } from '../utils/describe-error'
 import { loadOptionalPeer } from '../utils/load-optional-peer'
 import { collectEchoedExcerpts, readRedactedMessage, redactValues } from '../utils/redact'
+import type {
+  NodemailerLike,
+  SmtpAttachment,
+  SmtpCredentials,
+  SmtpEmailProviderOptions,
+  SmtpPoolOptions,
+  SmtpSendPayload,
+  SmtpSender,
+  SmtpTransportConfig,
+  SmtpTransportLike
+} from './smtp-email.types'
+export type {
+  SmtpCredentials,
+  SmtpEmailProviderOptions,
+  SmtpPoolOptions,
+  SmtpTlsOptions
+} from './smtp-email.types'
 
 /** Submission port, used when no `port` is supplied. */
 const DEFAULT_PORT = 587
@@ -87,150 +105,47 @@ function settleOrTimeout<T>(call: Promise<T>, timeoutMs: number): Promise<T> {
  */
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]'])
 
-/** TLS knobs forwarded to the transport, for relays using a private CA. */
-export interface SmtpTlsOptions {
-  /**
-   * Whether to reject a certificate that does not validate against the trust store.
-   * Defaults to Node's `true`. Setting it to `false` disables certificate
-   * verification and exposes the connection to interception — prefer supplying the
-   * relay's CA via {@link SmtpTlsOptions.ca}.
-   */
-  rejectUnauthorized?: boolean
-  /** SNI server name, when it differs from `host`. */
-  servername?: string
-  /** Additional trusted CA certificate(s), in PEM form. */
-  ca?: string | string[]
-}
-
 /**
- * Login credentials for the SMTP session (the protocol's `AUTH` command, RFC 4954).
- * Both fields must be non-empty for the provider to be configured.
- */
-export interface SmtpCredentials {
-  /**
-   * Login user. Explicitly `| undefined` — not merely optional — so a consumer can
-   * pass `process.env.SMTP_USER` straight through under `exactOptionalPropertyTypes`.
-   * A missing variable then makes `isConfigured()` answer `false` instead of forcing
-   * a non-null assertion at the call site or logging in as `undefined`.
-   */
-  user?: string | undefined
-  /** Login password (or app/API secret). See {@link SmtpCredentials.user}. */
-  pass?: string | undefined
-}
-
-/** Construction options for {@link SmtpEmailProvider}. */
-export interface SmtpEmailProviderOptions {
-  /**
-   * Relay hostname or IP. Required — without it the provider is not configured.
-   * Explicitly `| undefined` so `process.env.SMTP_HOST` can be passed straight
-   * through; see {@link SmtpCredentials.user}.
-   */
-  host?: string | undefined
-  /** TCP port. Defaults to `587` (submission). */
-  port?: number
-  /**
-   * Whether TLS wraps the connection from the first byte (implicit TLS, port 465).
-   * Defaults to `true` only when `port` is `465`. Leave `false` for submission and
-   * plaintext capture servers; the connection is still upgraded through STARTTLS
-   * when the relay advertises it. Use {@link SmtpEmailProviderOptions.requireTls}
-   * to make that upgrade mandatory.
-   */
-  secure?: boolean
-  /**
-   * Whether to require a STARTTLS upgrade on a non-implicit-TLS connection, failing
-   * the send when the relay does not offer it.
-   *
-   * **Defaults to `true` for any non-loopback host**, and to `false` for
-   * `localhost` / `127.0.0.1` / `::1` (the local capture-server case) and whenever
-   * `secure` is already on. Without it, whether the session is encrypted at all is
-   * decided by the plaintext EHLO banner: an attacker with network position strips
-   * the `250-STARTTLS` line, the transport never upgrades, and the credentials and
-   * the body — which carries OTP codes — cross the network in the clear. Set it to
-   * `false` explicitly for a relay you know cannot upgrade.
-   */
-  requireTls?: boolean
-  /** Login credentials. Omit entirely for an open relay (e.g. Mailpit). */
-  credentials?: SmtpCredentials
-  /** TLS knobs, for a relay presenting a certificate from a private CA. */
-  tls?: SmtpTlsOptions
-  /** TCP connection timeout in milliseconds. Defaults to `10000`. */
-  connectionTimeout?: number
-  /** Server-greeting timeout in milliseconds. Defaults to `10000`. */
-  greetingTimeout?: number
-  /** Idle-socket timeout in milliseconds. Defaults to `20000`. */
-  socketTimeout?: number
-  /**
-   * Longest one `send()` may take, in milliseconds, from the call to the transport's answer. An
-   * integer from `1` to `2147483647`; default `60000`. The three timeouts above bound a phase or an
-   * idle socket, so a relay that keeps trickling bytes could hold a send past all of them; this
-   * bounds the whole call. A send that exceeds it fails with `EMAIL_SEND_FAILED` (HTTP 503). The
-   * relay may still accept the message: only the answer is missing, so the failure does not say the
-   * message was not sent. The connection is left open: `socketTimeout` reaps it once the relay goes idle; a relay that keeps sending holds it until the relay ends the connection or the process exits.
-   */
-  sendTimeoutMs?: number
-}
-
-/**
- * The transport configuration this adapter hands to `createTransport`. The key is
- * `auth` because that is Nodemailer's own wire name for the credential pair.
- */
-interface SmtpTransportConfig {
-  host: string
-  port: number
-  secure: boolean
-  requireTLS: boolean
-  auth: { user: string; pass: string } | undefined
-  tls: SmtpTlsOptions | undefined
-  connectionTimeout: number
-  greetingTimeout: number
-  socketTimeout: number
-}
-
-/** An attachment in the shape Nodemailer expects. */
-interface SmtpAttachment {
-  filename: string
-  content: Buffer | string
-  contentType: string | undefined
-  encoding: string | undefined
-}
-
-/**
- * A sender in Nodemailer's structured address form.
+ * Refuses a pool option that is not an object of positive integers.
  *
- * Structured rather than a `"Name <address>"` string on purpose: handed a string,
- * Nodemailer *parses* it, so a display name containing its own angle-addr — say
- * `Mallory <mallory@evil.example>` — would supply the `From` address and the
- * envelope sender instead of the configured one. Given the object, the name is
- * never parsed; Nodemailer quotes it (and RFC-2047-encodes it when non-ASCII) while
- * the address stays exactly what this adapter chose.
+ * @param pool - The option as the caller passed it.
+ * @throws Error When `pool` is not an object, or a limit is not an integer of at least `1`.
  */
-interface SmtpSender {
-  name: string
-  address: string
+function assertPool(pool: SmtpPoolOptions | undefined): void {
+  if (pool === undefined) {
+    return
+  }
+  if (typeof pool !== 'object' || pool === null) {
+    throw new Error('SmtpEmailProvider: pool must be an object')
+  }
+  for (const [name, value] of [
+    ['maxConnections', pool.maxConnections],
+    ['maxMessages', pool.maxMessages]
+  ] as const) {
+    if (value !== undefined && !(Number.isInteger(value) && value >= 1)) {
+      throw new Error(`SmtpEmailProvider: pool.${name} must be a positive integer`)
+    }
+  }
 }
 
-/** The exact payload subset {@link SmtpEmailProvider} forwards to the transport. */
-interface SmtpSendPayload {
-  from: SmtpSender
-  to: string | string[]
-  subject: string
-  html: string
-  text: string | undefined
-  replyTo: string | undefined
-  cc: string | string[] | undefined
-  bcc: string | string[] | undefined
-  headers: Record<string, string> | undefined
-  attachments: SmtpAttachment[] | undefined
-}
-
-/** The slim transport surface this adapter relies on. */
-interface SmtpTransportLike {
-  sendMail(payload: SmtpSendPayload): Promise<{ messageId?: string }>
-}
-
-/** The slim surface of the `nodemailer` module this adapter relies on. */
-interface NodemailerLike {
-  createTransport(config: SmtpTransportConfig): SmtpTransportLike
+/**
+ * The transport settings a pool turns on: none without the option, so an unpooled transport gets
+ * the configuration it always did.
+ *
+ * @param pool - The validated option.
+ * @returns The keys to add to the transport configuration.
+ */
+function poolConfig(
+  pool: SmtpPoolOptions | undefined
+): Pick<SmtpTransportConfig, 'pool' | 'maxConnections' | 'maxMessages'> {
+  if (pool === undefined) {
+    return {}
+  }
+  return {
+    pool: true,
+    ...(pool.maxConnections === undefined ? {} : { maxConnections: pool.maxConnections }),
+    ...(pool.maxMessages === undefined ? {} : { maxMessages: pool.maxMessages })
+  }
 }
 
 /**
@@ -283,7 +198,7 @@ const NODEMAILER_MODULE: string = 'nodemailer'
  * They still reach the audit log through `EmailService`.
  */
 @Injectable()
-export class SmtpEmailProvider implements IEmailProvider {
+export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
   readonly name = 'smtp'
   private readonly logger = new Logger(SmtpEmailProvider.name)
   /**
@@ -321,6 +236,7 @@ export class SmtpEmailProvider implements IEmailProvider {
         `SmtpEmailProvider: sendTimeoutMs must be a positive integer of at most ${String(MAX_SEND_TIMEOUT_MS)}`
       )
     }
+    assertPool(options.pool)
     this.#options = options
   }
 
@@ -384,6 +300,41 @@ export class SmtpEmailProvider implements IEmailProvider {
       throw new Error('SMTP transport returned no message ID')
     }
     return { messageId: info.messageId }
+  }
+
+  /**
+   * Closes the transport this provider built, so a pooled connection does not keep the process
+   * alive. A send already in flight on a pooled transport finishes; one still waiting for a
+   * connection fails with `Connection pool was closed`. Idempotent, and it never builds a transport
+   * to close it. A `send()` after it builds a new transport, which the host has to close again if it
+   * keeps the provider alive.
+   *
+   * A close that throws is logged as a fixed line and not rethrown, so one failure cannot stop the
+   * other shutdown hooks of the application.
+   */
+  async close(): Promise<void> {
+    const pending = this.#transportPromise
+    this.#transportPromise = null
+    if (pending === null) {
+      return
+    }
+    let transport: SmtpTransportLike
+    try {
+      transport = await pending
+    } catch {
+      return
+    }
+    try {
+      transport.close?.()
+    } catch {
+      // What the failure carries can hold the relay's words or a credential: log a fixed line only.
+      this.logger.warn('[SMTP_CLOSE_FAILED] The transport could not be closed.')
+    }
+  }
+
+  /** Nest calls this when the application closes; it closes the transport. */
+  async onModuleDestroy(): Promise<void> {
+    await this.close()
   }
 
   /**
@@ -638,32 +589,38 @@ export class SmtpEmailProvider implements IEmailProvider {
    * Returns the cached transport, lazily importing `nodemailer` on first use.
    * Concurrent first calls share one in-flight initialization promise so the dynamic
    * import and creation run exactly once; a failed init is dropped from the cache so
-   * a later call can retry instead of being permanently bricked.
+   * a later call can retry instead of being permanently bricked. It is dropped only while
+   * it is still the cached build: `close()` may have taken it, and a newer send may have
+   * started a build of its own, which a late failure here must not clear.
    *
    * @returns The initialized transport.
    * @throws Error When the configuration is incomplete or `nodemailer` is missing.
    */
   private getTransport(): Promise<SmtpTransportLike> {
-    this.#transportPromise ??= this.createTransport()
-    return this.#transportPromise
+    const cached = this.#transportPromise
+    if (cached !== null) {
+      return cached
+    }
+    const build = this.createTransport()
+    this.#transportPromise = build
+    build.catch(() => {
+      if (this.#transportPromise === build) {
+        this.#transportPromise = null
+      }
+    })
+    return build
   }
 
   /**
-   * Builds a fresh transport, resetting the cached promise on any failure so the
-   * provider is not permanently bricked by a transient init error.
+   * Builds a fresh transport.
    *
    * @returns The initialized transport.
    * @throws Error When the configuration is incomplete or `nodemailer` is missing.
    */
   private async createTransport(): Promise<SmtpTransportLike> {
-    try {
-      const config = this.buildTransportConfig()
-      const nodemailer = await this.loadNodemailer()
-      return this.instantiate(nodemailer, config)
-    } catch (error) {
-      this.#transportPromise = null
-      throw error
-    }
+    const config = this.buildTransportConfig()
+    const nodemailer = await this.loadNodemailer()
+    return this.instantiate(nodemailer, config)
   }
 
   /**
@@ -741,7 +698,8 @@ export class SmtpEmailProvider implements IEmailProvider {
       tls: options.tls,
       connectionTimeout: options.connectionTimeout ?? DEFAULT_CONNECTION_TIMEOUT_MS,
       greetingTimeout: options.greetingTimeout ?? DEFAULT_GREETING_TIMEOUT_MS,
-      socketTimeout: options.socketTimeout ?? DEFAULT_SOCKET_TIMEOUT_MS
+      socketTimeout: options.socketTimeout ?? DEFAULT_SOCKET_TIMEOUT_MS,
+      ...poolConfig(options.pool)
     }
   }
 
