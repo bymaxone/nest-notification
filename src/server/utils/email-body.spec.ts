@@ -72,6 +72,13 @@ describe('assertBodyParts', () => {
     expect(refusal(42, 42).getResponse()).toMatchObject({ error: { details: { part: 'html' } } })
   })
 
+  // The message is the host's only explanation, so it is pinned, and it says nothing of the value.
+  it('should explain the refusal in its own words', () => {
+    expect(refusal(Buffer.from('x'), 'x').getResponse()).toMatchObject({
+      error: { message: 'The html and text parts of an email must be strings' }
+    })
+  })
+
   // The message must not echo the value: it may be a secret, or a path.
   it('should not put the value into the body', () => {
     const body = JSON.stringify(refusal({ path: '/etc/hostname' }, 'x').getResponse())

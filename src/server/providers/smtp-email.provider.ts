@@ -122,6 +122,27 @@ function isArrayLike(value: object): boolean {
 }
 
 /**
+ * Reads the two limits off a `pool` option, or `undefined` when it is not an options object or
+ * cannot be read: a value that is not an object, a sequence, a getter or a Proxy that throws, or
+ * `null`, which has no `length` to read and ends in the same place.
+ *
+ * @param pool - The option as the caller passed it.
+ * @returns The limits as given, or `undefined` when the option is not a readable options object.
+ */
+function readLimits(
+  pool: SmtpPoolOptions
+): readonly [number | undefined, number | undefined] | undefined {
+  try {
+    if (typeof pool !== 'object' || isArrayLike(pool)) {
+      return undefined
+    }
+    return [pool.maxConnections, pool.maxMessages]
+  } catch {
+    return undefined
+  }
+}
+
+/**
  * Reads the limits of the `pool` option once, refusing an option that is not an object of positive
  * integers. Reading it is host code too, so a getter or a Proxy that throws is refused like any
  * other value that is not an options object; and the limits are kept as plain values, so a getter
@@ -135,17 +156,11 @@ function readPool(pool: SmtpPoolOptions | undefined): SmtpPoolOptions | undefine
   if (pool === undefined) {
     return undefined
   }
-  let maxConnections: number | undefined
-  let maxMessages: number | undefined
-  try {
-    if (typeof pool !== 'object' || pool === null || isArrayLike(pool)) {
-      throw new Error('not an options object')
-    }
-    maxConnections = pool.maxConnections
-    maxMessages = pool.maxMessages
-  } catch {
+  const limits = readLimits(pool)
+  if (limits === undefined) {
     throw new Error('SmtpEmailProvider: pool must be an object')
   }
+  const [maxConnections, maxMessages] = limits
   for (const [name, value] of [
     ['maxConnections', maxConnections],
     ['maxMessages', maxMessages]
