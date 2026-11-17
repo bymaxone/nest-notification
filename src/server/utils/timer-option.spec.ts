@@ -17,8 +17,9 @@ describe('assertTimerMs', () => {
   })
 
   // Each of these either fails a send within milliseconds against a healthy relay (past the ceiling,
-  // negative, fractional, a string: the timer fires at once) or leaves the phase with no bound (NaN,
-  // zero).
+  // negative, fractional, true or a string that is not a number: the timer fires at once) or does
+  // not bound the phase at all (NaN, zero). A numeric string such as '5000' would be coerced and
+  // work, and is refused all the same: a bound is a number.
   it.each([
     0,
     -1,
