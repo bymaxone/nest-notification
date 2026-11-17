@@ -11,6 +11,36 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 ## [Unreleased]
 
+### Fixed
+
+- **A numeric option the library cannot act on is refused at startup, not honoured as `NaN`.**
+  `otp.defaultMaxAttempts` of `NaN` passed the check and then never locked, so the brute-force bound
+  was off; a `resendCooldownSeconds` of `NaN` never held a cooldown; a `defaultTtlSeconds` of `NaN`
+  never expired a code; a `maxAttachmentBytes` of `NaN` removed the attachment guard. The attempts
+  bound must now be an integer of at least `1`, the TTL a finite number above `0`, the cooldown and
+  `maxAttachmentBytes` finite numbers of at least `0`, in the defaults and in every `perPurpose`
+  entry. The message names the option and the value.
+- **A count past the largest safe integer is refused.** `otp.defaultMaxAttempts`, each `perPurpose`
+  `maxAttempts`, `email.maxRecipients` and the SMTP `pool` limits `maxConnections` and `maxMessages`
+  accepted `2 ** 53`, `1e21` and `Number.MAX_VALUE`, which bound nothing. Each must now be an integer
+  from `1` to `9007199254740991`.
+- **Every SMTP timeout is checked when the provider is built.** `connectionTimeout`,
+  `greetingTimeout` and `socketTimeout` were handed to Nodemailer unchecked: a `connectionTimeout`
+  past `2147483647` made every send fail within milliseconds against a healthy relay, a negative or
+  fractional `greetingTimeout` did the same, and `NaN` or `0` left a phase unbounded. They now take the
+  same integer from `1` to `2147483647` as `sendTimeoutMs`.
+- **A provider of your own gets the `503` for a transient reply too.** `EmailService` read the
+  reply number of an SMTP `4xx` only from the built-in providers' errors, so a provider that threw
+  Nodemailer's error answered `502`. The service now reads a `responseCode` from `400` to `499` on
+  the error or one of its causes.
+
+#### Apply to a derived backend
+
+No declaration changes. A configuration that passed with a value that is not a usable number (`NaN`,
+`Infinity`, a string, a fraction where an integer is needed) now fails at startup and names the
+option; fix the value. An SMTP timeout that was out of range, or not a number, now fails when the
+provider is built.
+
 ## [1.4.13] - 2026-11-17
 
 ### Fixed

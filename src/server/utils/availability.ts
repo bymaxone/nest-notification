@@ -65,9 +65,9 @@ function read(value: unknown, key: string): unknown {
 /**
  * Whether one error carries a transient SMTP reply: a 4xx, which the relay sends to say "not now".
  * A client sets the number as `responseCode` at whatever stage of the dialogue the reply came; a
- * 5xx is a refusal and says nothing about availability. Only {@link errorCodeOf} reads it, for the
- * email providers: {@link isUnavailableError} also holds the OTP store, which this reading must
- * not reach.
+ * 5xx is a refusal and says nothing about availability. {@link errorCodeOf} and
+ * {@link isUnavailableProviderError} read it, for the email providers: {@link isUnavailableError}
+ * also holds the OTP store, which this reading must not reach.
  */
 function isTransientReply(error: unknown): boolean {
   const reply = read(error, 'responseCode')
@@ -92,6 +92,32 @@ function isUnavailableLink(error: unknown): boolean {
 }
 
 /**
+ * Whether `test` holds for the error or for one of its first few `cause` links. The walk ends on a
+ * loop in the chain and on the window.
+ *
+ * @param error - The head of the chain.
+ * @param test - The question asked of each link, ignoring its causes.
+ * @returns `true` as soon as a link answers yes.
+ */
+function someLink(error: unknown, test: (link: unknown) => boolean): boolean {
+  const seen = new Set<unknown>()
+  let current: unknown = error
+  // `read` answers `undefined` for `null` and `undefined`, so the end of a chain walks itself out:
+  // the next link is `undefined`, which has been seen once the walk reaches it twice.
+  for (let remaining = MAX_LINKS; remaining > 0; remaining -= 1) {
+    if (seen.has(current)) {
+      return false
+    }
+    seen.add(current)
+    if (test(current)) {
+      return true
+    }
+    current = read(current, 'cause')
+  }
+  return false
+}
+
+/**
  * Whether a failure from a backing service means the service is unavailable: unreachable, closed,
  * timed out, or a server that cannot serve right now. The error and its first few `cause` links are
  * read, so a provider that wraps the original error is still recognised.
@@ -103,21 +129,19 @@ function isUnavailableLink(error: unknown): boolean {
  * @returns `true` when retrying later is the right response.
  */
 export function isUnavailableError(error: unknown): boolean {
-  const seen = new Set<unknown>()
-  let current: unknown = error
-  // `read` answers `undefined` for `null` and `undefined`, so the end of a chain walks itself out:
-  // the next link is `undefined`, which has been seen once the walk reaches it twice.
-  for (let remaining = MAX_LINKS; remaining > 0; remaining -= 1) {
-    if (seen.has(current)) {
-      return false
-    }
-    seen.add(current)
-    if (isUnavailableLink(current)) {
-      return true
-    }
-    current = read(current, 'cause')
-  }
-  return false
+  return someLink(error, isUnavailableLink)
+}
+
+/**
+ * Whether a failure raised by an email provider means "try later": an unavailability, or a
+ * transient SMTP reply. The OTP store is held to {@link isUnavailableError} alone, because a reply
+ * number is an SMTP client's and a store error that carries one has reported a fault.
+ *
+ * @param error - The failure the provider raised.
+ * @returns `true` when retrying later is the right response.
+ */
+export function isUnavailableProviderError(error: unknown): boolean {
+  return isUnavailableError(error) || someLink(error, isTransientReply)
 }
 
 /** A code as the platform and the SDKs write one: short, upper case, no spaces. */

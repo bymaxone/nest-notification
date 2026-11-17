@@ -7,7 +7,7 @@
  * @layer utils
  */
 
-import { errorCodeOf, isUnavailableError } from './availability'
+import { errorCodeOf, isUnavailableError, isUnavailableProviderError } from './availability'
 
 class ReplyError extends Error {
   override name = 'ReplyError'
@@ -206,6 +206,50 @@ describe('isUnavailableError', () => {
 
   it('should read the error code of a plain object, as SDKs reject with one', () => {
     expect(isUnavailableError({ code: 'ETIMEDOUT', message: 'x' })).toBe(true)
+  })
+})
+
+// What an email provider raised is read for a transient reply as well, on the error or on one of
+// its causes, and the store is not: the same error means "try later" to one and a fault to the other.
+describe('isUnavailableProviderError', () => {
+  it.each([400, 421, 450, 451, 452, 499])('should answer true for the reply %i', (responseCode) => {
+    expect(isUnavailableProviderError(Object.assign(new Error('x'), { responseCode }))).toBe(true)
+  })
+
+  it.each([200, 399, 500, 550, 554, 450.5, '451', null, undefined])(
+    'should answer false for the response code %p',
+    (responseCode) => {
+      expect(isUnavailableProviderError(Object.assign(new Error('x'), { responseCode }))).toBe(
+        false
+      )
+    }
+  )
+
+  it('should read a reply on a cause', () => {
+    const cause = Object.assign(new Error('x'), { responseCode: 451 })
+
+    expect(isUnavailableProviderError(new Error('send failed', { cause }))).toBe(true)
+  })
+
+  it('should still answer true for an unavailability and false for a refusal', () => {
+    expect(isUnavailableProviderError(coded('ECONNREFUSED'))).toBe(true)
+    expect(isUnavailableProviderError(coded('EAUTH'))).toBe(false)
+  })
+
+  it('should stop at a loop in the chain', () => {
+    let reads = 0
+
+    expect(isUnavailableProviderError(loopingError(() => (reads += 1)))).toBe(false)
+
+    expect(reads).toBeLessThanOrEqual(4)
+  })
+
+  // The store's classifier never reads a reply number.
+  it('should differ from the store classifier on a reply number', () => {
+    const error = Object.assign(new Error('x'), { responseCode: 451 })
+
+    expect(isUnavailableProviderError(error)).toBe(true)
+    expect(isUnavailableError(error)).toBe(false)
   })
 })
 
