@@ -51,7 +51,7 @@ describe('SmtpEmailProvider pool option', () => {
     )
   })
 
-  // QA-023: an array is not the object the option describes.
+  // An array is not the object the option describes.
   it.each([
     ['an empty array', []],
     ['an array of limits', [{ maxConnections: 3 }]]

@@ -267,7 +267,7 @@ describe('ResendEmailProvider', () => {
     warnSpy.mockRestore()
   })
 
-  // QA-023: the same for a send with no html part: the Resend error, not a TypeError, with the
+  // A send with no html part fails with the Resend error, not a TypeError, with the
   // declared values, the API key and an echo of the text part removed.
   it('should scrub the error of a send that has no html part', async () => {
     const text = 'Your password reset code is 998877. It expires shortly.'

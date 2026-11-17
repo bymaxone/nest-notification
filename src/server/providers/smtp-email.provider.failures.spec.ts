@@ -101,7 +101,7 @@ describe('SmtpEmailProvider failure handling', () => {
     warnSpy.mockRestore()
   })
 
-  // QA-023: a send with no html part (a JS caller, or one that bypasses the type) must fail with the
+  // A send with no html part (a JS caller, or one that bypasses the type) must fail with the
   // SMTP error, not a TypeError from reading the missing part, and the scrub must still remove the
   // declared values, the credentials and an echo of the text part.
   it('should scrub the error of a send that has no html part', async () => {

@@ -53,7 +53,7 @@ describe('EmailService.send redaction', () => {
     )
   })
 
-  // QA-023: a send with no html part reaches the same discovery with nothing to echo against on the
+  // A send with no html part reaches the discovery with nothing to echo against on the
   // html side: it must not throw a TypeError, and what the text part echoes and what the caller
   // declared are still removed from the cause and from the audit entry.
   it('should scrub the failure of a send that has no html part', async () => {
