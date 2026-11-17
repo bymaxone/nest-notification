@@ -33,10 +33,11 @@ jobs:
   full:
     uses: bymaxone/.github/.github/workflows/mutation-full.yml@v1
     with:
-      # The ceiling is per shard job. It is provisional until a sharded run has measured the slowest
-      # shard. One unsharded job took 31, 38 and then 52 minutes as the suite grew, against a
-      # 60-minute ceiling, and a run the ceiling cancels leaves no score and no baseline.
-      timeout-minutes: 60
+      # The ceiling is per shard job, and it is 1.5 times the slowest shard measured. Run 44110616953
+      # (four shards of two workers) took 6.9, 10.2, 15.5 and 20.9 minutes for them, so 32 is 1.5
+      # times 20.9; the same suite took 52 minutes as one job in run 44098809136. A run the ceiling
+      # cancels leaves no score and no baseline for the week, so re-measure when a shard nears it.
+      timeout-minutes: 32
       # A unit test the cold run did not run fails the job: the score cannot notice a test the
       # related-test lookup never selected. The specs that run no mutated source are listed with
       # their reason in scripts/mutation-inventory.exempt.json.
