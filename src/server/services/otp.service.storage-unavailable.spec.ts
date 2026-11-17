@@ -149,6 +149,22 @@ describe('OtpService when the store fails for another reason', () => {
     expect(await catching(service.generate(base))).toBe(defect)
   })
 
+  // The reply number is what an SMTP client sets. A store of your own that sets one (an HTTP-backed
+  // one answering 400 for a bad request, say) has reported a fault, not an outage.
+  it.each([400, 421, 451, 499])(
+    'should let a store error with a response code of %i through unchanged',
+    async (responseCode) => {
+      const failure = Object.assign(new Error('bad request'), { responseCode })
+      const service = new OtpService(
+        makeOptions({}),
+        failing({ set: () => Promise.reject(failure) }),
+        makeAudit()
+      )
+
+      expect(await catching(service.generate(base))).toBe(failure)
+    }
+  )
+
   it('should let a Redis reply that names a fault through unchanged', async () => {
     class ReplyError extends Error {
       override name = 'ReplyError'

@@ -95,24 +95,13 @@ describe('isUnavailableError', () => {
     }
   )
 
-  // A 4xx reply is the relay saying "not now" (RFC 5321 transient failure), at any stage of the
-  // dialogue: nodemailer 10.1.4 sets the number as `responseCode` for a 451 at MAIL, a 450 or 452 at
-  // RCPT, a 451 at DATA and at the end of the data. A 5xx reply is a permanent refusal.
-  it.each([400, 421, 450, 451, 452, 499])(
-    'should treat the SMTP reply %i as unavailable',
-    (code) => {
-      expect(
-        isUnavailableError(Object.assign(new Error('x'), { code: 'EENVELOPE', responseCode: code }))
-      ).toBe(true)
-    }
-  )
-
-  it.each([200, 250, 399, 500, 550, 554, 450.5, '451', null, undefined])(
-    'should not treat the response code %p as unavailable',
+  // A reply number is what an SMTP client sets; a store client that happens to set one is not
+  // reporting an outage, so the classifier the OTP store is held to never reads it. The email
+  // providers read it through `errorCodeOf`.
+  it.each([200, 400, 421, 450, 451, 452, 499, 500, 550])(
+    'should not treat a response code of %i as unavailable',
     (responseCode) => {
-      expect(
-        isUnavailableError(Object.assign(new Error('x'), { code: 'EENVELOPE', responseCode }))
-      ).toBe(false)
+      expect(isUnavailableError(Object.assign(new Error('x'), { responseCode }))).toBe(false)
     }
   )
 

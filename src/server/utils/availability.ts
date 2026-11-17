@@ -65,7 +65,9 @@ function read(value: unknown, key: string): unknown {
 /**
  * Whether one error carries a transient SMTP reply: a 4xx, which the relay sends to say "not now".
  * A client sets the number as `responseCode` at whatever stage of the dialogue the reply came; a
- * 5xx is a refusal and says nothing about availability.
+ * 5xx is a refusal and says nothing about availability. Only {@link errorCodeOf} reads it, for the
+ * email providers: {@link isUnavailableError} also holds the OTP store, which this reading must
+ * not reach.
  */
 function isTransientReply(error: unknown): boolean {
   const reply = read(error, 'responseCode')
@@ -75,7 +77,7 @@ function isTransientReply(error: unknown): boolean {
 /** Whether one error, ignoring its causes, is an unavailability. */
 function isUnavailableLink(error: unknown): boolean {
   const code = read(error, 'code')
-  if ((typeof code === 'string' && UNAVAILABLE_CODES.has(code)) || isTransientReply(error)) {
+  if (typeof code === 'string' && UNAVAILABLE_CODES.has(code)) {
     return true
   }
   if (read(error, 'name') === MAX_RETRIES_NAME) {
