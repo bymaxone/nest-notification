@@ -19,10 +19,13 @@ the entries that carry one, is the compatibility contract — read it, not the n
   and `tls` is now read once, when the provider is built, so a class with getters on its prototype
   works and a getter that answers differently later changes nothing; a key that reads as `undefined`
   or `null` is left out. `email.defaultTags` is copied the same way, tag by tag.
-- **A `null` is refused where leaving the option out turns a protection off.** In 1.4.14 `audit: null`,
-  SMTP `secure: null`, `requireTls: null` and `credentials: null` were read as omitted, which started
-  the module with no audit trail or the provider with no login. They now fail at startup naming the
-  option, like the six options listed in the 1.4.14 note; an `undefined` is still read as omitted.
+- **A `null` is refused for `audit`, `credentials`, `secure` and `requireTls`.** In 1.4.14 each was
+  read as omitted. Leaving out `audit` means no audit trail and leaving out `credentials` means a
+  session without a login, so a `null` from a config lookup that found nothing started the module or
+  the provider with that protection off; they now fail at startup naming the option, like the six
+  options listed in the 1.4.14 note. `secure` and `requireTls` are refused because a `null` is not a
+  valid value for them: left out, they are derived from the port and the host. An `undefined` is
+  still read as omitted for all four.
 - **Values of the wrong type are refused naming the option.** `options.global` must be an object; a
   `perPurpose` container that is a `Map`, a `Set`, a `Date` or another built-in is refused as such
   (a `Map` was refused as `perPurpose.size must be an object, got 1`, and a `Date` was accepted); the
