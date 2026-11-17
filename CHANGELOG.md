@@ -11,6 +11,45 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 ## [Unreleased]
 
+### Fixed
+
+- **Options that are objects are read once, key by key, all the way down.** In 1.4.14 the SMTP
+  `credentials` and `tls` stayed references to your objects: a getter on `credentials.user` was read
+  at construction and again each time the provider looked at it. Each declared key of `credentials`
+  and `tls` is now read once, when the provider is built, so a class with getters on its prototype
+  works and a getter that answers differently later changes nothing; a key that reads as `undefined`
+  or `null` is left out. `email.defaultTags` is copied the same way, tag by tag.
+- **A `null` is refused for `audit`, `credentials`, `secure` and `requireTls`.** In 1.4.14 each was
+  read as omitted. Leaving out `audit` means no audit trail and leaving out `credentials` means a
+  session without a login, so a `null` from a config lookup that found nothing started the module or
+  the provider with that protection off; they now fail at startup naming the option, like the six
+  options listed in the 1.4.14 note. `secure` and `requireTls` are refused because a `null` is not a
+  valid value for them: left out, they are derived from the port and the host. An `undefined` is
+  still read as omitted for all four.
+- **Values of the wrong type are refused naming the option.** `options.global`, when set, must be an object (a `null` is read as not set); a
+  `perPurpose` container that is a `Map`, a `Set`, a `Date` or another built-in is refused as such
+  (a `Map` was refused as `perPurpose.size must be an object, got 1`, and a `Date` was accepted); the
+  `codeType` of a `perPurpose` entry must be one of the supported types, where any value was accepted;
+  and the constructors of `SmtpEmailProvider` and `ResendEmailProvider` refuse options that are not an
+  object, where `null` raised a `TypeError` and a string or an array was accepted.
+- **The `OTP_INVALID_LENGTH` error carries the option in its message.** `error.message` was the class
+  name, so a log line that printed only the message did not say which option was wrong; the response
+  already had the text, and the message now has it too.
+
+#### Apply to a derived backend
+
+No declaration changes. These now fail at startup, naming the option: `audit: null`; an `options.global`
+that is not an object; a `perPurpose` container that is a built-in such as a `Map` or a `Date`; a
+`perPurpose` entry `codeType` that is not `numeric`, `alpha` or `alphanumeric`; and, when the SMTP
+provider is built, a `null` `secure`, `requireTls` or `credentials`. `SmtpEmailProvider` and
+`ResendEmailProvider` refuse options that are not an object with `options must be an object`. A `null`
+or `undefined` key of `credentials` or `tls` is left out, where it was handed to Nodemailer, and
+changing your `credentials` or `tls` object after the provider is built no longer reaches it. A log or
+a handler that read `error.message` of an `OTP_INVALID_LENGTH` error now sees the text of the option
+that was wrong, in place of `Notification Exception`. The checks of `audit` and `global` run before
+the channel checks, and that of `global.tenantIdResolver` before those of `email` and `otp`, so when
+several options are wrong the first message you see can be a different one.
+
 ## [1.4.14] - 2026-11-17
 
 ### Fixed

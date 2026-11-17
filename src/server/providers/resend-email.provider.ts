@@ -24,7 +24,7 @@ import { escapeAuditString } from '../utils/audit-escape'
 import { errorCodeOf } from '../utils/availability'
 import { assertBodyParts } from '../utils/email-body'
 import { loadOptionalPeer } from '../utils/load-optional-peer'
-import { readOptionKeys } from '../utils/read-options'
+import { assertOptionsObject, readOptionKeys } from '../utils/read-options'
 import {
   REDACTED_VALUE,
   collectEchoedExcerpts,
@@ -223,6 +223,7 @@ export class ResendEmailProvider implements IEmailProvider {
 
   constructor(options: ResendEmailProviderOptions = {}) {
     // A copy first, so the check reads the value that is kept, once.
+    assertOptionsObject('ResendEmailProvider', options)
     const own = readOptionKeys(options, RESEND_OPTION_KEYS)
     assertTimerMs('ResendEmailProvider', 'timeoutMs', own.timeoutMs)
     this.#options = own

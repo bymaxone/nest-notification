@@ -21,7 +21,10 @@ import type {
   OtpChannelOptions,
   OtpPurposeConfig
 } from '../interfaces/notification-module-options.interface'
-import { readOptionKeys } from '../utils/read-options'
+import { isPlainOrClassInstance, readOptionKeys } from '../utils/read-options'
+
+/** A default tag of the email channel. */
+type DefaultTag = NonNullable<EmailChannelOptions['defaultTags']>[number]
 
 /** Every key of the options the module takes. */
 const MODULE_KEYS = [
@@ -32,6 +35,14 @@ const MODULE_KEYS = [
   'push',
   'audit'
 ] as const satisfies readonly (keyof BymaxNotificationModuleOptions)[]
+
+/** The group whose omission turns the audit trail off: a `null` is refused, not read as omitted. */
+const MODULE_WEAKER_WHEN_UNSET = [
+  'audit'
+] as const satisfies readonly (keyof BymaxNotificationModuleOptions)[]
+
+/** Every key of a default tag. */
+const TAG_KEYS = ['name', 'value'] as const satisfies readonly (keyof DefaultTag)[]
 
 /** Every key of the `global` section. */
 const GLOBAL_KEYS = [
@@ -124,7 +135,12 @@ function purposesOf(container: object): string[] {
 
 /** The `perPurpose` container, and each entry in it, read once; anything else as it is. */
 function readPerPurpose<T>(perPurpose: T): T {
-  if (typeof perPurpose !== 'object' || perPurpose === null || Array.isArray(perPurpose)) {
+  if (
+    typeof perPurpose !== 'object' ||
+    perPurpose === null ||
+    Array.isArray(perPurpose) ||
+    !isPlainOrClassInstance(perPurpose)
+  ) {
     return perPurpose
   }
   const entries = purposesOf(perPurpose).map(
@@ -149,12 +165,16 @@ export function snapshotOptions(
   if (typeof options !== 'object' || options === null || Array.isArray(options)) {
     return options
   }
-  const read = readOptionKeys(options, MODULE_KEYS)
+  const read = readOptionKeys(options, MODULE_KEYS, MODULE_WEAKER_WHEN_UNSET)
   if (read.global !== undefined) {
     read.global = readOptionKeys(read.global, GLOBAL_KEYS, GLOBAL_WEAKER_WHEN_UNSET)
   }
   if (read.email !== undefined) {
-    read.email = readOptionKeys(read.email, EMAIL_KEYS)
+    const email = readOptionKeys(read.email, EMAIL_KEYS)
+    if (Array.isArray(email.defaultTags)) {
+      email.defaultTags = email.defaultTags.map((tag: DefaultTag) => readOptionKeys(tag, TAG_KEYS))
+    }
+    read.email = email
   }
   if (read.audit !== undefined) {
     read.audit = readOptionKeys(read.audit, AUDIT_KEYS, AUDIT_WEAKER_WHEN_UNSET)

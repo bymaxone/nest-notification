@@ -15,6 +15,7 @@ import type {
   OtpChannelOptions
 } from '../interfaces/notification-module-options.interface'
 import { MIN_CODE_SECRET_BYTES } from '../utils/code-digest'
+import { isPlainOrClassInstance } from '../utils/read-options'
 import { purposeProblem } from '../utils/tenant-scope'
 import { OTP_MAX_LENGTH, OTP_MIN_LENGTH, VALID_CODE_TYPES } from './default-options'
 import {
@@ -36,6 +37,16 @@ import {
 export function validateOptions(options: BymaxNotificationModuleOptions): void {
   if (typeof options !== 'object' || options === null || Array.isArray(options)) {
     throw new Error('[BymaxNotificationModule] options must be an object')
+  }
+  if ((options.audit as unknown) === null) {
+    throw new Error('[BymaxNotificationModule] options.audit must be an object')
+  }
+  const group: unknown = options.global
+  if (
+    group !== undefined &&
+    (typeof group !== 'object' || group === null || Array.isArray(group))
+  ) {
+    throw new Error('[BymaxNotificationModule] options.global must be an object')
   }
   if (!options.email && !options.otp && !options.sms && !options.push) {
     throw new Error(
@@ -143,12 +154,24 @@ function assertCodeLength(path: string, length: unknown): void {
     (length as number) > OTP_MAX_LENGTH
   ) {
     const allowed = `${OTP_MIN_LENGTH}-${OTP_MAX_LENGTH}`
-    throw new NotificationException(
+    const message = `[BymaxNotificationModule] options.${path} must be an integer from ${String(OTP_MIN_LENGTH)} to ${String(OTP_MAX_LENGTH)}, got ${received(length)}`
+    const error = new NotificationException(
       'OTP_INVALID_LENGTH',
       { provided: typeof length === 'number' ? length : received(length), allowed },
-      {
-        message: `[BymaxNotificationModule] options.${path} must be an integer from ${String(OTP_MIN_LENGTH)} to ${String(OTP_MAX_LENGTH)}, got ${received(length)}`
-      }
+      { message }
+    )
+    // The response carries the message already; the error's own text is the class name, which is
+    // all a log line that prints only `error.message` would show.
+    error.message = message
+    throw error
+  }
+}
+
+/** Refuses a code type that is not one of the supported ones; `undefined` is not set. */
+function assertCodeType(path: string, codeType: unknown): void {
+  if (codeType !== undefined && !VALID_CODE_TYPES.includes(codeType as never)) {
+    throw new Error(
+      `[BymaxNotificationModule] options.${path} must be one of: ${VALID_CODE_TYPES.join(', ')}`
     )
   }
 }
@@ -165,6 +188,11 @@ function validateOtpNumbers(otp: OtpChannelOptions): void {
 function validatePerPurpose(perPurpose: OtpChannelOptions['perPurpose']): void {
   if (perPurpose !== undefined) {
     assertObject('otp.perPurpose', perPurpose)
+    if (!isPlainOrClassInstance(perPurpose)) {
+      throw new Error(
+        '[BymaxNotificationModule] options.otp.perPurpose must be a plain object or a class instance, got a built-in'
+      )
+    }
   }
   for (const [key, entry] of Object.entries(perPurpose ?? {})) {
     const problem = purposeProblem(key)
@@ -175,6 +203,7 @@ function validatePerPurpose(perPurpose: OtpChannelOptions['perPurpose']): void {
     }
     const path = `otp.perPurpose.${key}`
     assertObject(path, entry)
+    assertCodeType(`${path}.codeType`, entry.codeType)
     assertCodeLength(`${path}.length`, entry.length)
     assertFiniteAbove(`${path}.ttlSeconds`, entry.ttlSeconds, 0)
     assertIntegerAtLeast(`${path}.maxAttempts`, entry.maxAttempts, 1)
@@ -193,11 +222,7 @@ function validateOtpOptions(otp: OtpChannelOptions): void {
   if (otp.codeSecret !== undefined) {
     validateCodeSecret(otp.codeSecret)
   }
-  if (otp.defaultCodeType !== undefined && !VALID_CODE_TYPES.includes(otp.defaultCodeType)) {
-    throw new Error(
-      `[BymaxNotificationModule] options.otp.defaultCodeType must be one of: ${VALID_CODE_TYPES.join(', ')}`
-    )
-  }
+  assertCodeType('otp.defaultCodeType', otp.defaultCodeType)
   validatePerPurpose(otp.perPurpose)
   if ((otp.consumeOnVerify as unknown) === null) {
     throw new Error('[BymaxNotificationModule] options.otp.consumeOnVerify must be a boolean')

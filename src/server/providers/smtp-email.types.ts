@@ -193,3 +193,27 @@ export const SMTP_OPTION_KEYS = [
   'sendTimeoutMs',
   'pool'
 ] as const satisfies readonly (keyof SmtpEmailProviderOptions)[]
+
+/** Every key of {@link SmtpCredentials}, by name. */
+export const SMTP_CREDENTIAL_KEYS = [
+  'user',
+  'pass'
+] as const satisfies readonly (keyof SmtpCredentials)[]
+
+/** Every key of {@link SmtpTlsOptions}, by name. */
+export const SMTP_TLS_KEYS = [
+  'rejectUnauthorized',
+  'servername',
+  'ca'
+] as const satisfies readonly (keyof SmtpTlsOptions)[]
+
+/**
+ * The options whose default is the weaker transport or login posture: a `null` for one is refused,
+ * not read as not set, so a missing value from a config lookup cannot start an unauthenticated or
+ * unsecured session.
+ */
+export const SMTP_WEAKER_WHEN_UNSET = [
+  'secure',
+  'requireTls',
+  'credentials'
+] as const satisfies readonly (keyof SmtpEmailProviderOptions)[]

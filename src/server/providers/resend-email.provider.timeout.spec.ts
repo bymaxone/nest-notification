@@ -144,6 +144,12 @@ describe('ResendEmailProvider timeout', () => {
     expect(timeout).toHaveBeenCalledWith(2_500)
   })
 
+  it.each([null, 'x', 5, true, []])('should refuse %p as the options', (value) => {
+    expect(() => new ResendEmailProvider(value as never)).toThrow(
+      'ResendEmailProvider: options must be an object'
+    )
+  })
+
   // A key that reads as undefined or null is not set and takes the default.
   it.each([undefined, null])(
     'should use the default bound for a timeoutMs of %p',
