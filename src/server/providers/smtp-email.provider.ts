@@ -135,8 +135,8 @@ function readPool(pool: SmtpPoolOptions | undefined): SmtpPoolOptions | undefine
   if (pool === undefined) {
     return undefined
   }
-  let maxConnections: unknown
-  let maxMessages: unknown
+  let maxConnections: number | undefined
+  let maxMessages: number | undefined
   try {
     if (typeof pool !== 'object' || pool === null || isArrayLike(pool)) {
       throw new Error('not an options object')
@@ -150,16 +150,13 @@ function readPool(pool: SmtpPoolOptions | undefined): SmtpPoolOptions | undefine
     ['maxConnections', maxConnections],
     ['maxMessages', maxMessages]
   ] as const) {
-    if (
-      value !== undefined &&
-      !(typeof value === 'number' && Number.isInteger(value) && value >= 1)
-    ) {
+    if (value !== undefined && !(Number.isInteger(value) && value >= 1)) {
       throw new Error(`SmtpEmailProvider: pool.${name} must be a positive integer`)
     }
   }
   return {
-    ...(maxConnections === undefined ? {} : { maxConnections: maxConnections as number }),
-    ...(maxMessages === undefined ? {} : { maxMessages: maxMessages as number })
+    ...(maxConnections === undefined ? {} : { maxConnections }),
+    ...(maxMessages === undefined ? {} : { maxMessages })
   }
 }
 
