@@ -125,6 +125,25 @@ describe('ResendEmailProvider timeout', () => {
     expect(timeout).toHaveBeenCalledWith(2_500)
   })
 
+  // A class whose options are getters on the prototype is read like a plain object, once.
+  it('should keep the options a class instance supplies from its prototype', async () => {
+    const timeout = jest.spyOn(AbortSignal, 'timeout')
+    class ResendOptions {
+      get apiKey(): string {
+        return 'k'
+      }
+      get timeoutMs(): number {
+        return 2_500
+      }
+    }
+    const provider = new ResendEmailProvider(new ResendOptions())
+
+    expect(provider.isConfigured()).toBe(true)
+    await provider.send(baseOptions)
+
+    expect(timeout).toHaveBeenCalledWith(2_500)
+  })
+
   it('should apply the configured bound to every send', async () => {
     const timeout = jest.spyOn(AbortSignal, 'timeout')
     const provider = new ResendEmailProvider({ apiKey: 'k', timeoutMs: 2_500 })

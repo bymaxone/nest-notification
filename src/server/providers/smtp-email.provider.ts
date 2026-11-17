@@ -35,8 +35,10 @@ import { describeError, UNPRINTABLE_ERROR } from '../utils/describe-error'
 import { assertBodyParts } from '../utils/email-body'
 import { loadOptionalPeer } from '../utils/load-optional-peer'
 import { assertPort } from '../utils/port-option'
+import { readOptionKeys } from '../utils/read-options'
 import { collectEchoedExcerpts, readRedactedMessage, redactValues } from '../utils/redact'
 import { assertTimerMs } from '../utils/timer-option'
+import { SMTP_OPTION_KEYS } from './smtp-email.types'
 import type {
   NodemailerLike,
   SmtpAttachment,
@@ -279,7 +281,7 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
    */
   constructor(options: SmtpEmailProviderOptions = {}) {
     // A copy first, so every check below reads the values that are kept, once.
-    const own = { ...options }
+    const own = readOptionKeys(options, SMTP_OPTION_KEYS)
     assertPort('SmtpEmailProvider', own.port)
     for (const [name, value] of [
       ['sendTimeoutMs', own.sendTimeoutMs],

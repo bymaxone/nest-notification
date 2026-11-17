@@ -24,6 +24,7 @@ import { escapeAuditString } from '../utils/audit-escape'
 import { errorCodeOf } from '../utils/availability'
 import { assertBodyParts } from '../utils/email-body'
 import { loadOptionalPeer } from '../utils/load-optional-peer'
+import { readOptionKeys } from '../utils/read-options'
 import {
   REDACTED_VALUE,
   collectEchoedExcerpts,
@@ -113,6 +114,15 @@ export interface ResendEmailProviderOptions {
    */
   timeoutMs?: number
 }
+
+/**
+ * Every option of {@link ResendEmailProviderOptions}, by name, read by property access so a class
+ * that supplies them from the prototype works; the compiler refuses a name that is not an option.
+ */
+const RESEND_OPTION_KEYS = [
+  'apiKey',
+  'timeoutMs'
+] as const satisfies readonly (keyof ResendEmailProviderOptions)[]
 
 /** Outcome of `resend.emails.send` — a `{ data, error }` discriminated result. */
 interface ResendSendOutcome {
@@ -213,7 +223,7 @@ export class ResendEmailProvider implements IEmailProvider {
 
   constructor(options: ResendEmailProviderOptions = {}) {
     // A copy first, so the check reads the value that is kept, once.
-    const own = { ...options }
+    const own = readOptionKeys(options, RESEND_OPTION_KEYS)
     assertTimerMs('ResendEmailProvider', 'timeoutMs', own.timeoutMs)
     this.#options = own
   }

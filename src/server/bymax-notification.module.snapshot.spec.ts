@@ -120,6 +120,40 @@ describe('BymaxNotificationModule options that answer differently on a second re
     ).rejects.toThrow(message)
   })
 
+  // A host may pass classes whose options are getters on the prototype (a ConfigService behind
+  // each): the values they supply are the values the services get.
+  it('should keep the options a class instance supplies from its prototype', async () => {
+    class Otp {
+      readonly storage = storage
+      get defaultTtlSeconds(): number {
+        return 120
+      }
+      get defaultMaxAttempts(): number {
+        return 4
+      }
+    }
+    class Email {
+      readonly provider = provider
+      get defaultFrom(): string {
+        return 'noreply@relay.example'
+      }
+      get maxRecipients(): number {
+        return 7
+      }
+    }
+
+    const moduleRef = await Test.createTestingModule({
+      imports: [BymaxNotificationModule.forRoot({ otp: new Otp(), email: new Email() } as never)]
+    }).compile()
+
+    const resolved = moduleRef.get<ResolvedNotificationOptions>(BYMAX_NOTIFICATION_OPTIONS)
+    expect(resolved.otp?.defaultTtlSeconds).toBe(120)
+    expect(resolved.otp?.defaultMaxAttempts).toBe(4)
+    expect(resolved.email?.defaultFrom).toBe('noreply@relay.example')
+    expect(resolved.email?.maxRecipients).toBe(7)
+    await moduleRef.close()
+  })
+
   it('should store the attempts bound that was validated in forRootAsync', async () => {
     const otp = flipping({ storage }, 'defaultMaxAttempts', 3, Number.NaN)
 

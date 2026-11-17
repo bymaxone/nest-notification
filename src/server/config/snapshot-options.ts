@@ -4,63 +4,124 @@
  *
  * Options are validated and then used. A getter or a Proxy on the host's object may answer with a
  * valid value the first time and another afterwards, and the second answer would then be stored
- * without having been checked. The module copies the options first, validates the copy and builds
- * every service from it, so what is checked is what is kept.
+ * without having been checked. The module reads the options once into plain objects, validates
+ * those and builds every service from them, so what is checked is what is kept.
  *
- * Only the option sections are copied, one level at a time down to each `perPurpose` entry:
- * providers, stores, repositories and resolvers are the host's objects and stay as they are. A
- * section is copied by its own enumerable properties, as a spread does, so an option that a class
- * instance supplies from its prototype is not part of the copy: pass the options as a plain object.
+ * Only the option sections are read, one level at a time down to each `perPurpose` entry:
+ * providers, stores, repositories and resolvers are the host's objects and stay as they are. Each
+ * section is read by property access on its known keys (see {@link readOptionKeys}), so a class that
+ * supplies its options from the prototype works as a plain object does.
  */
 
-import type { BymaxNotificationModuleOptions } from '../interfaces/notification-module-options.interface'
+import type {
+  AuditOptions,
+  BymaxNotificationModuleOptions,
+  EmailChannelOptions,
+  GlobalOptions,
+  OtpChannelOptions,
+  OtpPurposeConfig
+} from '../interfaces/notification-module-options.interface'
+import { readOptionKeys } from '../utils/read-options'
 
-/**
- * A shallow copy of the own enumerable properties of a section when it is an object that is not an
- * array; anything else is returned as it is. An array is not a section: spreading it into `{}`
- * would turn it into an object that passes the validation that refuses it.
- */
-function copySection<T>(section: T): T {
-  return typeof section === 'object' && section !== null && !Array.isArray(section)
-    ? { ...section }
-    : section
-}
+/** Every key of the options the module takes. */
+const MODULE_KEYS = [
+  'global',
+  'email',
+  'otp',
+  'sms',
+  'push',
+  'audit'
+] as const satisfies readonly (keyof BymaxNotificationModuleOptions)[]
 
-/** A copy of the `perPurpose` container and of each entry in it, or the value as it is. */
-function copyPerPurpose<T>(perPurpose: T): T {
+/** Every key of the `global` section. */
+const GLOBAL_KEYS = [
+  'redisNamespace',
+  'defaultLocale',
+  'tenantIdResolver'
+] as const satisfies readonly (keyof GlobalOptions)[]
+
+/** Every key of the `email` section. */
+const EMAIL_KEYS = [
+  'provider',
+  'defaultFrom',
+  'defaultFromName',
+  'templateRenderer',
+  'defaultReplyTo',
+  'defaultTags',
+  'maxAttachmentBytes',
+  'maxRecipients'
+] as const satisfies readonly (keyof EmailChannelOptions)[]
+
+/** Every key of the `otp` section. */
+const OTP_KEYS = [
+  'storage',
+  'defaultLength',
+  'defaultCodeType',
+  'defaultTtlSeconds',
+  'defaultMaxAttempts',
+  'resendCooldownSeconds',
+  'consumeOnVerify',
+  'codeSecret',
+  'perPurpose',
+  'strictPurposes'
+] as const satisfies readonly (keyof OtpChannelOptions)[]
+
+/** Every key of a `perPurpose` entry. */
+const PURPOSE_KEYS = [
+  'length',
+  'codeType',
+  'ttlSeconds',
+  'maxAttempts',
+  'resendCooldownSeconds'
+] as const satisfies readonly (keyof OtpPurposeConfig)[]
+
+/** Every key of the `audit` section. */
+const AUDIT_KEYS = [
+  'repository',
+  'swallowErrors',
+  'maskRecipient'
+] as const satisfies readonly (keyof AuditOptions)[]
+
+/** The `perPurpose` container, and each entry in it, read once; anything else as it is. */
+function readPerPurpose<T>(perPurpose: T): T {
   if (typeof perPurpose !== 'object' || perPurpose === null || Array.isArray(perPurpose)) {
     return perPurpose
   }
-  return Object.fromEntries(
-    Object.entries(perPurpose).map(([key, entry]) => [key, copySection(entry)])
-  ) as T
+  const entries = Object.keys(perPurpose).map(
+    (key) =>
+      [
+        key,
+        readOptionKeys(Reflect.get(perPurpose, key) as Partial<OtpPurposeConfig>, PURPOSE_KEYS)
+      ] as const
+  )
+  return Object.fromEntries(entries) as T
 }
 
 /**
- * Copies the options, reading each of them once.
+ * Reads the options once into plain objects.
  *
  * @param options - The options as the host gave them.
- * @returns Options of the same shape whose sections are fresh objects.
+ * @returns Options of the same shape whose sections are fresh plain objects.
  */
 export function snapshotOptions(
   options: BymaxNotificationModuleOptions
 ): BymaxNotificationModuleOptions {
-  const copy = { ...options }
-  if (copy.global !== undefined) {
-    copy.global = copySection(copy.global)
+  const read = readOptionKeys(options, MODULE_KEYS)
+  if (read.global !== undefined) {
+    read.global = readOptionKeys(read.global, GLOBAL_KEYS)
   }
-  if (copy.email !== undefined) {
-    copy.email = copySection(copy.email)
+  if (read.email !== undefined) {
+    read.email = readOptionKeys(read.email, EMAIL_KEYS)
   }
-  if (copy.audit !== undefined) {
-    copy.audit = copySection(copy.audit)
+  if (read.audit !== undefined) {
+    read.audit = readOptionKeys(read.audit, AUDIT_KEYS)
   }
-  if (typeof copy.otp === 'object' && copy.otp !== null) {
-    const otp = { ...copy.otp }
-    if (otp.perPurpose !== undefined) {
-      otp.perPurpose = copyPerPurpose(otp.perPurpose)
+  if (read.otp !== undefined) {
+    const otp = readOptionKeys(read.otp, OTP_KEYS)
+    if (typeof otp === 'object' && otp !== null && otp.perPurpose !== undefined) {
+      otp.perPurpose = readPerPurpose(otp.perPurpose)
     }
-    copy.otp = otp
+    read.otp = otp
   }
-  return copy
+  return read
 }

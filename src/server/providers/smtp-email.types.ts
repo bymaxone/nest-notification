@@ -174,3 +174,22 @@ export interface SmtpTransportLike {
 export interface NodemailerLike {
   createTransport(config: SmtpTransportConfig): SmtpTransportLike
 }
+
+/**
+ * Every option of {@link SmtpEmailProviderOptions}, by name. The provider reads its options by
+ * property access on these keys, so a class that supplies them from the prototype works; the
+ * compiler refuses a name that is not an option, and the specs list every option of the type.
+ */
+export const SMTP_OPTION_KEYS = [
+  'host',
+  'port',
+  'secure',
+  'requireTls',
+  'credentials',
+  'tls',
+  'connectionTimeout',
+  'greetingTimeout',
+  'socketTimeout',
+  'sendTimeoutMs',
+  'pool'
+] as const satisfies readonly (keyof SmtpEmailProviderOptions)[]

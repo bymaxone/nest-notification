@@ -7,6 +7,13 @@
  */
 
 import type { BymaxNotificationModuleOptions, IEmailProvider, IOtpStorage } from '../interfaces'
+import type {
+  AuditOptions,
+  EmailChannelOptions,
+  GlobalOptions,
+  OtpChannelOptions,
+  OtpPurposeConfig
+} from '../interfaces/notification-module-options.interface'
 
 import { snapshotOptions } from './snapshot-options'
 
@@ -134,5 +141,133 @@ describe('snapshotOptions', () => {
     expect(
       snapshotOptions({ otp: { storage, perPurpose: { a: null, b: 5 } } } as never).otp?.perPurpose
     ).toEqual({ a: null, b: 5 })
+  })
+
+  // A host may pass a class whose options are getters on the prototype, reading a ConfigService.
+  // They are read by property access, so own and prototype getters both work, once each.
+  it('should keep the options a class instance supplies from its prototype', () => {
+    let ttlReads = 0
+    class Otp {
+      readonly storage = storage
+      get defaultTtlSeconds(): number {
+        ttlReads += 1
+        return ttlReads === 1 ? 120 : -1
+      }
+      get defaultMaxAttempts(): number {
+        return 4
+      }
+    }
+    class Email {
+      readonly provider = provider
+      get defaultFrom(): string {
+        return 'noreply@relay.example'
+      }
+    }
+    class Global {
+      get defaultLocale(): string {
+        return 'pt'
+      }
+    }
+    class Entry {
+      get maxAttempts(): number {
+        return 2
+      }
+    }
+    class Container {
+      get mfa_oob(): Entry {
+        return new Entry()
+      }
+    }
+    const otp = new Otp() as unknown as { perPurpose?: unknown }
+    otp.perPurpose = new Container()
+
+    const copy = snapshotOptions({
+      otp: otp as never,
+      email: new Email() as never,
+      global: new Global() as never
+    })
+
+    expect(copy.otp?.defaultTtlSeconds).toBe(120)
+    expect(ttlReads).toBe(1)
+    expect(copy.otp?.defaultMaxAttempts).toBe(4)
+    expect(copy.email?.defaultFrom).toBe('noreply@relay.example')
+    expect(copy.global?.defaultLocale).toBe('pt')
+  })
+
+  // Every option of the interfaces is copied. These literals must list every key (the compiler
+  // refuses one that misses a key, so adding an option forces an update here), and each key must
+  // survive the copy: an option that is not on the list would be dropped without a sound.
+  describe('every option of every section', () => {
+    it('should copy every option of the module', () => {
+      const options = {
+        global: {} as never,
+        email: {} as never,
+        otp: {} as never,
+        sms: {} as never,
+        push: {} as never,
+        audit: {} as never
+      } satisfies Required<BymaxNotificationModuleOptions>
+
+      expect(snapshotOptions(options as never)).toEqual(options)
+    })
+
+    it('should copy every option of global', () => {
+      const global = {
+        redisNamespace: 'ns',
+        defaultLocale: 'pt',
+        tenantIdResolver: () => 't'
+      } satisfies Required<GlobalOptions>
+
+      expect(snapshotOptions({ global } as never).global).toEqual(global)
+    })
+
+    it('should copy every option of email', () => {
+      const email = {
+        provider,
+        defaultFrom: 'a@b.com',
+        defaultFromName: 'Acme',
+        templateRenderer: {} as never,
+        defaultReplyTo: 'r@b.com',
+        defaultTags: [{ name: 'a', value: 'b' }],
+        maxAttachmentBytes: 1,
+        maxRecipients: 2
+      } satisfies Required<EmailChannelOptions>
+
+      expect(snapshotOptions({ email } as never).email).toEqual(email)
+    })
+
+    it('should copy every option of otp and of a perPurpose entry', () => {
+      const entry = {
+        length: 8,
+        codeType: 'numeric',
+        ttlSeconds: 60,
+        maxAttempts: 3,
+        resendCooldownSeconds: 5
+      } satisfies Required<OtpPurposeConfig>
+      const otp = {
+        storage,
+        defaultLength: 6,
+        defaultCodeType: 'alpha',
+        defaultTtlSeconds: 10,
+        defaultMaxAttempts: 2,
+        resendCooldownSeconds: 1,
+        consumeOnVerify: true,
+        codeSecret: 'x'.repeat(40),
+        perPurpose: { mfa_oob: entry },
+        strictPurposes: true
+      } satisfies Required<OtpChannelOptions>
+
+      expect(snapshotOptions({ otp } as never).otp).toEqual(otp)
+    })
+
+    it('should copy every option of audit', () => {
+      const audit = {
+        repository: {} as never,
+        swallowErrors: false,
+        maskRecipient: (value: string) => value
+      } satisfies Required<AuditOptions>
+
+      expect(snapshotOptions({ audit } as never).audit).toEqual(audit)
+    })
   })
 })

@@ -12,6 +12,7 @@ import { BymaxNotificationModule } from '../bymax-notification.module'
 
 import { baseOptions } from './__tests__/smtp-email-provider.fixtures'
 import { SmtpEmailProvider } from './smtp-email.provider'
+import type { SmtpEmailProviderOptions } from './smtp-email.types'
 
 // `mock`-prefixed names are allowed inside the hoisted jest.mock factory.
 const mockSendMail = jest.fn()
@@ -167,6 +168,77 @@ describe('SmtpEmailProvider pool option', () => {
       expect(lastTransportConfig()[option]).toBe(5_000)
     }
   )
+
+  // A host may pass a class whose options are getters on the prototype (a ConfigService behind
+  // each): they are read by property access, once, like own properties.
+  it('should keep the options a class instance supplies from its prototype', async () => {
+    const reads = { host: 0, port: 0 }
+    class RelayOptions {
+      get host(): string {
+        reads.host += 1
+        return 'relay.example'
+      }
+      get port(): number {
+        reads.port += 1
+        return 2525
+      }
+      get connectionTimeout(): number {
+        return 7_000
+      }
+      get pool(): { maxConnections: number } {
+        return { maxConnections: 3 }
+      }
+    }
+    const provider = new SmtpEmailProvider(new RelayOptions())
+
+    expect(provider.isConfigured()).toBe(true)
+    await provider.send(baseOptions).catch(() => undefined)
+
+    expect(lastTransportConfig()).toMatchObject({
+      host: 'relay.example',
+      port: 2525,
+      connectionTimeout: 7_000,
+      pool: true,
+      maxConnections: 3
+    })
+    expect(reads).toEqual({ host: 1, port: 1 })
+  })
+
+  // Every option of SmtpEmailProviderOptions reaches the transport. The literal must list every
+  // key (the compiler refuses a missing one), so a new option forces this case to be updated and
+  // fails until the provider keeps it.
+  it('should keep every option of SmtpEmailProviderOptions', async () => {
+    const options = {
+      host: 'relay.example',
+      port: 2525,
+      secure: true,
+      requireTls: false,
+      credentials: { user: 'u', pass: 'p' },
+      tls: { rejectUnauthorized: false },
+      connectionTimeout: 1_000,
+      greetingTimeout: 2_000,
+      socketTimeout: 3_000,
+      sendTimeoutMs: 4_000,
+      pool: { maxConnections: 2, maxMessages: 5 }
+    } satisfies Required<SmtpEmailProviderOptions>
+
+    await new SmtpEmailProvider(options).send(baseOptions).catch(() => undefined)
+
+    expect(lastTransportConfig()).toMatchObject({
+      host: 'relay.example',
+      port: 2525,
+      secure: true,
+      requireTLS: false,
+      auth: { user: 'u', pass: 'p' },
+      tls: { rejectUnauthorized: false },
+      connectionTimeout: 1_000,
+      greetingTimeout: 2_000,
+      socketTimeout: 3_000,
+      pool: true,
+      maxConnections: 2,
+      maxMessages: 5
+    })
+  })
 
   // The limits are read once, at construction: a getter that answers differently later must not
   // change what the transport is built with.

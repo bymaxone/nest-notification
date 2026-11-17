@@ -59,9 +59,9 @@ is not an object (`null`, an array, a string, a number); and, when the provider 
 `port` that is `NaN`, `0`, past `65535`, a fraction or a string such as `'587'`, or a timeout that is
 out of range or not a number. Fix the value. The numeric checks of the `otp` defaults run before those of `codeSecret` and
 `defaultCodeType`, and those of `perPurpose` after them, so when several options are wrong the first
-message you see can be a different one. The module and both providers keep a copy of the options from
-the moment they are built, and 1.4.13 kept none: changing your options object afterwards no longer
-reaches them, so a host that blanked `host` or `apiKey` on the object to reconfigure a provider (its
+message you see can be a different one. The module and both providers read the options once, by property access, into
+a copy, so a class that supplies its options from getters works as a plain object does, and 1.4.13
+kept no copy: changing your options object afterwards no longer reaches them, so a host that blanked `host` or `apiKey` on the object to reconfigure a provider (its
 `isConfigured()` flipped) must build a new one. A provider of your own whose
 error carries `responseCode` `401`, `403`, `404` or `422` now answers `503`; set the code you mean if
 that is not what you want.
