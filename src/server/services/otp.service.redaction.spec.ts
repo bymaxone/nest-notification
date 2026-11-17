@@ -49,6 +49,54 @@ describe('OtpService email delivery contract', () => {
   })
 })
 
+/**
+ * A provider whose failure echoes the OTP-bearing body through every serializer-visible surface:
+ * the message, the name and a PRIMITIVE nested cause, which the log-safe copy keeps verbatim and
+ * only the scrub can clean.
+ */
+function echoingProvider(): IEmailProvider {
+  return {
+    name: 'echoing',
+    isConfigured: (): boolean => true,
+    send: async (sendOptions: EmailSendOptions): Promise<EmailSendResult> => {
+      const providerError = new Error(`provider rejected payload: ${sendOptions.html}`, {
+        cause: `wire dump: ${sendOptions.html}`
+      })
+      providerError.name = `REJECT_${sendOptions.html}`
+      throw providerError
+    }
+  }
+}
+
+/** A renderer that records the code it was given into `issued`. */
+function capturingRenderer(issued: { code: string }): IEmailTemplateRenderer {
+  return {
+    name: 'capturing',
+    hasTemplate: async (): Promise<boolean> => true,
+    render: async (
+      _template: string,
+      data: Record<string, unknown>,
+      _locale: string
+    ): Promise<RenderedEmail> => {
+      issued.code = String(data.code)
+      return { subject: 'Your code', html: `<p>Your code is ${issued.code}</p>` }
+    }
+  }
+}
+
+/** The options with an email channel added. */
+function withEmailChannel(options: ResolvedNotificationOptions): ResolvedNotificationOptions {
+  return {
+    ...options,
+    email: {
+      defaultFrom: 'noreply@acme.com',
+      defaultTags: [],
+      maxAttachmentBytes: 1_000_000,
+      maxRecipients: 50
+    }
+  }
+}
+
 describe('OtpService.generate — delivery-error redaction', () => {
   let storage: InMemoryOtpStorage
   let audit: jest.Mocked<INotificationLogRepository>
@@ -195,53 +243,24 @@ describe('OtpService.generate — delivery-error redaction', () => {
 
   it('should keep the code out of both audit entries on a real email delivery failure', async () => {
     const restoreClock = freezeClockAwayFromCodes()
-    let realCode = ''
-    const echoingProvider: IEmailProvider = {
-      name: 'echoing',
-      isConfigured: (): boolean => true,
-      send: async (sendOptions: EmailSendOptions): Promise<EmailSendResult> => {
-        // Echo the OTP-bearing body through every serializer-visible surface:
-        // message, name, and a PRIMITIVE nested cause (which the log-safe copy
-        // preserves verbatim and only the scrub can clean).
-        const providerError = new Error(`provider rejected payload: ${sendOptions.html}`, {
-          cause: `wire dump: ${sendOptions.html}`
-        })
-        providerError.name = `REJECT_${sendOptions.html}`
-        throw providerError
-      }
-    }
-    const renderer: IEmailTemplateRenderer = {
-      name: 'capturing',
-      hasTemplate: async (): Promise<boolean> => true,
-      render: async (
-        _template: string,
-        data: Record<string, unknown>,
-        _locale: string
-      ): Promise<RenderedEmail> => {
-        realCode = String(data.code)
-        return { subject: 'Your code', html: `<p>Your code is ${realCode}</p>` }
-      }
-    }
-    const options: ResolvedNotificationOptions = {
-      ...makeOptions(),
-      email: {
-        defaultFrom: 'noreply@acme.com',
-        defaultTags: [],
-        maxAttachmentBytes: 1_000_000,
-        maxRecipients: 50
-      }
-    }
-    const emailService = new EmailService(options, echoingProvider, renderer, audit)
+    const issued = { code: '' }
+    const options = withEmailChannel(makeOptions())
+    const emailService = new EmailService(
+      options,
+      echoingProvider(),
+      capturingRenderer(issued),
+      audit
+    )
     const service = new OtpService(options, storage, audit, emailService)
 
     const caught: unknown = await service
       .generate({ ...ref, deliverVia: 'email' })
       .catch((error: unknown) => error)
 
-    expect(realCode.length).toBeGreaterThan(0)
-    expect(serializeErrorChain(caught).includes(realCode)).toBe(false)
+    expect(issued.code.length).toBeGreaterThan(0)
+    expect(serializeErrorChain(caught).includes(issued.code)).toBe(false)
     for (const call of audit.create.mock.calls) {
-      expect(JSON.stringify(call[0]).includes(realCode)).toBe(false)
+      expect(JSON.stringify(call[0]).includes(issued.code)).toBe(false)
     }
     restoreClock()
   })
