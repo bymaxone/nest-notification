@@ -40,3 +40,44 @@ export function readOptionKeys<T>(
     .filter(([key, value]) => value !== undefined && (value !== null || refuseNull.includes(key)))
   return Object.fromEntries(entries) as T
 }
+
+/** What a built-in constructor's source looks like once printed. */
+const NATIVE_SOURCE = /\[native code\]/
+
+/**
+ * Whether an object is a plain object or an instance of a class the host wrote: no prototype on its
+ * chain, before `Object.prototype`, is a built-in's. A `Map`, a `Set`, a `Date`, a `RegExp` or a
+ * class that extends one is not, because what they hold is not read through property names.
+ *
+ * @param value - The object to test.
+ * @returns `true` when it is a plain object, a null-prototype object or an instance of a host class.
+ */
+export function isPlainOrClassInstance(value: object): boolean {
+  for (
+    let prototype = Object.getPrototypeOf(value) as object | null;
+    prototype !== null && prototype !== Object.prototype;
+    prototype = Object.getPrototypeOf(prototype) as object | null
+  ) {
+    const constructor: unknown = Object.getOwnPropertyDescriptor(prototype, 'constructor')?.value
+    if (
+      typeof constructor === 'function' &&
+      NATIVE_SOURCE.test(Function.prototype.toString.call(constructor))
+    ) {
+      return false
+    }
+  }
+  return true
+}
+
+/**
+ * Refuses options that are not an object, for the constructors of the providers.
+ *
+ * @param owner - The class name the message starts with.
+ * @param options - The options as the host gave them.
+ * @throws Error When `options` is `null`, an array or not an object.
+ */
+export function assertOptionsObject(owner: string, options: unknown): void {
+  if (typeof options !== 'object' || options === null || Array.isArray(options)) {
+    throw new Error(`${owner}: options must be an object`)
+  }
+}

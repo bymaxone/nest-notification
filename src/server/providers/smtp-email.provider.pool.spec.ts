@@ -190,11 +190,13 @@ describe('SmtpEmailProvider pool option', () => {
     }
   )
 
+  // `credentials` is not in this table: its default is an unauthenticated session, so a null is
+  // refused (see the nested options spec) and only an undefined is read as omitted.
   it.each([undefined, null])('should send unpooled and without a login for %p', async (value) => {
     const provider = new SmtpEmailProvider({
       host: 'h',
       pool: value,
-      credentials: value,
+      credentials: undefined,
       tls: value,
       sendTimeoutMs: value
     } as never)

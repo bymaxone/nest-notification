@@ -5,7 +5,7 @@
  * @layer utils
  */
 
-import { readOptionKeys } from './read-options'
+import { assertOptionsObject, isPlainOrClassInstance, readOptionKeys } from './read-options'
 
 interface Shape {
   a?: number
@@ -83,4 +83,53 @@ describe('readOptionKeys', () => {
   ])('should return %s as it is', (_label, value) => {
     expect(readOptionKeys(value as never, KEYS as never)).toBe(value)
   })
+})
+
+describe('isPlainOrClassInstance', () => {
+  it('should accept a plain object, a null-prototype object and a class instance', () => {
+    class Host {
+      get a(): number {
+        return 1
+      }
+    }
+    class Child extends Host {}
+
+    expect(isPlainOrClassInstance({})).toBe(true)
+    expect(isPlainOrClassInstance(Object.create(null) as object)).toBe(true)
+    expect(isPlainOrClassInstance(new Host())).toBe(true)
+    expect(isPlainOrClassInstance(new Child())).toBe(true)
+  })
+
+  it.each([
+    ['a Map', new Map()],
+    ['a Set', new Set()],
+    ['a Date', new Date(0)],
+    ['a RegExp', /x/],
+    ['an Error', new Error('x')],
+    ['an array', []],
+    ['a class that extends Map', new (class Extended extends Map<string, string> {})()]
+  ])('should refuse %s', (_label, value) => {
+    expect(isPlainOrClassInstance(value)).toBe(false)
+  })
+
+  it('should not take a prototype that only claims a native constructor', () => {
+    class Impostor {}
+    Object.defineProperty(Impostor.prototype, 'constructor', { value: 'Map' })
+
+    expect(isPlainOrClassInstance(new Impostor())).toBe(true)
+  })
+})
+
+describe('assertOptionsObject', () => {
+  it('should accept an object and a class instance', () => {
+    expect(() => assertOptionsObject('Owner', {})).not.toThrow()
+    expect(() => assertOptionsObject('Owner', new (class Host {})())).not.toThrow()
+  })
+
+  it.each([null, undefined, 'x', 5, true, [], [{}]])(
+    'should refuse %p naming the owner',
+    (value) => {
+      expect(() => assertOptionsObject('Owner', value)).toThrow('Owner: options must be an object')
+    }
+  )
 })
