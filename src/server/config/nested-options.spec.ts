@@ -63,6 +63,14 @@ describe('the global group', () => {
   it.each([null, undefined])('should read a global of %p as not set', (value) => {
     expect(() => resolved({ ...base, global: value })).not.toThrow()
   })
+
+  // The module drops a null global when it copies the options, so only the validator itself sees it:
+  // on its own it refuses a null, which is not an object.
+  it('should refuse a null global when the validator is given one directly', () => {
+    expect(() => validateOptions({ ...base, global: null } as never)).toThrow(
+      '[BymaxNotificationModule] options.global must be an object'
+    )
+  })
 })
 
 describe('the perPurpose container', () => {
@@ -163,9 +171,12 @@ describe('OTP_INVALID_LENGTH', () => {
       thrown = error
     }
 
-    expect(thrown).toBeInstanceOf(NotificationException)
-    expect((thrown as Error).message).toBe(
+    const text =
       '[BymaxNotificationModule] options.otp.defaultLength must be an integer from 1 to 32, got 99'
-    )
+    expect(thrown).toBeInstanceOf(NotificationException)
+    expect((thrown as Error).message).toBe(text)
+    expect((thrown as NotificationException).getResponse()).toMatchObject({
+      error: { code: 'notification.otp_invalid_length', message: text }
+    })
   })
 })
