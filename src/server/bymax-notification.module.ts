@@ -93,13 +93,13 @@ export class BymaxNotificationModule {
    * @returns A global `DynamicModule` exposing only the configured channels' tokens.
    * @throws Error When validation fails (no channel, malformed channel, or an unsupported channel).
    */
-  static forRoot(rawOptions: BymaxNotificationModuleOptions): DynamicModule {
+  static forRoot(options: BymaxNotificationModuleOptions): DynamicModule {
     // A copy, so the options that are validated are the options that are used.
-    const options = snapshotOptions(rawOptions)
-    validateOptions(options)
-    const resolved = resolveOptions(options)
+    const own = snapshotOptions(options)
+    validateOptions(own)
+    const resolved = resolveOptions(own)
     this.warnPlaintextCodes(resolved)
-    const tokenProviders = this.buildProviders(options, resolved)
+    const tokenProviders = this.buildProviders(own, resolved)
     const serviceProviders = this.buildServiceProviders(resolved)
     this.logger.log(
       `[BYMAX_NOTIFICATION_MODULE_BOOTSTRAP_OK] Initialized with channels: ${activeChannels(resolved).join(', ')}`
