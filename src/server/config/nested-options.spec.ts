@@ -1,5 +1,5 @@
 /**
- * @fileoverview Specs for the 1.4.15 options rules: a group whose omission turns a protection off
+ * @fileoverview Specs for the options rules that hold across releases: a group whose omission turns a protection off
  * refuses a `null`; the `global` group and the `perPurpose` container must be objects the library
  * can read, and a built-in such as a `Map` or a `Date` is not one; the `codeType` of an entry is
  * checked; `defaultTags` is read once like every other option; and a length error names the option
