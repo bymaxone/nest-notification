@@ -11,6 +11,8 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 ## [Unreleased]
 
+## [1.4.14] - 2026-11-17
+
 ### Fixed
 
 - **A numeric option the library cannot act on is refused at startup, not honoured as `NaN`.**
@@ -1392,7 +1394,8 @@ rejected at startup rather than failing on the first send.
 
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.4.13...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.4.14...HEAD
+[1.4.14]: https://github.com/bymaxone/nest-notification/compare/v1.4.13...v1.4.14
 [1.4.13]: https://github.com/bymaxone/nest-notification/compare/v1.4.12...v1.4.13
 [1.4.12]: https://github.com/bymaxone/nest-notification/compare/v1.4.11...v1.4.12
 [1.4.11]: https://github.com/bymaxone/nest-notification/compare/v1.4.10...v1.4.11
