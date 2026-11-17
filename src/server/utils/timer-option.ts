@@ -3,9 +3,10 @@
  * @layer utils
  *
  * Every bound in milliseconds ends in a timer, and a timer holds at most 2^31 - 1 ms: Node clamps a
- * longer one to 1 ms, so the call fails at once instead of waiting. A fraction, a negative or a
- * string behaves the same way, and NaN or zero leaves the phase with no bound at all. All are
- * refused when the provider is built, so a typo cannot reach a send.
+ * longer one to 1 ms, so the call fails at once instead of waiting. A negative or a fraction does
+ * the same, and NaN or zero leaves the phase with no bound at all. A string is refused with them,
+ * a numeric one included, because a bound is a number. All are refused when the provider is built,
+ * so a typo cannot reach a send.
  */
 
 /** The longest bound a timer holds, in milliseconds. */

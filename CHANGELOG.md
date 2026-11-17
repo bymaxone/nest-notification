@@ -26,8 +26,8 @@ the entries that carry one, is the compatibility contract — read it, not the n
   from `1` to `9007199254740991`.
 - **Every SMTP timeout is checked when the provider is built.** `connectionTimeout`,
   `greetingTimeout` and `socketTimeout` were handed to Nodemailer unchecked: a value past
-  `2147483647` made every send fail within milliseconds against a healthy relay, a fraction, a
-  negative or a string did the same, and `NaN` or `0` left the phase unbounded. They now take the
+  `2147483647` made every send fail within milliseconds against a healthy relay, a negative or a
+  fraction did the same, and `NaN` or `0` left the phase unbounded. They now take the
   same integer from `1` to `2147483647` as `sendTimeoutMs`.
 - **A provider of your own gets the `503` for a transient reply too.** `EmailService` read the
   reply number of an SMTP `4xx` only from the built-in providers' errors, so a provider that threw

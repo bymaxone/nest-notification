@@ -1,7 +1,8 @@
 /**
  * @fileoverview Holds the timer-option guard to the range a timer can hold: past 2^31 - 1
- * milliseconds Node clamps the duration to 1 ms, and a bound that is zero, negative, fractional or
- * not a number either fires at once or is ignored, so each is refused when the provider is built.
+ * milliseconds Node clamps the duration to 1 ms, a negative or a fraction does the same, and NaN or
+ * zero bounds nothing, so each is refused when the provider is built, with every value that is not
+ * a number.
  * @layer utils
  */
 
