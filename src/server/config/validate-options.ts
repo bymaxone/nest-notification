@@ -10,6 +10,7 @@
 import { NotificationException } from '../errors/notification-exception'
 import type {
   BymaxNotificationModuleOptions,
+  AuditOptions,
   EmailChannelOptions,
   OtpChannelOptions
 } from '../interfaces/notification-module-options.interface'
@@ -20,7 +21,8 @@ import {
   assertFiniteAbove,
   assertFiniteAtLeast,
   assertIntegerAtLeast,
-  assertObject
+  assertObject,
+  received
 } from './option-numbers'
 
 /**
@@ -32,6 +34,9 @@ import {
  * @throws NotificationException With `OTP_INVALID_LENGTH` when `otp.defaultLength` is out of range.
  */
 export function validateOptions(options: BymaxNotificationModuleOptions): void {
+  if (typeof options !== 'object' || options === null || Array.isArray(options)) {
+    throw new Error('[BymaxNotificationModule] options must be an object')
+  }
   if (!options.email && !options.otp && !options.sms && !options.push) {
     throw new Error(
       '[BymaxNotificationModule] At least one channel must be configured (email, otp, sms, or push)'
@@ -50,6 +55,11 @@ export function validateOptions(options: BymaxNotificationModuleOptions): void {
     )
   }
 
+  const resolver: unknown = options.global?.tenantIdResolver
+  if (resolver !== undefined && typeof resolver !== 'function') {
+    throw new Error('[BymaxNotificationModule] options.global.tenantIdResolver must be a function')
+  }
+
   if (options.email) {
     validateEmailOptions(options.email)
   }
@@ -58,10 +68,23 @@ export function validateOptions(options: BymaxNotificationModuleOptions): void {
     validateOtpOptions(options.otp)
   }
 
-  if (options.audit && !options.audit.repository) {
+  if (options.audit) {
+    validateAuditOptions(options.audit)
+  }
+}
+
+/** Validates the audit section. A `null` for an option whose default is weaker is refused. */
+function validateAuditOptions(audit: AuditOptions): void {
+  if (!audit.repository) {
     throw new Error(
       "[BymaxNotificationModule] options.audit.repository is required when 'audit' is configured"
     )
+  }
+  if ((audit.swallowErrors as unknown) === null) {
+    throw new Error('[BymaxNotificationModule] options.audit.swallowErrors must be a boolean')
+  }
+  if ((audit.maskRecipient as unknown) === null) {
+    throw new Error('[BymaxNotificationModule] options.audit.maskRecipient must be a function')
   }
 }
 
@@ -105,8 +128,12 @@ function validateCodeSecret(secret: unknown): void {
   }
 }
 
-/** Throws `OTP_INVALID_LENGTH` unless `length` is absent or an integer in the supported range. */
-function assertCodeLength(length: unknown): void {
+/**
+ * Throws `OTP_INVALID_LENGTH` unless `length` is absent or an integer in the supported range. The
+ * message names the option, and the details hold the allowed range and, for a number, the number:
+ * anything else is named by kind, because it may be a secret.
+ */
+function assertCodeLength(path: string, length: unknown): void {
   if (length === undefined) {
     return
   }
@@ -115,16 +142,20 @@ function assertCodeLength(length: unknown): void {
     (length as number) < OTP_MIN_LENGTH ||
     (length as number) > OTP_MAX_LENGTH
   ) {
-    throw new NotificationException('OTP_INVALID_LENGTH', {
-      provided: length,
-      allowed: `${OTP_MIN_LENGTH}-${OTP_MAX_LENGTH}`
-    })
+    const allowed = `${OTP_MIN_LENGTH}-${OTP_MAX_LENGTH}`
+    throw new NotificationException(
+      'OTP_INVALID_LENGTH',
+      { provided: typeof length === 'number' ? length : received(length), allowed },
+      {
+        message: `[BymaxNotificationModule] options.${path} must be an integer from ${String(OTP_MIN_LENGTH)} to ${String(OTP_MAX_LENGTH)}, got ${received(length)}`
+      }
+    )
   }
 }
 
 /** Validates the numeric defaults of the OTP channel. */
 function validateOtpNumbers(otp: OtpChannelOptions): void {
-  assertCodeLength(otp.defaultLength)
+  assertCodeLength('otp.defaultLength', otp.defaultLength)
   assertFiniteAbove('otp.defaultTtlSeconds', otp.defaultTtlSeconds, 0)
   assertIntegerAtLeast('otp.defaultMaxAttempts', otp.defaultMaxAttempts, 1)
   assertFiniteAtLeast('otp.resendCooldownSeconds', otp.resendCooldownSeconds, 0)
@@ -132,6 +163,9 @@ function validateOtpNumbers(otp: OtpChannelOptions): void {
 
 /** Validates each `perPurpose` entry: the key is a purpose, and every override is a usable number. */
 function validatePerPurpose(perPurpose: OtpChannelOptions['perPurpose']): void {
+  if (perPurpose !== undefined) {
+    assertObject('otp.perPurpose', perPurpose)
+  }
   for (const [key, entry] of Object.entries(perPurpose ?? {})) {
     const problem = purposeProblem(key)
     if (problem !== undefined) {
@@ -141,7 +175,7 @@ function validatePerPurpose(perPurpose: OtpChannelOptions['perPurpose']): void {
     }
     const path = `otp.perPurpose.${key}`
     assertObject(path, entry)
-    assertCodeLength(entry.length)
+    assertCodeLength(`${path}.length`, entry.length)
     assertFiniteAbove(`${path}.ttlSeconds`, entry.ttlSeconds, 0)
     assertIntegerAtLeast(`${path}.maxAttempts`, entry.maxAttempts, 1)
     assertFiniteAtLeast(`${path}.resendCooldownSeconds`, entry.resendCooldownSeconds, 0)
@@ -165,6 +199,9 @@ function validateOtpOptions(otp: OtpChannelOptions): void {
     )
   }
   validatePerPurpose(otp.perPurpose)
+  if ((otp.consumeOnVerify as unknown) === null) {
+    throw new Error('[BymaxNotificationModule] options.otp.consumeOnVerify must be a boolean')
+  }
   if (otp.strictPurposes !== undefined && typeof otp.strictPurposes !== 'boolean') {
     throw new Error('[BymaxNotificationModule] options.otp.strictPurposes must be a boolean')
   }

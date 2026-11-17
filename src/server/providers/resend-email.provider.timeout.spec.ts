@@ -106,6 +106,60 @@ describe('ResendEmailProvider timeout', () => {
     expect(timeout).toHaveBeenCalledWith(2_500)
   })
 
+  // The bound that passed the check is the bound that is used, even for an option that answers
+  // differently on a second read.
+  it('should use the bound that was validated when the option answers differently after', async () => {
+    const timeout = jest.spyOn(AbortSignal, 'timeout')
+    let reads = 0
+    const options = { apiKey: 'k' }
+    Object.defineProperty(options, 'timeoutMs', {
+      enumerable: true,
+      get: () => {
+        reads += 1
+        return reads === 1 ? 2_500 : 3_000_000_000
+      }
+    })
+
+    await new ResendEmailProvider(options).send(baseOptions)
+
+    expect(timeout).toHaveBeenCalledWith(2_500)
+  })
+
+  // A class whose options are getters on the prototype is read like a plain object, once.
+  it('should keep the options a class instance supplies from its prototype', async () => {
+    const timeout = jest.spyOn(AbortSignal, 'timeout')
+    class ResendOptions {
+      get apiKey(): string {
+        return 'k'
+      }
+      get timeoutMs(): number {
+        return 2_500
+      }
+    }
+    const provider = new ResendEmailProvider(new ResendOptions())
+
+    expect(provider.isConfigured()).toBe(true)
+    await provider.send(baseOptions)
+
+    expect(timeout).toHaveBeenCalledWith(2_500)
+  })
+
+  // A key that reads as undefined or null is not set and takes the default.
+  it.each([undefined, null])(
+    'should use the default bound for a timeoutMs of %p',
+    async (value) => {
+      const timeout = jest.spyOn(AbortSignal, 'timeout')
+
+      await new ResendEmailProvider({ apiKey: 'k', timeoutMs: value } as never).send(baseOptions)
+
+      expect(timeout).toHaveBeenCalledWith(15_000)
+    }
+  )
+
+  it.each([undefined, null])('should not be configured when the apiKey is %p', (apiKey) => {
+    expect(new ResendEmailProvider({ apiKey } as never).isConfigured()).toBe(false)
+  })
+
   it('should apply the configured bound to every send', async () => {
     const timeout = jest.spyOn(AbortSignal, 'timeout')
     const provider = new ResendEmailProvider({ apiKey: 'k', timeoutMs: 2_500 })

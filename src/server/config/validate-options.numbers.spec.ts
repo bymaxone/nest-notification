@@ -32,6 +32,14 @@ const TTL = [...NOT_NUMBERS, ...NOT_FINITE, 0, -5]
 /** A duration in seconds that must be a finite number, zero meaning none. */
 const COOLDOWN = [...NOT_NUMBERS, ...NOT_FINITE, -1]
 
+describe('validateOptions of something that is not an object', () => {
+  it.each([undefined, null, 'x', 5, true, [], [{}]])('should refuse %p', (value) => {
+    expect(() => validateOptions(value as never)).toThrow(
+      '[BymaxNotificationModule] options must be an object'
+    )
+  })
+})
+
 describe('validateOptions numeric options', () => {
   describe('otp.defaultMaxAttempts', () => {
     it.each([1, 5, 100])('should accept %p', (value) => {
@@ -149,12 +157,13 @@ describe('validateOptions numeric options', () => {
     })
   })
 
-  // The value is host configuration, not caller input, so the message may say what it was, in
-  // words that cannot be long or carry the value of an object.
+  // A number says nothing a secret could hide in, so it is shown; anything else is named by kind,
+  // because it may be a credential put in the wrong option (the echo spec holds that to every
+  // option).
   it.each([
     [NaN, 'got NaN'],
     [Infinity, 'got Infinity'],
-    ['3', 'got "3"'],
+    ['3', 'got a string'],
     [null, 'got null'],
     [true, 'got true'],
     [[], 'got an array'],
@@ -163,15 +172,5 @@ describe('validateOptions numeric options', () => {
     expect(() => validateOptions(otp({ defaultMaxAttempts: value }))).toThrow(
       `must be an integer of at most 9007199254740991, ${expected}`
     )
-  })
-
-  // A long string is cut to its first 40 characters, so a message cannot grow with the value.
-  it('should show no more than the first 40 characters of a string', () => {
-    const long = 'a'.repeat(40) + 'TAIL'
-
-    expect(() => validateOptions(otp({ defaultMaxAttempts: long }))).toThrow(
-      `got "${'a'.repeat(40)}"`
-    )
-    expect(() => validateOptions(otp({ defaultMaxAttempts: long }))).not.toThrow(/TAIL/)
   })
 })

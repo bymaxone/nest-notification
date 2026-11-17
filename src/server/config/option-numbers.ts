@@ -9,15 +9,35 @@
  * configuration and not caller input.
  */
 
-/** What the value was, short enough for a message and safe for any value. */
-function shown(value: unknown): string {
-  if (typeof value === 'string') {
-    return JSON.stringify(value.slice(0, 40))
+/**
+ * What the value was, in words that cannot carry it. A number, a bigint and a boolean are shown,
+ * because none can hide a secret of the shapes a host puts in the wrong option. A string, a symbol,
+ * a function (whose source would print), an object and an array are named by kind only: any of them
+ * may be a credential, a token or a path, and a message reaches logs.
+ *
+ * @param value - The value the host gave.
+ * @returns The words for a message.
+ */
+export function received(value: unknown): string {
+  switch (typeof value) {
+    case 'number':
+    case 'bigint':
+    case 'boolean':
+      return String(value)
+    case 'string':
+      return 'a string'
+    case 'symbol':
+      return 'a symbol'
+    case 'function':
+      return 'a function'
+    case 'undefined':
+      return 'undefined'
+    default:
+      if (value === null) {
+        return 'null'
+      }
+      return Array.isArray(value) ? 'an array' : 'an object'
   }
-  if (typeof value === 'object' && value !== null) {
-    return Array.isArray(value) ? 'an array' : 'an object'
-  }
-  return String(value)
 }
 
 /** The prefix every message carries. */
@@ -39,11 +59,11 @@ export function assertIntegerAtLeast(path: string, value: unknown, min: number):
   // Past the largest safe integer a count is no longer exact, and it bounds nothing.
   if (!Number.isSafeInteger(value)) {
     throw new Error(
-      `${named(path)} must be an integer of at most ${String(Number.MAX_SAFE_INTEGER)}, got ${shown(value)}`
+      `${named(path)} must be an integer of at most ${String(Number.MAX_SAFE_INTEGER)}, got ${received(value)}`
     )
   }
   if ((value as number) < min) {
-    throw new Error(`${named(path)} must be at least ${String(min)}, got ${shown(value)}`)
+    throw new Error(`${named(path)} must be at least ${String(min)}, got ${received(value)}`)
   }
 }
 
@@ -60,10 +80,10 @@ export function assertFiniteAbove(path: string, value: unknown, bound: number): 
   }
   // `Number.isFinite` does not coerce, so a string, `null` or an object is not finite.
   if (!Number.isFinite(value)) {
-    throw new Error(`${named(path)} must be a finite number, got ${shown(value)}`)
+    throw new Error(`${named(path)} must be a finite number, got ${received(value)}`)
   }
   if ((value as number) <= bound) {
-    throw new Error(`${named(path)} must be greater than ${String(bound)}, got ${shown(value)}`)
+    throw new Error(`${named(path)} must be greater than ${String(bound)}, got ${received(value)}`)
   }
 }
 
@@ -79,10 +99,10 @@ export function assertFiniteAtLeast(path: string, value: unknown, bound: number)
     return
   }
   if (!Number.isFinite(value)) {
-    throw new Error(`${named(path)} must be a finite number, got ${shown(value)}`)
+    throw new Error(`${named(path)} must be a finite number, got ${received(value)}`)
   }
   if ((value as number) < bound) {
-    throw new Error(`${named(path)} must be ${String(bound)} or greater, got ${shown(value)}`)
+    throw new Error(`${named(path)} must be ${String(bound)} or greater, got ${received(value)}`)
   }
 }
 
@@ -94,6 +114,6 @@ export function assertFiniteAtLeast(path: string, value: unknown, bound: number)
  */
 export function assertObject(path: string, value: unknown): void {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    throw new Error(`${named(path)} must be an object, got ${shown(value)}`)
+    throw new Error(`${named(path)} must be an object, got ${received(value)}`)
   }
 }

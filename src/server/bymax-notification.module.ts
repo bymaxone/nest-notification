@@ -31,6 +31,7 @@ import {
 } from './bymax-notification.constants'
 import { resolveOptions } from './config/resolved-options'
 import type { ResolvedNotificationOptions } from './config/resolved-options'
+import { snapshotOptions } from './config/snapshot-options'
 import { validateOptions } from './config/validate-options'
 import type { IEmailProvider } from './interfaces/email-provider.interface'
 import type { IEmailTemplateRenderer } from './interfaces/email-template-renderer.interface'
@@ -93,10 +94,12 @@ export class BymaxNotificationModule {
    * @throws Error When validation fails (no channel, malformed channel, or an unsupported channel).
    */
   static forRoot(options: BymaxNotificationModuleOptions): DynamicModule {
-    validateOptions(options)
-    const resolved = resolveOptions(options)
+    // A copy, so the options that are validated are the options that are used.
+    const own = snapshotOptions(options)
+    validateOptions(own)
+    const resolved = resolveOptions(own)
     this.warnPlaintextCodes(resolved)
-    const tokenProviders = this.buildProviders(options, resolved)
+    const tokenProviders = this.buildProviders(own, resolved)
     const serviceProviders = this.buildServiceProviders(resolved)
     this.logger.log(
       `[BYMAX_NOTIFICATION_MODULE_BOOTSTRAP_OK] Initialized with channels: ${activeChannels(resolved).join(', ')}`
@@ -127,7 +130,7 @@ export class BymaxNotificationModule {
     const rawOptionsProvider: FactoryProvider = {
       provide: RAW_NOTIFICATION_OPTIONS,
       useFactory: async (...args: never[]): Promise<BymaxNotificationModuleOptions> => {
-        const options = await asyncOptions.useFactory(...args)
+        const options = snapshotOptions(await asyncOptions.useFactory(...args))
         validateOptions(options)
         return options
       },

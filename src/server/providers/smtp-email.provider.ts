@@ -34,8 +34,11 @@ import { extractDeliveryStatus, withoutDeclaredValues } from '../utils/delivery-
 import { describeError, UNPRINTABLE_ERROR } from '../utils/describe-error'
 import { assertBodyParts } from '../utils/email-body'
 import { loadOptionalPeer } from '../utils/load-optional-peer'
+import { assertPort } from '../utils/port-option'
+import { readOptionKeys } from '../utils/read-options'
 import { collectEchoedExcerpts, readRedactedMessage, redactValues } from '../utils/redact'
 import { assertTimerMs } from '../utils/timer-option'
+import { SMTP_OPTION_KEYS } from './smtp-email.types'
 import type {
   NodemailerLike,
   SmtpAttachment,
@@ -277,17 +280,19 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
    * @throws Error When `sendTimeoutMs` is not an integer from `1` to `2147483647`.
    */
   constructor(options: SmtpEmailProviderOptions = {}) {
+    // A copy first, so every check below reads the values that are kept, once.
+    const own = readOptionKeys(options, SMTP_OPTION_KEYS)
+    assertPort('SmtpEmailProvider', own.port)
     for (const [name, value] of [
-      ['sendTimeoutMs', options.sendTimeoutMs],
-      ['connectionTimeout', options.connectionTimeout],
-      ['greetingTimeout', options.greetingTimeout],
-      ['socketTimeout', options.socketTimeout]
+      ['sendTimeoutMs', own.sendTimeoutMs],
+      ['connectionTimeout', own.connectionTimeout],
+      ['greetingTimeout', own.greetingTimeout],
+      ['socketTimeout', own.socketTimeout]
     ] as const) {
       assertTimerMs('SmtpEmailProvider', name, value)
     }
-    this.#pool = readPool(options.pool)
-    // A copy, so a value checked above cannot be changed by the host afterwards.
-    this.#options = { ...options }
+    this.#pool = readPool(own.pool)
+    this.#options = own
   }
 
   /**
