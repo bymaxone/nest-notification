@@ -35,6 +35,7 @@ import { describeError, UNPRINTABLE_ERROR } from '../utils/describe-error'
 import { assertBodyParts } from '../utils/email-body'
 import { loadOptionalPeer } from '../utils/load-optional-peer'
 import { collectEchoedExcerpts, readRedactedMessage, redactValues } from '../utils/redact'
+import { assertTimerMs } from '../utils/timer-option'
 import type {
   NodemailerLike,
   SmtpAttachment,
@@ -70,9 +71,6 @@ const DEFAULT_SOCKET_TIMEOUT_MS = 20_000
 
 /** Default bound on one whole send, in milliseconds. */
 const DEFAULT_SEND_TIMEOUT_MS = 60_000
-
-/** Longest bound a timer holds: Node clamps a longer one to 1 ms. */
-const MAX_SEND_TIMEOUT_MS = 2_147_483_647
 
 /**
  * Settles with `call`, or rejects once `timeoutMs` has passed, whichever comes first. Nodemailer
@@ -262,14 +260,13 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
    * @throws Error When `sendTimeoutMs` is not an integer from `1` to `2147483647`.
    */
   constructor(options: SmtpEmailProviderOptions = {}) {
-    const timeout = options.sendTimeoutMs
-    if (
-      timeout !== undefined &&
-      !(Number.isInteger(timeout) && timeout >= 1 && timeout <= MAX_SEND_TIMEOUT_MS)
-    ) {
-      throw new Error(
-        `SmtpEmailProvider: sendTimeoutMs must be a positive integer of at most ${String(MAX_SEND_TIMEOUT_MS)}`
-      )
+    for (const [name, value] of [
+      ['sendTimeoutMs', options.sendTimeoutMs],
+      ['connectionTimeout', options.connectionTimeout],
+      ['greetingTimeout', options.greetingTimeout],
+      ['socketTimeout', options.socketTimeout]
+    ] as const) {
+      assertTimerMs('SmtpEmailProvider', name, value)
     }
     this.#pool = readPool(options.pool)
     this.#options = options

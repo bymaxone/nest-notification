@@ -16,6 +16,7 @@ import type {
 import { MIN_CODE_SECRET_BYTES } from '../utils/code-digest'
 import { purposeProblem } from '../utils/tenant-scope'
 import { OTP_MAX_LENGTH, OTP_MIN_LENGTH, VALID_CODE_TYPES } from './default-options'
+import { assertFiniteAbove, assertFiniteAtLeast, assertIntegerAtLeast } from './option-numbers'
 
 /**
  * Validates module options, throwing on the first problem found.
@@ -84,6 +85,7 @@ function validateEmailOptions(email: EmailChannelOptions): void {
       '[BymaxNotificationModule] options.email.maxRecipients must be a positive integer'
     )
   }
+  assertFiniteAtLeast('email.maxAttachmentBytes', email.maxAttachmentBytes, 0)
 }
 
 /**
@@ -98,6 +100,48 @@ function validateCodeSecret(secret: unknown): void {
   }
 }
 
+/** Throws `OTP_INVALID_LENGTH` unless `length` is absent or an integer in the supported range. */
+function assertCodeLength(length: unknown): void {
+  if (length === undefined) {
+    return
+  }
+  if (
+    !Number.isInteger(length) ||
+    (length as number) < OTP_MIN_LENGTH ||
+    (length as number) > OTP_MAX_LENGTH
+  ) {
+    throw new NotificationException('OTP_INVALID_LENGTH', {
+      provided: length,
+      allowed: `${OTP_MIN_LENGTH}-${OTP_MAX_LENGTH}`
+    })
+  }
+}
+
+/** Validates the numeric defaults of the OTP channel. */
+function validateOtpNumbers(otp: OtpChannelOptions): void {
+  assertCodeLength(otp.defaultLength)
+  assertFiniteAbove('otp.defaultTtlSeconds', otp.defaultTtlSeconds, 0)
+  assertIntegerAtLeast('otp.defaultMaxAttempts', otp.defaultMaxAttempts, 1)
+  assertFiniteAtLeast('otp.resendCooldownSeconds', otp.resendCooldownSeconds, 0)
+}
+
+/** Validates each `perPurpose` entry: the key is a purpose, and every override is a usable number. */
+function validatePerPurpose(perPurpose: OtpChannelOptions['perPurpose']): void {
+  for (const [key, entry] of Object.entries(perPurpose ?? {})) {
+    const problem = purposeProblem(key)
+    if (problem !== undefined) {
+      throw new Error(
+        `[BymaxNotificationModule] options.otp.perPurpose has the key ${JSON.stringify(key)}, which is not a valid purpose: ${problem}`
+      )
+    }
+    const path = `otp.perPurpose.${key}`
+    assertCodeLength(entry.length)
+    assertFiniteAbove(`${path}.ttlSeconds`, entry.ttlSeconds, 0)
+    assertIntegerAtLeast(`${path}.maxAttempts`, entry.maxAttempts, 1)
+    assertFiniteAtLeast(`${path}.resendCooldownSeconds`, entry.resendCooldownSeconds, 0)
+  }
+}
+
 /** Validates the OTP channel section. */
 function validateOtpOptions(otp: OtpChannelOptions): void {
   if (!otp.storage) {
@@ -105,15 +149,7 @@ function validateOtpOptions(otp: OtpChannelOptions): void {
       "[BymaxNotificationModule] options.otp.storage is required when 'otp' is configured"
     )
   }
-  if (otp.defaultLength !== undefined) {
-    const length = otp.defaultLength
-    if (!Number.isInteger(length) || length < OTP_MIN_LENGTH || length > OTP_MAX_LENGTH) {
-      throw new NotificationException('OTP_INVALID_LENGTH', {
-        provided: length,
-        allowed: `${OTP_MIN_LENGTH}-${OTP_MAX_LENGTH}`
-      })
-    }
-  }
+  validateOtpNumbers(otp)
   if (otp.codeSecret !== undefined) {
     validateCodeSecret(otp.codeSecret)
   }
@@ -122,28 +158,8 @@ function validateOtpOptions(otp: OtpChannelOptions): void {
       `[BymaxNotificationModule] options.otp.defaultCodeType must be one of: ${VALID_CODE_TYPES.join(', ')}`
     )
   }
-  if (otp.defaultTtlSeconds !== undefined && otp.defaultTtlSeconds <= 0) {
-    throw new Error(
-      '[BymaxNotificationModule] options.otp.defaultTtlSeconds must be greater than 0'
-    )
-  }
-  if (otp.defaultMaxAttempts !== undefined && otp.defaultMaxAttempts < 1) {
-    throw new Error('[BymaxNotificationModule] options.otp.defaultMaxAttempts must be at least 1')
-  }
-  for (const key of Object.keys(otp.perPurpose ?? {})) {
-    const problem = purposeProblem(key)
-    if (problem !== undefined) {
-      throw new Error(
-        `[BymaxNotificationModule] options.otp.perPurpose has the key ${JSON.stringify(key)}, which is not a valid purpose: ${problem}`
-      )
-    }
-  }
+  validatePerPurpose(otp.perPurpose)
   if (otp.strictPurposes !== undefined && typeof otp.strictPurposes !== 'boolean') {
     throw new Error('[BymaxNotificationModule] options.otp.strictPurposes must be a boolean')
-  }
-  if (otp.resendCooldownSeconds !== undefined && otp.resendCooldownSeconds < 0) {
-    throw new Error(
-      '[BymaxNotificationModule] options.otp.resendCooldownSeconds must be 0 or greater'
-    )
   }
 }

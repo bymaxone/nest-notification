@@ -95,6 +95,41 @@ describe('EmailService status when the failure is scrubbed', () => {
       }
     )
 
+    // A provider of the host's own that wraps Nodemailer throws the error it was given, which
+    // carries only the reply number: the rule that reads it is the service's, not the provider's.
+    it.each([
+      ['451', 451, HttpStatus.SERVICE_UNAVAILABLE],
+      ['421', 421, HttpStatus.SERVICE_UNAVAILABLE],
+      ['550', 550, HttpStatus.BAD_GATEWAY]
+    ])(
+      'should read a custom provider error with only the reply %s',
+      async (_name, code, expected) => {
+        const provider: IEmailProvider = {
+          name: 'custom',
+          isConfigured: () => true,
+          send: () =>
+            Promise.reject(Object.assign(new Error('relay said no'), { responseCode: code }))
+        }
+
+        expect(await statusOf(provider, redact)).toBe(expected)
+      }
+    )
+
+    it('should read a reply number on the cause of a custom provider error', async () => {
+      const provider: IEmailProvider = {
+        name: 'custom',
+        isConfigured: () => true,
+        send: () =>
+          Promise.reject(
+            new Error('send failed', {
+              cause: Object.assign(new Error('relay said no'), { responseCode: 451 })
+            })
+          )
+      }
+
+      expect(await statusOf(provider, redact)).toBe(HttpStatus.SERVICE_UNAVAILABLE)
+    })
+
     // A provider of the host's own throws whatever it likes: the code may sit on the error or on
     // a cause, and the removal strips both.
     it.each([
