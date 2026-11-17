@@ -62,10 +62,20 @@ function read(value: unknown, key: string): unknown {
   }
 }
 
+/**
+ * Whether one error carries a transient SMTP reply: a 4xx, which the relay sends to say "not now".
+ * A client sets the number as `responseCode` at whatever stage of the dialogue the reply came; a
+ * 5xx is a refusal and says nothing about availability.
+ */
+function isTransientReply(error: unknown): boolean {
+  const reply = read(error, 'responseCode')
+  return typeof reply === 'number' && Number.isInteger(reply) && reply >= 400 && reply <= 499
+}
+
 /** Whether one error, ignoring its causes, is an unavailability. */
 function isUnavailableLink(error: unknown): boolean {
   const code = read(error, 'code')
-  if (typeof code === 'string' && UNAVAILABLE_CODES.has(code)) {
+  if ((typeof code === 'string' && UNAVAILABLE_CODES.has(code)) || isTransientReply(error)) {
     return true
   }
   if (read(error, 'name') === MAX_RETRIES_NAME) {
@@ -113,7 +123,8 @@ const CODE_TOKEN = /^[A-Z][A-Z0-9_]{1,31}$/
 
 /**
  * The error code to carry from a failure of a client: the first availability code on the error or
- * its first few causes, otherwise the first code that is a short token.
+ * its first few causes, otherwise `EUNAVAILABLE` for a transient SMTP reply (the stage's own code,
+ * such as `EENVELOPE`, would hide it), otherwise the first code that is a short token.
  *
  * A provider wraps the failure of its client in an error of its own, and the wrapper has to carry
  * the code across or the status of the failure can no longer be told from its text. An outage code
@@ -128,11 +139,13 @@ export function errorCodeOf(error: unknown): string | undefined {
   const seen = new Set<unknown>()
   let current: unknown = error
   let first: string | undefined
+  let transient = false
   for (let remaining = MAX_LINKS; remaining > 0; remaining -= 1) {
     if (seen.has(current)) {
       break
     }
     seen.add(current)
+    transient ||= isTransientReply(current)
     const code = read(current, 'code')
     if (typeof code === 'string' && CODE_TOKEN.test(code)) {
       if (UNAVAILABLE_CODES.has(code)) {
@@ -142,5 +155,5 @@ export function errorCodeOf(error: unknown): string | undefined {
     }
     current = read(current, 'cause')
   }
-  return first
+  return transient ? 'EUNAVAILABLE' : first
 }

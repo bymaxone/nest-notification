@@ -219,7 +219,9 @@ describe('ResendEmailProvider failure codes', () => {
       }
     ],
     ['an HTTP 503', { name: 'service_unavailable', message: 'down', statusCode: 503 }],
-    ['an HTTP 500', { name: 'internal_server_error', message: 'oops', statusCode: 500 }]
+    ['an HTTP 500', { name: 'internal_server_error', message: 'oops', statusCode: 500 }],
+    // The real SDK 6.38.1 returns exactly this for a 429 from the API.
+    ['an HTTP 429', { name: 'rate_limit_exceeded', message: 'Too many requests.', statusCode: 429 }]
   ])('should carry EUNAVAILABLE for %s', async (_name, error) => {
     mockSend.mockResolvedValue({ data: null, error })
 
@@ -233,7 +235,8 @@ describe('ResendEmailProvider failure codes', () => {
   it.each([
     ['a validation error', { name: 'validation_error', message: 'bad from', statusCode: 422 }],
     ['an authentication failure', { name: 'missing_api_key', message: 'no key', statusCode: 401 }],
-    ['a rate limit', { name: 'rate_limit_exceeded', message: 'slow down', statusCode: 429 }]
+    ['a status next below the rate limit', { name: 'x', message: 'x', statusCode: 428 }],
+    ['a status next above the rate limit', { name: 'x', message: 'x', statusCode: 430 }]
   ])('should carry no availability code for %s', async (_name, error) => {
     mockSend.mockResolvedValue({ data: null, error })
 

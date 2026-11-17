@@ -80,14 +80,15 @@ function withCode(error: Error, code: string | undefined): Error {
 
 /**
  * `EUNAVAILABLE` for an error object the SDK returned that says Resend could not be reached or is
- * down: no request was made at all (the SDK's `application_error` with no status), or an HTTP 5xx.
- * Anything else, a rejected request included, is an answer and carries no availability code.
+ * down or asking to be called later: no request was made at all (the SDK's `application_error` with
+ * no status), an HTTP 5xx, or an HTTP 429. Anything else, a rejected request included, is an answer
+ * and carries no availability code.
  */
 function unavailableCodeOf(error: { name?: unknown; statusCode?: unknown }): string | undefined {
   try {
     const status: unknown = error.statusCode
     const requestNotMade = error.name === 'application_error' && status === null
-    return requestNotMade || (typeof status === 'number' && status >= 500)
+    return requestNotMade || (typeof status === 'number' && (status >= 500 || status === 429))
       ? 'EUNAVAILABLE'
       : undefined
   } catch {
