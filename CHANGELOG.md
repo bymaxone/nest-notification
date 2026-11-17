@@ -11,6 +11,8 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 ## [Unreleased]
 
+## [1.4.11] - 2026-11-17
+
 ### Added
 
 - **`SmtpEmailProvider` can pool its connections, and closes with the application.** The new
@@ -1305,7 +1307,8 @@ rejected at startup rather than failing on the first send.
 
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.4.10...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.4.11...HEAD
+[1.4.11]: https://github.com/bymaxone/nest-notification/compare/v1.4.10...v1.4.11
 [1.4.10]: https://github.com/bymaxone/nest-notification/compare/v1.4.9...v1.4.10
 [1.4.9]: https://github.com/bymaxone/nest-notification/compare/v1.4.8...v1.4.9
 [1.4.8]: https://github.com/bymaxone/nest-notification/compare/v1.4.7...v1.4.8
