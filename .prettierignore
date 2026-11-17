@@ -13,3 +13,6 @@ reports/
 # check-function-length), which is what lets every repository carry the same gate. Reformatting it
 # here would make this copy differ from the template.
 scripts/check-function-length.mjs
+
+# Copied byte for byte from the shared template; Prettier would rewrite it.
+scripts/commitlint-no-ai-attribution.cjs
