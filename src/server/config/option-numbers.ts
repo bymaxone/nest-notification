@@ -82,3 +82,15 @@ export function assertFiniteAtLeast(path: string, value: unknown, bound: number)
     throw new Error(`${named(path)} must be ${String(bound)} or greater, got ${shown(value)}`)
   }
 }
+
+/**
+ * Throws unless `value` is an object that is not an array.
+ *
+ * @param path - The option, relative to `options`.
+ * @param value - The option as the host gave it.
+ */
+export function assertObject(path: string, value: unknown): void {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Error(`${named(path)} must be an object, got ${shown(value)}`)
+  }
+}

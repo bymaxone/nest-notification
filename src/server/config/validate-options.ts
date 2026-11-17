@@ -16,7 +16,12 @@ import type {
 import { MIN_CODE_SECRET_BYTES } from '../utils/code-digest'
 import { purposeProblem } from '../utils/tenant-scope'
 import { OTP_MAX_LENGTH, OTP_MIN_LENGTH, VALID_CODE_TYPES } from './default-options'
-import { assertFiniteAbove, assertFiniteAtLeast, assertIntegerAtLeast } from './option-numbers'
+import {
+  assertFiniteAbove,
+  assertFiniteAtLeast,
+  assertIntegerAtLeast,
+  assertObject
+} from './option-numbers'
 
 /**
  * Validates module options, throwing on the first problem found.
@@ -135,6 +140,7 @@ function validatePerPurpose(perPurpose: OtpChannelOptions['perPurpose']): void {
       )
     }
     const path = `otp.perPurpose.${key}`
+    assertObject(path, entry)
     assertCodeLength(entry.length)
     assertFiniteAbove(`${path}.ttlSeconds`, entry.ttlSeconds, 0)
     assertIntegerAtLeast(`${path}.maxAttempts`, entry.maxAttempts, 1)

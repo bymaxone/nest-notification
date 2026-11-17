@@ -103,6 +103,14 @@ describe('validateOptions numeric options', () => {
       )
     })
 
+    // An entry is an object of overrides. Anything else would have been read for fields it does
+    // not have, so it is refused with the library's own message, not a TypeError.
+    it.each([null, 'x', 5, true, []])('should refuse the entry %p', (entry) => {
+      expect(() => validateOptions(otp({ perPurpose: { mfa_oob: entry } }))).toThrow(
+        'options.otp.perPurpose.mfa_oob must be an object'
+      )
+    })
+
     // An entry that sets nothing keeps the defaults, and an absent field is not a value.
     it('should accept an entry that sets nothing, and an undefined field', () => {
       expect(() => validateOptions(perPurpose({}))).not.toThrow()
