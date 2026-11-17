@@ -82,3 +82,25 @@ export function assertOptionsObject(owner: string, options: unknown): void {
     throw new Error(`${owner}: options must be an object`)
   }
 }
+
+/**
+ * The names an object holds: its own enumerable string keys, and the accessors (getters) of
+ * the prototypes it inherits from before `Object.prototype`. A class used as a record, with a getter
+ * for each name, is read the way a plain object is. A method, `constructor`, a symbol and a
+ * non-enumerable own key are not names.
+ */
+export function namesOf(container: object): string[] {
+  const names = new Set(Object.keys(container))
+  for (
+    let prototype = Object.getPrototypeOf(container) as object | null;
+    prototype !== null && prototype !== Object.prototype;
+    prototype = Object.getPrototypeOf(prototype) as object | null
+  ) {
+    for (const [name, descriptor] of Object.entries(Object.getOwnPropertyDescriptors(prototype))) {
+      if (descriptor.get !== undefined) {
+        names.add(name)
+      }
+    }
+  }
+  return [...names]
+}

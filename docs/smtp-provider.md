@@ -25,17 +25,17 @@ BymaxNotificationModule.forRoot({
 })
 ```
 
-| Option                                                    | Default                                | Notes                                                                        |
-| --------------------------------------------------------- | -------------------------------------- | ---------------------------------------------------------------------------- |
-| `host`                                                    | —                                      | Required. Without it `isConfigured()` is `false` and `send()` throws.        |
-| `port`                                                    | `587`                                  | Submission port.                                                             |
-| `secure`                                                  | `true` iff port 465                    | Implicit TLS from the first byte.                                            |
-| `requireTls`                                              | `true` unless implicit TLS or loopback | Makes the STARTTLS upgrade mandatory. See the TLS note below.                |
-| `credentials`                                             | — (open relay)                         | `{ user, pass }`. Supplying it declares the deployment logs in.              |
-| `tls`                                                     | —                                      | `rejectUnauthorized` / `servername` / `ca`, for a relay behind a private CA. |
-| `connectionTimeout` / `greetingTimeout` / `socketTimeout` | `10s` / `10s` / `20s`                  | Bounded on purpose — Nodemailer's own defaults run into minutes.             |
-| `sendTimeoutMs`                                           | `60000`                                | Bounds the whole `send()`, in ms. It may still be delivered; see below.      |
-| `pool`                                                    | `—`                                    | Off unless set: `{ maxConnections?, maxMessages? }`. Close on shutdown.      |
+| Option                                                    | Default                                | Notes                                                                                                                                                         |
+| --------------------------------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `host`                                                    | —                                      | Required. Without it `isConfigured()` is `false` and `send()` throws.                                                                                         |
+| `port`                                                    | `587`                                  | Submission port.                                                                                                                                              |
+| `secure`                                                  | `true` iff port 465                    | Implicit TLS from the first byte.                                                                                                                             |
+| `requireTls`                                              | `true` unless implicit TLS or loopback | Makes the STARTTLS upgrade mandatory. See the TLS note below.                                                                                                 |
+| `credentials`                                             | — (open relay)                         | `{ user, pass }`. Supplying it declares the deployment logs in.                                                                                               |
+| `tls`                                                     | —                                      | `rejectUnauthorized` / `servername` / `ca` / `minVersion` / `maxVersion` / `ciphers` / `checkServerIdentity` / `cert` / `key`; any other key fails the build. |
+| `connectionTimeout` / `greetingTimeout` / `socketTimeout` | `10s` / `10s` / `20s`                  | Bounded on purpose — Nodemailer's own defaults run into minutes.                                                                                              |
+| `sendTimeoutMs`                                           | `60000`                                | Bounds the whole `send()`, in ms. It may still be delivered; see below.                                                                                       |
+| `pool`                                                    | `—`                                    | Off unless set: `{ maxConnections?, maxMessages? }`. Close on shutdown.                                                                                       |
 
 `sendTimeoutMs` is an integer from `1` to `2147483647`. The timeouts above bound a phase or an idle socket, so a relay that keeps trickling bytes could hold a send past all of them; this bounds the whole call. A send that exceeds it fails with `EMAIL_SEND_FAILED` and the code `ETIMEDOUT`. Nodemailer cannot abort a send in flight: the message may still be delivered, and the connection is left open: `socketTimeout` reaps it once the relay goes idle; a relay that keeps sending holds it until the relay ends the connection or the process exits.
 

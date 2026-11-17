@@ -44,10 +44,19 @@ describe('SmtpEmailProvider options that are objects', () => {
   // the type forces this case to change, and it fails until the provider keeps the new key.
   it('should keep every key of credentials, tls and pool', async () => {
     const credentials = { user: 'u', pass: 'p' } satisfies Required<SmtpCredentials>
+    const checkServerIdentity = (): undefined => undefined
+    const cert = Buffer.from('cert')
+    const key = [Buffer.from('key')]
     const tls = {
       rejectUnauthorized: false,
       servername: 'relay.example',
-      ca: ['ca']
+      ca: ['ca'],
+      minVersion: 'TLSv1.3',
+      maxVersion: 'TLSv1.3',
+      ciphers: 'TLS_AES_256_GCM_SHA384',
+      checkServerIdentity,
+      cert,
+      key
     } satisfies Required<SmtpTlsOptions>
     const pool = { maxConnections: 2, maxMessages: 5 } satisfies Required<SmtpPoolOptions>
 
@@ -55,10 +64,70 @@ describe('SmtpEmailProvider options that are objects', () => {
 
     expect(transport).toMatchObject({
       auth: { user: 'u', pass: 'p' },
-      tls: { rejectUnauthorized: false, servername: 'relay.example', ca: ['ca'] },
+      tls: {
+        rejectUnauthorized: false,
+        servername: 'relay.example',
+        ca: ['ca'],
+        minVersion: 'TLSv1.3',
+        maxVersion: 'TLSv1.3',
+        ciphers: 'TLS_AES_256_GCM_SHA384'
+      },
       maxConnections: 2,
       maxMessages: 5
     })
+  })
+
+  // A setting the host asked for must reach the connection or fail the build: hardening that is
+  // dropped without a word downgrades the session. The host's own objects stay by reference.
+  it('should hand a version bound, ciphers, a verifier and a client pair to the transport as given', async () => {
+    const checkServerIdentity = (): undefined => undefined
+    const cert = Buffer.from('cert')
+    const key = Buffer.from('key')
+
+    const transport = await transportOf({
+      host: 'h',
+      tls: { minVersion: 'TLSv1.3', ciphers: 'X', checkServerIdentity, cert, key }
+    })
+
+    const tls = transport.tls as Record<string, unknown>
+    expect(tls.minVersion).toBe('TLSv1.3')
+    expect(tls.ciphers).toBe('X')
+    expect(tls.checkServerIdentity).toBe(checkServerIdentity)
+    expect(tls.cert).toBe(cert)
+    expect(tls.key).toBe(key)
+  })
+
+  it.each([
+    ['an own key', { zzExtra: 1 }, 'zzExtra'],
+    ['a key with an undefined value', { passphrase: undefined }, 'passphrase'],
+    ['a key with a null value', { secureProtocol: null }, 'secureProtocol'],
+    ['a misspelled known key', { minversion: 'TLSv1.3' }, 'minversion']
+  ])('should refuse %s of tls naming it', (_label, tls, name) => {
+    expect(() => new SmtpEmailProvider({ host: 'h', tls: tls as never })).toThrow(
+      `SmtpEmailProvider: tls.${name} is not a supported option`
+    )
+  })
+
+  // A tls that is not an object has no keys to refuse; it goes to the transport as it always did.
+  it.each(['x', 5, true, []])('should leave a tls of %p to the transport', async (value) => {
+    const transport = await transportOf({ host: 'h', tls: value as never })
+
+    expect(transport.tls).toEqual(value)
+  })
+
+  it('should refuse a key a class supplies from its prototype and the provider does not forward', () => {
+    class Tls {
+      get minVersion(): string {
+        return 'TLSv1.3'
+      }
+      get secureOptions(): number {
+        return 1
+      }
+    }
+
+    expect(() => new SmtpEmailProvider({ host: 'h', tls: new Tls() as never })).toThrow(
+      'SmtpEmailProvider: tls.secureOptions is not a supported option'
+    )
   })
 
   it('should read each credential and each tls key once, when it is built', async () => {
