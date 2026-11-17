@@ -105,6 +105,21 @@ describe('snapshotOptions', () => {
     expect(copy.audit?.repository).toBe(repository)
   })
 
+  // An array is not a section or an entry, and spreading it into `{}` would hide it from the
+  // validation that refuses it: it is kept as it is.
+  it('should keep an array where a section or an entry is expected', () => {
+    const entry: unknown[] = []
+    const email: unknown[] = ['x']
+
+    const copy = snapshotOptions({
+      email,
+      otp: { storage, perPurpose: { mfa_oob: entry } }
+    } as never)
+
+    expect(copy.email).toBe(email)
+    expect(copy.otp?.perPurpose?.['mfa_oob']).toBe(entry)
+  })
+
   it('should leave absent sections absent and a section that is not an object as it is', () => {
     expect(snapshotOptions({ email: { provider, defaultFrom: 'a@b.com' } } as never)).toEqual({
       email: { provider, defaultFrom: 'a@b.com' }

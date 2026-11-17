@@ -82,6 +82,44 @@ describe('BymaxNotificationModule options that answer differently on a second re
     await moduleRef.close()
   })
 
+  // What the validation refuses is refused after the copy too: an array entry must not become an
+  // empty object that passes.
+  it.each([
+    [
+      'an array entry',
+      { perPurpose: { mfa_oob: [] } },
+      'options.otp.perPurpose.mfa_oob must be an object, got an array'
+    ],
+    [
+      'a null entry',
+      { perPurpose: { mfa_oob: null } },
+      'options.otp.perPurpose.mfa_oob must be an object, got null'
+    ],
+    [
+      'a string entry',
+      { perPurpose: { mfa_oob: 'x' } },
+      'options.otp.perPurpose.mfa_oob must be an object, got a string'
+    ],
+    [
+      'an array container',
+      { perPurpose: [] },
+      'options.otp.perPurpose must be an object, got an array'
+    ]
+  ])('should refuse %s in forRoot and in forRootAsync', async (_label, extra, message) => {
+    expect(() => BymaxNotificationModule.forRoot({ otp: { storage, ...extra } } as never)).toThrow(
+      message
+    )
+    await expect(
+      Test.createTestingModule({
+        imports: [
+          BymaxNotificationModule.forRootAsync({
+            useFactory: () => ({ otp: { storage, ...extra } }) as never
+          })
+        ]
+      }).compile()
+    ).rejects.toThrow(message)
+  })
+
   it('should store the attempts bound that was validated in forRootAsync', async () => {
     const otp = flipping({ storage }, 'defaultMaxAttempts', 3, Number.NaN)
 

@@ -13,9 +13,15 @@
 
 import type { BymaxNotificationModuleOptions } from '../interfaces/notification-module-options.interface'
 
-/** A shallow copy of a section when it is an object; anything else is returned as it is. */
+/**
+ * A shallow copy of a section when it is a plain object; anything else is returned as it is. An
+ * array is not a section: spreading it into `{}` would turn it into an object that passes the
+ * validation that refuses it.
+ */
 function copySection<T>(section: T): T {
-  return typeof section === 'object' && section !== null ? { ...section } : section
+  return typeof section === 'object' && section !== null && !Array.isArray(section)
+    ? { ...section }
+    : section
 }
 
 /** A copy of the `perPurpose` container and of each entry in it, or the value as it is. */
