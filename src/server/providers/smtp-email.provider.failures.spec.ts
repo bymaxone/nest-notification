@@ -12,6 +12,8 @@ import * as vm from 'node:vm'
 import { Logger } from '@nestjs/common'
 
 import { baseOptions } from './__tests__/smtp-email-provider.fixtures'
+import { NotificationException } from '../errors/notification-exception'
+
 import { BIDI_OVERRIDE, hasRawControl } from './__tests__/has-raw-control'
 import { SmtpEmailProvider } from './smtp-email.provider'
 
@@ -126,6 +128,28 @@ describe('SmtpEmailProvider failure handling', () => {
       expect(String(warnSpy.mock.calls[0]?.[0])).not.toContain(leaked)
     }
     warnSpy.mockRestore()
+  })
+
+  // The transport would send these parts as content the echo scrub cannot read, so the provider
+  // refuses them before it builds a transport.
+  it.each([
+    ['html', { html: Buffer.from('<p>x</p>') }],
+    ['html', { html: { path: '/etc/hostname' } }],
+    ['text', { text: Buffer.from('x') }],
+    ['text', { text: new Uint8Array(2) }],
+    ['text', { text: 42 }]
+  ])('should refuse a %s part that is not a string', async (part, override) => {
+    const caught: unknown = await new SmtpEmailProvider({ host: 'h' })
+      .send({ ...baseOptions, ...override } as never)
+      .catch((error: unknown) => error)
+
+    expect(caught).toBeInstanceOf(NotificationException)
+    expect(caught).toMatchObject({ code: 'notification.email_missing_body' })
+    expect((caught as NotificationException).getResponse()).toMatchObject({
+      error: { details: { part } }
+    })
+    expect(mockCreateTransport).not.toHaveBeenCalled()
+    expect(mockSendMail).not.toHaveBeenCalled()
   })
 
   // An echo of the PLAIN-TEXT part alone (absent from the HTML) must be

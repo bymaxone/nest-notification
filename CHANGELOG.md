@@ -11,6 +11,19 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 ## [Unreleased]
 
+### Fixed
+
+- **An html or text part that is not a string is refused, not sent.** `EmailService.send`,
+  `SmtpEmailProvider.send` and `ResendEmailProvider.send` read a Buffer, a typed array or an object
+  (which Nodemailer treats as a content descriptor, a file `path` included) as content and sent it, and the removal of a body echoed in an error compares strings only, so a relay
+  that quoted such a part back was not scrubbed. These now fail with `EMAIL_MISSING_BODY` (400),
+  `details` naming the part (`html` or `text`) and `reason: 'not_a_string'`, before anything is audited
+  or sent. An absent part (`undefined` or `null`) is accepted as before, so a text-only message still
+  sends. A host that passed a Buffer as a part must pass a string.
+- **`pool` refuses any sequence.** `SmtpEmailProvider` took a typed array, a Buffer, an
+  `ArrayBuffer` or an object with a numeric `length` for the `pool` object and behaved as if `{}` had
+  been given; it now fails with `pool must be an object`, as an array already did.
+
 ### Changed
 
 - **A relay or API that says "try later" is answered with `503`, not `502`.** `EMAIL_SEND_FAILED`
@@ -19,6 +32,13 @@ the entries that carry one, is the compatibility contract — read it, not the n
   `450`, a `451`, a `452`) and when `ResendEmailProvider` meets an HTTP `429`. An SMTP `5xx` reply
   and any other rejection are refused sends and keep `502`. The error code and body are unchanged, so a host
   that branches on `code` is unaffected; one that branches on the status now sees `503` for these.
+
+#### Apply to a derived backend
+
+No declaration changes. Two behaviours do. A send whose `html` or `text` is not a string, a Buffer or a
+content descriptor that Nodemailer would have sent, now fails with `EMAIL_MISSING_BODY` (400): pass a
+string. A host that branches on the HTTP status of `EMAIL_SEND_FAILED` sees `503`, not `502`, for an
+SMTP `4xx` reply and a Resend `429`; a host that branches on `code` is unaffected.
 
 ## [1.4.12] - 2026-11-17
 

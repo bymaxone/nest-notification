@@ -32,6 +32,7 @@ import { escapeAuditString } from '../utils/audit-escape'
 import { errorCodeOf } from '../utils/availability'
 import { extractDeliveryStatus, withoutDeclaredValues } from '../utils/delivery-status'
 import { describeError, UNPRINTABLE_ERROR } from '../utils/describe-error'
+import { assertBodyParts } from '../utils/email-body'
 import { loadOptionalPeer } from '../utils/load-optional-peer'
 import { collectEchoedExcerpts, readRedactedMessage, redactValues } from '../utils/redact'
 import type {
@@ -106,6 +107,21 @@ function settleOrTimeout<T>(call: Promise<T>, timeoutMs: number): Promise<T> {
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]'])
 
 /**
+ * Whether an object is a sequence and not an options object: an array, a typed array, a buffer, a
+ * data view, an array buffer or anything else with a numeric `length`.
+ *
+ * @param value - The object to test.
+ * @returns `true` when it is a sequence.
+ */
+function isArrayLike(value: object): boolean {
+  return (
+    ArrayBuffer.isView(value) ||
+    value instanceof ArrayBuffer ||
+    typeof (value as { length?: unknown }).length === 'number'
+  )
+}
+
+/**
  * Refuses a pool option that is not an object of positive integers.
  *
  * @param pool - The option as the caller passed it.
@@ -115,7 +131,7 @@ function assertPool(pool: SmtpPoolOptions | undefined): void {
   if (pool === undefined) {
     return
   }
-  if (typeof pool !== 'object' || pool === null || Array.isArray(pool)) {
+  if (typeof pool !== 'object' || pool === null || isArrayLike(pool)) {
     throw new Error('SmtpEmailProvider: pool must be an object')
   }
   for (const [name, value] of [
@@ -276,6 +292,7 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
    * comes back. `EmailService` maps any thrown `Error` to `EMAIL_SEND_FAILED`.
    */
   async send(options: EmailSendOptions): Promise<EmailSendResult> {
+    assertBodyParts(options.html, options.text)
     this.guardHeaderInjection(options)
     const from = this.buildSender(options.from, options.fromName)
     const transport = await this.getTransport()
