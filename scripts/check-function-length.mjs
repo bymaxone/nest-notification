@@ -133,8 +133,7 @@ function classNameOf(member) {
 function describeNode(node) {
   const call = ts.isCallExpression(node.parent) ? node.parent : null
   const root = call === null ? null : calleeRoot(call)
-  if (call !== null && root !== null && HOOKS.has(root))
-    return { segment: ['hook', root], measured: true }
+  if (call !== null && root !== null && HOOKS.has(root)) return { segment: ['hook', root], measured: true }
   if (call !== null && root !== null && (CONTAINERS.has(root) || TESTS.has(root))) {
     const title = titleOf(call)
     const kind = CONTAINERS.has(root) ? 'container' : 'test'
