@@ -8,15 +8,17 @@
  * every service from it, so what is checked is what is kept.
  *
  * Only the option sections are copied, one level at a time down to each `perPurpose` entry:
- * providers, stores, repositories and resolvers are the host's objects and stay as they are.
+ * providers, stores, repositories and resolvers are the host's objects and stay as they are. A
+ * section is copied by its own enumerable properties, as a spread does, so an option that a class
+ * instance supplies from its prototype is not part of the copy: pass the options as a plain object.
  */
 
 import type { BymaxNotificationModuleOptions } from '../interfaces/notification-module-options.interface'
 
 /**
- * A shallow copy of a section when it is a plain object; anything else is returned as it is. An
- * array is not a section: spreading it into `{}` would turn it into an object that passes the
- * validation that refuses it.
+ * A shallow copy of the own enumerable properties of a section when it is an object that is not an
+ * array; anything else is returned as it is. An array is not a section: spreading it into `{}`
+ * would turn it into an object that passes the validation that refuses it.
  */
 function copySection<T>(section: T): T {
   return typeof section === 'object' && section !== null && !Array.isArray(section)
