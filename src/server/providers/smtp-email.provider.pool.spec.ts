@@ -24,6 +24,18 @@ jest.mock('nodemailer', () => ({ __esModule: true, createTransport: mockCreateTr
   virtual: true
 })
 
+/** A trap or getter that throws, as host code may. */
+function throwing(): never {
+  throw new Error('host code threw')
+}
+
+/** A Proxy whose handler has been revoked: every operation on it throws. */
+function revokedProxy(): object {
+  const { proxy, revoke } = Proxy.revocable({}, {})
+  revoke()
+  return proxy
+}
+
 /** The transport config handed to `createTransport` on the most recent init. */
 function lastTransportConfig(): Record<string, unknown> {
   return mockCreateTransport.mock.calls.at(-1)?.[0] as Record<string, unknown>
@@ -79,6 +91,37 @@ describe('SmtpEmailProvider pool option', () => {
     expect(() => new SmtpEmailProvider({ host: 'h', pool: pool as never })).toThrow(
       'SmtpEmailProvider: pool must be an object'
     )
+  })
+
+  // Reading the option is host code too: a getter or a Proxy that throws must end in the same
+  // refusal as any other value that is not an options object, not in its own error.
+  it.each([
+    ['a throwing length getter', Object.defineProperty({}, 'length', { get: throwing })],
+    ['a throwing limit getter', Object.defineProperty({}, 'maxConnections', { get: throwing })],
+    ['a Proxy that throws on every read', new Proxy({}, { get: throwing })],
+    ['a Proxy that throws on its prototype', new Proxy({}, { getPrototypeOf: throwing })],
+    ['a revoked Proxy', revokedProxy()]
+  ])('should refuse a pool given as %s', (_label, pool) => {
+    expect(() => new SmtpEmailProvider({ host: 'h', pool: pool as never })).toThrow(
+      'SmtpEmailProvider: pool must be an object'
+    )
+  })
+
+  // The limits are read once, at construction: a getter that answers differently later must not
+  // change what the transport is built with.
+  it('should read the limits of the pool once', async () => {
+    let reads = 0
+    const pool = {
+      get maxConnections(): number {
+        reads += 1
+        return reads === 1 ? 3 : 99
+      }
+    }
+    const provider = new SmtpEmailProvider({ host: 'h', pool })
+
+    await provider.send(baseOptions).catch(() => undefined)
+
+    expect(lastTransportConfig()).toMatchObject({ pool: true, maxConnections: 3 })
   })
 
   it.each([

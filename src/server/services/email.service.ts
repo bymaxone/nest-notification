@@ -273,6 +273,10 @@ export class EmailService {
     try {
       return await this.provider.send(sendOptions)
     } catch (error) {
+      // The status is read from the failure as the provider raised it: the removal of secrets below
+      // strips the error's own properties in place, the code among them, so nothing may read the
+      // error for its status after that.
+      const status = unavailableStatus(error)
       // A chain too large to examine, like a send that asked for it, publishes none of the
       // provider's text: reading it, scanning it and scrubbing it would all grow with a length
       // the provider chose.
@@ -299,7 +303,7 @@ export class EmailService {
         { providerName: this.provider.name },
         {
           cause: secretValues.length > 0 ? scrubValuesFromErrorChain(error, secretValues) : error,
-          ...unavailableStatus(error)
+          ...status
         }
       )
     }
