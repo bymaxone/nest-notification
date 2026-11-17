@@ -5,6 +5,8 @@
  * @layer utils
  */
 
+import { runInNewContext } from 'node:vm'
+
 import { assertOptionsObject, isPlainOrClassInstance, readOptionKeys } from './read-options'
 
 interface Shape {
@@ -110,6 +112,22 @@ describe('isPlainOrClassInstance', () => {
     ['a class that extends Map', new (class Extended extends Map<string, string> {})()]
   ])('should refuse %s', (_label, value) => {
     expect(isPlainOrClassInstance(value)).toBe(false)
+  })
+
+  // The root of a chain is the prototype with no prototype, in whichever realm the object was made:
+  // an options literal built in a vm context has that realm's Object.prototype, not this one's.
+  it('should accept a plain object and a class instance from another realm', () => {
+    const foreign = runInNewContext('({ mfa_oob: {} })') as object
+    const foreignInstance = runInNewContext('new (class Purposes {})()') as object
+
+    expect(Object.getPrototypeOf(foreign)).not.toBe(Object.prototype)
+    expect(isPlainOrClassInstance(foreign)).toBe(true)
+    expect(isPlainOrClassInstance(foreignInstance)).toBe(true)
+  })
+
+  it('should refuse a built-in from another realm', () => {
+    expect(isPlainOrClassInstance(runInNewContext('new Map()') as object)).toBe(false)
+    expect(isPlainOrClassInstance(runInNewContext('new Date(0)') as object)).toBe(false)
   })
 
   it('should not take a prototype that only claims a native constructor', () => {

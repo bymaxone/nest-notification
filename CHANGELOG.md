@@ -26,7 +26,7 @@ the entries that carry one, is the compatibility contract — read it, not the n
   options listed in the 1.4.14 note. `secure` and `requireTls` are refused because a `null` is not a
   valid value for them: left out, they are derived from the port and the host. An `undefined` is
   still read as omitted for all four.
-- **Values of the wrong type are refused naming the option.** `options.global` must be an object; a
+- **Values of the wrong type are refused naming the option.** `options.global`, when set, must be an object (a `null` is read as not set); a
   `perPurpose` container that is a `Map`, a `Set`, a `Date` or another built-in is refused as such
   (a `Map` was refused as `perPurpose.size must be an object, got 1`, and a `Date` was accepted); the
   `codeType` of a `perPurpose` entry must be one of the supported types, where any value was accepted;

@@ -46,7 +46,8 @@ const NATIVE_SOURCE = /\[native code\]/
 
 /**
  * Whether an object is a plain object or an instance of a class the host wrote: no prototype on its
- * chain, before `Object.prototype`, is a built-in's. A `Map`, a `Set`, a `Date`, a `RegExp` or a
+ * chain, before the root, is a built-in's. The root is the prototype that has no prototype, so an
+ * object made in another realm (a `vm` context) is read the same as one made here. A `Map`, a `Set`, a `Date`, a `RegExp` or a
  * class that extends one is not, because what they hold is not read through property names.
  *
  * @param value - The object to test.
@@ -55,7 +56,7 @@ const NATIVE_SOURCE = /\[native code\]/
 export function isPlainOrClassInstance(value: object): boolean {
   for (
     let prototype = Object.getPrototypeOf(value) as object | null;
-    prototype !== null && prototype !== Object.prototype;
+    prototype !== null && Object.getPrototypeOf(prototype) !== null;
     prototype = Object.getPrototypeOf(prototype) as object | null
   ) {
     const constructor: unknown = Object.getOwnPropertyDescriptor(prototype, 'constructor')?.value
