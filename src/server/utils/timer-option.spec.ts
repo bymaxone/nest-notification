@@ -16,8 +16,9 @@ describe('assertTimerMs', () => {
     expect(() => assertTimerMs('Owner', 'option', value)).not.toThrow()
   })
 
-  // Each of these made a real Nodemailer 10.1.4 send fail in a few milliseconds against a healthy
-  // relay (past the ceiling, negative, fractional, a string) or run with no bound (NaN, zero).
+  // Each of these either fails a send within milliseconds against a healthy relay (past the ceiling,
+  // negative, fractional, a string: the timer fires at once) or leaves the phase with no bound (NaN,
+  // zero).
   it.each([
     0,
     -1,
