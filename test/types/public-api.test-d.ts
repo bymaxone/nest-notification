@@ -10,6 +10,7 @@
  * (`tsc`). There is no runtime here — everything is checked by the compiler.
  */
 import type { DynamicModule } from '@nestjs/common'
+import type { PeerCertificate } from 'node:tls'
 import type { Redis } from 'ioredis'
 
 import type {
@@ -141,6 +142,16 @@ type _IsConfigured = Expect<Equal<ReturnType<typeof emailProvider.isConfigured>,
 
 // The bundled SMTP adapter satisfies the same closed contract a consumer implements.
 const _smtpIsAProvider: IEmailProvider = new SmtpEmailProvider({ host: 'localhost', port: 1025 })
+// The usual form of the identity check, written with the certificate type Node hands it, compiles as
+// supplied: a consumer never needs a cast to wire a custom verifier.
+const _smtpAcceptsTypedIdentityCheck: SmtpEmailProviderOptions = {
+  host: 'localhost',
+  tls: {
+    minVersion: 'TLSv1.3',
+    checkServerIdentity: (_host: string, cert: PeerCertificate): Error | undefined =>
+      cert.subject.CN === 'relay' ? undefined : new Error('wrong certificate')
+  }
+}
 // Credentials read straight from `process.env` are `string | undefined`. They must
 // type-check as supplied — `isConfigured()` is what reports a variable that failed to
 // load, so a consumer never needs a non-null assertion to wire the provider up.

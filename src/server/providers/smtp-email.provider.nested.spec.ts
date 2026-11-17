@@ -44,21 +44,144 @@ describe('SmtpEmailProvider options that are objects', () => {
   // the type forces this case to change, and it fails until the provider keeps the new key.
   it('should keep every key of credentials, tls and pool', async () => {
     const credentials = { user: 'u', pass: 'p' } satisfies Required<SmtpCredentials>
+    const checkServerIdentity = (): undefined => undefined
+    const cert = Buffer.from('cert')
+    const key = [Buffer.from('key')]
+    const pfx = Buffer.from('pfx')
     const tls = {
       rejectUnauthorized: false,
       servername: 'relay.example',
-      ca: ['ca']
+      ca: ['ca'],
+      minVersion: 'TLSv1.3',
+      maxVersion: 'TLSv1.3',
+      ciphers: 'TLS_AES_256_GCM_SHA384',
+      checkServerIdentity,
+      cert,
+      key,
+      passphrase: 'phrase',
+      pfx
     } satisfies Required<SmtpTlsOptions>
     const pool = { maxConnections: 2, maxMessages: 5 } satisfies Required<SmtpPoolOptions>
 
     const transport = await transportOf({ host: 'relay.example', credentials, tls, pool })
 
+    // The whole tls object: every key is there, and the ones that hold objects or functions are the
+    // host's own, not copies of them.
+    const forwarded = transport.tls as Record<string, unknown>
+    expect(forwarded).toEqual(tls)
+    expect(Object.keys(forwarded).sort()).toEqual(Object.keys(tls).sort())
+    expect(forwarded.checkServerIdentity).toBe(checkServerIdentity)
+    expect(forwarded.cert).toBe(cert)
+    expect(forwarded.key).toBe(key)
+    expect(forwarded.pfx).toBe(pfx)
     expect(transport).toMatchObject({
       auth: { user: 'u', pass: 'p' },
-      tls: { rejectUnauthorized: false, servername: 'relay.example', ca: ['ca'] },
+      tls: {
+        rejectUnauthorized: false,
+        servername: 'relay.example',
+        ca: ['ca'],
+        minVersion: 'TLSv1.3',
+        maxVersion: 'TLSv1.3',
+        ciphers: 'TLS_AES_256_GCM_SHA384',
+        passphrase: 'phrase'
+      },
       maxConnections: 2,
       maxMessages: 5
     })
+  })
+
+  // A setting the host asked for must reach the connection or fail the build: hardening that is
+  // dropped without a word downgrades the session. The host's own objects stay by reference.
+  it('should hand a version bound, ciphers, a verifier and a client pair to the transport as given', async () => {
+    const checkServerIdentity = (): undefined => undefined
+    const cert = Buffer.from('cert')
+    const key = Buffer.from('key')
+
+    const transport = await transportOf({
+      host: 'h',
+      tls: { minVersion: 'TLSv1.3', ciphers: 'X', checkServerIdentity, cert, key }
+    })
+
+    const tls = transport.tls as Record<string, unknown>
+    expect(tls.minVersion).toBe('TLSv1.3')
+    expect(tls.ciphers).toBe('X')
+    expect(tls.checkServerIdentity).toBe(checkServerIdentity)
+    expect(tls.cert).toBe(cert)
+    expect(tls.key).toBe(key)
+  })
+
+  it('should hand a passphrase and a pfx to the transport as given', async () => {
+    const pfx = Buffer.from('pfx')
+
+    const tls = (await transportOf({ host: 'h', tls: { passphrase: 'phrase', pfx } })).tls
+
+    expect(tls).toMatchObject({ passphrase: 'phrase' })
+    expect((tls as { pfx: unknown }).pfx).toBe(pfx)
+  })
+
+  // The refusal names the key and never a value: a passphrase is a secret.
+  it('should not print a value of tls when it refuses a key', () => {
+    const attempt = (): unknown =>
+      new SmtpEmailProvider({
+        host: 'h',
+        tls: { passphrase: 'SECRET-PHRASE', zzExtra: 'SECRET-VALUE' } as never
+      })
+
+    expect(attempt).toThrow('SmtpEmailProvider: tls.zzExtra is not a supported option')
+    expect(attempt).not.toThrow(/SECRET/)
+  })
+
+  it('should refuse an unsupported key that is not enumerable', () => {
+    const tls = { minVersion: 'TLSv1.3' }
+    Object.defineProperty(tls, 'secureProtocol', { value: 'TLSv1_2_method', enumerable: false })
+
+    expect(() => new SmtpEmailProvider({ host: 'h', tls: tls as never })).toThrow(
+      'SmtpEmailProvider: tls.secureProtocol is not a supported option'
+    )
+  })
+
+  it('should refuse a symbol key without printing its description', () => {
+    const tls = { [Symbol('SECRET-DESCRIPTION')]: 1 }
+
+    const attempt = (): unknown => new SmtpEmailProvider({ host: 'h', tls: tls as never })
+
+    expect(attempt).toThrow(
+      'SmtpEmailProvider: tls has a symbol key, which is not a supported option'
+    )
+    expect(attempt).not.toThrow(/SECRET/)
+  })
+
+  it.each([
+    ['an own key', { zzExtra: 1 }, 'zzExtra'],
+    ['a key with an undefined value', { crl: undefined }, 'crl'],
+    ['a key with a null value', { secureProtocol: null }, 'secureProtocol'],
+    ['a misspelled known key', { minversion: 'TLSv1.3' }, 'minversion']
+  ])('should refuse %s of tls naming it', (_label, tls, name) => {
+    expect(() => new SmtpEmailProvider({ host: 'h', tls: tls as never })).toThrow(
+      `SmtpEmailProvider: tls.${name} is not a supported option`
+    )
+  })
+
+  // A tls that is not an object has no keys to refuse; it is passed through to the transport.
+  it.each(['x', 5, true, []])('should leave a tls of %p to the transport', async (value) => {
+    const transport = await transportOf({ host: 'h', tls: value as never })
+
+    expect(transport.tls).toEqual(value)
+  })
+
+  it('should refuse a key a class supplies from its prototype and the provider does not forward', () => {
+    class Tls {
+      get minVersion(): string {
+        return 'TLSv1.3'
+      }
+      get secureOptions(): number {
+        return 1
+      }
+    }
+
+    expect(() => new SmtpEmailProvider({ host: 'h', tls: new Tls() as never })).toThrow(
+      'SmtpEmailProvider: tls.secureOptions is not a supported option'
+    )
   })
 
   it('should read each credential and each tls key once, when it is built', async () => {

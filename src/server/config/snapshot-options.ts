@@ -21,7 +21,7 @@ import type {
   OtpChannelOptions,
   OtpPurposeConfig
 } from '../interfaces/notification-module-options.interface'
-import { isPlainOrClassInstance, readOptionKeys } from '../utils/read-options'
+import { isPlainOrClassInstance, namesOf, readOptionKeys } from '../utils/read-options'
 
 /** A default tag of the email channel. */
 type DefaultTag = NonNullable<EmailChannelOptions['defaultTags']>[number]
@@ -111,28 +111,6 @@ const AUDIT_KEYS = [
   'maskRecipient'
 ] as const satisfies readonly (keyof AuditOptions)[]
 
-/**
- * The purposes a container holds: its own enumerable string keys, and the accessors (getters) of
- * the prototypes it inherits from before `Object.prototype`. A class used as a record, with a getter
- * for each purpose, is read the way a plain object is. A method, `constructor`, a symbol and a
- * non-enumerable own key are not purposes.
- */
-function purposesOf(container: object): string[] {
-  const names = new Set(Object.keys(container))
-  for (
-    let prototype = Object.getPrototypeOf(container) as object | null;
-    prototype !== null && prototype !== Object.prototype;
-    prototype = Object.getPrototypeOf(prototype) as object | null
-  ) {
-    for (const [name, descriptor] of Object.entries(Object.getOwnPropertyDescriptors(prototype))) {
-      if (descriptor.get !== undefined) {
-        names.add(name)
-      }
-    }
-  }
-  return [...names]
-}
-
 /** The `perPurpose` container, and each entry in it, read once; anything else as it is. */
 function readPerPurpose<T>(perPurpose: T): T {
   if (
@@ -143,7 +121,7 @@ function readPerPurpose<T>(perPurpose: T): T {
   ) {
     return perPurpose
   }
-  const entries = purposesOf(perPurpose).map(
+  const entries = namesOf(perPurpose).map(
     (key) =>
       [
         key,

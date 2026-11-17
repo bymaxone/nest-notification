@@ -5,7 +5,12 @@
  * @layer infrastructure
  */
 
-/** TLS knobs forwarded to the transport, for relays using a private CA. */
+/**
+ * TLS knobs forwarded to the transport: a private CA, the protocol bounds, the ciphers, a custom
+ * identity check and a client certificate. These are the only keys accepted; any other key of `tls`
+ * is refused when the provider is built, because a setting that is dropped without a word can leave
+ * the connection weaker than the host asked for.
+ */
 export interface SmtpTlsOptions {
   /**
    * Whether to reject a certificate that does not validate against the trust store.
@@ -18,6 +23,25 @@ export interface SmtpTlsOptions {
   servername?: string
   /** Additional trusted CA certificate(s), in PEM form. */
   ca?: string | string[]
+  /** The lowest TLS version the session may negotiate. */
+  minVersion?: 'TLSv1' | 'TLSv1.1' | 'TLSv1.2' | 'TLSv1.3'
+  /** The highest TLS version the session may negotiate. */
+  maxVersion?: 'TLSv1' | 'TLSv1.1' | 'TLSv1.2' | 'TLSv1.3'
+  /** The cipher suites the session may use, in OpenSSL list format. */
+  ciphers?: string
+  /**
+   * Replaces the check of the certificate against the server name; return an error to refuse it.
+   * Declared as a method so a callback typed with Node's own `PeerCertificate` is assignable.
+   */
+  checkServerIdentity?(hostname: string, cert: object): Error | undefined
+  /** The client certificate chain, in PEM form. */
+  cert?: string | Buffer | ReadonlyArray<string | Buffer>
+  /** The private key of the client certificate, in PEM form. */
+  key?: string | Buffer | ReadonlyArray<string | Buffer>
+  /** The passphrase of an encrypted `key` or `pfx`. A secret: it is never printed. */
+  passphrase?: string
+  /** The client certificate and key as a PKCS#12 bundle. */
+  pfx?: string | Buffer | ReadonlyArray<string | Buffer>
 }
 
 /**
@@ -204,7 +228,15 @@ export const SMTP_CREDENTIAL_KEYS = [
 export const SMTP_TLS_KEYS = [
   'rejectUnauthorized',
   'servername',
-  'ca'
+  'ca',
+  'minVersion',
+  'maxVersion',
+  'ciphers',
+  'checkServerIdentity',
+  'cert',
+  'key',
+  'passphrase',
+  'pfx'
 ] as const satisfies readonly (keyof SmtpTlsOptions)[]
 
 /**

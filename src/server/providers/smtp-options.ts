@@ -8,7 +8,7 @@
  * not set. The options whose default is the weaker transport or login posture refuse a `null`.
  */
 
-import { assertOptionsObject, readOptionKeys } from '../utils/read-options'
+import { assertOptionsObject, namesOf, readOptionKeys } from '../utils/read-options'
 import {
   SMTP_CREDENTIAL_KEYS,
   SMTP_OPTION_KEYS,
@@ -88,6 +88,30 @@ export function readPool(pool: SmtpPoolOptions | undefined): SmtpPoolOptions | u
   }
 }
 /**
+ * Refuses a key of `tls` that the provider does not forward. Dropping it would leave the session
+ * with a weaker setting than the host asked for (a version floor, a cipher list, a verifier), so
+ * the build fails and names the key. A `tls` that is not an object is left to the transport.
+ *
+ * @param tls - The option as the host gave it.
+ * @throws Error When `tls` holds a key outside {@link SMTP_TLS_KEYS}.
+ */
+function refuseUnknownTlsKeys(tls: unknown): void {
+  if (typeof tls !== 'object' || tls === null || Array.isArray(tls)) {
+    return
+  }
+  // Every own key, enumerable or not, and every accessor the object inherits: a key that is left
+  // out of the list below is refused, never dropped.
+  for (const name of new Set<string | symbol>([...Reflect.ownKeys(tls), ...namesOf(tls)])) {
+    if (typeof name === 'symbol') {
+      throw new Error('SmtpEmailProvider: tls has a symbol key, which is not a supported option')
+    }
+    if (!(SMTP_TLS_KEYS as readonly string[]).includes(name)) {
+      throw new Error(`SmtpEmailProvider: tls.${name} is not a supported option`)
+    }
+  }
+}
+
+/**
  * Copies the options of the provider, reading every declared key once.
  *
  * @param options - The options as the host gave them.
@@ -107,6 +131,7 @@ export function readSmtpOptions(options: SmtpEmailProviderOptions): SmtpEmailPro
     own.credentials = readOptionKeys(own.credentials, SMTP_CREDENTIAL_KEYS)
   }
   if (own.tls !== undefined) {
+    refuseUnknownTlsKeys(own.tls)
     own.tls = readOptionKeys(own.tls, SMTP_TLS_KEYS)
   }
   return own
