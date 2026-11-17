@@ -32,6 +32,14 @@ const TTL = [...NOT_NUMBERS, ...NOT_FINITE, 0, -5]
 /** A duration in seconds that must be a finite number, zero meaning none. */
 const COOLDOWN = [...NOT_NUMBERS, ...NOT_FINITE, -1]
 
+describe('validateOptions of something that is not an object', () => {
+  it.each([undefined, null, 'x', 5, true, [], [{}]])('should refuse %p', (value) => {
+    expect(() => validateOptions(value as never)).toThrow(
+      '[BymaxNotificationModule] options must be an object'
+    )
+  })
+})
+
 describe('validateOptions numeric options', () => {
   describe('otp.defaultMaxAttempts', () => {
     it.each([1, 5, 100])('should accept %p', (value) => {

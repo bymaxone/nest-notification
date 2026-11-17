@@ -144,6 +144,22 @@ describe('ResendEmailProvider timeout', () => {
     expect(timeout).toHaveBeenCalledWith(2_500)
   })
 
+  // A key that reads as undefined or null is not set and takes the default.
+  it.each([undefined, null])(
+    'should use the default bound for a timeoutMs of %p',
+    async (value) => {
+      const timeout = jest.spyOn(AbortSignal, 'timeout')
+
+      await new ResendEmailProvider({ apiKey: 'k', timeoutMs: value } as never).send(baseOptions)
+
+      expect(timeout).toHaveBeenCalledWith(15_000)
+    }
+  )
+
+  it.each([undefined, null])('should not be configured when the apiKey is %p', (apiKey) => {
+    expect(new ResendEmailProvider({ apiKey } as never).isConfigured()).toBe(false)
+  })
+
   it('should apply the configured bound to every send', async () => {
     const timeout = jest.spyOn(AbortSignal, 'timeout')
     const provider = new ResendEmailProvider({ apiKey: 'k', timeoutMs: 2_500 })

@@ -33,6 +33,9 @@ import {
  * @throws NotificationException With `OTP_INVALID_LENGTH` when `otp.defaultLength` is out of range.
  */
 export function validateOptions(options: BymaxNotificationModuleOptions): void {
+  if (typeof options !== 'object' || options === null || Array.isArray(options)) {
+    throw new Error('[BymaxNotificationModule] options must be an object')
+  }
   if (!options.email && !options.otp && !options.sms && !options.push) {
     throw new Error(
       '[BymaxNotificationModule] At least one channel must be configured (email, otp, sms, or push)'

@@ -82,12 +82,33 @@ const AUDIT_KEYS = [
   'maskRecipient'
 ] as const satisfies readonly (keyof AuditOptions)[]
 
+/**
+ * The purposes a container holds: its own enumerable keys, and the property names of the prototypes
+ * it inherits from before `Object.prototype`, so a class used as a record, with a getter for each
+ * purpose, is read the way a plain object is.
+ */
+function purposesOf(container: object): string[] {
+  const names = new Set(Object.keys(container))
+  for (
+    let prototype: object | null = Object.getPrototypeOf(container) as object | null;
+    prototype !== null && prototype !== Object.prototype;
+    prototype = Object.getPrototypeOf(prototype) as object | null
+  ) {
+    for (const name of Object.getOwnPropertyNames(prototype)) {
+      if (name !== 'constructor') {
+        names.add(name)
+      }
+    }
+  }
+  return [...names]
+}
+
 /** The `perPurpose` container, and each entry in it, read once; anything else as it is. */
 function readPerPurpose<T>(perPurpose: T): T {
   if (typeof perPurpose !== 'object' || perPurpose === null || Array.isArray(perPurpose)) {
     return perPurpose
   }
-  const entries = Object.keys(perPurpose).map(
+  const entries = purposesOf(perPurpose).map(
     (key) =>
       [
         key,
@@ -106,6 +127,9 @@ function readPerPurpose<T>(perPurpose: T): T {
 export function snapshotOptions(
   options: BymaxNotificationModuleOptions
 ): BymaxNotificationModuleOptions {
+  if (typeof options !== 'object' || options === null || Array.isArray(options)) {
+    return options
+  }
   const read = readOptionKeys(options, MODULE_KEYS)
   if (read.global !== undefined) {
     read.global = readOptionKeys(read.global, GLOBAL_KEYS)

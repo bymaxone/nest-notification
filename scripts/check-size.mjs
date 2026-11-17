@@ -32,14 +32,14 @@ const PACKAGE = openPackage(ROOT)
 // headroom: server ~15.5/30 kB, shared ~0.8/4 kB, react ~1.7/8 kB. The budgets
 // sit roughly 2x over the real artifact so a peer dep leaking into the bundle
 // trips the gate well before it ships; revisit when the SMS/Push channels land.
-// Server budget: 37 658 B, the 37 628 B measured plus 30 B of headroom. It is a byte count so
+// Server budget: 37 777 B, the 37 747 B measured plus 30 B of headroom. It is a byte count so
 // it follows the measured artifact and is not set ahead of it; the other budgets keep the margin
 // the calibration above describes.
 // The .mjs ships unminified with JSDoc, so every line of runtime code and every contract case
 // counts in full. A budget is re-derived from the artifact of the change that needs it, and not
 // raised ahead of it.
 const BUDGETS = [
-  { name: 'server (NestJS module)', path: 'dist/server/index.mjs', brotli: 37_658 },
+  { name: 'server (NestJS module)', path: 'dist/server/index.mjs', brotli: 37_777 },
   { name: 'shared (types + constants)', path: 'dist/shared/index.mjs', brotli: 4 * 1024 },
   { name: 'react (hooks)', path: 'dist/react/index.mjs', brotli: 8 * 1024 },
   { name: 'testing (storage contract)', path: 'dist/testing/index.mjs', brotli: 4.5 * 1024 }

@@ -15,7 +15,7 @@ describe('SmtpEmailProvider port', () => {
     expect(() => new SmtpEmailProvider({ host: 'h', port })).not.toThrow()
   })
 
-  it.each([0, -1, 65_536, 70_000, 587.5, NaN, Infinity, '587', null, true])(
+  it.each([0, -1, 65_536, 70_000, 587.5, NaN, Infinity, '587', true])(
     'should refuse %p',
     (port) => {
       expect(() => new SmtpEmailProvider({ host: 'h', port: port as never })).toThrow(
@@ -35,7 +35,7 @@ describe('SmtpEmailProvider timer options', () => {
       expect(() => new SmtpEmailProvider({ host: 'h' })).not.toThrow()
     })
 
-    it.each([0, -1, 1.5, NaN, Infinity, 2_147_483_648, 3_000_000_000, '10s', '5000', null, true])(
+    it.each([0, -1, 1.5, NaN, Infinity, 2_147_483_648, 3_000_000_000, '10s', '5000', true])(
       'should refuse %p',
       (value) => {
         expect(() => new SmtpEmailProvider({ host: 'h', [option]: value as never })).toThrow(

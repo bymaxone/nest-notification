@@ -154,6 +154,21 @@ describe('BymaxNotificationModule options that answer differently on a second re
     await moduleRef.close()
   })
 
+  // The options themselves must be an object, and the refusal says so.
+  it.each([undefined, null, 'x', 5, true, []])(
+    'should refuse %p as the options in forRoot and in forRootAsync',
+    async (value) => {
+      const message = '[BymaxNotificationModule] options must be an object'
+
+      expect(() => BymaxNotificationModule.forRoot(value as never)).toThrow(message)
+      await expect(
+        Test.createTestingModule({
+          imports: [BymaxNotificationModule.forRootAsync({ useFactory: () => value as never })]
+        }).compile()
+      ).rejects.toThrow(message)
+    }
+  )
+
   it('should store the attempts bound that was validated in forRootAsync', async () => {
     const otp = flipping({ storage }, 'defaultMaxAttempts', 3, Number.NaN)
 

@@ -169,6 +169,46 @@ describe('SmtpEmailProvider pool option', () => {
     }
   )
 
+  // A key that reads as undefined or null is not set and takes the default, as it does when it is
+  // left out, and the checks run on what is left.
+  it.each([
+    ['port', 587],
+    ['connectionTimeout', 10_000],
+    ['greetingTimeout', 10_000],
+    ['socketTimeout', 20_000]
+  ] as const)(
+    'should take the default %s for an undefined and a null',
+    async (option, expected) => {
+      for (const value of [undefined, null]) {
+        jest.clearAllMocks()
+        const provider = new SmtpEmailProvider({ host: 'h', [option]: value } as never)
+
+        await provider.send(baseOptions).catch(() => undefined)
+
+        expect(lastTransportConfig()[option]).toBe(expected)
+      }
+    }
+  )
+
+  it.each([undefined, null])('should send unpooled and without a login for %p', async (value) => {
+    const provider = new SmtpEmailProvider({
+      host: 'h',
+      pool: value,
+      credentials: value,
+      tls: value,
+      sendTimeoutMs: value
+    } as never)
+
+    await provider.send(baseOptions).catch(() => undefined)
+
+    expect(lastTransportConfig()).toMatchObject({ host: 'h', auth: undefined, tls: undefined })
+    expect(lastTransportConfig()).not.toHaveProperty('pool')
+  })
+
+  it.each([undefined, null])('should not be configured when the host is %p', (host) => {
+    expect(new SmtpEmailProvider({ host } as never).isConfigured()).toBe(false)
+  })
+
   // A host may pass a class whose options are getters on the prototype (a ConfigService behind
   // each): they are read by property access, once, like own properties.
   it('should keep the options a class instance supplies from its prototype', async () => {
@@ -259,7 +299,6 @@ describe('SmtpEmailProvider pool option', () => {
 
   it.each([
     ['true', true],
-    ['null', null],
     ['a string', 'yes']
   ])('should refuse a pool given as %s', (_label, pool) => {
     expect(() => new SmtpEmailProvider({ host: 'h', pool: pool as never })).toThrow(

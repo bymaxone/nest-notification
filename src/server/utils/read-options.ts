@@ -14,9 +14,10 @@
  */
 
 /**
- * Reads `keys` from `source` once each, into a new plain object. A value that is `undefined` is
- * left out, so absent and undefined stay the same thing. `source` is returned as it is when it is
- * not an object, or is an array, so the validation that refuses it still sees what was given.
+ * Reads `keys` from `source` once each, into a new plain object. A value that is `undefined` or
+ * `null` is left out: an option that reads as either is not set and takes its default, the same as
+ * a key that is absent, and the checks run on what is left. `source` is returned as it is when it
+ * is not an object, or is an array, so the validation that refuses it still sees what was given.
  *
  * @param source - The options as the host gave them.
  * @param keys - Every option of the type, by name.
@@ -29,6 +30,6 @@ export function readOptionKeys<T>(source: T, keys: readonly (keyof T & string)[]
   // `Reflect.get` is the same property access as `source[key]`, getters and prototypes included.
   const entries = keys
     .map((key) => [key, Reflect.get(source, key) as unknown] as const)
-    .filter(([, value]) => value !== undefined)
+    .filter(([, value]) => value !== undefined && value !== null)
   return Object.fromEntries(entries) as T
 }

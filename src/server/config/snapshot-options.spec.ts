@@ -131,7 +131,7 @@ describe('snapshotOptions', () => {
     expect(snapshotOptions({ email: { provider, defaultFrom: 'a@b.com' } } as never)).toEqual({
       email: { provider, defaultFrom: 'a@b.com' }
     })
-    expect(snapshotOptions({ otp: null } as never)).toEqual({ otp: null })
+    expect(snapshotOptions({ otp: null } as never)).toEqual({})
     expect(
       snapshotOptions({ otp: { storage, perPurpose: 'login' } } as never).otp?.perPurpose
     ).toBe('login')
@@ -192,6 +192,44 @@ describe('snapshotOptions', () => {
     expect(copy.otp?.defaultMaxAttempts).toBe(4)
     expect(copy.email?.defaultFrom).toBe('noreply@relay.example')
     expect(copy.global?.defaultLocale).toBe('pt')
+    expect(copy.otp?.perPurpose).toEqual({ mfa_oob: { maxAttempts: 2 } })
+  })
+
+  // The purposes of a container are its own keys, so a class used as a record is read through the
+  // property names of its prototype chain as well, and nothing it inherits from Object.
+  it('should read the purposes of a container class from its prototype', () => {
+    class Entry {
+      get maxAttempts(): number {
+        return 2
+      }
+    }
+    class Container {
+      readonly own = { ttlSeconds: 30 }
+      get mfa_oob(): Entry {
+        return new Entry()
+      }
+    }
+
+    const copy = snapshotOptions({ otp: { storage, perPurpose: new Container() } } as never)
+
+    expect(copy.otp?.perPurpose).toEqual({ own: { ttlSeconds: 30 }, mfa_oob: { maxAttempts: 2 } })
+  })
+
+  it('should not take the purposes of a plain container from Object', () => {
+    const copy = snapshotOptions({ otp: { storage, perPurpose: { mfa_oob: {} } } } as never)
+
+    expect(Object.keys(copy.otp?.perPurpose ?? {})).toEqual(['mfa_oob'])
+  })
+
+  // The validation refuses these with a message that names the options.
+  it.each([undefined, null, 'x', 5, true])('should return %p as it is', (value) => {
+    expect(snapshotOptions(value as never)).toBe(value)
+  })
+
+  it('should return an array as it is', () => {
+    const options: unknown[] = []
+
+    expect(snapshotOptions(options as never)).toBe(options)
   })
 
   // Every option of the interfaces is copied. These literals must list every key (the compiler
