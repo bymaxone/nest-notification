@@ -11,6 +11,8 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 ## [Unreleased]
 
+## [1.4.15] - 2026-11-17
+
 ### Fixed
 
 - **Options that are objects are read once, key by key, all the way down.** In 1.4.14 the SMTP
@@ -43,8 +45,9 @@ that is not an object; a `perPurpose` container that is a built-in such as a `Ma
 `perPurpose` entry `codeType` that is not `numeric`, `alpha` or `alphanumeric`; and, when the SMTP
 provider is built, a `null` `secure`, `requireTls` or `credentials`. `SmtpEmailProvider` and
 `ResendEmailProvider` refuse options that are not an object with `options must be an object`. A `null`
-or `undefined` key of `credentials` or `tls` is left out, where it was handed to Nodemailer, and
-changing your `credentials` or `tls` object after the provider is built no longer reaches it. A log or
+or `undefined` key of `credentials` or `tls` is left out, where it was handed to Nodemailer, a key of
+those two objects that the declarations do not name (`user` and `pass`; `rejectUnauthorized`, `servername`
+and `ca`) is no longer passed on, and changing your `credentials` or `tls` object after the provider is built no longer reaches it. A log or
 a handler that read `error.message` of an `OTP_INVALID_LENGTH` error now sees the text of the option
 that was wrong, in place of `Notification Exception`. The checks of `audit` and `global` run before
 the channel checks, and that of `global.tenantIdResolver` before those of `email` and `otp`, so when
@@ -1484,7 +1487,8 @@ rejected at startup rather than failing on the first send.
 
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.4.14...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.4.15...HEAD
+[1.4.15]: https://github.com/bymaxone/nest-notification/compare/v1.4.14...v1.4.15
 [1.4.14]: https://github.com/bymaxone/nest-notification/compare/v1.4.13...v1.4.14
 [1.4.13]: https://github.com/bymaxone/nest-notification/compare/v1.4.12...v1.4.13
 [1.4.12]: https://github.com/bymaxone/nest-notification/compare/v1.4.11...v1.4.12
