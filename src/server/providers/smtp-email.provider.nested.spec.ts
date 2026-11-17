@@ -47,6 +47,7 @@ describe('SmtpEmailProvider options that are objects', () => {
     const checkServerIdentity = (): undefined => undefined
     const cert = Buffer.from('cert')
     const key = [Buffer.from('key')]
+    const pfx = Buffer.from('pfx')
     const tls = {
       rejectUnauthorized: false,
       servername: 'relay.example',
@@ -58,12 +59,21 @@ describe('SmtpEmailProvider options that are objects', () => {
       cert,
       key,
       passphrase: 'phrase',
-      pfx: Buffer.from('pfx')
+      pfx
     } satisfies Required<SmtpTlsOptions>
     const pool = { maxConnections: 2, maxMessages: 5 } satisfies Required<SmtpPoolOptions>
 
     const transport = await transportOf({ host: 'relay.example', credentials, tls, pool })
 
+    // The whole tls object: every key is there, and the ones that hold objects or functions are the
+    // host's own, not copies of them.
+    const forwarded = transport.tls as Record<string, unknown>
+    expect(forwarded).toEqual(tls)
+    expect(Object.keys(forwarded).sort()).toEqual(Object.keys(tls).sort())
+    expect(forwarded.checkServerIdentity).toBe(checkServerIdentity)
+    expect(forwarded.cert).toBe(cert)
+    expect(forwarded.key).toBe(key)
+    expect(forwarded.pfx).toBe(pfx)
     expect(transport).toMatchObject({
       auth: { user: 'u', pass: 'p' },
       tls: {
@@ -152,7 +162,7 @@ describe('SmtpEmailProvider options that are objects', () => {
     )
   })
 
-  // A tls that is not an object has no keys to refuse; it goes to the transport as it always did.
+  // A tls that is not an object has no keys to refuse; it is passed through to the transport.
   it.each(['x', 5, true, []])('should leave a tls of %p to the transport', async (value) => {
     const transport = await transportOf({ host: 'h', tls: value as never })
 
