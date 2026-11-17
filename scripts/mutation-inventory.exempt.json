@@ -18,5 +18,9 @@
   {
     "file": "src/mutate-const-tables.spec.ts",
     "reason": "Runs scripts/mutate-const-tables.mjs as a child process against throwaway git repositories and imports nothing under src/, so it judges no mutant."
+  },
+  {
+    "file": "src/server/utils/source-hygiene.spec.ts",
+    "reason": "Reads every .ts file under src as text and fails if one holds a bidirectional control as a raw character. It imports no module from src/, so no mutant is covered by it, Stryker's per-test coverage never selects it, and it judges no mutant."
   }
 ]
