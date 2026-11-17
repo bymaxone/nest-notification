@@ -33,7 +33,7 @@ describe('received', () => {
     [['SENTINEL_9d3a'], 'an array'],
     [{}, 'an object'],
     [{ toString: () => 'SENTINEL_9d3a' }, 'an object'],
-    [new Date(), 'an object']
+    [new Date(0), 'an object']
   ])('should name %p by kind', (value, expected) => {
     expect(received(value)).toBe(expected)
   })
