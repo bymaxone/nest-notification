@@ -59,7 +59,8 @@ handed on key by key: only `user` and `pass` reach it). A `tls` key outside `rej
 `passphrase` and `pfx` fails when the provider is built, naming the key (a symbol key is refused
 without its description), where 1.4.14 passed it on to the transport: a `secureProtocol` or
 `secureOptions` that you set must be removed, or the key requested. Changing your
-`credentials` or `tls` object after the provider is built no longer reaches it. A log or
+`credentials` or `tls` object after the provider is built, or your `email.defaultTags` array or one
+of its tags after the module is built, no longer reaches it. A log or
 a handler that read `error.message` of an `OTP_INVALID_LENGTH` error now sees the text of the option
 that was wrong, in place of `Notification Exception`. The checks of `audit` and `global` run before
 the channel checks, and that of `global.tenantIdResolver` before those of `email` and `otp`, so when
