@@ -30,7 +30,7 @@ import type {
   NotificationLogEntry
 } from '../interfaces/notification-log-repository.interface'
 import { AuditWriteWarning } from '../utils/audit-write-warning'
-import { isUnavailableError } from '../utils/availability'
+import { isUnavailableProviderError } from '../utils/availability'
 import type { DeliveryStatus } from '../utils/delivery-status'
 import {
   extractDeliveryStatus,
@@ -181,11 +181,13 @@ function readAttachedStatus(error: unknown): DeliveryStatus | undefined {
 }
 
 /**
- * The status override of a failed send: 503 when the provider could not be reached or timed out,
- * nothing (the catalog's 502) when it answered and refused. A caller told 503 may try again later.
+ * The status override of a failed send: 503 when the provider could not be reached, timed out or
+ * answered with a transient reply, nothing (the catalog's 502) when it answered and refused. A
+ * caller told 503 may try again later. The rule is the service's, so a provider of the host's own
+ * that throws the error its client gave it, a reply number and nothing else, is classified too.
  */
 function unavailableStatus(error: unknown): { status?: HttpStatus } {
-  return isUnavailableError(error) ? { status: HttpStatus.SERVICE_UNAVAILABLE } : {}
+  return isUnavailableProviderError(error) ? { status: HttpStatus.SERVICE_UNAVAILABLE } : {}
 }
 
 /** Transactional email service. */

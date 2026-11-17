@@ -93,6 +93,30 @@ describe('SmtpEmailProvider pool option', () => {
     )
   })
 
+  // A limit past the largest safe integer is not an integer a count can be held to: 2**53 and its
+  // neighbours compare equal after one more step, and a pool of that size is no limit at all.
+  it.each([
+    ['maxConnections of 2**53', { maxConnections: 2 ** 53 }, 'maxConnections'],
+    ['maxConnections of 1e21', { maxConnections: 1e21 }, 'maxConnections'],
+    ['maxMessages of 2**53', { maxMessages: 2 ** 53 }, 'maxMessages'],
+    ['maxMessages of the largest double', { maxMessages: Number.MAX_VALUE }, 'maxMessages'],
+    ['maxMessages of Infinity', { maxMessages: Infinity }, 'maxMessages']
+  ])('should refuse %s', (_label, pool, field) => {
+    expect(() => new SmtpEmailProvider({ host: 'h', pool })).toThrow(
+      `SmtpEmailProvider: pool.${field} must be a positive integer of at most 9007199254740991`
+    )
+  })
+
+  it('should accept the largest safe integer for both limits', () => {
+    expect(
+      () =>
+        new SmtpEmailProvider({
+          host: 'h',
+          pool: { maxConnections: Number.MAX_SAFE_INTEGER, maxMessages: Number.MAX_SAFE_INTEGER }
+        })
+    ).not.toThrow()
+  })
+
   // Reading the option is host code too: a getter or a Proxy that throws must end in the same
   // refusal as any other value that is not an options object, not in its own error.
   it.each([
@@ -106,6 +130,21 @@ describe('SmtpEmailProvider pool option', () => {
       'SmtpEmailProvider: pool must be an object'
     )
   })
+
+  // The options are the host's object, and a timeout is checked once, when the provider is built:
+  // changing it afterwards must not reach the transport, or the check could be walked around.
+  it.each(['connectionTimeout', 'greetingTimeout', 'socketTimeout'] as const)(
+    'should keep the %s it was built with when the options object changes',
+    async (option) => {
+      const options = { host: 'h', [option]: 5_000 }
+      const provider = new SmtpEmailProvider(options)
+      Object.assign(options, { [option]: 3_000_000_000 })
+
+      await provider.send(baseOptions).catch(() => undefined)
+
+      expect(lastTransportConfig()[option]).toBe(5_000)
+    }
+  )
 
   // The limits are read once, at construction: a getter that answers differently later must not
   // change what the transport is built with.

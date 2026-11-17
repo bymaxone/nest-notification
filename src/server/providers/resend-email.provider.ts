@@ -30,6 +30,7 @@ import {
   readRedactedMessage,
   redactValues
 } from '../utils/redact'
+import { assertTimerMs } from '../utils/timer-option'
 
 /**
  * Reads the message off an SDK error object, failing closed.
@@ -99,12 +100,6 @@ function unavailableCodeOf(error: { name?: unknown; statusCode?: unknown }): str
 
 /** Default bound on one send, in milliseconds. */
 const DEFAULT_TIMEOUT_MS = 15_000
-
-/**
- * Largest bound a timer can hold: past 2^31 - 1 milliseconds Node clamps the duration to 1 ms and
- * the call aborts at once, so such a value is refused instead of accepted.
- */
-const MAX_TIMEOUT_MS = 2_147_483_647
 
 /** Construction options for {@link ResendEmailProvider}. */
 export interface ResendEmailProviderOptions {
@@ -217,16 +212,9 @@ export class ResendEmailProvider implements IEmailProvider {
   readonly #options: ResendEmailProviderOptions
 
   constructor(options: ResendEmailProviderOptions = {}) {
-    const timeout = options.timeoutMs
-    if (
-      timeout !== undefined &&
-      !(Number.isInteger(timeout) && timeout >= 1 && timeout <= MAX_TIMEOUT_MS)
-    ) {
-      throw new Error(
-        `ResendEmailProvider: timeoutMs must be a positive integer of at most ${String(MAX_TIMEOUT_MS)}`
-      )
-    }
-    this.#options = options
+    assertTimerMs('ResendEmailProvider', 'timeoutMs', options.timeoutMs)
+    // A copy, so a value checked above cannot be changed by the host afterwards.
+    this.#options = { ...options }
   }
 
   /**
