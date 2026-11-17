@@ -95,6 +95,16 @@ describe('isUnavailableError', () => {
     }
   )
 
+  // A reply number is what an SMTP client sets; a store client that happens to set one is not
+  // reporting an outage, so the classifier the OTP store is held to never reads it. The email
+  // providers read it through `errorCodeOf`.
+  it.each([200, 400, 421, 450, 451, 452, 499, 500, 550])(
+    'should not treat a response code of %i as unavailable',
+    (responseCode) => {
+      expect(isUnavailableError(Object.assign(new Error('x'), { responseCode }))).toBe(false)
+    }
+  )
+
   // The texts are matched whole: the same words inside a longer message are not an outage.
   it.each([
     'Connection is closed.',
@@ -224,6 +234,58 @@ describe('errorCodeOf', () => {
     })
 
     expect(errorCodeOf(error)).toBe('ECONNREFUSED')
+  })
+
+  // A transient reply has the code of the stage it came at (EENVELOPE, EMESSAGE, EPROTOCOL): what
+  // is carried is the availability code, because the status of the failure is read from the code.
+  it.each([
+    ['EENVELOPE', 451],
+    ['EMESSAGE', 451],
+    ['EPROTOCOL', 421]
+  ])('should carry EUNAVAILABLE for %s with the reply %i', (code, responseCode) => {
+    expect(errorCodeOf(Object.assign(new Error('x'), { code, responseCode }))).toBe('EUNAVAILABLE')
+  })
+
+  it('should carry EUNAVAILABLE for a transient reply on a cause', () => {
+    const cause = Object.assign(new Error('x'), { code: 'EENVELOPE', responseCode: 450 })
+
+    expect(errorCodeOf(new Error('send failed', { cause }))).toBe('EUNAVAILABLE')
+  })
+
+  // The edges of the 4xx class: 400 and 499 are transient, 399 and 500 are not, and what is not an
+  // integer number is not a reply number at all.
+  it.each([400, 421, 450, 451, 452, 499])(
+    'should read a reply of %i as transient',
+    (responseCode) => {
+      expect(errorCodeOf(Object.assign(new Error('x'), { code: 'EENVELOPE', responseCode }))).toBe(
+        'EUNAVAILABLE'
+      )
+    }
+  )
+
+  it.each([200, 250, 399, 500, 550, 554, 450.5, '451', null, undefined])(
+    'should keep the stage code for the response code %p',
+    (responseCode) => {
+      expect(errorCodeOf(Object.assign(new Error('x'), { code: 'EENVELOPE', responseCode }))).toBe(
+        'EENVELOPE'
+      )
+    }
+  )
+
+  it('should keep the code of a permanent reply', () => {
+    expect(
+      errorCodeOf(Object.assign(new Error('x'), { code: 'EENVELOPE', responseCode: 550 }))
+    ).toBe('EENVELOPE')
+  })
+
+  it('should prefer the availability code the error already has over a transient reply', () => {
+    const error = Object.assign(new Error('x'), { code: 'ECONNRESET', responseCode: 451 })
+
+    expect(errorCodeOf(error)).toBe('ECONNRESET')
+  })
+
+  it('should carry EUNAVAILABLE for a transient reply with no code at all', () => {
+    expect(errorCodeOf(Object.assign(new Error('x'), { responseCode: 421 }))).toBe('EUNAVAILABLE')
   })
 
   it('should carry the first code when none of them is an outage', () => {

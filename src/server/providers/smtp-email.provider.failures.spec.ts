@@ -581,6 +581,28 @@ describe('SmtpEmailProvider failure handling', () => {
     }
   )
 
+  // The reply of the relay decides: a 4xx is "try later" and carries the availability code whatever
+  // stage it came at, a 5xx is a refusal and keeps the stage's own code.
+  it.each([
+    ['a 451 at MAIL', 'EENVELOPE', 451, 'EUNAVAILABLE'],
+    ['a 450 at RCPT', 'EENVELOPE', 450, 'EUNAVAILABLE'],
+    ['a 451 at the end of the data', 'EMESSAGE', 451, 'EUNAVAILABLE'],
+    ['a 550 at RCPT', 'EENVELOPE', 550, 'EENVELOPE'],
+    ['a 554 at the end of the data', 'EMESSAGE', 554, 'EMESSAGE']
+  ])('should carry the code of %s', async (_name, code, responseCode, expected) => {
+    for (const publish of [undefined, false]) {
+      mockSendMail.mockRejectedValue(
+        Object.assign(new Error(`${responseCode} reply from the relay`), { code, responseCode })
+      )
+
+      const caught: unknown = await new SmtpEmailProvider({ host: 'h' })
+        .send({ ...baseOptions, ...(publish === false ? { publishProviderText: false } : {}) })
+        .catch((error: unknown) => error)
+
+      expect((caught as { code?: string }).code).toBe(expected)
+    }
+  })
+
   it('should carry the code a client sets on the cause of its error', async () => {
     mockSendMail.mockRejectedValue(
       new Error('send failed', { cause: Object.assign(new Error('x'), { code: 'ETIMEDOUT' }) })

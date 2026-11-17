@@ -11,6 +11,15 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 ## [Unreleased]
 
+### Changed
+
+- **A relay or API that says "try later" is answered with `503`, not `502`.** `EMAIL_SEND_FAILED`
+  already answered `503` when the provider could not be reached or timed out. It now also does when
+  `SmtpEmailProvider` meets a `4xx` reply from the relay at any stage of the dialogue (a `421`, a
+  `450`, a `451`, a `452`) and when `ResendEmailProvider` meets an HTTP `429`. An SMTP `5xx` reply
+  and any other rejection are refused sends and keep `502`. The error code and body are unchanged, so a host
+  that branches on `code` is unaffected; one that branches on the status now sees `503` for these.
+
 ## [1.4.12] - 2026-11-17
 
 ### Fixed
