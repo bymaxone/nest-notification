@@ -252,6 +252,26 @@ describe('errorCodeOf', () => {
     expect(errorCodeOf(new Error('send failed', { cause }))).toBe('EUNAVAILABLE')
   })
 
+  // The edges of the 4xx class: 400 and 499 are transient, 399 and 500 are not, and what is not an
+  // integer number is not a reply number at all.
+  it.each([400, 421, 450, 451, 452, 499])(
+    'should read a reply of %i as transient',
+    (responseCode) => {
+      expect(errorCodeOf(Object.assign(new Error('x'), { code: 'EENVELOPE', responseCode }))).toBe(
+        'EUNAVAILABLE'
+      )
+    }
+  )
+
+  it.each([200, 250, 399, 500, 550, 554, 450.5, '451', null, undefined])(
+    'should keep the stage code for the response code %p',
+    (responseCode) => {
+      expect(errorCodeOf(Object.assign(new Error('x'), { code: 'EENVELOPE', responseCode }))).toBe(
+        'EENVELOPE'
+      )
+    }
+  )
+
   it('should keep the code of a permanent reply', () => {
     expect(
       errorCodeOf(Object.assign(new Error('x'), { code: 'EENVELOPE', responseCode: 550 }))
