@@ -220,7 +220,7 @@ describe('ResendEmailProvider failure codes', () => {
     ],
     ['an HTTP 503', { name: 'service_unavailable', message: 'down', statusCode: 503 }],
     ['an HTTP 500', { name: 'internal_server_error', message: 'oops', statusCode: 500 }],
-    // The real SDK 6.38.1 returns exactly this for a 429 from the API.
+    // A 429 is the API asking to be called later, so it carries the code a 5xx does.
     ['an HTTP 429', { name: 'rate_limit_exceeded', message: 'Too many requests.', statusCode: 429 }]
   ])('should carry EUNAVAILABLE for %s', async (_name, error) => {
     mockSend.mockResolvedValue({ data: null, error })
