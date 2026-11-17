@@ -11,6 +11,8 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 ## [Unreleased]
 
+## [1.4.12] - 2026-11-17
+
 ### Fixed
 
 - **A send with no `html` part fails with its own error, not a `TypeError`.** When the transport or
@@ -1319,7 +1321,8 @@ rejected at startup rather than failing on the first send.
 
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.4.11...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.4.12...HEAD
+[1.4.12]: https://github.com/bymaxone/nest-notification/compare/v1.4.11...v1.4.12
 [1.4.11]: https://github.com/bymaxone/nest-notification/compare/v1.4.10...v1.4.11
 [1.4.10]: https://github.com/bymaxone/nest-notification/compare/v1.4.9...v1.4.10
 [1.4.9]: https://github.com/bymaxone/nest-notification/compare/v1.4.8...v1.4.9
