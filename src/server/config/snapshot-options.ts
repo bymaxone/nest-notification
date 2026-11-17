@@ -83,19 +83,20 @@ const AUDIT_KEYS = [
 ] as const satisfies readonly (keyof AuditOptions)[]
 
 /**
- * The purposes a container holds: its own enumerable keys, and the property names of the prototypes
- * it inherits from before `Object.prototype`, so a class used as a record, with a getter for each
- * purpose, is read the way a plain object is.
+ * The purposes a container holds: its own enumerable string keys, and the accessors (getters) of
+ * the prototypes it inherits from before `Object.prototype`. A class used as a record, with a getter
+ * for each purpose, is read the way a plain object is. A method, `constructor`, a symbol and a
+ * non-enumerable own key are not purposes.
  */
 function purposesOf(container: object): string[] {
   const names = new Set(Object.keys(container))
   for (
-    let prototype: object | null = Object.getPrototypeOf(container) as object | null;
+    let prototype = Object.getPrototypeOf(container) as object | null;
     prototype !== null && prototype !== Object.prototype;
     prototype = Object.getPrototypeOf(prototype) as object | null
   ) {
-    for (const name of Object.getOwnPropertyNames(prototype)) {
-      if (name !== 'constructor') {
+    for (const [name, descriptor] of Object.entries(Object.getOwnPropertyDescriptors(prototype))) {
+      if (descriptor.get !== undefined) {
         names.add(name)
       }
     }

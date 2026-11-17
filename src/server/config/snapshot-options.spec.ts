@@ -215,6 +215,90 @@ describe('snapshotOptions', () => {
     expect(copy.otp?.perPurpose).toEqual({ own: { ttlSeconds: 30 }, mfa_oob: { maxAttempts: 2 } })
   })
 
+  // The cases of reading a container, one each: what is a purpose and what is not.
+  describe('the purposes a container holds', () => {
+    const purposes = (container: object): string[] =>
+      Object.keys(
+        snapshotOptions({ otp: { storage, perPurpose: container } } as never).otp?.perPurpose ?? {}
+      )
+
+    it('should take a getter of a parent class too', () => {
+      class Base {
+        get from_base(): object {
+          return {}
+        }
+      }
+      class Child extends Base {
+        get from_child(): object {
+          return {}
+        }
+      }
+
+      expect(purposes(new Child()).sort()).toEqual(['from_base', 'from_child'])
+    })
+
+    it('should not take a method, the constructor or a symbol', () => {
+      const symbol = Symbol('purpose')
+      class Container {
+        helper(): object {
+          return {}
+        }
+        get real(): object {
+          return {}
+        }
+        readonly [symbol] = {}
+      }
+
+      expect(purposes(new Container())).toEqual(['real'])
+    })
+
+    it('should not take a non-enumerable own key', () => {
+      const container = { shown: {} }
+      Object.defineProperty(container, 'hidden', { value: {}, enumerable: false })
+
+      expect(purposes(container)).toEqual(['shown'])
+    })
+
+    it('should list a purpose once when an own key shadows a getter, and keep the own value', () => {
+      class Container {
+        get mfa_oob(): object {
+          return { maxAttempts: 9 }
+        }
+      }
+      const container = new Container()
+      Object.defineProperty(container, 'mfa_oob', {
+        value: { maxAttempts: 2 },
+        enumerable: true
+      })
+
+      const copy = snapshotOptions({ otp: { storage, perPurpose: container } } as never)
+
+      expect(copy.otp?.perPurpose).toEqual({ mfa_oob: { maxAttempts: 2 } })
+    })
+
+    it('should read each getter once', () => {
+      let reads = 0
+      class Container {
+        get mfa_oob(): object {
+          reads += 1
+          return { maxAttempts: 2 }
+        }
+      }
+
+      snapshotOptions({ otp: { storage, perPurpose: new Container() } } as never)
+
+      expect(reads).toBe(1)
+    })
+
+    it('should keep a purpose named __proto__ as an own key', () => {
+      const container = JSON.parse('{"__proto__":{"maxAttempts":2}}') as object
+
+      const copy = snapshotOptions({ otp: { storage, perPurpose: container } } as never)
+
+      expect(Object.keys(copy.otp?.perPurpose ?? {})).toEqual(['__proto__'])
+    })
+  })
+
   it('should not take the purposes of a plain container from Object', () => {
     const copy = snapshotOptions({ otp: { storage, perPurpose: { mfa_oob: {} } } } as never)
 
