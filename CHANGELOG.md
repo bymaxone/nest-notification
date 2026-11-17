@@ -19,7 +19,7 @@ the entries that carry one, is the compatibility contract — read it, not the n
   never expired a code; a `maxAttachmentBytes` of `NaN` removed the attachment guard. The attempts
   bound must now be an integer of at least `1`, the TTL a finite number above `0`, the cooldown and
   `maxAttachmentBytes` finite numbers of at least `0`, in the defaults and in every `perPurpose`
-  entry (`length` is checked there too). The message names the option and the value.
+  entry. The message names the option and the value.
 - **A count past the largest safe integer is refused.** `otp.defaultMaxAttempts`, each `perPurpose`
   `maxAttempts`, `email.maxRecipients` and the SMTP `pool` limits `maxConnections` and `maxMessages`
   accepted `2 ** 53`, `1e21` and `Number.MAX_VALUE`, which bound nothing. Each must now be an integer
