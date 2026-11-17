@@ -61,6 +61,12 @@ describe('readOptionKeys', () => {
     expect(Object.keys(read)).toEqual(['b'])
   })
 
+  it('should keep a null the caller names, and drop the others', () => {
+    const source = { a: null, b: null } as unknown as Shape
+
+    expect(readOptionKeys(source, KEYS, ['a'])).toEqual({ a: null })
+  })
+
   it('should keep the host objects by reference', () => {
     const c = {}
 

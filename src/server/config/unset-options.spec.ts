@@ -27,8 +27,7 @@ const SECTIONS: ReadonlyArray<readonly [string, Build, readonly string[]]> = [
       'defaultTtlSeconds',
       'defaultMaxAttempts',
       'resendCooldownSeconds',
-      'consumeOnVerify',
-      'strictPurposes'
+      'consumeOnVerify'
     ]
   ],
   [
@@ -97,5 +96,27 @@ describe('a perPurpose entry option that reads as not set', () => {
     expect(resolved({ otp: { storage, perPurpose: value } })).toEqual(
       resolved({ otp: { storage } })
     )
+  })
+})
+
+// When the default of an option is the weaker security posture, a null (a missing secret or flag
+// from a config lookup) is a misconfiguration and is refused at startup; undefined stays unset.
+describe('an option whose default is the weaker posture', () => {
+  const build = (extra: object): Record<string, unknown> => ({ otp: { storage, ...extra } })
+
+  it.each(['codeSecret', 'strictPurposes'])('should refuse null for %s', (key) => {
+    expect(() => resolved(build({ [key]: null }))).toThrow(`options.otp.${key}`)
+  })
+
+  it.each(['codeSecret', 'strictPurposes'])('should treat undefined for %s as omitted', (key) => {
+    expect(resolved(build({ [key]: undefined }))).toEqual(resolved(build({})))
+  })
+
+  it('should refuse a codeSecret that is not a string', () => {
+    expect(() => resolved(build({ codeSecret: 5 }))).toThrow('options.otp.codeSecret')
+  })
+
+  it.each(['storage'])('should keep refusing a null %s', (key) => {
+    expect(() => resolved(build({ [key]: null }))).toThrow()
   })
 })

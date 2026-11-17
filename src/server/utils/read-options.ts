@@ -21,15 +21,22 @@
  *
  * @param source - The options as the host gave them.
  * @param keys - Every option of the type, by name.
+ * @param refuseNull - Options whose default is the weaker security posture: a `null` stays in the
+ * copy so the validation refuses it, because a `null` from a config lookup is a misconfiguration
+ * and must not start the module unkeyed or non-strict.
  * @returns A plain object holding what was read, or `source` itself when it is not an object.
  */
-export function readOptionKeys<T>(source: T, keys: readonly (keyof T & string)[]): T {
+export function readOptionKeys<T>(
+  source: T,
+  keys: readonly (keyof T & string)[],
+  refuseNull: readonly (keyof T & string)[] = []
+): T {
   if (typeof source !== 'object' || source === null || Array.isArray(source)) {
     return source
   }
   // `Reflect.get` is the same property access as `source[key]`, getters and prototypes included.
   const entries = keys
     .map((key) => [key, Reflect.get(source, key) as unknown] as const)
-    .filter(([, value]) => value !== undefined && value !== null)
+    .filter(([key, value]) => value !== undefined && (value !== null || refuseNull.includes(key)))
   return Object.fromEntries(entries) as T
 }
