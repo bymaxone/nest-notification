@@ -742,32 +742,38 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
    * Returns the cached transport, lazily importing `nodemailer` on first use.
    * Concurrent first calls share one in-flight initialization promise so the dynamic
    * import and creation run exactly once; a failed init is dropped from the cache so
-   * a later call can retry instead of being permanently bricked.
+   * a later call can retry instead of being permanently bricked. It is dropped only while
+   * it is still the cached build: `close()` may have taken it, and a newer send may have
+   * started a build of its own, which a late failure here must not clear.
    *
    * @returns The initialized transport.
    * @throws Error When the configuration is incomplete or `nodemailer` is missing.
    */
   private getTransport(): Promise<SmtpTransportLike> {
-    this.#transportPromise ??= this.createTransport()
-    return this.#transportPromise
+    const cached = this.#transportPromise
+    if (cached !== null) {
+      return cached
+    }
+    const build = this.createTransport()
+    this.#transportPromise = build
+    build.catch(() => {
+      if (this.#transportPromise === build) {
+        this.#transportPromise = null
+      }
+    })
+    return build
   }
 
   /**
-   * Builds a fresh transport, resetting the cached promise on any failure so the
-   * provider is not permanently bricked by a transient init error.
+   * Builds a fresh transport.
    *
    * @returns The initialized transport.
    * @throws Error When the configuration is incomplete or `nodemailer` is missing.
    */
   private async createTransport(): Promise<SmtpTransportLike> {
-    try {
-      const config = this.buildTransportConfig()
-      const nodemailer = await this.loadNodemailer()
-      return this.instantiate(nodemailer, config)
-    } catch (error) {
-      this.#transportPromise = null
-      throw error
-    }
+    const config = this.buildTransportConfig()
+    const nodemailer = await this.loadNodemailer()
+    return this.instantiate(nodemailer, config)
   }
 
   /**

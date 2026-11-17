@@ -184,6 +184,25 @@ describe('SmtpEmailProvider close', () => {
     expect(mockClose).not.toHaveBeenCalled()
   })
 
+  // A build that fails after close() has taken it, while a later send has started a build of its own,
+  // must not clear the later one from the cache: nothing could close its transport afterwards.
+  it('should keep a newer build when an older one that close() took fails late', async () => {
+    mockCreateTransport.mockImplementationOnce(() => {
+      throw new Error('bad config')
+    })
+    const provider = new SmtpEmailProvider({ host: 'h', pool: {} })
+    const first = provider.send(baseOptions)
+    const closing = provider.close()
+    const second = provider.send(baseOptions)
+
+    const [firstResult, , secondResult] = await Promise.allSettled([first, closing, second])
+    await provider.close()
+
+    expect(firstResult.status).toBe('rejected')
+    expect(secondResult.status).toBe('fulfilled')
+    expect(mockClose).toHaveBeenCalledTimes(1)
+  })
+
   // A close that throws must not stop the host's other shutdown hooks, and what it threw can hold the
   // relay's own words or a credential, so the log line is fixed text and carries none of it.
   it('should log a fixed line, and never what the failed close threw', async () => {
