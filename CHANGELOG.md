@@ -17,7 +17,7 @@ the entries that carry one, is the compatibility contract — read it, not the n
   kept per `(tenant, recipient, purpose)` and a purpose with no `perPurpose` entry uses the
   defaults, so a host that lets a caller choose the purpose lets the caller ask for a fresh
   cooldown and attempt counter each time. With `strictPurposes: true`, `OtpService` refuses at every
-  operation, before any storage call, a purpose that is neither one of the five in
+  operation, before any storage call, a purpose that is neither in
   `NOTIFICATION_PURPOSES` nor a key of `perPurpose`, with `notification.invalid_scope_identifier`
   (400) and the reason `not a registered purpose`, never the value. The option is a boolean
   checked when the module starts and is off by default.
@@ -30,7 +30,7 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 `OtpChannelOptions` gains the optional `strictPurposes`, off by default, so a backend that does
 not set it needs no change; one that sets it registers each purpose it uses that is not one of
-the canonical five as a key of `perPurpose` (an empty object keeps the defaults).
+the canonical purposes as a key of `perPurpose` (an empty object keeps the defaults).
 
 ## [1.4.10] - 2026-11-16
 
