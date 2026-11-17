@@ -34,6 +34,13 @@ the entries that carry one, is the compatibility contract — read it, not the n
   and any other rejection are refused sends and keep `502`. The error code and body are unchanged, so a host
   that branches on `code` is unaffected; one that branches on the status now sees `503` for these.
 
+#### Apply to a derived backend
+
+No declaration changes. Two behaviours do. A send whose `html` or `text` is not a string, a Buffer or a
+content descriptor that Nodemailer would have sent, now fails with `EMAIL_MISSING_BODY` (400): pass a
+string. A host that branches on the HTTP status of `EMAIL_SEND_FAILED` sees `503`, not `502`, for an
+SMTP `4xx` reply and a Resend `429`; a host that branches on `code` is unaffected.
+
 ## [1.4.12] - 2026-11-17
 
 ### Fixed
