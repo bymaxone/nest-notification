@@ -19,11 +19,14 @@ the entries that carry one, is the compatibility contract — read it, not the n
   `credentials` and `tls` stayed references to your objects: a getter on `credentials.user` was read
   at construction and again each time the provider looked at it. Each declared key of `credentials`
   and `tls` is now read once, when the provider is built, so a class with getters on its prototype
-  works and a getter that answers differently later changes nothing. `tls` takes `rejectUnauthorized`,
-  `servername`, `ca`, `minVersion`, `maxVersion`, `ciphers`, `checkServerIdentity`, `cert`, `key`, `passphrase` and `pfx`;
-  any other key fails the build naming it, so a setting you asked for is forwarded or refused, never
-  dropped. A key that reads as `undefined`
+  works and a getter that answers differently later changes nothing. A key that reads as `undefined`
   or `null` is left out. `email.defaultTags` is copied the same way, tag by tag.
+- **A `tls` setting is forwarded or refused, never dropped.** `tls` takes `rejectUnauthorized`,
+  `servername`, `ca`, `minVersion`, `maxVersion`, `ciphers`, `checkServerIdentity`, `cert`, `key`,
+  `passphrase` and `pfx`, and passes them to the transport as given; any other key fails the build
+  naming it, and a symbol key is refused without its description. A setting dropped without a word would
+  leave the connection weaker than the host asked for: with a `minVersion` of `TLSv1.3`
+  against a relay that speaks only TLS 1.2, the send fails the handshake, as it does on 1.4.14.
 - **A `null` is refused for `audit`, `credentials`, `secure` and `requireTls`.** In 1.4.14 each was
   read as omitted. Leaving out `audit` means no audit trail and leaving out `credentials` means a
   session without a login, so a `null` from a config lookup that found nothing started the module or
@@ -56,7 +59,8 @@ handed on key by key: only `user` and `pass` reach it). A `tls` key outside `rej
 `passphrase` and `pfx` fails when the provider is built, naming the key (a symbol key is refused
 without its description), where 1.4.14 passed it on to the transport: a `secureProtocol` or
 `secureOptions` that you set must be removed, or the key requested. Changing your
-`credentials` or `tls` object after the provider is built no longer reaches it. A log or
+`credentials` or `tls` object after the provider is built, or your `email.defaultTags` array or one
+of its tags after the module is built, no longer reaches it. A log or
 a handler that read `error.message` of an `OTP_INVALID_LENGTH` error now sees the text of the option
 that was wrong, in place of `Notification Exception`. The checks of `audit` and `global` run before
 the channel checks, and that of `global.tenantIdResolver` before those of `email` and `otp`, so when
