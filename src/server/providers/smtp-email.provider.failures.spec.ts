@@ -101,6 +101,33 @@ describe('SmtpEmailProvider failure handling', () => {
     warnSpy.mockRestore()
   })
 
+  // A send with no html part (a JS caller, or one that bypasses the type) must fail with the
+  // SMTP error, not a TypeError from reading the missing part, and the scrub must still remove the
+  // declared values, the credentials and an echo of the text part.
+  it('should scrub the error of a send that has no html part', async () => {
+    const text = 'Your password reset code is 998877. It expires shortly.'
+    mockSendMail.mockRejectedValue(
+      new Error(`535 login hunter2 failed for secret42, body was: ${text.slice(2, 50)}`)
+    )
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    const provider = new SmtpEmailProvider({
+      host: 'h',
+      credentials: { user: 'u', pass: 'hunter2' }
+    })
+
+    const caught: unknown = await provider
+      .send({ ...baseOptions, html: undefined, text, redactValues: ['secret42'] } as never)
+      .catch((error: unknown) => error)
+
+    expect(caught).not.toBeInstanceOf(TypeError)
+    expect((caught as Error).message).toMatch(/^SMTP send failed: 535 login \[redacted\] failed/)
+    for (const leaked of ['hunter2', 'secret42', '998877']) {
+      expect((caught as Error).message).not.toContain(leaked)
+      expect(String(warnSpy.mock.calls[0]?.[0])).not.toContain(leaked)
+    }
+    warnSpy.mockRestore()
+  })
+
   // An echo of the PLAIN-TEXT part alone (absent from the HTML) must be
   // detected too — pins the text-reference branch.
   it('should scrub content echoed only from the text body', async () => {
