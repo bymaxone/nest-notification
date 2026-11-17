@@ -441,7 +441,7 @@ What the library leaves to you, and what to set before real traffic. The option 
 
 ### The Redis client is yours: bound it, and close it
 
-`RedisOtpStorage` uses the client you give it. It never connects it, configures it or quits it. A client with no bounds turns a Redis outage into requests that hang. With a connect timeout, a command timeout and a bounded retry policy, the same outage reaches the caller as the library's `503`: a command that times out, runs out of retries or finds the connection closed is answered as unavailable.
+`RedisOtpStorage` uses the client you give it. It never connects it, configures it or quits it. A client with no bounds turns a Redis outage into requests that hang. With a connect timeout, a command timeout and a bounded retry policy, the same outage reaches the caller as the library's `503`: a command that fails because the server cannot be reached is answered as unavailable.
 
 ```typescript
 import Redis from 'ioredis'
@@ -461,7 +461,7 @@ Close the client in your own shutdown hook, after Nest has closed the applicatio
 
 ### Bound every send
 
-`ResendEmailProvider` takes `timeoutMs` and `SmtpEmailProvider` takes `sendTimeoutMs`, plus the three phase timeouts, each with its default in the option tables. A send that times out fails with `EMAIL_SEND_FAILED`, and **may still have been delivered**: make the job that retries it idempotent, as the Apply note of 1.4.9 says.
+`ResendEmailProvider` takes `timeoutMs` and `SmtpEmailProvider` takes `sendTimeoutMs`, plus the phase timeouts, each with its default in the option tables. A send that times out fails with `EMAIL_SEND_FAILED`, and **may still have been delivered**: make the job that retries it idempotent, as the Apply note of 1.4.9 says.
 
 ### Shut down cleanly
 
