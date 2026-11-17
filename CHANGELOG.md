@@ -21,9 +21,9 @@ the entries that carry one, is the compatibility contract — read it, not the n
   never expired a code; a `maxAttachmentBytes` of `NaN` removed the attachment guard. The attempts
   bound must now be an integer of at least `1`, the TTL a finite number above `0`, the cooldown and
   `maxAttachmentBytes` finite numbers of at least `0`, in the defaults and in every `perPurpose`
-  entry. The message names the option and what it received: a number is shown, and anything else is
-  named by kind (`a string`, `an object`) and never printed, because it may be a credential put in the
-  wrong option.
+  entry. The message names the option and what it received: a number is shown, and a string or an
+  object is named by kind (`a string`, `an object`) and never printed, because it may be a credential
+  put in the wrong option.
 - **`perPurpose` and the SMTP `port` are checked too.** A `perPurpose` `length` outside `1` to `32`
   was not checked in an entry (only `otp.defaultLength` was) and is now refused naming the option;
   the `perPurpose` container and each entry in it must be an object, so `null`, an array, a string and
@@ -57,11 +57,12 @@ No declaration changes. These now fail at startup, naming the option: a numeric 
 `perPurpose` `length` outside `1` to `32`, which was not checked; a `perPurpose` container or entry that
 is not an object (`null`, an array, a string, a number); and, when the provider is built, an SMTP
 `port` that is `NaN`, `0`, past `65535`, a fraction or a string such as `'587'`, or a timeout that is
-out of range or not a number. Fix the value. The numeric checks run before those of `codeSecret`,
-`defaultCodeType` and `strictPurposes`, so when several options are wrong the first message you see can
-be a different one. The module and both providers keep a copy of the options from the moment they are
-built: changing your options object afterwards no longer reaches them, so a host that blanked `host` or
-`apiKey` on the object to reconfigure a provider must build a new one. A provider of your own whose
+out of range or not a number. Fix the value. The numeric checks of the `otp` defaults run before those of `codeSecret` and
+`defaultCodeType`, and those of `perPurpose` after them, so when several options are wrong the first
+message you see can be a different one. The module and both providers keep a copy of the options from
+the moment they are built, and 1.4.13 kept none: changing your options object afterwards no longer
+reaches them, so a host that blanked `host` or `apiKey` on the object to reconfigure a provider (its
+`isConfigured()` flipped) must build a new one. A provider of your own whose
 error carries `responseCode` `401`, `403`, `404` or `422` now answers `503`; set the code you mean if
 that is not what you want.
 
