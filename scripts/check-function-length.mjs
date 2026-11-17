@@ -4,8 +4,8 @@
  * @layer scripts
  *
  * `AGENTS.md` caps a function or a test body at 50 lines, and the pull-request review reports a
- * newly introduced one as a blocking finding. The repository already holds offenders, so this gate
- * is red for what a change introduces and not for what is inherited.
+ * newly introduced one as a blocking finding. The gate is red for what a change introduces; a
+ * function over the limit is allowed only while it is on a baseline whose entries can only shrink.
  *
  * The unit is a function-like node (a declaration, a method, a constructor, an accessor, a function
  * or an arrow expression) measured from its first line to its last, signature and braces included.

@@ -134,7 +134,7 @@ describe('check-function-length', () => {
       )
     })
 
-    it('removes the entry of a numbered offender that is gone while its namesake stays', () => {
+    it('reports the stale entry of a numbered offender that is gone while its namesake stays', () => {
       const baseline = { [KEY]: 60, [fnKey('big', 2)]: 60 }
 
       const result = run(repo({ 'src/a.ts': declaration('big', 60) }, baseline))
