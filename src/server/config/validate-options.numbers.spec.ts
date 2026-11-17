@@ -149,9 +149,29 @@ describe('validateOptions numeric options', () => {
     })
   })
 
-  // The value is host configuration, not caller input, so the message may say what it was.
-  it('should say what the value was', () => {
-    expect(() => validateOptions(otp({ defaultMaxAttempts: NaN }))).toThrow('got NaN')
-    expect(() => validateOptions(otp({ defaultMaxAttempts: '3' }))).toThrow('got "3"')
+  // The value is host configuration, not caller input, so the message may say what it was, in
+  // words that cannot be long or carry the value of an object.
+  it.each([
+    [NaN, 'got NaN'],
+    [Infinity, 'got Infinity'],
+    ['3', 'got "3"'],
+    [null, 'got null'],
+    [true, 'got true'],
+    [[], 'got an array'],
+    [{ secret: 'x' }, 'got an object']
+  ])('should say what the value %p was', (value, expected) => {
+    expect(() => validateOptions(otp({ defaultMaxAttempts: value }))).toThrow(
+      `must be an integer of at most 9007199254740991, ${expected}`
+    )
+  })
+
+  // A long string is cut to its first 40 characters, so a message cannot grow with the value.
+  it('should show no more than the first 40 characters of a string', () => {
+    const long = 'a'.repeat(40) + 'TAIL'
+
+    expect(() => validateOptions(otp({ defaultMaxAttempts: long }))).toThrow(
+      `got "${'a'.repeat(40)}"`
+    )
+    expect(() => validateOptions(otp({ defaultMaxAttempts: long }))).not.toThrow(/TAIL/)
   })
 })
