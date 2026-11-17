@@ -140,6 +140,23 @@ interface ResendSendPayload {
   attachments: EmailSendOptions['attachments']
 }
 
+/** The payload the SDK is given: the envelope and the body, and nothing else of the input. */
+function toPayload(options: EmailSendOptions, from: string): ResendSendPayload {
+  return {
+    from,
+    to: options.to,
+    subject: options.subject,
+    html: options.html,
+    text: options.text,
+    replyTo: options.replyTo,
+    cc: options.cc,
+    bcc: options.bcc,
+    tags: options.tags,
+    headers: options.headers,
+    attachments: options.attachments
+  }
+}
+
 /** The request options of the SDK this adapter uses: the signal that aborts the call. */
 interface ResendRequestOptions {
   signal: AbortSignal
@@ -238,25 +255,7 @@ export class ResendEmailProvider implements IEmailProvider {
     const signal = AbortSignal.timeout(timeoutMs)
     let result: ResendSendOutcome
     try {
-      result = await settleOrAbort(
-        client.emails.send(
-          {
-            from,
-            to: options.to,
-            subject: options.subject,
-            html: options.html,
-            text: options.text,
-            replyTo: options.replyTo,
-            cc: options.cc,
-            bcc: options.bcc,
-            tags: options.tags,
-            headers: options.headers,
-            attachments: options.attachments
-          },
-          { signal }
-        ),
-        signal
-      )
+      result = await settleOrAbort(client.emails.send(toPayload(options, from), { signal }), signal)
     } catch (error) {
       // The SDK can REJECT instead of resolving `{ error }` — a transport or
       // fetch failure whose message quotes the request body carries the same

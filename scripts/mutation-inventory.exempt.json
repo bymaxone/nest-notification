@@ -22,5 +22,17 @@
   {
     "file": "src/server/utils/source-hygiene.spec.ts",
     "reason": "Reads every .ts file under src as text and fails if one holds a bidirectional control as a raw character. It imports no module from src/, so no mutant is covered by it, Stryker's per-test coverage never selects it, and it judges no mutant."
+  },
+  {
+    "file": "src/check-function-length.spec.ts",
+    "reason": "Runs scripts/check-function-length.mjs as a child process against throwaway git repositories and imports nothing under src/, so it judges no mutant."
+  },
+  {
+    "file": "src/check-function-length.baseline.spec.ts",
+    "reason": "Runs scripts/check-function-length.mjs against throwaway git repositories and the committed baseline and imports nothing under src/, so it judges no mutant."
+  },
+  {
+    "file": "src/check-function-length.key.spec.ts",
+    "reason": "Tests scripts/function-length-key.mjs, a repository script, and imports nothing under src/, so it judges no mutant."
   }
 ]

@@ -75,6 +75,21 @@ jobs:
           else
             pnpm check:file-length
           fi
+      - name: Functions stay within the length limit
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          # The baseline a change carries is the change's own file, so it is also compared with the
+          # one at the revision the change started from: a pull request's base branch, a push's
+          # previous head. A first push has no previous head and is checked on its own.
+          if [ -n "$BASE_REF" ]; then
+            pnpm check:function-length --base "origin/$BASE_REF"
+          elif [ -n "$BEFORE" ] && [ "$BEFORE" != "0000000000000000000000000000000000000000" ]; then
+            pnpm check:function-length --base "$BEFORE"
+          else
+            pnpm check:function-length
+          fi
       - name: Build all subpaths
         run: pnpm build
       - name: Verify build output integrity
