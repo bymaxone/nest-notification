@@ -14,9 +14,8 @@ the entries that carry one, is the compatibility contract — read it, not the n
 ### Fixed
 
 - **An html or text part that is not a string is refused, not sent.** `EmailService.send`,
-  `SmtpEmailProvider.send` and `ResendEmailProvider.send` read a Buffer, a typed array, an array, a
-  number or an object (which Nodemailer treats as a content descriptor, a file `path` included) as
-  content and sent it, and the removal of a body echoed in an error compares strings only, so a relay
+  `SmtpEmailProvider.send` and `ResendEmailProvider.send` read a Buffer, a typed array or an object
+  (which Nodemailer treats as a content descriptor, a file `path` included) as content and sent it, and the removal of a body echoed in an error compares strings only, so a relay
   that quoted such a part back was not scrubbed. These now fail with `EMAIL_MISSING_BODY` (400),
   `details` naming the part (`html` or `text`) and `reason: 'not_a_string'`, before anything is audited
   or sent. An absent part (`undefined` or `null`) is accepted as before, so a text-only message still
