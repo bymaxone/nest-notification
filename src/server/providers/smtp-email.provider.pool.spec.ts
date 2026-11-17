@@ -146,6 +146,28 @@ describe('SmtpEmailProvider pool option', () => {
     }
   )
 
+  // A value is read once and the provider keeps what it validated: a getter that answers with a
+  // valid bound and then an invalid one must not get the invalid one into the transport.
+  it.each(['connectionTimeout', 'greetingTimeout', 'socketTimeout'] as const)(
+    'should keep the %s that was validated when the option answers differently after',
+    async (option) => {
+      let reads = 0
+      const options = { host: 'h' }
+      Object.defineProperty(options, option, {
+        enumerable: true,
+        get: () => {
+          reads += 1
+          return reads === 1 ? 5_000 : 3_000_000_000
+        }
+      })
+      const provider = new SmtpEmailProvider(options)
+
+      await provider.send(baseOptions).catch(() => undefined)
+
+      expect(lastTransportConfig()[option]).toBe(5_000)
+    }
+  )
+
   // The limits are read once, at construction: a getter that answers differently later must not
   // change what the transport is built with.
   it('should read the limits of the pool once', async () => {

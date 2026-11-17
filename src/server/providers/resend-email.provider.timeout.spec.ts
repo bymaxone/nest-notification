@@ -106,6 +106,25 @@ describe('ResendEmailProvider timeout', () => {
     expect(timeout).toHaveBeenCalledWith(2_500)
   })
 
+  // The bound that passed the check is the bound that is used, even for an option that answers
+  // differently on a second read.
+  it('should use the bound that was validated when the option answers differently after', async () => {
+    const timeout = jest.spyOn(AbortSignal, 'timeout')
+    let reads = 0
+    const options = { apiKey: 'k' }
+    Object.defineProperty(options, 'timeoutMs', {
+      enumerable: true,
+      get: () => {
+        reads += 1
+        return reads === 1 ? 2_500 : 3_000_000_000
+      }
+    })
+
+    await new ResendEmailProvider(options).send(baseOptions)
+
+    expect(timeout).toHaveBeenCalledWith(2_500)
+  })
+
   it('should apply the configured bound to every send', async () => {
     const timeout = jest.spyOn(AbortSignal, 'timeout')
     const provider = new ResendEmailProvider({ apiKey: 'k', timeoutMs: 2_500 })

@@ -21,27 +21,49 @@ the entries that carry one, is the compatibility contract — read it, not the n
   never expired a code; a `maxAttachmentBytes` of `NaN` removed the attachment guard. The attempts
   bound must now be an integer of at least `1`, the TTL a finite number above `0`, the cooldown and
   `maxAttachmentBytes` finite numbers of at least `0`, in the defaults and in every `perPurpose`
-  entry. The message names the option and the value.
+  entry. The message names the option and what it received: a number is shown, and anything else is
+  named by kind (`a string`, `an object`) and never printed, because it may be a credential put in the
+  wrong option.
+- **`perPurpose` and the SMTP `port` are checked too.** A `perPurpose` `length` outside `1` to `32`
+  was not checked in an entry (only `otp.defaultLength` was) and is now refused naming the option;
+  the `perPurpose` container and each entry in it must be an object, so `null`, an array, a string and
+  a number fail naming `otp.perPurpose` and no longer pass silently or as a purpose called `0`; and
+  the SMTP `port` must be an integer from `1` to `65535`, where `NaN`, `0`, `70000` and `'587'` were
+  accepted.
+- **What is checked is what is kept.** The module copies the options once and validates and builds
+  from the copy, and both providers copy theirs before checking them, so a getter that answered with a
+  valid value and then an invalid one no longer got the invalid one into the service.
 - **A count past the largest safe integer is refused.** `otp.defaultMaxAttempts`, each `perPurpose`
   `maxAttempts`, `email.maxRecipients` and the SMTP `pool` limits `maxConnections` and `maxMessages`
   accepted `2 ** 53`, `1e21` and `Number.MAX_VALUE`, which bound nothing. Each must now be an integer
   from `1` to `9007199254740991`.
 - **Every SMTP timeout is checked when the provider is built.** `connectionTimeout`,
   `greetingTimeout` and `socketTimeout` were handed to Nodemailer unchecked: a `connectionTimeout`
-  past `2147483647` made every send fail within milliseconds against a healthy relay, a negative or
-  fractional `greetingTimeout` did the same, and `NaN` or `0` left a phase unbounded. They now take the
+  past `2147483647` made a send fail when the relay did not answer within about a millisecond, because
+  the timer fired at once, a negative or fractional `greetingTimeout` failed a send against a relay
+  that stalled, within a few milliseconds, and `NaN` or `0` left a phase unbounded. They now take the
   same integer from `1` to `2147483647` as `sendTimeoutMs`.
 - **A provider of your own gets the `503` for a transient reply too.** `EmailService` read the
   reply number of an SMTP `4xx` only from the built-in providers' errors, so a provider that threw
   Nodemailer's error answered `502`. The service now reads a `responseCode` from `400` to `499` on
-  the error or one of its causes.
+  the error or one of its causes. The rule is not specific to SMTP: a provider of your own that wraps
+  an HTTP client and sets `responseCode` to `401`, `403`, `404` or `422` now answers `503`, where it
+  answered `502`.
 
 #### Apply to a derived backend
 
-No declaration changes. A configuration that passed with a value that is not a usable number (`NaN`,
-`Infinity`, a string, a fraction where an integer is needed) now fails at startup and names the
-option; fix the value. An SMTP timeout that was out of range, or not a number, now fails when the
-provider is built.
+No declaration changes. These now fail at startup, naming the option: a numeric option that is `NaN`,
+`Infinity`, a string, or a fraction where an integer is needed; a count past `9007199254740991`; a
+`perPurpose` `length` outside `1` to `32`, which was not checked; a `perPurpose` container or entry that
+is not an object (`null`, an array, a string, a number); and, when the provider is built, an SMTP
+`port` that is `NaN`, `0`, past `65535`, a fraction or a string such as `'587'`, or a timeout that is
+out of range or not a number. Fix the value. The numeric checks run before those of `codeSecret`,
+`defaultCodeType` and `strictPurposes`, so when several options are wrong the first message you see can
+be a different one. The module and both providers keep a copy of the options from the moment they are
+built: changing your options object afterwards no longer reaches them, so a host that blanked `host` or
+`apiKey` on the object to reconfigure a provider must build a new one. A provider of your own whose
+error carries `responseCode` `401`, `403`, `404` or `422` now answers `503`; set the code you mean if
+that is not what you want.
 
 ## [1.4.13] - 2026-11-17
 

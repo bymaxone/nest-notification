@@ -212,9 +212,10 @@ export class ResendEmailProvider implements IEmailProvider {
   readonly #options: ResendEmailProviderOptions
 
   constructor(options: ResendEmailProviderOptions = {}) {
-    assertTimerMs('ResendEmailProvider', 'timeoutMs', options.timeoutMs)
-    // A copy, so a value checked above cannot be changed by the host afterwards.
-    this.#options = { ...options }
+    // A copy first, so the check reads the value that is kept, once.
+    const own = { ...options }
+    assertTimerMs('ResendEmailProvider', 'timeoutMs', own.timeoutMs)
+    this.#options = own
   }
 
   /**

@@ -20,7 +20,8 @@ import {
   assertFiniteAbove,
   assertFiniteAtLeast,
   assertIntegerAtLeast,
-  assertObject
+  assertObject,
+  received
 } from './option-numbers'
 
 /**
@@ -105,8 +106,12 @@ function validateCodeSecret(secret: unknown): void {
   }
 }
 
-/** Throws `OTP_INVALID_LENGTH` unless `length` is absent or an integer in the supported range. */
-function assertCodeLength(length: unknown): void {
+/**
+ * Throws `OTP_INVALID_LENGTH` unless `length` is absent or an integer in the supported range. The
+ * message names the option, and the details hold the allowed range and, for a number, the number:
+ * anything else is named by kind, because it may be a secret.
+ */
+function assertCodeLength(path: string, length: unknown): void {
   if (length === undefined) {
     return
   }
@@ -115,16 +120,20 @@ function assertCodeLength(length: unknown): void {
     (length as number) < OTP_MIN_LENGTH ||
     (length as number) > OTP_MAX_LENGTH
   ) {
-    throw new NotificationException('OTP_INVALID_LENGTH', {
-      provided: length,
-      allowed: `${OTP_MIN_LENGTH}-${OTP_MAX_LENGTH}`
-    })
+    const allowed = `${OTP_MIN_LENGTH}-${OTP_MAX_LENGTH}`
+    throw new NotificationException(
+      'OTP_INVALID_LENGTH',
+      { provided: typeof length === 'number' ? length : received(length), allowed },
+      {
+        message: `[BymaxNotificationModule] options.${path} must be an integer from ${String(OTP_MIN_LENGTH)} to ${String(OTP_MAX_LENGTH)}, got ${received(length)}`
+      }
+    )
   }
 }
 
 /** Validates the numeric defaults of the OTP channel. */
 function validateOtpNumbers(otp: OtpChannelOptions): void {
-  assertCodeLength(otp.defaultLength)
+  assertCodeLength('otp.defaultLength', otp.defaultLength)
   assertFiniteAbove('otp.defaultTtlSeconds', otp.defaultTtlSeconds, 0)
   assertIntegerAtLeast('otp.defaultMaxAttempts', otp.defaultMaxAttempts, 1)
   assertFiniteAtLeast('otp.resendCooldownSeconds', otp.resendCooldownSeconds, 0)
@@ -132,6 +141,9 @@ function validateOtpNumbers(otp: OtpChannelOptions): void {
 
 /** Validates each `perPurpose` entry: the key is a purpose, and every override is a usable number. */
 function validatePerPurpose(perPurpose: OtpChannelOptions['perPurpose']): void {
+  if (perPurpose !== undefined) {
+    assertObject('otp.perPurpose', perPurpose)
+  }
   for (const [key, entry] of Object.entries(perPurpose ?? {})) {
     const problem = purposeProblem(key)
     if (problem !== undefined) {
@@ -141,7 +153,7 @@ function validatePerPurpose(perPurpose: OtpChannelOptions['perPurpose']): void {
     }
     const path = `otp.perPurpose.${key}`
     assertObject(path, entry)
-    assertCodeLength(entry.length)
+    assertCodeLength(`${path}.length`, entry.length)
     assertFiniteAbove(`${path}.ttlSeconds`, entry.ttlSeconds, 0)
     assertIntegerAtLeast(`${path}.maxAttempts`, entry.maxAttempts, 1)
     assertFiniteAtLeast(`${path}.resendCooldownSeconds`, entry.resendCooldownSeconds, 0)
