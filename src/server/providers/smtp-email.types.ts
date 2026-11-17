@@ -29,12 +29,19 @@ export interface SmtpTlsOptions {
   maxVersion?: 'TLSv1' | 'TLSv1.1' | 'TLSv1.2' | 'TLSv1.3'
   /** The cipher suites the session may use, in OpenSSL list format. */
   ciphers?: string
-  /** Replaces the check of the certificate against the server name; return an error to refuse it. */
-  checkServerIdentity?: (hostname: string, cert: object) => Error | undefined
+  /**
+   * Replaces the check of the certificate against the server name; return an error to refuse it.
+   * Declared as a method so a callback typed with Node's own `PeerCertificate` is assignable.
+   */
+  checkServerIdentity?(hostname: string, cert: object): Error | undefined
   /** The client certificate chain, in PEM form. */
   cert?: string | Buffer | ReadonlyArray<string | Buffer>
   /** The private key of the client certificate, in PEM form. */
   key?: string | Buffer | ReadonlyArray<string | Buffer>
+  /** The passphrase of an encrypted `key` or `pfx`. A secret: it is never printed. */
+  passphrase?: string
+  /** The client certificate and key as a PKCS#12 bundle. */
+  pfx?: string | Buffer | ReadonlyArray<string | Buffer>
 }
 
 /**
@@ -227,7 +234,9 @@ export const SMTP_TLS_KEYS = [
   'ciphers',
   'checkServerIdentity',
   'cert',
-  'key'
+  'key',
+  'passphrase',
+  'pfx'
 ] as const satisfies readonly (keyof SmtpTlsOptions)[]
 
 /**

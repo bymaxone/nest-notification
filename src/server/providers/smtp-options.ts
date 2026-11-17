@@ -99,7 +99,12 @@ function refuseUnknownTlsKeys(tls: unknown): void {
   if (typeof tls !== 'object' || tls === null || Array.isArray(tls)) {
     return
   }
-  for (const name of namesOf(tls)) {
+  // Every own key, enumerable or not, and every accessor the object inherits: a key that is left
+  // out of the list below is refused, never dropped.
+  for (const name of new Set<string | symbol>([...Reflect.ownKeys(tls), ...namesOf(tls)])) {
+    if (typeof name === 'symbol') {
+      throw new Error('SmtpEmailProvider: tls has a symbol key, which is not a supported option')
+    }
     if (!(SMTP_TLS_KEYS as readonly string[]).includes(name)) {
       throw new Error(`SmtpEmailProvider: tls.${name} is not a supported option`)
     }

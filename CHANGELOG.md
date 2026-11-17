@@ -20,7 +20,7 @@ the entries that carry one, is the compatibility contract — read it, not the n
   at construction and again each time the provider looked at it. Each declared key of `credentials`
   and `tls` is now read once, when the provider is built, so a class with getters on its prototype
   works and a getter that answers differently later changes nothing. `tls` takes `rejectUnauthorized`,
-  `servername`, `ca`, `minVersion`, `maxVersion`, `ciphers`, `checkServerIdentity`, `cert` and `key`;
+  `servername`, `ca`, `minVersion`, `maxVersion`, `ciphers`, `checkServerIdentity`, `cert`, `key`, `passphrase` and `pfx`;
   any other key fails the build naming it, so a setting you asked for is forwarded or refused, never
   dropped. A key that reads as `undefined`
   or `null` is left out. `email.defaultTags` is copied the same way, tag by tag.
@@ -44,17 +44,18 @@ the entries that carry one, is the compatibility contract — read it, not the n
 #### Apply to a derived backend
 
 The declaration `SmtpTlsOptions` gains the optional keys `minVersion`, `maxVersion`, `ciphers`,
-`checkServerIdentity`, `cert` and `key`, which the provider already forwarded when a JavaScript caller
-set them; nothing else in the declarations changes. These now fail at startup, naming the option: `audit: null`; an `options.global`
+`checkServerIdentity`, `cert`, `key`, `passphrase` and `pfx`, which the provider already forwarded
+when a JavaScript caller set them; nothing else in the declarations changes. These now fail at startup, naming the option: `audit: null`; an `options.global`
 that is not an object; a `perPurpose` container that is a built-in such as a `Map` or a `Date`; a
 `perPurpose` entry `codeType` that is not `numeric`, `alpha` or `alphanumeric`; and, when the SMTP
 provider is built, a `null` `secure`, `requireTls` or `credentials`. `SmtpEmailProvider` and
 `ResendEmailProvider` refuse options that are not an object with `options must be an object`. A `null`
 or `undefined` key of `tls` is left out, where it was handed to Nodemailer (`credentials` was never
 handed on key by key: only `user` and `pass` reach it). A `tls` key outside `rejectUnauthorized`,
-`servername`, `ca`, `minVersion`, `maxVersion`, `ciphers`, `checkServerIdentity`, `cert` and `key` fails
-when the provider is built, naming the key, where 1.4.14 passed it on to the transport: a `passphrase`,
-`pfx` or `secureProtocol` that you set must be removed, or the key requested. Changing your
+`servername`, `ca`, `minVersion`, `maxVersion`, `ciphers`, `checkServerIdentity`, `cert`, `key`,
+`passphrase` and `pfx` fails when the provider is built, naming the key (a symbol key is refused
+without its description), where 1.4.14 passed it on to the transport: a `secureProtocol` or
+`secureOptions` that you set must be removed, or the key requested. Changing your
 `credentials` or `tls` object after the provider is built no longer reaches it. A log or
 a handler that read `error.message` of an `OTP_INVALID_LENGTH` error now sees the text of the option
 that was wrong, in place of `Notification Exception`. The checks of `audit` and `global` run before
