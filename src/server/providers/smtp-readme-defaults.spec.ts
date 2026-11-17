@@ -97,6 +97,18 @@ describe('SMTP option table', () => {
     ])
   })
 
+  // The pool is off unless the option is set: the table says no default, and the transport is
+  // configured without any pool key.
+  it('should document the pool as off unless it is set', async () => {
+    const off = await transportFor({ host: 'smtp.acme.com' })
+    const on = await transportFor({ host: 'smtp.acme.com', pool: {} })
+
+    expect(rows.get('pool')).toBe('—')
+    expect(notes.get('pool')).toMatch(/^Off unless set/)
+    expect(off).not.toHaveProperty('pool')
+    expect(on).toHaveProperty('pool', true)
+  })
+
   // An open relay is the default: no credentials means no auth block.
   it('should document an open relay when no credentials are given', async () => {
     const config = await transportFor({ host: 'smtp.acme.com' })

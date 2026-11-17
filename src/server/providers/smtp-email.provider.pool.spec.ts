@@ -1,0 +1,266 @@
+/**
+ * @fileoverview Specs for the pooled transport and the shutdown of SmtpEmailProvider: the `pool`
+ * option and its validation, what `close()` does and does not do to a send in flight, the fixed
+ * warning when a close fails, and Nest closing the provider with the application.
+ * @layer infrastructure
+ */
+
+import { Logger } from '@nestjs/common'
+import { Test } from '@nestjs/testing'
+
+import { BymaxNotificationModule } from '../bymax-notification.module'
+
+import { baseOptions } from './__tests__/smtp-email-provider.fixtures'
+import { SmtpEmailProvider } from './smtp-email.provider'
+
+// `mock`-prefixed names are allowed inside the hoisted jest.mock factory.
+const mockSendMail = jest.fn()
+const mockClose = jest.fn()
+const mockCreateTransport = jest.fn()
+
+// `nodemailer` is an optional peer dep that is NOT installed; the virtual flag lets jest register a
+// mock module for the lazy `import('nodemailer')`.
+jest.mock('nodemailer', () => ({ __esModule: true, createTransport: mockCreateTransport }), {
+  virtual: true
+})
+
+/** The transport config handed to `createTransport` on the most recent init. */
+function lastTransportConfig(): Record<string, unknown> {
+  return mockCreateTransport.mock.calls.at(-1)?.[0] as Record<string, unknown>
+}
+
+beforeEach(() => {
+  jest.clearAllMocks()
+  mockCreateTransport.mockImplementation(() => ({ sendMail: mockSendMail, close: mockClose }))
+  mockSendMail.mockResolvedValue({ messageId: '<abc@relay>' })
+})
+
+describe('SmtpEmailProvider pool option', () => {
+  it.each([
+    ['maxConnections of 0', { maxConnections: 0 }, 'maxConnections'],
+    ['a negative maxConnections', { maxConnections: -1 }, 'maxConnections'],
+    ['a fractional maxConnections', { maxConnections: 1.5 }, 'maxConnections'],
+    ['a string maxConnections', { maxConnections: '5' }, 'maxConnections'],
+    ['maxMessages of 0', { maxMessages: 0 }, 'maxMessages'],
+    ['a fractional maxMessages', { maxMessages: 2.5 }, 'maxMessages'],
+    ['a string maxMessages', { maxMessages: '100' }, 'maxMessages']
+  ])('should refuse %s', (_label, pool, field) => {
+    expect(() => new SmtpEmailProvider({ host: 'h', pool: pool as never })).toThrow(
+      `SmtpEmailProvider: pool.${field} must be a positive integer`
+    )
+  })
+
+  it.each([
+    ['true', true],
+    ['null', null],
+    ['a string', 'yes']
+  ])('should refuse a pool given as %s', (_label, pool) => {
+    expect(() => new SmtpEmailProvider({ host: 'h', pool: pool as never })).toThrow(
+      'SmtpEmailProvider: pool must be an object'
+    )
+  })
+
+  it.each([{}, { maxConnections: 3 }, { maxMessages: 50 }, { maxConnections: 3, maxMessages: 50 }])(
+    'should accept the pool %j',
+    (pool) => {
+      expect(() => new SmtpEmailProvider({ host: 'h', pool })).not.toThrow()
+    }
+  )
+
+  it('should hand a pooled transport its two limits when they are set', async () => {
+    await new SmtpEmailProvider({
+      host: 'h',
+      pool: { maxConnections: 3, maxMessages: 50 }
+    }).send(baseOptions)
+
+    expect(lastTransportConfig()).toMatchObject({ pool: true, maxConnections: 3, maxMessages: 50 })
+  })
+
+  it('should hand a pooled transport only the limit that is set', async () => {
+    await new SmtpEmailProvider({ host: 'h', pool: { maxMessages: 7 } }).send(baseOptions)
+
+    const config = lastTransportConfig()
+    expect(config).toMatchObject({ pool: true, maxMessages: 7 })
+    expect(config).not.toHaveProperty('maxConnections')
+  })
+
+  it('should hand a pooled transport the nodemailer defaults for an empty pool', async () => {
+    await new SmtpEmailProvider({ host: 'h', pool: {} }).send(baseOptions)
+
+    const config = lastTransportConfig()
+    expect(config).toMatchObject({ pool: true })
+    expect(config).not.toHaveProperty('maxConnections')
+    expect(config).not.toHaveProperty('maxMessages')
+  })
+
+  it('should leave the transport config as it was without a pool', async () => {
+    await new SmtpEmailProvider({ host: 'h' }).send(baseOptions)
+
+    const config = lastTransportConfig()
+    expect(config).not.toHaveProperty('pool')
+    expect(config).not.toHaveProperty('maxConnections')
+    expect(config).not.toHaveProperty('maxMessages')
+  })
+})
+
+describe('SmtpEmailProvider close', () => {
+  it('should close the transport it built, once', async () => {
+    const provider = new SmtpEmailProvider({ host: 'h' })
+    await provider.send(baseOptions)
+
+    await provider.close()
+
+    expect(mockClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('should do nothing, and load nothing, when no transport was ever built', async () => {
+    await new SmtpEmailProvider({ host: 'h' }).close()
+
+    expect(mockCreateTransport).not.toHaveBeenCalled()
+    expect(mockClose).not.toHaveBeenCalled()
+  })
+
+  it('should be idempotent', async () => {
+    const provider = new SmtpEmailProvider({ host: 'h' })
+    await provider.send(baseOptions)
+
+    await provider.close()
+    await provider.close()
+
+    expect(mockClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('should build a new transport for a send after it, which the host closes again', async () => {
+    const provider = new SmtpEmailProvider({ host: 'h' })
+    await provider.send(baseOptions)
+    await provider.close()
+
+    await provider.send(baseOptions)
+    await provider.close()
+
+    expect(mockCreateTransport).toHaveBeenCalledTimes(2)
+    expect(mockClose).toHaveBeenCalledTimes(2)
+  })
+
+  it('should close a transport whose build was still in flight', async () => {
+    const provider = new SmtpEmailProvider({ host: 'h' })
+    const sending = provider.send(baseOptions)
+
+    await provider.close()
+    await sending
+
+    expect(mockClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('should cope with a transport that has no close method', async () => {
+    mockCreateTransport.mockImplementation(() => ({ sendMail: mockSendMail }))
+    const provider = new SmtpEmailProvider({ host: 'h' })
+    await provider.send(baseOptions)
+
+    await expect(provider.close()).resolves.toBeUndefined()
+  })
+
+  it('should not break after a build that failed', async () => {
+    mockCreateTransport.mockImplementationOnce(() => {
+      throw new Error('bad config')
+    })
+    const provider = new SmtpEmailProvider({ host: 'h' })
+    await expect(provider.send(baseOptions)).rejects.toThrow('bad config')
+
+    await expect(provider.close()).resolves.toBeUndefined()
+    expect(mockClose).not.toHaveBeenCalled()
+  })
+
+  it('should leave a failed build to its own caller when it is closed meanwhile', async () => {
+    mockCreateTransport.mockImplementationOnce(() => {
+      throw new Error('bad config')
+    })
+    const provider = new SmtpEmailProvider({ host: 'h' })
+    const sending = provider.send(baseOptions)
+    const closing = provider.close()
+
+    await expect(sending).rejects.toThrow('bad config')
+    await expect(closing).resolves.toBeUndefined()
+    expect(mockClose).not.toHaveBeenCalled()
+  })
+
+  // A close that throws must not stop the host's other shutdown hooks, and what it threw can hold the
+  // relay's own words or a credential, so the log line is fixed text and carries none of it.
+  it('should log a fixed line, and never what the failed close threw', async () => {
+    mockClose.mockImplementation(() => {
+      throw new Error('relay said: login failed for hunter2')
+    })
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    const provider = new SmtpEmailProvider({
+      host: 'h',
+      credentials: { user: 'u', pass: 'hunter2' }
+    })
+    await provider.send(baseOptions)
+
+    await expect(provider.close()).resolves.toBeUndefined()
+
+    expect(warn.mock.calls).toEqual([['[SMTP_CLOSE_FAILED] The transport could not be closed.']])
+    warn.mockRestore()
+  })
+
+  it('should close through the Nest shutdown hook', async () => {
+    const provider = new SmtpEmailProvider({ host: 'h' })
+    const close = jest.spyOn(provider, 'close')
+
+    await provider.onModuleDestroy()
+
+    expect(close).toHaveBeenCalledTimes(1)
+  })
+})
+
+// What nodemailer 10 does with a close, measured against a local relay: a send already in flight on
+// the pooled transport finishes and resolves, one still waiting for a connection rejects with
+// 'Connection pool was closed', and a send on the same transport after the close rejects too. The
+// stand-in below answers the way it did, so these cases hold what THIS adapter does with each answer.
+describe('SmtpEmailProvider close with a send in flight', () => {
+  it('should neither wait for nor disturb a send that is already in flight', async () => {
+    let finish: (info: { messageId: string }) => void = () => undefined
+    mockSendMail.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve as typeof finish
+        })
+    )
+    const provider = new SmtpEmailProvider({ host: 'h', pool: { maxConnections: 1 } })
+    const sending = provider.send(baseOptions)
+    await new Promise((resolve) => setImmediate(resolve))
+
+    await provider.close()
+    finish({ messageId: '<late@relay>' })
+
+    await expect(sending).resolves.toEqual({ messageId: '<late@relay>' })
+  })
+
+  it('should fail a send that was still waiting for a connection like any transport failure', async () => {
+    mockSendMail.mockRejectedValue(new Error('Connection pool was closed'))
+    const provider = new SmtpEmailProvider({ host: 'h', pool: { maxConnections: 1 } })
+
+    await expect(provider.send(baseOptions)).rejects.toThrow(
+      'SMTP send failed: Connection pool was closed'
+    )
+  })
+})
+
+describe('SmtpEmailProvider and the Nest application', () => {
+  it('should be closed when the application closes', async () => {
+    const provider = new SmtpEmailProvider({ host: 'h' })
+    const moduleRef = await Test.createTestingModule({
+      imports: [
+        BymaxNotificationModule.forRoot({
+          email: { provider, defaultFrom: 'noreply@acme.com' }
+        })
+      ]
+    }).compile()
+    await moduleRef.init()
+    await provider.send(baseOptions)
+
+    await moduleRef.close()
+
+    expect(mockClose).toHaveBeenCalledTimes(1)
+  })
+})

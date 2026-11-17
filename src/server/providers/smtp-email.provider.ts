@@ -20,6 +20,7 @@
  */
 
 import { Injectable, Logger } from '@nestjs/common'
+import type { OnModuleDestroy } from '@nestjs/common'
 
 import type {
   EmailAttachment,
@@ -168,6 +169,24 @@ export interface SmtpEmailProviderOptions {
    * message was not sent. The connection is left open: `socketTimeout` reaps it once the relay goes idle; a relay that keeps sending holds it until the relay ends the connection or the process exits.
    */
   sendTimeoutMs?: number
+  /**
+   * Keeps connections to the relay open and reuses them, instead of one connection per send.
+   * Setting it, even to `{}`, turns Nodemailer's pooled mode on; each limit left out keeps
+   * Nodemailer's own default. Each is an integer of at least `1`.
+   *
+   * A pool holds sockets open, so close it with {@link SmtpEmailProvider.close} when the application
+   * stops; Nest does that for you when the application closes. `sendTimeoutMs` also covers the wait
+   * for a free connection.
+   */
+  pool?: SmtpPoolOptions
+}
+
+/** The limits of a pooled transport; each left out keeps Nodemailer's default. */
+export interface SmtpPoolOptions {
+  /** Most connections open to the relay at once. An integer of at least `1`. */
+  maxConnections?: number
+  /** Most messages sent over one connection before it is replaced. An integer of at least `1`. */
+  maxMessages?: number
 }
 
 /**
@@ -184,6 +203,10 @@ interface SmtpTransportConfig {
   connectionTimeout: number
   greetingTimeout: number
   socketTimeout: number
+  /** Present, as `true`, only when the pool option is set. */
+  pool?: true
+  maxConnections?: number
+  maxMessages?: number
 }
 
 /** An attachment in the shape Nodemailer expects. */
@@ -226,11 +249,56 @@ interface SmtpSendPayload {
 /** The slim transport surface this adapter relies on. */
 interface SmtpTransportLike {
   sendMail(payload: SmtpSendPayload): Promise<{ messageId?: string }>
+  /** Nodemailer's transports have it; the stand-ins of a test may not. */
+  close?(): void
 }
 
 /** The slim surface of the `nodemailer` module this adapter relies on. */
 interface NodemailerLike {
   createTransport(config: SmtpTransportConfig): SmtpTransportLike
+}
+
+/**
+ * Refuses a pool option that is not an object of positive integers.
+ *
+ * @param pool - The option as the caller passed it.
+ * @throws Error When `pool` is not an object, or a limit is not an integer of at least `1`.
+ */
+function assertPool(pool: SmtpPoolOptions | undefined): void {
+  if (pool === undefined) {
+    return
+  }
+  if (typeof pool !== 'object' || pool === null) {
+    throw new Error('SmtpEmailProvider: pool must be an object')
+  }
+  for (const [name, value] of [
+    ['maxConnections', pool.maxConnections],
+    ['maxMessages', pool.maxMessages]
+  ] as const) {
+    if (value !== undefined && !(Number.isInteger(value) && value >= 1)) {
+      throw new Error(`SmtpEmailProvider: pool.${name} must be a positive integer`)
+    }
+  }
+}
+
+/**
+ * The transport settings a pool turns on: none without the option, so an unpooled transport gets
+ * the configuration it always did.
+ *
+ * @param pool - The validated option.
+ * @returns The keys to add to the transport configuration.
+ */
+function poolConfig(
+  pool: SmtpPoolOptions | undefined
+): Pick<SmtpTransportConfig, 'pool' | 'maxConnections' | 'maxMessages'> {
+  if (pool === undefined) {
+    return {}
+  }
+  return {
+    pool: true,
+    ...(pool.maxConnections === undefined ? {} : { maxConnections: pool.maxConnections }),
+    ...(pool.maxMessages === undefined ? {} : { maxMessages: pool.maxMessages })
+  }
 }
 
 /**
@@ -283,7 +351,7 @@ const NODEMAILER_MODULE: string = 'nodemailer'
  * They still reach the audit log through `EmailService`.
  */
 @Injectable()
-export class SmtpEmailProvider implements IEmailProvider {
+export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
   readonly name = 'smtp'
   private readonly logger = new Logger(SmtpEmailProvider.name)
   /**
@@ -321,6 +389,7 @@ export class SmtpEmailProvider implements IEmailProvider {
         `SmtpEmailProvider: sendTimeoutMs must be a positive integer of at most ${String(MAX_SEND_TIMEOUT_MS)}`
       )
     }
+    assertPool(options.pool)
     this.#options = options
   }
 
@@ -384,6 +453,41 @@ export class SmtpEmailProvider implements IEmailProvider {
       throw new Error('SMTP transport returned no message ID')
     }
     return { messageId: info.messageId }
+  }
+
+  /**
+   * Closes the transport this provider built, so a pooled connection does not keep the process
+   * alive. A send already in flight on a pooled transport finishes; one still waiting for a
+   * connection fails with `Connection pool was closed`. Idempotent, and it never builds a transport
+   * to close it. A `send()` after it builds a new transport, which the host has to close again if it
+   * keeps the provider alive.
+   *
+   * A close that throws is logged as a fixed line and not rethrown, so one failure cannot stop the
+   * other shutdown hooks of the application.
+   */
+  async close(): Promise<void> {
+    const pending = this.#transportPromise
+    this.#transportPromise = null
+    if (pending === null) {
+      return
+    }
+    let transport: SmtpTransportLike
+    try {
+      transport = await pending
+    } catch {
+      return
+    }
+    try {
+      transport.close?.()
+    } catch {
+      // What the failure carries can hold the relay's words or a credential: log a fixed line only.
+      this.logger.warn('[SMTP_CLOSE_FAILED] The transport could not be closed.')
+    }
+  }
+
+  /** Nest calls this when the application closes; it closes the transport. */
+  async onModuleDestroy(): Promise<void> {
+    await this.close()
   }
 
   /**
@@ -741,7 +845,8 @@ export class SmtpEmailProvider implements IEmailProvider {
       tls: options.tls,
       connectionTimeout: options.connectionTimeout ?? DEFAULT_CONNECTION_TIMEOUT_MS,
       greetingTimeout: options.greetingTimeout ?? DEFAULT_GREETING_TIMEOUT_MS,
-      socketTimeout: options.socketTimeout ?? DEFAULT_SOCKET_TIMEOUT_MS
+      socketTimeout: options.socketTimeout ?? DEFAULT_SOCKET_TIMEOUT_MS,
+      ...poolConfig(options.pool)
     }
   }
 
