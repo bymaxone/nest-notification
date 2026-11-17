@@ -33,11 +33,15 @@ jobs:
   full:
     uses: bymaxone/.github/.github/workflows/mutation-full.yml@v1
     with:
-      # Measured cold: 7 min. Generous on purpose — nothing blocks on this job, so an
-      # over-wide ceiling costs only the minutes it uses, while an under-tight one costs the
-      # whole run and leaves the week without a measured baseline.
+      # The ceiling is per shard job. It is provisional until a sharded run has measured the slowest
+      # shard. One unsharded job took 31, 38 and then 52 minutes as the suite grew, against a
+      # 60-minute ceiling, and a run the ceiling cancels leaves no score and no baseline.
       timeout-minutes: 60
       # A unit test the cold run did not run fails the job: the score cannot notice a test the
       # related-test lookup never selected. The specs that run no mutated source are listed with
       # their reason in scripts/mutation-inventory.exempt.json.
       inventory: enforce
+      # Four shards of two workers each. The count and the concurrency are passed here, not written
+      # into stryker.config.json, which the per-push incremental job and local runs share.
+      shards: 4
+      concurrency: 2
