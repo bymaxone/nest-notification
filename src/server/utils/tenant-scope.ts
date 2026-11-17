@@ -111,6 +111,25 @@ export function purposeProblem(value: unknown): string | undefined {
 }
 
 /**
+ * Asserts that a purpose is registered: one of the canonical purposes or a key of `perPurpose`. The
+ * refusal names the boundary and the parameter, never the value.
+ *
+ * @param owner - Component quoted in `details`, to name the failing boundary.
+ * @param value - The purpose, already known to be a plain name.
+ * @param isRegistered - The resolved options' membership test.
+ * @throws NotificationException `INVALID_SCOPE_IDENTIFIER` when the purpose is not registered.
+ */
+export function assertRegisteredPurpose(
+  owner: string,
+  value: string,
+  isRegistered: (purpose: string) => boolean
+): void {
+  if (!isRegistered(value)) {
+    throw refuse(owner, 'purpose', 'not a registered purpose')
+  }
+}
+
+/**
  * Asserts that a value can be a purpose. The refusal names the boundary and the parameter, never
  * the value: it is serialized into the HTTP response.
  *

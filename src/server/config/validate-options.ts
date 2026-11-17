@@ -138,6 +138,9 @@ function validateOtpOptions(otp: OtpChannelOptions): void {
       )
     }
   }
+  if (otp.strictPurposes !== undefined && typeof otp.strictPurposes !== 'boolean') {
+    throw new Error('[BymaxNotificationModule] options.otp.strictPurposes must be a boolean')
+  }
   if (otp.resendCooldownSeconds !== undefined && otp.resendCooldownSeconds < 0) {
     throw new Error(
       '[BymaxNotificationModule] options.otp.resendCooldownSeconds must be 0 or greater'

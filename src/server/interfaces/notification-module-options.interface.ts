@@ -117,6 +117,15 @@ export interface OtpChannelOptions {
   codeSecret?: string
   /** Per-purpose overrides of the defaults above. */
   perPurpose?: Record<string, Partial<OtpPurposeConfig>>
+  /**
+   * When `true`, an OTP operation whose purpose is neither one of the five in
+   * `NOTIFICATION_PURPOSES` nor a key of `perPurpose` is refused with
+   * `INVALID_SCOPE_IDENTIFIER`, before any storage call. A purpose is part of the scope the limits
+   * are kept on, so a host that lets a caller choose it lets the caller ask for a fresh cooldown and
+   * attempt counter each time; this closes that without the host checking the purpose itself.
+   * Default: `false`.
+   */
+  strictPurposes?: boolean
 }
 
 /**

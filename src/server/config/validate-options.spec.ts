@@ -235,6 +235,23 @@ describe('validateOptions', () => {
       )
     })
 
+    it.each([true, false])('should accept strictPurposes %s', (value) => {
+      expect(() =>
+        validateOptions({ otp: { storage: otpStorage, strictPurposes: value } })
+      ).not.toThrow()
+    })
+
+    it.each([
+      ['the string true', 'true'],
+      ['a number', 1],
+      ['null', null],
+      ['an object', {}]
+    ])('should refuse strictPurposes given as %s', (_label, value) => {
+      expect(() =>
+        validateOptions({ otp: { storage: otpStorage, strictPurposes: value as never } })
+      ).toThrow('[BymaxNotificationModule] options.otp.strictPurposes must be a boolean')
+    })
+
     it('should accept an otp section without perPurpose', () => {
       expect(() => validateOptions({ otp: { storage: otpStorage } })).not.toThrow()
     })
