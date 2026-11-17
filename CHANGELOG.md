@@ -26,13 +26,25 @@ the entries that carry one, is the compatibility contract — read it, not the n
   put in the wrong option.
 - **`perPurpose` and the SMTP `port` are checked too.** A `perPurpose` `length` outside `1` to `32`
   was not checked in an entry (only `otp.defaultLength` was) and is now refused naming the option;
-  the `perPurpose` container and each entry in it must be an object, so `null`, an array, a string and
-  a number fail naming `otp.perPurpose` and no longer pass silently or as a purpose called `0`; and
+  the `perPurpose` container, when set, and each entry in it must be an object, so an array, a string
+  and a number fail naming `otp.perPurpose`, and a `null` or `undefined` entry fails naming
+  `otp.perPurpose.<purpose>`, where they passed silently or as a purpose called `0` (a `null` container
+  is read as not set); and
   the SMTP `port` must be an integer from `1` to `65535`, where `NaN`, `0`, `70000` and `'587'` were
   accepted.
 - **What is checked is what is kept.** The module copies the options once and validates and builds
   from the copy, and both providers copy theirs before checking them, so a getter that answered with a
-  valid value and then an invalid one no longer got the invalid one into the service.
+  valid value and then an invalid one no longer got the invalid one into the service. The copy reads
+  each declared option by property access, so a class that supplies its options from getters on the
+  prototype keeps its values, and a `perPurpose` container that is a class with a getter for each
+  purpose is read too; an option the library does not declare is not copied. `credentials` and `tls`
+  stay references to your objects.
+- **An unset `perPurpose` value no longer removes the TTL.** In 1.4.13 an entry with
+  `ttlSeconds: undefined` left the entry without a TTL, so a code issued for that purpose never
+  expired, and `ttlSeconds: null` was stored as `null`. An option that reads as `undefined` or `null`
+  now takes its default in every group (a `perPurpose` entry that is itself `null` or `undefined` is
+  refused), and `sms: null` and `push: null` are read as not set. The exception is the options whose
+  default is the weaker security posture, listed in the note below, where a `null` is refused.
 - **A count past the largest safe integer is refused.** `otp.defaultMaxAttempts`, each `perPurpose`
   `maxAttempts`, `email.maxRecipients` and the SMTP `pool` limits `maxConnections` and `maxMessages`
   accepted `2 ** 53`, `1e21` and `Number.MAX_VALUE`, which bound nothing. Each must now be an integer
@@ -59,12 +71,13 @@ posture, `global.tenantIdResolver`, `otp.codeSecret`, `otp.strictPurposes`, `otp
 `audit.swallowErrors` and `audit.maskRecipient`: a `null` there is refused at startup, so a missing
 secret, flag or resolver from a config lookup cannot start the module unkeyed, non-strict, unmasked,
 with errors swallowed or trusting the tenant in the payload. A `tenantIdResolver` that is not a
-function is refused too. Options that are not an object
+function is refused too, and its check runs before the email and `otp` checks. Options that are not an object
 (`undefined`, `null`, a string, an array) fail with `options must be an object`, where they failed with a `TypeError`. These now fail at startup,
 naming the option: a numeric option that is `NaN`,
 `Infinity`, a string, or a fraction where an integer is needed; a count past `9007199254740991`; a
-`perPurpose` `length` outside `1` to `32`, which was not checked; a `perPurpose` container or entry that
-is not an object (`null`, an array, a string, a number); and, when the provider is built, an SMTP
+`perPurpose` `length` outside `1` to `32`, which was not checked; a `perPurpose` container that is not an
+object (an array, a string, a number) and an entry that is not an object (`null`, `undefined`, an array, a
+string, a number); and, when the provider is built, an SMTP
 `port` that is `NaN`, `0`, past `65535`, a fraction or a string such as `'587'`, or a timeout that is
 out of range or not a number. Fix the value. The numeric checks of the `otp` defaults run before those of `codeSecret` and
 `defaultCodeType`, and those of `perPurpose` after them, so when several options are wrong the first
