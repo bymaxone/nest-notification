@@ -1,8 +1,8 @@
 /**
  * @fileoverview Holds every SMTP timeout to the range a timer can hold, at construction. The
  * connection, greeting and socket timeouts are handed to Nodemailer, which arms a timer with each:
- * a value past 2^31 - 1 ms fires at once, and a fraction, a negative or a string either fires at
- * once or is ignored, so a typo in one makes every send fail or hang against a healthy relay.
+ * a value outside that range, or one that is not a number, can fire the timer at once or leave the
+ * phase unbounded, so a typo in one can make every send fail or hang against a healthy relay.
  * @layer infrastructure
  */
 
