@@ -208,7 +208,7 @@ describe('ResendEmailProvider failure codes', () => {
     expect((caught as { code?: string }).code).toBe('ETIMEDOUT')
   })
 
-  // What the real SDK 6.38.1 returned for a closed port and for an HTTP 503.
+  // A request that could not be made and an HTTP 5xx both mean the API is unavailable.
   it.each([
     [
       'a request that could not be made',

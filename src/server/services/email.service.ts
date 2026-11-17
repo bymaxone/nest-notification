@@ -38,6 +38,7 @@ import {
   isEnhancedStatus,
   withoutDeclaredValues
 } from '../utils/delivery-status'
+import { assertBodyParts } from '../utils/email-body'
 import { countRecipients } from '../utils/recipient-list'
 import {
   collectEchoedExcerpts,
@@ -226,12 +227,13 @@ export class EmailService {
    * @returns The provider's message id.
    * @throws NotificationException `EMAIL_PROVIDER_NOT_CONFIGURED`, `INVALID_SCOPE_IDENTIFIER`
    * (a blank tenant or one with a control character), `EMAIL_ATTACHMENTS_TOO_LARGE`,
-   * `EMAIL_INVALID_RECIPIENT` (more recipients than `maxRecipients`),
-   * `EMAIL_SEND_FAILED`, or `AUDIT_LOG_FAILED` (only when `audit.swallowErrors` is `false`).
+   * `EMAIL_INVALID_RECIPIENT` (more recipients than `maxRecipients`), `EMAIL_MISSING_BODY` (an html
+   * or text part that is not a string), `EMAIL_SEND_FAILED`, or `AUDIT_LOG_FAILED` (only when `audit.swallowErrors` is `false`).
    */
   async send(input: EmailSendInput): Promise<{ messageId: string }> {
     const email = this.requireEmailOptions()
     assertIdentifies('EmailService', 'tenantId', input.tenantId)
+    assertBodyParts(input.html, input.text)
     this.guardAttachmentSize(input.attachments, email.maxAttachmentBytes)
     this.guardRecipientCount(input, email.maxRecipients)
     const sendOptions = this.buildSendOptions(input, email)

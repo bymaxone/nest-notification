@@ -61,6 +61,26 @@ describe('SmtpEmailProvider pool option', () => {
     )
   })
 
+  // Nor is a typed array, a buffer or anything else that has a length: each is `typeof` an object.
+  it.each([
+    ['a Uint8Array', new Uint8Array(0)],
+    ['an Int32Array', new Int32Array(2)],
+    ['a Buffer', Buffer.alloc(0)],
+    ['an ArrayBuffer', new ArrayBuffer(0)],
+    ['a DataView', new DataView(new ArrayBuffer(1))],
+    ['an array-like object', { length: 0 }],
+    [
+      'an arguments object',
+      (function (..._: unknown[]) {
+        return arguments
+      })()
+    ]
+  ])('should refuse a pool given as %s', (_label, pool) => {
+    expect(() => new SmtpEmailProvider({ host: 'h', pool: pool as never })).toThrow(
+      'SmtpEmailProvider: pool must be an object'
+    )
+  })
+
   it.each([
     ['true', true],
     ['null', null],

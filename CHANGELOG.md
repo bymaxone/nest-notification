@@ -11,6 +11,20 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 ## [Unreleased]
 
+### Fixed
+
+- **An html or text part that is not a string is refused, not sent.** `EmailService.send`,
+  `SmtpEmailProvider.send` and `ResendEmailProvider.send` read a Buffer, a typed array, an array, a
+  number or an object (which Nodemailer treats as a content descriptor, a file `path` included) as
+  content and sent it, and the removal of a body echoed in an error compares strings only, so a relay
+  that quoted such a part back was not scrubbed. These now fail with `EMAIL_MISSING_BODY` (400),
+  `details` naming the part (`html` or `text`) and `reason: 'not_a_string'`, before anything is audited
+  or sent. An absent part (`undefined` or `null`) is accepted as before, so a text-only message still
+  sends. A host that passed a Buffer as a part must pass a string.
+- **`pool` refuses any sequence.** `SmtpEmailProvider` took a typed array, a Buffer, an
+  `ArrayBuffer` or an object with a numeric `length` for the `pool` object and behaved as if `{}` had
+  been given; it now fails with `pool must be an object`, as an array already did.
+
 ### Changed
 
 - **A relay or API that says "try later" is answered with `503`, not `502`.** `EMAIL_SEND_FAILED`

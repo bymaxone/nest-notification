@@ -2,6 +2,7 @@ import { inspect } from 'node:util'
 
 import { Logger } from '@nestjs/common'
 
+import { NotificationException } from '../errors/notification-exception'
 import type { EmailSendOptions } from '../interfaces/email-provider.interface'
 
 import { BIDI_OVERRIDE, hasRawControl } from './__tests__/has-raw-control'
@@ -265,6 +266,27 @@ describe('ResendEmailProvider', () => {
     ).rejects.toThrow('Resend send failed: rejected: [redacted]')
     expect(String(warnSpy.mock.calls[0]?.[0])).toBe('[RESEND_SEND_FAILED] rejected: [redacted]')
     warnSpy.mockRestore()
+  })
+
+  // The SDK would send these parts as content the echo scrub cannot read, so the provider refuses
+  // them before it calls the API.
+  it.each([
+    ['html', { html: Buffer.from('<p>x</p>') }],
+    ['html', { html: { path: '/etc/hostname' } }],
+    ['text', { text: Buffer.from('x') }],
+    ['text', { text: new Uint8Array(2) }],
+    ['text', { text: 42 }]
+  ])('should refuse a %s part that is not a string', async (part, override) => {
+    const caught: unknown = await new ResendEmailProvider({ apiKey: 'k' })
+      .send({ ...baseOptions, ...override } as never)
+      .catch((error: unknown) => error)
+
+    expect(caught).toBeInstanceOf(NotificationException)
+    expect(caught).toMatchObject({ code: 'notification.email_missing_body' })
+    expect((caught as NotificationException).getResponse()).toMatchObject({
+      error: { details: { part } }
+    })
+    expect(mockSend).not.toHaveBeenCalled()
   })
 
   // A send with no html part fails with the Resend error, not a TypeError, with the

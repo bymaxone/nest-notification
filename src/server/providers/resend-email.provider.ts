@@ -22,6 +22,7 @@ import type {
 } from '../interfaces/email-provider.interface'
 import { escapeAuditString } from '../utils/audit-escape'
 import { errorCodeOf } from '../utils/availability'
+import { assertBodyParts } from '../utils/email-body'
 import { loadOptionalPeer } from '../utils/load-optional-peer'
 import {
   REDACTED_VALUE,
@@ -230,6 +231,7 @@ export class ResendEmailProvider implements IEmailProvider {
    * maps any thrown `Error` to `EMAIL_SEND_FAILED`.
    */
   async send(options: EmailSendOptions): Promise<EmailSendResult> {
+    assertBodyParts(options.html, options.text)
     const client = await this.getClient()
     const from = this.formatFrom(options.from, options.fromName)
     const timeoutMs = this.#options.timeoutMs ?? DEFAULT_TIMEOUT_MS
