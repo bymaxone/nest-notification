@@ -161,7 +161,7 @@ export function snapshotOptions(
   }
   if (read.otp !== undefined) {
     const otp = readOptionKeys(read.otp, OTP_KEYS, WEAKER_WHEN_UNSET)
-    if (typeof otp === 'object' && otp !== null && otp.perPurpose !== undefined) {
+    if (otp.perPurpose !== undefined) {
       otp.perPurpose = readPerPurpose(otp.perPurpose)
     }
     read.otp = otp

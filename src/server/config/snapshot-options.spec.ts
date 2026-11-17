@@ -290,6 +290,15 @@ describe('snapshotOptions', () => {
       expect(reads).toBe(1)
     })
 
+    it('should read a container that has no prototype', () => {
+      const container = Object.create(null) as Record<string, object>
+      container['mfa_oob'] = { maxAttempts: 2 }
+
+      const copy = snapshotOptions({ otp: { storage, perPurpose: container } } as never)
+
+      expect(copy.otp?.perPurpose).toEqual({ mfa_oob: { maxAttempts: 2 } })
+    })
+
     it('should keep a purpose named __proto__ as an own key', () => {
       const container = JSON.parse('{"__proto__":{"maxAttempts":2}}') as object
 
