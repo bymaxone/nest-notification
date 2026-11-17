@@ -66,11 +66,18 @@ const OTP_KEYS = [
   'strictPurposes'
 ] as const satisfies readonly (keyof OtpChannelOptions)[]
 
-/** Options whose default is the weaker posture (no key, non-strict): a `null` is refused, not defaulted. */
+/** Options whose default is the weaker posture (no key, non-strict, not consumed): a `null` is refused, not defaulted. */
 const WEAKER_WHEN_UNSET = [
   'codeSecret',
-  'strictPurposes'
+  'strictPurposes',
+  'consumeOnVerify'
 ] as const satisfies readonly (keyof OtpChannelOptions)[]
+
+/** The same for the audit section: errors not swallowed, and recipients masked. */
+const AUDIT_WEAKER_WHEN_UNSET = [
+  'swallowErrors',
+  'maskRecipient'
+] as const satisfies readonly (keyof AuditOptions)[]
 
 /** Every key of a `perPurpose` entry. */
 const PURPOSE_KEYS = [
@@ -145,7 +152,7 @@ export function snapshotOptions(
     read.email = readOptionKeys(read.email, EMAIL_KEYS)
   }
   if (read.audit !== undefined) {
-    read.audit = readOptionKeys(read.audit, AUDIT_KEYS)
+    read.audit = readOptionKeys(read.audit, AUDIT_KEYS, AUDIT_WEAKER_WHEN_UNSET)
   }
   if (read.otp !== undefined) {
     const otp = readOptionKeys(read.otp, OTP_KEYS, WEAKER_WHEN_UNSET)

@@ -54,9 +54,10 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 No declaration changes. An option that reads as `null` is now read as not set and takes its default,
 as `undefined` does, in the module options and in the options of both providers (a numeric option set
-to `null` was refused before). The exception is `otp.codeSecret` and `otp.strictPurposes`, whose
-default is the weaker posture: a `null` there is still refused at startup, so a missing secret or flag
-from a config lookup cannot start the module unkeyed or non-strict. Options that are not an object
+to `null` was refused before). The exception is the options whose default is the weaker security
+posture, `otp.codeSecret`, `otp.strictPurposes`, `otp.consumeOnVerify`, `audit.swallowErrors` and
+`audit.maskRecipient`: a `null` there is refused at startup, so a missing secret or flag from a config
+lookup cannot start the module unkeyed, non-strict, unmasked or with errors swallowed. Options that are not an object
 (`undefined`, `null`, a string, an array) fail with `options must be an object`, where they failed with a `TypeError`. These now fail at startup,
 naming the option: a numeric option that is `NaN`,
 `Infinity`, a string, or a fraction where an integer is needed; a count past `9007199254740991`; a

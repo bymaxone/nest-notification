@@ -26,8 +26,7 @@ const SECTIONS: ReadonlyArray<readonly [string, Build, readonly string[]]> = [
       'defaultCodeType',
       'defaultTtlSeconds',
       'defaultMaxAttempts',
-      'resendCooldownSeconds',
-      'consumeOnVerify'
+      'resendCooldownSeconds'
     ]
   ],
   [
@@ -39,14 +38,6 @@ const SECTIONS: ReadonlyArray<readonly [string, Build, readonly string[]]> = [
     'global',
     (extra) => ({ email: { provider, defaultFrom: 'a@b.com' }, global: extra }),
     ['redisNamespace', 'defaultLocale']
-  ],
-  [
-    'audit',
-    (extra) => ({
-      email: { provider, defaultFrom: 'a@b.com' },
-      audit: { repository: {}, ...extra }
-    }),
-    ['swallowErrors']
   ]
 ]
 
@@ -102,21 +93,37 @@ describe('a perPurpose entry option that reads as not set', () => {
 // When the default of an option is the weaker security posture, a null (a missing secret or flag
 // from a config lookup) is a misconfiguration and is refused at startup; undefined stays unset.
 describe('an option whose default is the weaker posture', () => {
-  const build = (extra: object): Record<string, unknown> => ({ otp: { storage, ...extra } })
+  const sections = {
+    otp: (extra: object): Record<string, unknown> => ({ otp: { storage, ...extra } }),
+    audit: (extra: object): Record<string, unknown> => ({
+      email: { provider, defaultFrom: 'a@b.com' },
+      audit: { repository: {}, ...extra }
+    })
+  }
+  const WEAKER = [
+    ['otp', 'codeSecret'],
+    ['otp', 'strictPurposes'],
+    ['otp', 'consumeOnVerify'],
+    ['audit', 'swallowErrors'],
+    ['audit', 'maskRecipient']
+  ] as const
 
-  it.each(['codeSecret', 'strictPurposes'])('should refuse null for %s', (key) => {
-    expect(() => resolved(build({ [key]: null }))).toThrow(`options.otp.${key}`)
+  it.each(WEAKER)('should refuse null for %s.%s', (section, key) => {
+    expect(() => resolved(sections[section]({ [key]: null }))).toThrow(`options.${section}.${key}`)
   })
 
-  it.each(['codeSecret', 'strictPurposes'])('should treat undefined for %s as omitted', (key) => {
-    expect(resolved(build({ [key]: undefined }))).toEqual(resolved(build({})))
+  it.each(WEAKER)('should treat undefined for %s.%s as omitted', (section, key) => {
+    expect(resolved(sections[section]({ [key]: undefined }))).toEqual(
+      resolved(sections[section]({}))
+    )
   })
 
   it('should refuse a codeSecret that is not a string', () => {
-    expect(() => resolved(build({ codeSecret: 5 }))).toThrow('options.otp.codeSecret')
+    expect(() => resolved(sections.otp({ codeSecret: 5 }))).toThrow('options.otp.codeSecret')
   })
 
-  it.each(['storage'])('should keep refusing a null %s', (key) => {
-    expect(() => resolved(build({ [key]: null }))).toThrow()
+  it('should keep refusing a null storage and a null repository', () => {
+    expect(() => resolved(sections.otp({ storage: null }))).toThrow()
+    expect(() => resolved(sections.audit({ repository: null }))).toThrow()
   })
 })

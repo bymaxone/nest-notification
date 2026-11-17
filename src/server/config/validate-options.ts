@@ -10,6 +10,7 @@
 import { NotificationException } from '../errors/notification-exception'
 import type {
   BymaxNotificationModuleOptions,
+  AuditOptions,
   EmailChannelOptions,
   OtpChannelOptions
 } from '../interfaces/notification-module-options.interface'
@@ -62,10 +63,23 @@ export function validateOptions(options: BymaxNotificationModuleOptions): void {
     validateOtpOptions(options.otp)
   }
 
-  if (options.audit && !options.audit.repository) {
+  if (options.audit) {
+    validateAuditOptions(options.audit)
+  }
+}
+
+/** Validates the audit section. A `null` for an option whose default is weaker is refused. */
+function validateAuditOptions(audit: AuditOptions): void {
+  if (!audit.repository) {
     throw new Error(
       "[BymaxNotificationModule] options.audit.repository is required when 'audit' is configured"
     )
+  }
+  if ((audit.swallowErrors as unknown) === null) {
+    throw new Error('[BymaxNotificationModule] options.audit.swallowErrors must be a boolean')
+  }
+  if ((audit.maskRecipient as unknown) === null) {
+    throw new Error('[BymaxNotificationModule] options.audit.maskRecipient must be a function')
   }
 }
 
@@ -180,6 +194,9 @@ function validateOtpOptions(otp: OtpChannelOptions): void {
     )
   }
   validatePerPurpose(otp.perPurpose)
+  if ((otp.consumeOnVerify as unknown) === null) {
+    throw new Error('[BymaxNotificationModule] options.otp.consumeOnVerify must be a boolean')
+  }
   if (otp.strictPurposes !== undefined && typeof otp.strictPurposes !== 'boolean') {
     throw new Error('[BymaxNotificationModule] options.otp.strictPurposes must be a boolean')
   }
