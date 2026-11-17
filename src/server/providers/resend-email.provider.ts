@@ -213,7 +213,8 @@ export class ResendEmailProvider implements IEmailProvider {
 
   constructor(options: ResendEmailProviderOptions = {}) {
     assertTimerMs('ResendEmailProvider', 'timeoutMs', options.timeoutMs)
-    this.#options = options
+    // A copy, so a value checked above cannot be changed by the host afterwards.
+    this.#options = { ...options }
   }
 
   /**

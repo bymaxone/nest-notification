@@ -93,6 +93,19 @@ describe('ResendEmailProvider timeout', () => {
     expect(timeout).toHaveBeenCalledWith(15_000)
   })
 
+  // The check is made when the provider is built, so a change to the host's options object
+  // afterwards must not reach a send.
+  it('should keep the bound it was built with when the options object changes', async () => {
+    const timeout = jest.spyOn(AbortSignal, 'timeout')
+    const options = { apiKey: 'k', timeoutMs: 2_500 }
+    const provider = new ResendEmailProvider(options)
+    options.timeoutMs = 3_000_000_000
+
+    await provider.send(baseOptions)
+
+    expect(timeout).toHaveBeenCalledWith(2_500)
+  })
+
   it('should apply the configured bound to every send', async () => {
     const timeout = jest.spyOn(AbortSignal, 'timeout')
     const provider = new ResendEmailProvider({ apiKey: 'k', timeoutMs: 2_500 })

@@ -269,7 +269,8 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
       assertTimerMs('SmtpEmailProvider', name, value)
     }
     this.#pool = readPool(options.pool)
-    this.#options = options
+    // A copy, so a value checked above cannot be changed by the host afterwards.
+    this.#options = { ...options }
   }
 
   /**

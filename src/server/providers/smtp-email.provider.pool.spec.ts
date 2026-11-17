@@ -107,6 +107,21 @@ describe('SmtpEmailProvider pool option', () => {
     )
   })
 
+  // The options are the host's object, and a timeout is checked once, when the provider is built:
+  // changing it afterwards must not reach the transport, or the check could be walked around.
+  it.each(['connectionTimeout', 'greetingTimeout', 'socketTimeout'] as const)(
+    'should keep the %s it was built with when the options object changes',
+    async (option) => {
+      const options = { host: 'h', [option]: 5_000 }
+      const provider = new SmtpEmailProvider(options)
+      Object.assign(options, { [option]: 3_000_000_000 })
+
+      await provider.send(baseOptions).catch(() => undefined)
+
+      expect(lastTransportConfig()[option]).toBe(5_000)
+    }
+  )
+
   // The limits are read once, at construction: a getter that answers differently later must not
   // change what the transport is built with.
   it('should read the limits of the pool once', async () => {
