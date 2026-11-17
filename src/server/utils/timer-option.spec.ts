@@ -16,10 +16,8 @@ describe('assertTimerMs', () => {
     expect(() => assertTimerMs('Owner', 'option', value)).not.toThrow()
   })
 
-  // Each of these either fails a send within milliseconds against a healthy relay (past the ceiling,
-  // negative, fractional, true or a string that is not a number: the timer fires at once) or does
-  // not bound the phase at all (NaN, zero). A numeric string such as '5000' would be coerced and
-  // work, and is refused all the same: a bound is a number.
+  // A bound is an integer a timer can hold. Anything else is refused when the provider is built,
+  // a numeric string and a value past the ceiling included.
   it.each([
     0,
     -1,
