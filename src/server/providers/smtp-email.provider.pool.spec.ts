@@ -31,6 +31,7 @@ function lastTransportConfig(): Record<string, unknown> {
 
 beforeEach(() => {
   jest.clearAllMocks()
+  mockClose.mockReset()
   mockCreateTransport.mockImplementation(() => ({ sendMail: mockSendMail, close: mockClose }))
   mockSendMail.mockResolvedValue({ messageId: '<abc@relay>' })
 })
@@ -255,13 +256,29 @@ describe('SmtpEmailProvider close with a send in flight', () => {
     await expect(sending).resolves.toEqual({ messageId: '<late@relay>' })
   })
 
-  it('should fail a send that was still waiting for a connection like any transport failure', async () => {
-    mockSendMail.mockRejectedValue(new Error('Connection pool was closed'))
-    const provider = new SmtpEmailProvider({ host: 'h', pool: { maxConnections: 1 } })
-
-    await expect(provider.send(baseOptions)).rejects.toThrow(
-      'SMTP send failed: Connection pool was closed'
+  // The stand-in holds a send that is waiting for a connection and rejects it when the pool closes,
+  // as Nodemailer does, so what is checked is the adapter's answer to that rejection and that closing
+  // is what brings it about.
+  it('should fail a send that was still waiting for a connection when the pool closes', async () => {
+    const waiting: Array<(error: Error) => void> = []
+    mockSendMail.mockImplementation(
+      () =>
+        new Promise((_resolve, reject: (error: Error) => void) => {
+          waiting.push(reject)
+        })
     )
+    mockClose.mockImplementation(() => {
+      for (const reject of waiting) {
+        reject(new Error('Connection pool was closed'))
+      }
+    })
+    const provider = new SmtpEmailProvider({ host: 'h', pool: { maxConnections: 1 } })
+    const sending = provider.send(baseOptions)
+    await new Promise((resolve) => setImmediate(resolve))
+
+    await provider.close()
+
+    await expect(sending).rejects.toThrow('SMTP send failed: Connection pool was closed')
   })
 })
 
