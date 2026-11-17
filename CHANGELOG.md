@@ -39,7 +39,7 @@ the entries that carry one, is the compatibility contract — read it, not the n
   prototype keeps its values, and a `perPurpose` container that is a class with a getter for each
   purpose is read too; an option the library does not declare is not copied. `credentials` and `tls`
   stay references to your objects.
-- **An unset `perPurpose` value no longer removes the attempts bound, the TTL or the cooldown.**
+- **An unset `perPurpose` value no longer removes or breaks the attempts bound, the TTL or the cooldown.**
   Measured with the in-memory storage on 1.4.13, an entry with `maxAttempts: undefined` had no
   attempts bound (after eight wrong codes the right one still verified), `maxAttempts: null` made every
   verify fail with `max_attempts`, `ttlSeconds: undefined` left the code without an expiry (an
@@ -72,8 +72,7 @@ the entries that carry one, is the compatibility contract — read it, not the n
 #### Apply to a derived backend
 
 No declaration changes. An option that reads as `null` is now read as not set and takes its default,
-as `undefined` does, in the module options and in the options of both providers (a numeric option set
-to `null` was refused before). The exception is the options whose default is the weaker security
+as `undefined` does, in the module options and in the options of both providers. The exception is the options whose default is the weaker security
 posture, `global.tenantIdResolver`, `otp.codeSecret`, `otp.strictPurposes`, `otp.consumeOnVerify`,
 `audit.swallowErrors` and `audit.maskRecipient`: a `null` there is refused at startup, so a missing
 secret, flag or resolver from a config lookup cannot start the module unkeyed, non-strict, unmasked,
