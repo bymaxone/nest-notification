@@ -122,25 +122,44 @@ function isArrayLike(value: object): boolean {
 }
 
 /**
- * Refuses a pool option that is not an object of positive integers.
+ * Reads the limits of the `pool` option once, refusing an option that is not an object of positive
+ * integers. Reading it is host code too, so a getter or a Proxy that throws is refused like any
+ * other value that is not an options object; and the limits are kept as plain values, so a getter
+ * that answers differently later cannot change the transport that is built.
  *
  * @param pool - The option as the caller passed it.
+ * @returns The limits that were set, or `undefined` when there is no pool.
  * @throws Error When `pool` is not an object, or a limit is not an integer of at least `1`.
  */
-function assertPool(pool: SmtpPoolOptions | undefined): void {
+function readPool(pool: SmtpPoolOptions | undefined): SmtpPoolOptions | undefined {
   if (pool === undefined) {
-    return
+    return undefined
   }
-  if (typeof pool !== 'object' || pool === null || isArrayLike(pool)) {
+  let maxConnections: unknown
+  let maxMessages: unknown
+  try {
+    if (typeof pool !== 'object' || pool === null || isArrayLike(pool)) {
+      throw new Error('not an options object')
+    }
+    maxConnections = pool.maxConnections
+    maxMessages = pool.maxMessages
+  } catch {
     throw new Error('SmtpEmailProvider: pool must be an object')
   }
   for (const [name, value] of [
-    ['maxConnections', pool.maxConnections],
-    ['maxMessages', pool.maxMessages]
+    ['maxConnections', maxConnections],
+    ['maxMessages', maxMessages]
   ] as const) {
-    if (value !== undefined && !(Number.isInteger(value) && value >= 1)) {
+    if (
+      value !== undefined &&
+      !(typeof value === 'number' && Number.isInteger(value) && value >= 1)
+    ) {
       throw new Error(`SmtpEmailProvider: pool.${name} must be a positive integer`)
     }
+  }
+  return {
+    ...(maxConnections === undefined ? {} : { maxConnections: maxConnections as number }),
+    ...(maxMessages === undefined ? {} : { maxMessages: maxMessages as number })
   }
 }
 
@@ -237,6 +256,9 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
    */
   readonly #options: SmtpEmailProviderOptions
 
+  /** The limits of the pool option, read once at construction; `undefined` for an unpooled transport. */
+  readonly #pool: SmtpPoolOptions | undefined
+
   /**
    * @param options - Adapter options; `host` is required to actually send, and
    *   `credentials` must be complete whenever supplied at all.
@@ -252,7 +274,7 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
         `SmtpEmailProvider: sendTimeoutMs must be a positive integer of at most ${String(MAX_SEND_TIMEOUT_MS)}`
       )
     }
-    assertPool(options.pool)
+    this.#pool = readPool(options.pool)
     this.#options = options
   }
 
@@ -714,7 +736,7 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
       connectionTimeout: options.connectionTimeout ?? DEFAULT_CONNECTION_TIMEOUT_MS,
       greetingTimeout: options.greetingTimeout ?? DEFAULT_GREETING_TIMEOUT_MS,
       socketTimeout: options.socketTimeout ?? DEFAULT_SOCKET_TIMEOUT_MS,
-      ...poolConfig(options.pool)
+      ...poolConfig(this.#pool)
     }
   }
 

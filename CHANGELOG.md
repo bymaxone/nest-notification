@@ -26,6 +26,16 @@ the entries that carry one, is the compatibility contract — read it, not the n
   `ArrayBuffer` or an object with a numeric `length` for the `pool` object and behaved as if `{}` had
   been given; it now fails with `pool must be an object`, as an array already did.
 
+- **`EMAIL_SEND_FAILED` keeps its `503` when `auditRedactValues` is set.** With a value to remove
+  from the error, the removal strips the error's own properties in place, the code among them, and
+  the status was read afterwards: an outage, an SMTP `4xx` reply or a Resend `429` answered `502`.
+  `EmailService` now reads the status from the failure as the provider raised it, before anything
+  is removed from it.
+- **A `pool` that throws when it is read is refused like any other value that is not an object.**
+  A getter, a `Proxy` or a revoked `Proxy` given as the `pool` option failed with its own error; it
+  now fails with `pool must be an object`. The limits are read once, when the provider is built, so
+  a getter that answers differently later cannot change the transport.
+
 ### Changed
 
 - **A relay or API that says "try later" is answered with `503`, not `502`.** `EMAIL_SEND_FAILED`
