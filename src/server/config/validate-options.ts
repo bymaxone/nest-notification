@@ -55,6 +55,11 @@ export function validateOptions(options: BymaxNotificationModuleOptions): void {
     )
   }
 
+  const resolver: unknown = options.global?.tenantIdResolver
+  if (resolver !== undefined && typeof resolver !== 'function') {
+    throw new Error('[BymaxNotificationModule] options.global.tenantIdResolver must be a function')
+  }
+
   if (options.email) {
     validateEmailOptions(options.email)
   }

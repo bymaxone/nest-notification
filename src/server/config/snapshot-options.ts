@@ -73,6 +73,11 @@ const WEAKER_WHEN_UNSET = [
   'consumeOnVerify'
 ] as const satisfies readonly (keyof OtpChannelOptions)[]
 
+/** The same for the global section: no tenant resolver means the payload's tenant is trusted. */
+const GLOBAL_WEAKER_WHEN_UNSET = [
+  'tenantIdResolver'
+] as const satisfies readonly (keyof GlobalOptions)[]
+
 /** The same for the audit section: errors not swallowed, and recipients masked. */
 const AUDIT_WEAKER_WHEN_UNSET = [
   'swallowErrors',
@@ -146,7 +151,7 @@ export function snapshotOptions(
   }
   const read = readOptionKeys(options, MODULE_KEYS)
   if (read.global !== undefined) {
-    read.global = readOptionKeys(read.global, GLOBAL_KEYS)
+    read.global = readOptionKeys(read.global, GLOBAL_KEYS, GLOBAL_WEAKER_WHEN_UNSET)
   }
   if (read.email !== undefined) {
     read.email = readOptionKeys(read.email, EMAIL_KEYS)

@@ -94,6 +94,10 @@ describe('a perPurpose entry option that reads as not set', () => {
 // from a config lookup) is a misconfiguration and is refused at startup; undefined stays unset.
 describe('an option whose default is the weaker posture', () => {
   const sections = {
+    global: (extra: object): Record<string, unknown> => ({
+      email: { provider, defaultFrom: 'a@b.com' },
+      global: extra
+    }),
     otp: (extra: object): Record<string, unknown> => ({ otp: { storage, ...extra } }),
     audit: (extra: object): Record<string, unknown> => ({
       email: { provider, defaultFrom: 'a@b.com' },
@@ -101,6 +105,7 @@ describe('an option whose default is the weaker posture', () => {
     })
   }
   const WEAKER = [
+    ['global', 'tenantIdResolver'],
     ['otp', 'codeSecret'],
     ['otp', 'strictPurposes'],
     ['otp', 'consumeOnVerify'],
@@ -116,6 +121,16 @@ describe('an option whose default is the weaker posture', () => {
     expect(resolved(sections[section]({ [key]: undefined }))).toEqual(
       resolved(sections[section]({}))
     )
+  })
+
+  it.each([5, 'resolver', {}, true])('should refuse a tenantIdResolver of %p', (value) => {
+    expect(() => resolved(sections.global({ tenantIdResolver: value }))).toThrow(
+      'options.global.tenantIdResolver must be a function'
+    )
+  })
+
+  it('should accept a tenantIdResolver that is a function', () => {
+    expect(() => resolved(sections.global({ tenantIdResolver: () => 't' }))).not.toThrow()
   })
 
   it('should refuse a codeSecret that is not a string', () => {
