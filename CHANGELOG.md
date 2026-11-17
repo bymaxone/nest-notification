@@ -39,12 +39,19 @@ the entries that carry one, is the compatibility contract — read it, not the n
   prototype keeps its values, and a `perPurpose` container that is a class with a getter for each
   purpose is read too; an option the library does not declare is not copied. `credentials` and `tls`
   stay references to your objects.
-- **An unset `perPurpose` value no longer removes the TTL.** In 1.4.13 an entry with
-  `ttlSeconds: undefined` left the entry without a TTL, so a code issued for that purpose never
-  expired, and `ttlSeconds: null` was stored as `null`. An option that reads as `undefined` or `null`
-  now takes its default in every group (a `perPurpose` entry that is itself `null` or `undefined` is
-  refused), and `sms: null` and `push: null` are read as not set. The exception is the options whose
-  default is the weaker security posture, listed in the note below, where a `null` is refused.
+- **An unset `perPurpose` value no longer removes the attempts bound, the TTL or the cooldown.**
+  Measured with the in-memory storage on 1.4.13, an entry with `maxAttempts: undefined` had no
+  attempts bound (after eight wrong codes the right one still verified), `maxAttempts: null` made every
+  verify fail with `max_attempts`, `ttlSeconds: undefined` left the code without an expiry (an
+  `expiresAt` of `NaN`; a storage that derives a TTL from it was not measured), `ttlSeconds: null`
+  expired the code at the moment of issue, and an unset `resendCooldownSeconds` removed the cooldown.
+  An option that reads as `undefined` or `null` now takes its default, for every top-level option of
+  the module and of both providers and for each option of a `perPurpose` entry; a `perPurpose` entry
+  that is itself `null` or `undefined` is refused. Nested provider objects (`pool`, `tls`,
+  `credentials`) are taken as given: a `null` `pool.maxConnections` or `pool.maxMessages` is refused
+  and a `null` `tls.rejectUnauthorized` reaches Nodemailer. The exception to the default is the
+  options whose default is the weaker security posture, listed in the note below, where a `null` is
+  refused.
 - **A count past the largest safe integer is refused.** `otp.defaultMaxAttempts`, each `perPurpose`
   `maxAttempts`, `email.maxRecipients` and the SMTP `pool` limits `maxConnections` and `maxMessages`
   accepted `2 ** 53`, `1e21` and `Number.MAX_VALUE`, which bound nothing. Each must now be an integer
