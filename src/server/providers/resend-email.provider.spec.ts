@@ -267,6 +267,30 @@ describe('ResendEmailProvider', () => {
     warnSpy.mockRestore()
   })
 
+  // QA-023: the same for a send with no html part: the Resend error, not a TypeError, with the
+  // declared values, the API key and an echo of the text part removed.
+  it('should scrub the error of a send that has no html part', async () => {
+    const text = 'Your password reset code is 998877. It expires shortly.'
+    const apiKey = 're_nohtml_key'
+    mockSend.mockResolvedValue({
+      data: null,
+      error: { message: `bad key ${apiKey} for secret42, body was: ${text.slice(2, 50)}` }
+    })
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+    const caught: unknown = await new ResendEmailProvider({ apiKey })
+      .send({ ...baseOptions, html: undefined, text, redactValues: ['secret42'] } as never)
+      .catch((error: unknown) => error)
+
+    expect(caught).not.toBeInstanceOf(TypeError)
+    expect((caught as Error).message).toMatch(/^Resend send failed: bad key \[redacted\] for/)
+    for (const leaked of [apiKey, 'secret42', '998877']) {
+      expect((caught as Error).message).not.toContain(leaked)
+      expect(String(warnSpy.mock.calls[0]?.[0])).not.toContain(leaked)
+    }
+    warnSpy.mockRestore()
+  })
+
   // Declared secrets travel as `redactValues` and are scrubbed even when the
   // echo is too short for detection.
   it('should scrub declared redactValues out of an SDK error', async () => {

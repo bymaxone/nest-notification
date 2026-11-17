@@ -313,9 +313,7 @@ export class ResendEmailProvider implements IEmailProvider {
    */
   private scrubSendError(message: string, options: EmailSendOptions): string {
     const values = collectEchoedExcerpts(message, options.html)
-    if (options.text !== undefined) {
-      values.push(...collectEchoedExcerpts(message, options.text))
-    }
+    values.push(...collectEchoedExcerpts(message, options.text))
     if (options.redactValues) {
       values.push(...options.redactValues)
     }

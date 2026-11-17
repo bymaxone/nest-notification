@@ -53,6 +53,37 @@ describe('EmailService.send redaction', () => {
     )
   })
 
+  // QA-023: a send with no html part reaches the same discovery with nothing to echo against on the
+  // html side: it must not throw a TypeError, and what the text part echoes and what the caller
+  // declared are still removed from the cause and from the audit entry.
+  it('should scrub the failure of a send that has no html part', async () => {
+    const provider = makeProvider()
+    const text = 'Your password reset code is 998877. It expires shortly.'
+    provider.send.mockImplementation(async (options) => {
+      throw new Error(`550 rejected, secret42, body was: ${String(options.text).slice(2, 50)}`)
+    })
+    const audit = makeAudit()
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), audit)
+
+    const caught: unknown = await service
+      .send({ ...baseInput, html: undefined, text, auditRedactValues: ['secret42'] } as never)
+      .catch((error: unknown) => error)
+
+    expect(caught).toBeInstanceOf(NotificationException)
+    const cause = (caught as NotificationException).cause as Error
+    expect(cause.message).toContain('550 rejected')
+    for (const leaked of ['secret42', '998877']) {
+      expect(cause.message).not.toContain(leaked)
+      expect(cause.stack?.includes(leaked)).toBe(false)
+    }
+    expect(audit.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        verb: 'failed',
+        errorMessage: expect.not.stringMatching(/secret42|998877/)
+      })
+    )
+  })
+
   // Echo discovery reads the WHOLE chain: a wrapper with a generic outer
   // message but the echoed body inside a nested cause must still be caught —
   // reading only the top-level message would pick the raw-cause path with the

@@ -240,13 +240,14 @@ interface EchoState {
  * an error that large and never lets quoted content through.
  *
  * @param fields - One error field (a message or a stack), or the fields of a chain.
- * @param reference - The content the error may be echoing (e.g. a message body).
+ * @param reference - The content the error may be echoing (e.g. a message body). Missing, as for a
+ *   send with no html part, there is nothing to echo against and only the fields returned whole remain.
  * @returns The echoed excerpts, field by field in order of appearance, preceded by the fields that
  *   were returned whole.
  */
 export function collectEchoedExcerpts(
   fields: string | readonly string[],
-  reference: string
+  reference: string | undefined
 ): string[] {
   const all = typeof fields === 'string' ? [fields] : fields
   let budget = MAX_ECHO_SCAN_LENGTH
@@ -262,6 +263,10 @@ export function collectEchoedExcerpts(
       examined.push(field)
       budget -= field.length
     }
+  }
+  // With no reference there is nothing to echo against: only the fields too long to scan remain.
+  if (typeof reference !== 'string') {
+    return whole
   }
   // One automaton over every examined field, a separator that is no character between them.
   // Stryker disable next-line UnaryOperator: equivalent — the excerpt is clamped to its own field, so a run that crossed a separator would yield the same excerpt

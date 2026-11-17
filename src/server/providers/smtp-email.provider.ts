@@ -115,7 +115,7 @@ function assertPool(pool: SmtpPoolOptions | undefined): void {
   if (pool === undefined) {
     return
   }
-  if (typeof pool !== 'object' || pool === null) {
+  if (typeof pool !== 'object' || pool === null || Array.isArray(pool)) {
     throw new Error('SmtpEmailProvider: pool must be an object')
   }
   for (const [name, value] of [
@@ -443,9 +443,7 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
     declaredValues: readonly string[] | undefined
   ): string {
     const values = collectEchoedExcerpts(message, payload.html)
-    if (payload.text !== undefined) {
-      values.push(...collectEchoedExcerpts(message, payload.text))
-    }
+    values.push(...collectEchoedExcerpts(message, payload.text))
     if (declaredValues) {
       values.push(...declaredValues)
     }

@@ -11,6 +11,19 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 ## [Unreleased]
 
+### Fixed
+
+- **A send with no `html` part fails with its own error, not a `TypeError`.** When the transport or
+  the API rejected such a send, the code that removes secrets and echoed content from the error read
+  the missing part and threw a `TypeError` instead of the `SMTP send failed` or `Resend send failed`
+  error. `SmtpEmailProvider`, `ResendEmailProvider` and `EmailService` now treat a missing part as
+  nothing to echo against, and the declared values, the credentials and an echo of the text part are
+  removed as before. `EmailService` always supplies `html`, so only a caller that bypasses the type
+  reached it.
+- **`pool: []` is refused.** `SmtpEmailProvider` took an empty array for the `pool` object and
+  behaved as if `{}` had been given; it now fails with the same `pool must be an object` as any
+  other value that is not one.
+
 ## [1.4.11] - 2026-11-17
 
 ### Added

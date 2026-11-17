@@ -590,7 +590,7 @@ export class EmailService {
     // Array literals, not `push(...list)`: spreading a list into a call overflows the stack.
     return [
       ...collectEchoedExcerpts(parts, sendOptions.html),
-      ...(sendOptions.text !== undefined ? collectEchoedExcerpts(parts, sendOptions.text) : []),
+      ...collectEchoedExcerpts(parts, sendOptions.text),
       ...(declared ?? [])
     ]
   }

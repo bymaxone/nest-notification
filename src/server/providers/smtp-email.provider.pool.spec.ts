@@ -51,6 +51,16 @@ describe('SmtpEmailProvider pool option', () => {
     )
   })
 
+  // QA-023: an array is not the object the option describes.
+  it.each([
+    ['an empty array', []],
+    ['an array of limits', [{ maxConnections: 3 }]]
+  ])('should refuse a pool given as %s', (_label, pool) => {
+    expect(() => new SmtpEmailProvider({ host: 'h', pool: pool as never })).toThrow(
+      'SmtpEmailProvider: pool must be an object'
+    )
+  })
+
   it.each([
     ['true', true],
     ['null', null],
