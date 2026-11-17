@@ -52,7 +52,7 @@ import {
   scrubValuesFromErrorChain
 } from '../utils/redact'
 import { withStorageFailures } from '../utils/storage-failures'
-import { assertIdentifies, assertPurpose } from '../utils/tenant-scope'
+import { assertIdentifies, assertPurpose, assertRegisteredPurpose } from '../utils/tenant-scope'
 import { safeCompare } from '../utils/timing-safe-compare'
 import { EmailService } from './email.service'
 import type { EmailSendTemplateInput } from './email.service'
@@ -649,6 +649,10 @@ export class OtpService implements OnModuleInit {
     assertIdentifies('OtpService', 'tenantId', ref.tenantId)
     assertIdentifies('OtpService', 'recipient', ref.recipient)
     assertPurpose('OtpService', ref.purpose)
+    const otp = this.options.otp
+    if (otp?.strictPurposes === true) {
+      assertRegisteredPurpose('OtpService', ref.purpose, otp.isRegisteredPurpose)
+    }
   }
 
   /**

@@ -18,6 +18,7 @@ import {
   DEFAULT_GLOBAL_OPTIONS,
   DEFAULT_OTP_OPTIONS
 } from '../constants/default-options.constants'
+import { NOTIFICATION_PURPOSES } from '../constants/notification-purposes'
 import type {
   BymaxNotificationModuleOptions,
   EmailChannelOptions,
@@ -63,6 +64,10 @@ export interface ResolvedOtpOptions {
   perPurpose: Record<string, OtpPurposeConfig>
   /** Effective config for a purpose: the resolved `perPurpose[purpose]`, or the OTP defaults. */
   resolveForPurpose(purpose: string): OtpPurposeConfig
+  /** Whether an operation whose purpose is not registered is refused. */
+  strictPurposes: boolean
+  /** Whether `purpose` is one of the canonical purposes or a key of `perPurpose`. */
+  isRegisteredPurpose(purpose: string): boolean
 }
 
 /** Resolved audit section — always present; the no-op sink obeys these settings too. */
@@ -132,6 +137,11 @@ function resolveOtp(otp: OtpChannelOptions): ResolvedOtpOptions {
   )
   const perPurpose = Object.fromEntries(entries)
   const perPurposeMap = new Map<string, OtpPurposeConfig>(entries)
+  // A Set, not an object: an object lookup finds 'constructor' and 'toString' through its prototype.
+  const registered = new Set<string>([
+    ...Object.values(NOTIFICATION_PURPOSES),
+    ...perPurposeMap.keys()
+  ])
   return {
     defaultLength: base.length,
     defaultCodeType: base.codeType,
@@ -141,7 +151,9 @@ function resolveOtp(otp: OtpChannelOptions): ResolvedOtpOptions {
     consumeOnVerify: otp.consumeOnVerify ?? DEFAULT_OTP_OPTIONS.consumeOnVerify,
     ...(otp.codeSecret !== undefined ? { digestCode: createCodeDigester(otp.codeSecret) } : {}),
     perPurpose,
-    resolveForPurpose: (purpose: string): OtpPurposeConfig => perPurposeMap.get(purpose) ?? base
+    resolveForPurpose: (purpose: string): OtpPurposeConfig => perPurposeMap.get(purpose) ?? base,
+    strictPurposes: otp.strictPurposes ?? false,
+    isRegisteredPurpose: (purpose: string): boolean => registered.has(purpose)
   }
 }
 

@@ -166,3 +166,47 @@ describe('resolveOptions', () => {
     expect(Object.isFrozen(resolved.otp?.perPurpose['mfa_oob'])).toBe(true)
   })
 })
+
+describe('resolveOptions and the registered purposes', () => {
+  const resolved = (otp: object = {}): NonNullable<ReturnType<typeof resolveOptions>['otp']> => {
+    const otpOptions = resolveOptions({
+      email: validEmail,
+      otp: { storage: otpStorage, ...otp },
+      audit: { repository: auditRepository }
+    }).otp
+    if (otpOptions === undefined) {
+      throw new Error('otp was not resolved')
+    }
+    return otpOptions
+  }
+
+  it('should leave strictPurposes off unless it is set', () => {
+    expect(resolved().strictPurposes).toBe(false)
+    expect(resolved({ strictPurposes: false }).strictPurposes).toBe(false)
+    expect(resolved({ strictPurposes: true }).strictPurposes).toBe(true)
+  })
+
+  it('should register the canonical five and the keys of perPurpose', () => {
+    const otp = resolved({ perPurpose: { login: { length: 8 }, 'auth:step-2': {} } })
+
+    for (const purpose of [
+      'email_verification',
+      'password_reset',
+      'mfa_oob',
+      'phone_verification',
+      'magic_link',
+      'login',
+      'auth:step-2'
+    ]) {
+      expect(otp.isRegisteredPurpose(purpose)).toBe(true)
+    }
+  })
+
+  // The set is a Set, not an object: an object finds these through its prototype.
+  it.each(['unknown_flow', 'EMAIL_VERIFICATION', '__proto__', 'constructor', 'toString', ''])(
+    'should not register %j',
+    (purpose) => {
+      expect(resolved({ perPurpose: { login: {} } }).isRegisteredPurpose(purpose)).toBe(false)
+    }
+  )
+})
