@@ -199,6 +199,22 @@ describe('EmailService observer', () => {
     await expect(build(throwing).send(baseInput)).resolves.toEqual({ messageId: 'msg_1' })
   })
 
+  it('should still send, once, when the observer span throws before running it', async () => {
+    const provider = makeProvider()
+    const observer: INotificationObserver = {
+      span: () => {
+        throw new Error('span broke')
+      },
+      onSend: jest.fn()
+    }
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), makeAudit(), observer)
+
+    await expect(service.send(baseInput)).resolves.toEqual({ messageId: 'msg_1' })
+
+    expect(provider.send).toHaveBeenCalledTimes(1)
+    expect(observer.onSend).toHaveBeenCalledWith(expect.objectContaining({ outcome: 'sent' }))
+  })
+
   it('should send without an observer and with one that has no span', async () => {
     await expect(build(undefined).send(baseInput)).resolves.toEqual({ messageId: 'msg_1' })
     const onSend = jest.fn()

@@ -159,7 +159,7 @@ export default [
 
   // Node.js scripts — plain ESM, no TypeScript parser needed
   {
-    files: ['scripts/**/*.mjs', 'scripts/**/*.js'],
+    files: ['scripts/**/*.mjs', 'scripts/**/*.js', 'scripts/**/*.cjs'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'module',

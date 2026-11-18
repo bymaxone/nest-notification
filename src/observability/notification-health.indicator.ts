@@ -9,8 +9,9 @@ import { BymaxHealthIndicator } from '@bymax-one/nest-core/health'
 import type { HealthIndicatorResult, IHealthIndicator } from '@bymax-one/nest-core/health'
 import { Inject, Injectable, Optional } from '@nestjs/common'
 
-import { BYMAX_NOTIFICATION_EMAIL_PROVIDER } from '../server/bymax-notification.constants'
-import type { IEmailProvider } from '../server/interfaces/email-provider.interface'
+import { BYMAX_NOTIFICATION_EMAIL_PROVIDER } from '@bymax-one/nest-notification'
+import type { IEmailProvider } from '@bymax-one/nest-notification'
+
 import { NOTIFICATION_HEALTH_NAME } from './constants'
 
 /** Injection token of the options of {@link NotificationHealthIndicator}. */

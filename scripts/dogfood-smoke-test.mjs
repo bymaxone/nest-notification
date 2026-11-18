@@ -17,7 +17,7 @@
  */
 
 import { execSync, spawnSync } from 'node:child_process'
-import { existsSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs'
+import { copyFileSync, existsSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { resolve, dirname, join } from 'node:path'
@@ -154,6 +154,28 @@ for (const name of EXPECTED_OBSERVABILITY_EXPORTS) {
   new RegExp(`exports\\.${name}\\b`).test(observabilityCjs)
     ? pass(`cjs observability ${name}`)
     : fail(`Missing CJS export (observability): ${name}`)
+}
+
+// The built observability entry beside the built server entry, run from inside the package under
+// test so that the package name resolves to it: the specs run on src, where there is one copy of
+// every token, and only the built bundles can show that the two entries share them.
+section('4b. Observability wired against the built server')
+const probeFile = join(PACKAGE.root, '.observability-dist-probe.cjs')
+copyFileSync(join(ROOT, 'scripts', 'observability-dist-probe.cjs'), probeFile)
+try {
+  const probe = spawnSync('node', [probeFile], {
+    cwd: PACKAGE.root,
+    encoding: 'utf8',
+    env: { ...process.env, NODE_PATH: join(ROOT, 'node_modules') },
+    timeout: 60_000
+  })
+  probe.status === 0
+    ? pass('observability samples and readiness come out of the built packages')
+    : fail(
+        `Observability dist probe failed (code ${probe.status}): ${probe.stderr || probe.stdout}`
+      )
+} finally {
+  rmSync(probeFile, { force: true })
 }
 
 // -- 5. Tarball contents -----------------------------------------------------

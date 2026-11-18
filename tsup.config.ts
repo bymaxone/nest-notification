@@ -12,6 +12,9 @@ const PEER_EXTERNALS = [
   'ioredis',
   'resend',
   'nodemailer',
+  // The package itself: the observability entry imports the server's tokens and exception through
+  // its own name, so an install holds one copy of each, the one the services use.
+  '@bymax-one/nest-notification',
   // The observability entry's optional peers: metrics, readiness and traces.
   /^@bymax-one\/nest-core/,
   'prom-client',

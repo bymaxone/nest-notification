@@ -7,8 +7,9 @@
 import { Global, Module } from '@nestjs/common'
 import type { DynamicModule } from '@nestjs/common'
 
-import { BYMAX_NOTIFICATION_OBSERVER } from '../server/bymax-notification.constants'
-import type { INotificationObserver } from '../server/interfaces/notification-observer.interface'
+import { BYMAX_NOTIFICATION_OBSERVER } from '@bymax-one/nest-notification'
+import type { INotificationObserver } from '@bymax-one/nest-notification'
+
 import {
   NotificationHealthIndicator,
   NOTIFICATION_HEALTH_OPTIONS

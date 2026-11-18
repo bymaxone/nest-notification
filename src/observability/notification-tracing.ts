@@ -8,12 +8,13 @@
 import { Injectable } from '@nestjs/common'
 import { SpanStatusCode, trace } from '@opentelemetry/api'
 
-import { NotificationException } from '../server/errors/notification-exception'
+import { NotificationException } from '@bymax-one/nest-notification'
 import type {
   INotificationObserver,
   NotificationSpanAttributes,
   NotificationSpanName
-} from '../server/interfaces/notification-observer.interface'
+} from '@bymax-one/nest-notification'
+
 import { NOTIFICATION_SPAN_CHANNEL_ATTRIBUTE, NOTIFICATION_TRACER_NAME } from './constants'
 
 /** The status message of a failed span: the library's error code, or a fixed word, never text. */

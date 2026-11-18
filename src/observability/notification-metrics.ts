@@ -19,7 +19,8 @@ import type {
   INotificationObserver,
   NotificationOtpEvent,
   NotificationSendEvent
-} from '../server/interfaces/notification-observer.interface'
+} from '@bymax-one/nest-notification'
+
 import {
   NOTIFICATION_METRIC_NAMES,
   NOTIFICATION_OTP_EVENTS,

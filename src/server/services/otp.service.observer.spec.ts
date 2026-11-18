@@ -139,6 +139,21 @@ describe('OtpService observer', () => {
     await expect(built.service.verify({ ...ref, code })).resolves.toEqual({ valid: true })
   })
 
+  it('should still verify when the observer span throws before running the verification', async () => {
+    const onOtp = jest.fn()
+    const built = build({
+      onOtp,
+      span: () => {
+        throw new Error('span broke')
+      }
+    })
+    const code = await issue(built)
+
+    await expect(built.service.verify({ ...ref, code })).resolves.toEqual({ valid: true })
+
+    expect(onOtp).toHaveBeenCalledWith({ event: 'verified' })
+  })
+
   it('should verify without an observer and with one that has no span', async () => {
     const plain = build(undefined)
     const code = await issue(plain)
