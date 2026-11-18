@@ -23,6 +23,7 @@ import type { OnModuleInit } from '@nestjs/common'
 
 import {
   BYMAX_NOTIFICATION_AUDIT_SINK,
+  BYMAX_NOTIFICATION_OBSERVER,
   BYMAX_NOTIFICATION_OPTIONS,
   BYMAX_NOTIFICATION_OTP_STORAGE
 } from '../bymax-notification.constants'
@@ -36,6 +37,7 @@ import type {
   NotificationLogVerb
 } from '../interfaces/notification-log-repository.interface'
 import type { OtpPurposeConfig } from '../interfaces/notification-module-options.interface'
+import type { INotificationObserver } from '../interfaces/notification-observer.interface'
 import type { IOtpStorage, OtpEntry, OtpVerifyResult } from '../interfaces/otp-storage.interface'
 import { escapeAuditString } from '../utils/audit-escape'
 import { AuditWriteWarning } from '../utils/audit-write-warning'
@@ -44,6 +46,7 @@ import { generateOtpCode } from '../utils/code-generator'
 import { cooldownExpiresAt, toRetryAfterHeader } from '../utils/cooldown-helpers'
 import { describeError } from '../utils/describe-error'
 import { logEvent } from '../utils/log-event'
+import { reportOtp, runInSpan } from '../utils/observe'
 import { normalizeRecipient } from '../utils/recipient'
 import { assertSingleMailbox } from '../utils/recipient-list'
 import {
@@ -136,6 +139,21 @@ export interface OtpStatusResult {
   validated?: boolean
 }
 
+/**
+ * What a verification result is, as the observer counts it: an accepted code is `verified`, a
+ * recipient that has run into the attempt ceiling is `locked`, and any other refusal (a wrong code,
+ * or none live) is `failed`.
+ *
+ * @param result - The answer of a verification.
+ * @returns The event.
+ */
+function otpEventOf(result: OtpVerifyResult): 'verified' | 'failed' | 'locked' {
+  if (result.valid) {
+    return 'verified'
+  }
+  return result.reason === 'max_attempts' ? 'locked' : 'failed'
+}
+
 /** OTP generation, verification, consumption, and status. */
 @Injectable()
 export class OtpService implements OnModuleInit {
@@ -164,7 +182,10 @@ export class OtpService implements OnModuleInit {
     private readonly auditLog: INotificationLogRepository,
     @Optional()
     @Inject(EmailService)
-    private readonly emailService?: EmailService
+    private readonly emailService?: EmailService,
+    @Optional()
+    @Inject(BYMAX_NOTIFICATION_OBSERVER)
+    private readonly observer?: INotificationObserver
   ) {
     // A one-time code that several concurrent verifications can each accept is not one-time, and
     // a storage that cannot compare-and-delete atomically would keep that race without a sign.
@@ -214,6 +235,7 @@ export class OtpService implements OnModuleInit {
       maxAttempts: cfg.maxAttempts
     }
     await this.persistAndDeliver(input, scope, code, entry, cfg)
+    reportOtp(this.observer, { event: 'issued' })
     await this.audit(this.otpAuditEntry('generated', scope, undefined))
     return { expiresAt, cooldownSeconds: cfg.resendCooldownSeconds }
   }
@@ -226,6 +248,23 @@ export class OtpService implements OnModuleInit {
    * @throws NotificationException `OTP_STORAGE_NOT_CONFIGURED` when the channel is absent.
    */
   async verify(input: OtpVerifyInput): Promise<OtpVerifyResult> {
+    const result = await runInSpan(
+      this.observer,
+      'notification.otp.verify',
+      { channel: 'otp' },
+      () => this.verifyUnobserved(input)
+    )
+    reportOtp(this.observer, { event: otpEventOf(result) })
+    return result
+  }
+
+  /**
+   * The verification itself, with no observer in sight.
+   *
+   * @param input - The recipient, purpose and the code to check.
+   * @returns Whether the code is valid, and why not when it is not.
+   */
+  private async verifyUnobserved(input: OtpVerifyInput): Promise<OtpVerifyResult> {
     const otp = this.requireOtpOptions()
     this.assertScope(input)
     const scope = this.keyed(input)

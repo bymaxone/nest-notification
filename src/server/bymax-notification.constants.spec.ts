@@ -1,6 +1,7 @@
 import {
   BYMAX_NOTIFICATION_EMAIL_PROVIDER,
   BYMAX_NOTIFICATION_LOG_REPOSITORY,
+  BYMAX_NOTIFICATION_OBSERVER,
   BYMAX_NOTIFICATION_OPTIONS,
   BYMAX_NOTIFICATION_OTP_STORAGE,
   BYMAX_NOTIFICATION_PUSH_PROVIDER,
@@ -16,7 +17,8 @@ describe('injection tokens', () => {
     BYMAX_NOTIFICATION_SMS_PROVIDER,
     BYMAX_NOTIFICATION_PUSH_PROVIDER,
     BYMAX_NOTIFICATION_TEMPLATE_RENDERER,
-    BYMAX_NOTIFICATION_LOG_REPOSITORY
+    BYMAX_NOTIFICATION_LOG_REPOSITORY,
+    BYMAX_NOTIFICATION_OBSERVER
   ]
 
   // Tokens must be symbols (not strings) so they cannot collide with another
@@ -28,7 +30,7 @@ describe('injection tokens', () => {
   })
 
   // Each token must be distinct; a duplicated symbol would alias two providers.
-  it('should declare seven unique tokens', () => {
-    expect(new Set(tokens).size).toBe(7)
+  it('should declare eight unique tokens', () => {
+    expect(new Set(tokens).size).toBe(8)
   })
 })

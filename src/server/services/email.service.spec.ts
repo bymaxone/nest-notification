@@ -620,7 +620,9 @@ describe('EmailService.sendTemplate', () => {
     const renderer = makeRenderer()
     renderer.render.mockResolvedValue({ subject: 'S', html: '<p>H</p>' })
     const service = new EmailService(makeOptions(), makeProvider(), renderer, makeAudit())
-    const sendSpy = jest.spyOn(service, 'send').mockResolvedValue({ messageId: 'm' })
+    const sendSpy = jest
+      .spyOn(service as unknown as { sendUnobserved: EmailService['send'] }, 'sendUnobserved')
+      .mockResolvedValue({ messageId: 'm' })
 
     await service.sendTemplate({ tenantId: 't', to: 'a@x.com', template: 'welcome', data: {} })
 

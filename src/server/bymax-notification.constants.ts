@@ -30,6 +30,13 @@ export const BYMAX_NOTIFICATION_TEMPLATE_RENDERER = Symbol('BYMAX_NOTIFICATION_T
 export const BYMAX_NOTIFICATION_LOG_REPOSITORY = Symbol('BYMAX_NOTIFICATION_LOG_REPOSITORY')
 
 /**
+ * Token of the optional `INotificationObserver`. When something provides it, the services report
+ * every send and every OTP event to it and run their operations inside its spans; when nothing
+ * does, they do none of that and cost nothing. `NotificationObservabilityModule` provides it.
+ */
+export const BYMAX_NOTIFICATION_OBSERVER = Symbol('BYMAX_NOTIFICATION_OBSERVER')
+
+/**
  * Internal token of the repository every audit writer uses: the one the host configured, wrapped so
  * that the entries it receives are escaped. The public {@link BYMAX_NOTIFICATION_LOG_REPOSITORY}
  * still resolves to the host's own instance. Not part of the package's public API.

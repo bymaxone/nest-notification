@@ -659,7 +659,9 @@ describe('EmailService.sendTemplate redaction', () => {
   // delivery uses — silently keeps publishing provider text.
   it('should forward publishProviderText to the inner send input', async () => {
     const service = new EmailService(makeOptions(), makeProvider(), makeRenderer(), makeAudit())
-    const sendSpy = jest.spyOn(service, 'send').mockResolvedValue({ messageId: 'm' })
+    const sendSpy = jest
+      .spyOn(service as unknown as { sendUnobserved: EmailService['send'] }, 'sendUnobserved')
+      .mockResolvedValue({ messageId: 'm' })
 
     await service.sendTemplate({
       tenantId: 't',
@@ -701,7 +703,9 @@ describe('EmailService.sendTemplate redaction', () => {
   it('should forward auditRedactValues to the inner send input', async () => {
     const renderer = makeRenderer()
     const service = new EmailService(makeOptions(), makeProvider(), renderer, makeAudit())
-    const sendSpy = jest.spyOn(service, 'send').mockResolvedValue({ messageId: 'm' })
+    const sendSpy = jest
+      .spyOn(service as unknown as { sendUnobserved: EmailService['send'] }, 'sendUnobserved')
+      .mockResolvedValue({ messageId: 'm' })
 
     await service.sendTemplate({
       tenantId: 't',

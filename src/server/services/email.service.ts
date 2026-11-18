@@ -12,11 +12,13 @@
  * `EMAIL_SEND_FAILED`. OTP codes ride inside the body, never in audit metadata.
  */
 
-import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common'
+import { HttpStatus, Inject, Injectable, Logger, Optional } from '@nestjs/common'
 
+import { NOTIFICATION_ERROR_CODES } from '../../shared/constants/error-codes'
 import {
   BYMAX_NOTIFICATION_EMAIL_PROVIDER,
   BYMAX_NOTIFICATION_AUDIT_SINK,
+  BYMAX_NOTIFICATION_OBSERVER,
   BYMAX_NOTIFICATION_OPTIONS,
   BYMAX_NOTIFICATION_TEMPLATE_RENDERER
 } from '../bymax-notification.constants'
@@ -29,6 +31,7 @@ import type {
   INotificationLogRepository,
   NotificationLogEntry
 } from '../interfaces/notification-log-repository.interface'
+import type { INotificationObserver } from '../interfaces/notification-observer.interface'
 import { AuditWriteWarning } from '../utils/audit-write-warning'
 import { isUnavailableProviderError } from '../utils/availability'
 import type { DeliveryStatus } from '../utils/delivery-status'
@@ -39,6 +42,7 @@ import {
   withoutDeclaredValues
 } from '../utils/delivery-status'
 import { assertBodyParts } from '../utils/email-body'
+import { reportSend, runInSpan } from '../utils/observe'
 import { countRecipients } from '../utils/recipient-list'
 import {
   collectEchoedExcerpts,
@@ -190,6 +194,28 @@ function unavailableStatus(error: unknown): { status?: HttpStatus } {
   return isUnavailableProviderError(error) ? { status: HttpStatus.SERVICE_UNAVAILABLE } : {}
 }
 
+/** Nanoseconds in a second, to turn a high-resolution timer into the seconds a metric holds. */
+const NANOSECONDS_PER_SECOND = 1_000_000_000
+
+/**
+ * How a send that threw ended, as the observer counts it. A provider failure is `failed`; a
+ * delivered message whose audit write then failed is `sent`, since the provider accepted it; every
+ * other refusal of the library, which happens before the provider is called, is `rejected`; and a
+ * failure that is not the library's is `failed`.
+ *
+ * @param error - What the send threw.
+ * @returns The outcome.
+ */
+function sendOutcomeOf(error: unknown): 'sent' | 'failed' | 'rejected' {
+  if (!(error instanceof NotificationException)) {
+    return 'failed'
+  }
+  if (error.code === NOTIFICATION_ERROR_CODES.EMAIL_SEND_FAILED) {
+    return 'failed'
+  }
+  return error.code === NOTIFICATION_ERROR_CODES.AUDIT_LOG_FAILED ? 'sent' : 'rejected'
+}
+
 /** Transactional email service. */
 @Injectable()
 export class EmailService {
@@ -210,7 +236,10 @@ export class EmailService {
     @Inject(BYMAX_NOTIFICATION_TEMPLATE_RENDERER)
     private readonly renderer: IEmailTemplateRenderer,
     @Inject(BYMAX_NOTIFICATION_AUDIT_SINK)
-    private readonly auditLog: INotificationLogRepository
+    private readonly auditLog: INotificationLogRepository,
+    @Optional()
+    @Inject(BYMAX_NOTIFICATION_OBSERVER)
+    private readonly observer?: INotificationObserver
   ) {}
 
   /**
@@ -233,6 +262,40 @@ export class EmailService {
    * or text part that is not a string), `EMAIL_SEND_FAILED`, or `AUDIT_LOG_FAILED` (only when `audit.swallowErrors` is `false`).
    */
   async send(input: EmailSendInput): Promise<{ messageId: string }> {
+    return this.observed(() => this.sendUnobserved(input))
+  }
+
+  /**
+   * Runs one send inside the observer's span and tells it how the send ended.
+   *
+   * @param run - The send.
+   * @returns What the send returns.
+   */
+  private async observed<T>(run: () => Promise<T>): Promise<T> {
+    const started = process.hrtime.bigint()
+    const seconds = (): number => Number(process.hrtime.bigint() - started) / NANOSECONDS_PER_SECOND
+    try {
+      const result = await runInSpan(this.observer, 'notification.send', { channel: 'email' }, run)
+      reportSend(this.observer, { channel: 'email', outcome: 'sent', seconds: seconds() })
+      return result
+    } catch (error) {
+      reportSend(this.observer, {
+        channel: 'email',
+        outcome: sendOutcomeOf(error),
+        seconds: seconds()
+      })
+      throw error
+    }
+  }
+
+  /**
+   * The send itself, with no observer in sight, so a template send that ends in one is reported
+   * once, by the call the host made.
+   *
+   * @param input - The message envelope and rendered body.
+   * @returns The provider's message id.
+   */
+  private async sendUnobserved(input: EmailSendInput): Promise<{ messageId: string }> {
     const email = this.requireEmailOptions()
     assertIdentifies('EmailService', 'tenantId', input.tenantId)
     assertBodyParts(input.html, input.text)
@@ -320,6 +383,18 @@ export class EmailService {
    * `TEMPLATE_RENDER_FAILED` (the renderer threw), plus anything {@link EmailService.send} throws.
    */
   async sendTemplate(input: EmailSendTemplateInput): Promise<{ messageId: string }> {
+    return this.observed(() => this.sendTemplateUnobserved(input))
+  }
+
+  /**
+   * The template send, whose last step is the unobserved send.
+   *
+   * @param input - The template name, data, and envelope.
+   * @returns The provider's message id.
+   */
+  private async sendTemplateUnobserved(
+    input: EmailSendTemplateInput
+  ): Promise<{ messageId: string }> {
     assertIdentifies('EmailService', 'tenantId', input.tenantId)
     // Refused before rendering: a template is not rendered to be thrown away.
     if (this.options.email) {
@@ -337,7 +412,7 @@ export class EmailService {
     // Each optional field is spread only when present, so an absent field never
     // becomes an `{ x: undefined }` key in the send input that `send()` would then
     // carry as an explicit value rather than a genuinely missing one.
-    return this.send({
+    return this.sendUnobserved({
       tenantId: input.tenantId,
       to: input.to,
       subject: rendered.subject,
