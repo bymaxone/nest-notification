@@ -116,6 +116,30 @@ describe('EmailService observer', () => {
     expect(observer.onSend).toHaveBeenCalledWith(expect.objectContaining({ outcome: 'sent' }))
   })
 
+  // The provider did not accept the message, and then the audit write of that failure failed too: the
+  // error the caller gets is the audit one, but the message was not delivered.
+  it('should report a provider failure as failed even when its audit write then fails', async () => {
+    const observer = recorder()
+    const provider = makeProvider()
+    provider.send.mockRejectedValue(new Error('relay down'))
+    const audit = makeAudit()
+    audit.create.mockRejectedValue(new Error('audit down'))
+    const service = new EmailService(
+      makeOptions({}, { swallowErrors: false }),
+      provider,
+      makeRenderer(),
+      audit,
+      observer
+    )
+
+    await expect(service.send(baseInput)).rejects.toMatchObject({
+      code: 'notification.audit_log_failed'
+    })
+
+    expect(observer.onSend).toHaveBeenCalledTimes(1)
+    expect(observer.onSend).toHaveBeenCalledWith(expect.objectContaining({ outcome: 'failed' }))
+  })
+
   it('should report a failure that is not a NotificationException as failed', async () => {
     const observer = recorder()
     const provider = makeProvider()

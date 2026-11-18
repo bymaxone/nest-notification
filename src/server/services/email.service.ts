@@ -14,7 +14,6 @@
 
 import { HttpStatus, Inject, Injectable, Logger, Optional } from '@nestjs/common'
 
-import { NOTIFICATION_ERROR_CODES } from '../../shared/constants/error-codes'
 import {
   BYMAX_NOTIFICATION_EMAIL_PROVIDER,
   BYMAX_NOTIFICATION_AUDIT_SINK,
@@ -197,23 +196,30 @@ function unavailableStatus(error: unknown): { status?: HttpStatus } {
 /** Nanoseconds in a second, to turn a high-resolution timer into the seconds a metric holds. */
 const NANOSECONDS_PER_SECOND = 1_000_000_000
 
+/** How far a send got: whether the provider was reached, and what it answered. */
+interface SendProgress {
+  stage: 'before-provider' | 'accepted' | 'failed'
+}
+
 /**
- * How a send that threw ended, as the observer counts it. A provider failure is `failed`; a
- * delivered message whose audit write then failed is `sent`, since the provider accepted it; every
- * other refusal of the library, which happens before the provider is called, is `rejected`; and a
- * failure that is not the library's is `failed`.
+ * How a send that threw ended, as the observer counts it, decided by how far it got and not by the
+ * error it ended in. A message the provider accepted is `sent`, even when the audit write that
+ * followed threw; a message the provider failed is `failed`, even when the audit write of that
+ * failure threw too; one that never reached the provider is `rejected` when the library refused it,
+ * and `failed` when something that is not the library's failed.
  *
+ * @param progress - How far the send got.
  * @param error - What the send threw.
  * @returns The outcome.
  */
-function sendOutcomeOf(error: unknown): 'sent' | 'failed' | 'rejected' {
-  if (!(error instanceof NotificationException)) {
+function sendOutcomeOf(progress: SendProgress, error: unknown): 'sent' | 'failed' | 'rejected' {
+  if (progress.stage === 'accepted') {
+    return 'sent'
+  }
+  if (progress.stage === 'failed') {
     return 'failed'
   }
-  if (error.code === NOTIFICATION_ERROR_CODES.EMAIL_SEND_FAILED) {
-    return 'failed'
-  }
-  return error.code === NOTIFICATION_ERROR_CODES.AUDIT_LOG_FAILED ? 'sent' : 'rejected'
+  return error instanceof NotificationException ? 'rejected' : 'failed'
 }
 
 /** Transactional email service. */
@@ -262,26 +268,29 @@ export class EmailService {
    * or text part that is not a string), `EMAIL_SEND_FAILED`, or `AUDIT_LOG_FAILED` (only when `audit.swallowErrors` is `false`).
    */
   async send(input: EmailSendInput): Promise<{ messageId: string }> {
-    return this.observed(() => this.sendUnobserved(input))
+    return this.observed((progress) => this.sendUnobserved(input, progress))
   }
 
   /**
    * Runs one send inside the observer's span and tells it how the send ended.
    *
-   * @param run - The send.
+   * @param run - The send, which records in `progress` how far it gets.
    * @returns What the send returns.
    */
-  private async observed<T>(run: () => Promise<T>): Promise<T> {
+  private async observed<T>(run: (progress: SendProgress) => Promise<T>): Promise<T> {
+    const progress: SendProgress = { stage: 'before-provider' }
     const started = process.hrtime.bigint()
     const seconds = (): number => Number(process.hrtime.bigint() - started) / NANOSECONDS_PER_SECOND
     try {
-      const result = await runInSpan(this.observer, 'notification.send', { channel: 'email' }, run)
+      const result = await runInSpan(this.observer, 'notification.send', { channel: 'email' }, () =>
+        run(progress)
+      )
       reportSend(this.observer, { channel: 'email', outcome: 'sent', seconds: seconds() })
       return result
     } catch (error) {
       reportSend(this.observer, {
         channel: 'email',
-        outcome: sendOutcomeOf(error),
+        outcome: sendOutcomeOf(progress, error),
         seconds: seconds()
       })
       throw error
@@ -293,9 +302,13 @@ export class EmailService {
    * once, by the call the host made.
    *
    * @param input - The message envelope and rendered body.
+   * @param progress - Where the send records how far it gets.
    * @returns The provider's message id.
    */
-  private async sendUnobserved(input: EmailSendInput): Promise<{ messageId: string }> {
+  private async sendUnobserved(
+    input: EmailSendInput,
+    progress: SendProgress
+  ): Promise<{ messageId: string }> {
     const email = this.requireEmailOptions()
     assertIdentifies('EmailService', 'tenantId', input.tenantId)
     assertBodyParts(input.html, input.text)
@@ -303,7 +316,7 @@ export class EmailService {
     this.guardRecipientCount(input, email.maxRecipients)
     const sendOptions = this.buildSendOptions(input, email)
     const recipient = this.maskRecipients(input.to)
-    const result = await this.deliver(sendOptions, input, recipient)
+    const result = await this.deliver(sendOptions, input, recipient, progress)
     await this.audit(
       this.auditEntry('sent', input.tenantId, recipient, input.userId, {
         messageId: result.messageId
@@ -326,6 +339,7 @@ export class EmailService {
    * @param sendOptions - The envelope handed to the provider.
    * @param input - The original input, for redaction values and the audit entry.
    * @param recipient - The already-masked recipient.
+   * @param progress - Where the send records how far it gets.
    * @returns The provider's result.
    * @throws NotificationException `EMAIL_SEND_FAILED`, carrying only what the
    * caller allows to be published.
@@ -333,11 +347,15 @@ export class EmailService {
   private async deliver(
     sendOptions: EmailSendOptions,
     input: EmailSendInput,
-    recipient: string
+    recipient: string,
+    progress: SendProgress
   ): Promise<{ messageId: string }> {
     try {
-      return await this.provider.send(sendOptions)
+      const result = await this.provider.send(sendOptions)
+      progress.stage = 'accepted'
+      return result
     } catch (error) {
+      progress.stage = 'failed'
       // The status is read from the failure as the provider raised it: the removal of secrets below
       // strips the error's own properties in place, the code among them, so nothing may read the
       // error for its status after that.
@@ -383,17 +401,19 @@ export class EmailService {
    * `TEMPLATE_RENDER_FAILED` (the renderer threw), plus anything {@link EmailService.send} throws.
    */
   async sendTemplate(input: EmailSendTemplateInput): Promise<{ messageId: string }> {
-    return this.observed(() => this.sendTemplateUnobserved(input))
+    return this.observed((progress) => this.sendTemplateUnobserved(input, progress))
   }
 
   /**
    * The template send, whose last step is the unobserved send.
    *
    * @param input - The template name, data, and envelope.
+   * @param progress - Where the send records how far it gets.
    * @returns The provider's message id.
    */
   private async sendTemplateUnobserved(
-    input: EmailSendTemplateInput
+    input: EmailSendTemplateInput,
+    progress: SendProgress
   ): Promise<{ messageId: string }> {
     assertIdentifies('EmailService', 'tenantId', input.tenantId)
     // Refused before rendering: a template is not rendered to be thrown away.
@@ -412,24 +432,27 @@ export class EmailService {
     // Each optional field is spread only when present, so an absent field never
     // becomes an `{ x: undefined }` key in the send input that `send()` would then
     // carry as an explicit value rather than a genuinely missing one.
-    return this.sendUnobserved({
-      tenantId: input.tenantId,
-      to: input.to,
-      subject: rendered.subject,
-      html: rendered.html,
-      tags,
-      ...(rendered.text !== undefined ? { text: rendered.text } : {}),
-      ...(input.from !== undefined ? { from: input.from } : {}),
-      ...(input.fromName !== undefined ? { fromName: input.fromName } : {}),
-      ...(input.replyTo !== undefined ? { replyTo: input.replyTo } : {}),
-      ...(input.userId !== undefined ? { userId: input.userId } : {}),
-      ...(input.auditRedactValues !== undefined
-        ? { auditRedactValues: input.auditRedactValues }
-        : {}),
-      ...(input.publishProviderText !== undefined
-        ? { publishProviderText: input.publishProviderText }
-        : {})
-    })
+    return this.sendUnobserved(
+      {
+        tenantId: input.tenantId,
+        to: input.to,
+        subject: rendered.subject,
+        html: rendered.html,
+        tags,
+        ...(rendered.text !== undefined ? { text: rendered.text } : {}),
+        ...(input.from !== undefined ? { from: input.from } : {}),
+        ...(input.fromName !== undefined ? { fromName: input.fromName } : {}),
+        ...(input.replyTo !== undefined ? { replyTo: input.replyTo } : {}),
+        ...(input.userId !== undefined ? { userId: input.userId } : {}),
+        ...(input.auditRedactValues !== undefined
+          ? { auditRedactValues: input.auditRedactValues }
+          : {}),
+        ...(input.publishProviderText !== undefined
+          ? { publishProviderText: input.publishProviderText }
+          : {})
+      },
+      progress
+    )
   }
 
   /** Returns the resolved email options or throws when the channel is not configured. */
