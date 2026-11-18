@@ -6,28 +6,31 @@
  */
 
 import { escapeAuditString } from './audit-escape'
-
-/** What a failure to read an error's properties is reported as. */
-const UNREADABLE = 'Error (unreadable)'
+import { describeError, UNPRINTABLE_ERROR } from './describe-error'
 
 /**
- * Copies an error for the log. The original is never touched: it is the one the caller receives.
- * Reading is guarded, since the error can come from consumer code and a property can throw.
+ * Copies whatever stands behind a log line into an `Error` that is safe to hand to a logger. The
+ * original is never touched: it is the one the caller receives, or the host's own. The value can come
+ * from consumer code and need not be an `Error`, so no type test is made on it (one throws for a
+ * revoked proxy); the message, the name and a string code are read through a guard, and a value that
+ * cannot be read becomes a fixed error.
  *
- * @param error - The error behind a log line.
+ * @param error - The value behind a log line.
  * @returns A new `Error` with an escaped message, name and string code, and no cause or stack of the
  *   original.
  */
-export function loggableError(error: Error): Error {
+export function loggableError(error: unknown): Error {
   try {
-    const copy = new Error(escapeAuditString(error.message))
-    copy.name = escapeAuditString(error.name)
-    const code = (error as { code?: unknown }).code
-    if (typeof code === 'string') {
-      Object.assign(copy, { code: escapeAuditString(code) })
+    const source = error as { message?: unknown; name?: unknown; code?: unknown } | null | undefined
+    const copy = new Error(escapeAuditString(describeError(error)))
+    if (typeof source?.name === 'string') {
+      copy.name = escapeAuditString(source.name)
+    }
+    if (typeof source?.code === 'string') {
+      Object.assign(copy, { code: escapeAuditString(source.code) })
     }
     return copy
   } catch {
-    return new Error(UNREADABLE)
+    return new Error(UNPRINTABLE_ERROR)
   }
 }

@@ -43,7 +43,7 @@ describe('loggableError', () => {
     expect(copy.stack).not.toContain('secret.js')
   })
 
-  it('should become a fixed error when a property of the original throws', () => {
+  it('should say it could not be printed when a property of the original throws', () => {
     const hostile = new Error('x')
     Object.defineProperty(hostile, 'message', {
       get: () => {
@@ -51,6 +51,56 @@ describe('loggableError', () => {
       }
     })
 
-    expect(loggableError(hostile).message).toBe('Error (unreadable)')
+    expect(loggableError(hostile).message).toBe('unprintable error')
+  })
+
+  // The value behind a log line can come from consumer code and is not always an Error: whatever it
+  // is, the copy is built without a type test that a hostile value could make throw.
+  describe('a value that is not an ordinary Error', () => {
+    const revoked = (): object => {
+      const { proxy, revoke } = Proxy.revocable({}, {})
+      revoke()
+      return proxy
+    }
+
+    it.each([
+      ['a string', 'boom', 'boom'],
+      ['a number', 42, '42'],
+      ['null', null, 'null'],
+      ['undefined', undefined, 'undefined'],
+      ['a plain object with a message', { message: 'store down' }, 'store down'],
+      [
+        'an object with no prototype and a message',
+        Object.assign(Object.create(null), { message: 'x' }),
+        'x'
+      ],
+      ['an object whose message is not a string', { message: 7 }, '[object Object]'],
+      ['a message with a line break', { message: 'a\nb' }, 'a\\nb']
+    ])('should copy %s into an Error with a readable message', (_label, value, expected) => {
+      const copy = loggableError(value)
+
+      expect(copy).toBeInstanceOf(Error)
+      expect(copy.message).toBe(expected)
+    })
+
+    it.each([
+      ['a revoked proxy', revoked()],
+      [
+        'a value whose toString throws',
+        {
+          toString: () => {
+            throw new Error('no')
+          }
+        }
+      ],
+      ['an object with no prototype and no message', Object.create(null)]
+    ])('should say it could not be printed for %s', (_label, value) => {
+      expect(loggableError(value).message).toBe('unprintable error')
+    })
+
+    it('should read the name only when it is a string', () => {
+      expect(loggableError({ message: 'm', name: 5 }).name).toBe('Error')
+      expect(loggableError({ message: 'm', name: 'Odd\nName' }).name).toBe('Odd\\nName')
+    })
   })
 })

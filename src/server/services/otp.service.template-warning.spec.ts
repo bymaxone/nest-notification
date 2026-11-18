@@ -294,14 +294,30 @@ describe('OtpService startup warning for an unresolved default template', () => 
         'rejects with an object with no prototype',
         async (): Promise<boolean> => Promise.reject(Object.create(null)),
         'unprintable error'
+      ],
+      // A type test on this value throws; the line is written from a detached promise, so a throw
+      // there would be an unhandled rejection that ends the process.
+      [
+        'rejects with a revoked proxy',
+        async (): Promise<boolean> => {
+          const { proxy, revoke } = Proxy.revocable({}, {})
+          revoke()
+          return Promise.reject(proxy)
+        },
+        'unprintable error'
       ]
     ])('should warn, not throw, when hasTemplate %s', async (_label, hasTemplate, reason) => {
       const { service, renderer } = build()
       renderer.hasTemplate.mockImplementation(hasTemplate)
 
+      const unhandled = jest.fn()
+      process.on('unhandledRejection', unhandled)
+
       expect(() => service.onModuleInit()).not.toThrow()
       await settle()
+      process.off('unhandledRejection', unhandled)
 
+      expect(unhandled).not.toHaveBeenCalled()
       expect(ours()).toHaveLength(1)
       expect(ours()[0]).toContain('Could not check')
       expect(ours()[0]).toContain(reason)

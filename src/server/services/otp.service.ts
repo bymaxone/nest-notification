@@ -43,7 +43,6 @@ import { AuditWriteWarning } from '../utils/audit-write-warning'
 import { isCodeDigest } from '../utils/code-digest'
 import { generateOtpCode } from '../utils/code-generator'
 import { cooldownExpiresAt, toRetryAfterHeader } from '../utils/cooldown-helpers'
-import { describeError } from '../utils/describe-error'
 import { logEvent } from '../utils/log-event'
 import { loggableError } from '../utils/loggable-error'
 import { reportOtp, runInSpan } from '../utils/observe'
@@ -521,7 +520,7 @@ export class OtpService implements OnModuleInit {
         NOTIFICATION_LOG_EVENTS.OTP_TEMPLATE_NOT_RESOLVED,
         `[${TEMPLATE_WARNING_CODE}] Could not check whether the email template '${DEFAULT_OTP_TEMPLATE}' resolves ` +
           '(the renderer error is in the err field); if it does not, the first generate() that delivers by email fails with TEMPLATE_NOT_FOUND.',
-        loggableError(error instanceof Error ? error : new Error(describeError(error)))
+        loggableError(error)
       )
     }
   }
