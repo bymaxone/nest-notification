@@ -12,6 +12,7 @@ import { InMemoryOtpStorage } from '../providers/in-memory-otp.storage'
 
 import { makeAudit, makeOptions, ref } from './__tests__/otp-service.fixtures'
 import { OtpService } from './otp.service'
+import { loggedEvent, loggedText } from '../__tests__/logged'
 
 const base = { ...ref, tenantId: 'acme', deliverVia: 'manual' as const }
 // Letters never occur in the numeric codes the service generates, so this guess is always wrong.
@@ -318,7 +319,7 @@ describe('OtpService failed attempts across re-issues', () => {
       legacy.onModuleInit()
       legacy.onModuleInit()
 
-      const messages = warn.mock.calls.map((call) => String(call[0]))
+      const messages = warn.mock.calls.map((call) => loggedText(call))
       expect(messages).toHaveLength(1)
       expect(messages[0]).toContain('BYMAX_NOTIFICATION_OTP_FAILURES_NOT_CARRIED')
       expect(messages[0]).toContain('recordFailure')
@@ -376,9 +377,10 @@ describe('OtpService failed attempts across re-issues', () => {
 
       new OtpService(makeOptions({}), new PlainStorage(), audit).onModuleInit()
 
-      expect(String(warn.mock.calls[0]?.[0])).toContain(
+      expect(loggedText(warn.mock.calls[0])).toContain(
         'Implement the three optional methods to carry the count across re-issues.'
       )
+      expect(loggedEvent(warn.mock.calls[0])).toBe('NOTIFICATION_OTP_FAILURES_NOT_CARRIED')
     })
 
     it('should stay silent for a storage that implements them', () => {

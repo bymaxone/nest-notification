@@ -7,6 +7,7 @@ import type { EmailSendOptions } from '../interfaces/email-provider.interface'
 
 import { BIDI_OVERRIDE, hasRawControl } from './__tests__/has-raw-control'
 import { ResendEmailProvider } from './resend-email.provider'
+import { loggedEvent, loggedText } from '../__tests__/logged'
 
 // `mock`-prefixed names are allowed inside the hoisted jest.mock factory.
 const mockSend = jest.fn()
@@ -181,7 +182,8 @@ describe('ResendEmailProvider', () => {
     await expect(new ResendEmailProvider({ apiKey: 'k' }).send(baseOptions)).rejects.toThrow(
       'Resend send failed: rate limited'
     )
-    const logged = String(warnSpy.mock.calls[0]?.[0])
+    const logged = loggedText(warnSpy.mock.calls[0])
+    expect(loggedEvent(warnSpy.mock.calls[0])).toBe('NOTIFICATION_RESEND_SEND_FAILED')
     expect(logged).toContain('rate limited')
     expect(logged).not.toContain('Secret 123456')
   })
@@ -201,7 +203,7 @@ describe('ResendEmailProvider', () => {
     await expect(new ResendEmailProvider({ apiKey: 'k' }).send(baseOptions)).rejects.toThrow(
       /^Resend send failed: content rejected by policy/
     )
-    const logged = String(warnSpy.mock.calls[0]?.[0])
+    const logged = loggedText(warnSpy.mock.calls[0])
     expect(logged).toContain('[redacted]')
     expect(logged).not.toContain('Secret 123456')
     warnSpy.mockRestore()
@@ -220,7 +222,7 @@ describe('ResendEmailProvider', () => {
     await expect(
       new ResendEmailProvider({ apiKey: 'k' }).send({ ...baseOptions, text: textOnly })
     ).rejects.toThrow(/^Resend send failed: rejected: \[redacted\]/)
-    expect(String(warnSpy.mock.calls[0]?.[0])).not.toContain('998877')
+    expect(loggedText(warnSpy.mock.calls[0])).not.toContain('998877')
     warnSpy.mockRestore()
   })
 
@@ -247,7 +249,7 @@ describe('ResendEmailProvider', () => {
     await expect(
       new ResendEmailProvider({ apiKey: 're_logescape_key' }).send(baseOptions)
     ).rejects.toThrow(`Resend send failed: ${message}`)
-    const logged = String(warnSpy.mock.calls[0]?.[0])
+    const logged = loggedText(warnSpy.mock.calls[0])
     expect(hasRawControl(logged)).toBe(false)
     expect(logged).toBe('[RESEND_SEND_FAILED] rate\\nforged [RESEND_SEND_FAILED] ok\\u202e')
     warnSpy.mockRestore()
@@ -264,7 +266,7 @@ describe('ResendEmailProvider', () => {
         redactValues: ['pass\nword']
       })
     ).rejects.toThrow('Resend send failed: rejected: [redacted]')
-    expect(String(warnSpy.mock.calls[0]?.[0])).toBe('[RESEND_SEND_FAILED] rejected: [redacted]')
+    expect(loggedText(warnSpy.mock.calls[0])).toBe('[RESEND_SEND_FAILED] rejected: [redacted]')
     warnSpy.mockRestore()
   })
 
@@ -308,7 +310,7 @@ describe('ResendEmailProvider', () => {
     expect((caught as Error).message).toMatch(/^Resend send failed: bad key \[redacted\] for/)
     for (const leaked of [apiKey, 'secret42', '998877']) {
       expect((caught as Error).message).not.toContain(leaked)
-      expect(String(warnSpy.mock.calls[0]?.[0])).not.toContain(leaked)
+      expect(loggedText(warnSpy.mock.calls[0])).not.toContain(leaked)
     }
     warnSpy.mockRestore()
   })
@@ -322,7 +324,7 @@ describe('ResendEmailProvider', () => {
     await expect(
       new ResendEmailProvider({ apiKey: 'k' }).send({ ...baseOptions, redactValues: ['998877'] })
     ).rejects.toThrow('Resend send failed: rejected: [redacted]')
-    expect(String(warnSpy.mock.calls[0]?.[0])).not.toContain('998877')
+    expect(loggedText(warnSpy.mock.calls[0])).not.toContain('998877')
     warnSpy.mockRestore()
   })
 
@@ -336,7 +338,7 @@ describe('ResendEmailProvider', () => {
     await expect(new ResendEmailProvider({ apiKey }).send(baseOptions)).rejects.toThrow(
       'Resend send failed: invalid key: [redacted]'
     )
-    expect(String(warnSpy.mock.calls[0]?.[0])).not.toContain(apiKey)
+    expect(loggedText(warnSpy.mock.calls[0])).not.toContain(apiKey)
     warnSpy.mockRestore()
   })
 
@@ -352,7 +354,7 @@ describe('ResendEmailProvider', () => {
     await expect(new ResendEmailProvider({ apiKey: 'k' }).send(baseOptions)).rejects.toThrow(
       /^Resend send failed: fetch failed sending: \[redacted\]/
     )
-    const logged = String(warnSpy.mock.calls[0]?.[0])
+    const logged = loggedText(warnSpy.mock.calls[0])
     expect(logged).toContain('[redacted]')
     expect(logged).not.toContain('Secret 123456')
     warnSpy.mockRestore()
@@ -386,8 +388,8 @@ describe('ResendEmailProvider', () => {
       .catch((error: unknown) => error)
 
     expect((thrown as Error).message).toBe('Resend send failed')
-    expect(String(warnSpy.mock.calls[0]?.[0])).toBe('[RESEND_SEND_FAILED] (provider text withheld)')
-    expect(String(warnSpy.mock.calls[0]?.[0])).not.toContain('Secret 123456')
+    expect(loggedText(warnSpy.mock.calls[0])).toBe('[RESEND_SEND_FAILED] (provider text withheld)')
+    expect(loggedText(warnSpy.mock.calls[0])).not.toContain('Secret 123456')
     warnSpy.mockRestore()
   })
 
@@ -410,7 +412,7 @@ describe('ResendEmailProvider', () => {
       .catch((error: unknown) => error)
 
     expect((thrown as Error).message).toBe('Resend send failed')
-    expect(String(warnSpy.mock.calls[0]?.[0])).not.toContain('998877')
+    expect(loggedText(warnSpy.mock.calls[0])).not.toContain('998877')
     warnSpy.mockRestore()
   })
 
@@ -430,7 +432,7 @@ describe('ResendEmailProvider', () => {
     await expect(new ResendEmailProvider({ apiKey: 'k' }).send(baseOptions)).rejects.toThrow(
       'Resend send failed: [redacted]'
     )
-    expect(String(warnSpy.mock.calls[0]?.[0])).not.toContain('998877')
+    expect(loggedText(warnSpy.mock.calls[0])).not.toContain('998877')
     warnSpy.mockRestore()
   })
 
@@ -486,7 +488,7 @@ describe('ResendEmailProvider', () => {
         .catch((error: unknown) => error)
 
       expect(String((caught as Error).message).includes('998877')).toBe(false)
-      expect(String(warnSpy.mock.calls[0]?.[0]).includes('998877')).toBe(false)
+      expect(loggedText(warnSpy.mock.calls[0]).includes('998877')).toBe(false)
       warnSpy.mockRestore()
     })
   })

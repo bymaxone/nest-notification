@@ -3,6 +3,7 @@ import { Logger } from '@nestjs/common'
 import type { EmailSendOptions } from '../interfaces/email-provider.interface'
 
 import { NoOpEmailProvider } from './no-op-email.provider'
+import { loggedEvent, loggedText } from '../__tests__/logged'
 
 const baseOptions: EmailSendOptions = {
   to: 'jane@acme.com',
@@ -37,7 +38,8 @@ describe('NoOpEmailProvider', () => {
     await new NoOpEmailProvider().send({ ...baseOptions, subject: 'Your code 123456' })
 
     expect(debugSpy).toHaveBeenCalledTimes(1)
-    const logged = String(debugSpy.mock.calls[0]?.[0])
+    const logged = loggedText(debugSpy.mock.calls[0])
+    expect(loggedEvent(debugSpy.mock.calls[0])).toBe('NOTIFICATION_NOOP_EMAIL')
     expect(logged).toContain('j***@acme.com')
     expect(logged).not.toContain('jane@acme.com')
     expect(logged).not.toContain('Your code 123456')
@@ -50,7 +52,7 @@ describe('NoOpEmailProvider', () => {
 
     await new NoOpEmailProvider().send({ ...baseOptions, to: ['alice@x.com', 'bob@x.com'] })
 
-    const logged = String(debugSpy.mock.calls[0]?.[0])
+    const logged = loggedText(debugSpy.mock.calls[0])
     expect(logged).toContain('a***@x.com,b***@x.com')
     expect(logged).not.toContain('alice@x.com')
   })
@@ -62,7 +64,7 @@ describe('NoOpEmailProvider', () => {
 
     await new NoOpEmailProvider().send({ ...baseOptions, to: '@nope.com' })
 
-    const logged = String(debugSpy.mock.calls[0]?.[0])
+    const logged = loggedText(debugSpy.mock.calls[0])
     expect(logged).toContain('to=***')
     expect(logged).not.toContain('@nope.com')
   })

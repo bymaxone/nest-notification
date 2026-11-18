@@ -10,6 +10,7 @@ import { Test } from '@nestjs/testing'
 import { BymaxNotificationModule } from './bymax-notification.module'
 import type { IEmailProvider, IOtpStorage } from './interfaces'
 import { InMemoryOtpStorage } from './providers/in-memory-otp.storage'
+import { loggedEvent, loggedText } from './__tests__/logged'
 
 const emailProvider: IEmailProvider = {
   name: 'fake',
@@ -32,7 +33,7 @@ describe('plaintext OTP code storage warning', () => {
     jest.restoreAllMocks()
   })
 
-  const warned = (): string[] => warnSpy.mock.calls.map((call) => String(call[0]))
+  const warned = (): string[] => warnSpy.mock.calls.map((call) => loggedText(call))
 
   // An OTP channel without the secret stores codes in the clear; say so, naming the option.
   it('should warn once from forRoot when the OTP channel has no secret', () => {
@@ -44,6 +45,9 @@ describe('plaintext OTP code storage warning', () => {
     // The remedy is part of the message: what to set, how long, and what it stores instead.
     expect(messages[0]).toContain('at least 32 bytes')
     expect(messages[0]).toContain('HMAC-SHA-256')
+    expect(warnSpy.mock.calls.map((call) => loggedEvent(call))).toContain(
+      'NOTIFICATION_PLAINTEXT_OTP_CODES'
+    )
   })
 
   // With the secret the warning has nothing to say.

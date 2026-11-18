@@ -12,8 +12,10 @@ import { Inject, Injectable, Logger, Optional } from '@nestjs/common'
 import type { OnModuleInit } from '@nestjs/common'
 
 import type { NotificationChannel } from '../../shared/types/notification-channel.types'
+import { NOTIFICATION_LOG_EVENTS } from '../constants/log-events.constants'
 import { NotificationException } from '../errors/notification-exception'
 import type { OtpVerifyResult } from '../interfaces/otp-storage.interface'
+import { logEvent } from '../utils/log-event'
 import { EmailService } from './email.service'
 import type { EmailSendInput, EmailSendTemplateInput } from './email.service'
 import { OtpService } from './otp.service'
@@ -165,7 +167,10 @@ export class NotificationService implements OnModuleInit {
 
   /** Logs the not-usable warning for one channel. */
   private warnNotUsable(channel: NotificationChannel, part: 'provider' | 'storage'): void {
-    this.logger.warn(
+    logEvent(
+      this.logger,
+      'warn',
+      NOTIFICATION_LOG_EVENTS.CHANNEL_NOT_USABLE,
       `[BYMAX_NOTIFICATION_CHANNEL_NOT_USABLE] The ${channel} channel is configured but its ${part} reports isConfigured() = false, ` +
         `so it is not enabled: check the ${part}'s credentials or environment.`
     )

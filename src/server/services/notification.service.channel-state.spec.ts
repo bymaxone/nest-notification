@@ -19,6 +19,7 @@ import { makeOptions as otpOptions } from './__tests__/otp-service.fixtures'
 import { EmailService } from './email.service'
 import { NotificationService } from './notification.service'
 import { OtpService } from './otp.service'
+import { loggedEvent, loggedText } from '../__tests__/logged'
 
 /** An email service over a provider that does, or does not, report itself configured. */
 const email = (configured: boolean): EmailService => {
@@ -139,7 +140,7 @@ describe('NotificationService channel state', () => {
 
   describe('onModuleInit', () => {
     const warnings = (spy: jest.SpyInstance): string[] =>
-      spy.mock.calls.map((call) => String(call[0]))
+      spy.mock.calls.map((call) => loggedText(call))
 
     // A channel that is configured but unusable would otherwise only show up at the first send.
     it('should warn once per configured-but-unusable channel', () => {
@@ -149,6 +150,10 @@ describe('NotificationService channel state', () => {
 
       const messages = warnings(warn)
       expect(messages).toHaveLength(2)
+      expect(warn.mock.calls.map((call) => loggedEvent(call))).toEqual([
+        'NOTIFICATION_CHANNEL_NOT_USABLE',
+        'NOTIFICATION_CHANNEL_NOT_USABLE'
+      ])
       expect(messages[0]).toContain('BYMAX_NOTIFICATION_CHANNEL_NOT_USABLE')
       expect(messages[0]).toContain('email')
       expect(messages[0]).toContain('isConfigured()')

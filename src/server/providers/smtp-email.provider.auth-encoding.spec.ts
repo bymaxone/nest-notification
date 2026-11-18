@@ -11,6 +11,7 @@ import { Logger } from '@nestjs/common'
 
 import { baseOptions } from './__tests__/smtp-email-provider.fixtures'
 import { SmtpEmailProvider } from './smtp-email.provider'
+import { loggedText } from '../__tests__/logged'
 
 // `mock`-prefixed names are allowed inside the hoisted jest.mock factory.
 const mockSendMail = jest.fn()
@@ -46,7 +47,7 @@ async function failWith(
   })
     .send(baseOptions)
     .catch((error: unknown) => error)
-  return { thrown: (caught as Error).message, logged: String(warn.mock.calls[0]?.[0]) }
+  return { thrown: (caught as Error).message, logged: loggedText(warn.mock.calls[0]) }
 }
 
 describe('SmtpEmailProvider credentials echoed in base64', () => {

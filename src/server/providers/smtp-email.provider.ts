@@ -22,6 +22,7 @@
 import { Injectable, Logger } from '@nestjs/common'
 import type { OnModuleDestroy } from '@nestjs/common'
 
+import { NOTIFICATION_LOG_EVENTS } from '../constants/log-events.constants'
 import type {
   EmailAttachment,
   EmailSendOptions,
@@ -34,6 +35,7 @@ import { extractDeliveryStatus, withoutDeclaredValues } from '../utils/delivery-
 import { describeError, UNPRINTABLE_ERROR } from '../utils/describe-error'
 import { assertBodyParts } from '../utils/email-body'
 import { loadOptionalPeer } from '../utils/load-optional-peer'
+import { logEvent } from '../utils/log-event'
 import { assertPort } from '../utils/port-option'
 import { collectEchoedExcerpts, readRedactedMessage, redactValues } from '../utils/redact'
 import { assertTimerMs } from '../utils/timer-option'
@@ -289,6 +291,25 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
   }
 
   /**
+   * Checks that the relay answers, without sending a message: the transport connects, reads the
+   * greeting, upgrades to TLS when the options ask for it, and logs in when credentials are set.
+   * Meant for a readiness check, which should call it rarely and bound it with a timeout.
+   *
+   * The failure carries no text of the relay's or of Nodemailer's, which can quote the options, so
+   * what it reports is the same words every time.
+   *
+   * @throws Error `SmtpEmailProvider: the relay did not accept the connection`, whatever the cause.
+   */
+  async verify(): Promise<void> {
+    try {
+      const transport = await this.getTransport()
+      await transport.verify?.()
+    } catch {
+      throw new Error('SmtpEmailProvider: the relay did not accept the connection')
+    }
+  }
+
+  /**
    * Closes the transport this provider built, so a pooled connection does not keep the process
    * alive. A send already in flight on a pooled transport finishes; one still waiting for a
    * connection fails with `Connection pool was closed`. Idempotent, and it never builds a transport
@@ -314,7 +335,12 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
       transport.close?.()
     } catch {
       // What the failure carries can hold the relay's words or a credential: log a fixed line only.
-      this.logger.warn('[SMTP_CLOSE_FAILED] The transport could not be closed.')
+      logEvent(
+        this.logger,
+        'warn',
+        NOTIFICATION_LOG_EVENTS.SMTP_CLOSE_FAILED,
+        '[SMTP_CLOSE_FAILED] The transport could not be closed.'
+      )
     }
   }
 
@@ -372,7 +398,12 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
       return this.withheldFailure(raw, code, redactValuesList)
     }
     const reason = this.scrubTransportError(raw, payload, redactValuesList)
-    this.logger.warn(`[SMTP_SEND_FAILED] ${escapeAuditString(reason)}`)
+    logEvent(
+      this.logger,
+      'warn',
+      NOTIFICATION_LOG_EVENTS.SMTP_SEND_FAILED,
+      `[SMTP_SEND_FAILED] ${escapeAuditString(reason)}`
+    )
     return Object.assign(
       new Error(`SMTP send failed: ${reason}`),
       code === undefined ? {} : { code }
@@ -396,7 +427,12 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
   ): Error {
     const { status, enhanced } = withoutDeclaredValues(extractDeliveryStatus(raw), redactValuesList)
     const codes = [status, enhanced].filter((reply) => reply !== undefined).join(' ')
-    this.logger.warn(`[SMTP_SEND_FAILED] ${codes || 'no reply code'}`)
+    logEvent(
+      this.logger,
+      'warn',
+      NOTIFICATION_LOG_EVENTS.SMTP_SEND_FAILED,
+      `[SMTP_SEND_FAILED] ${codes || 'no reply code'}`
+    )
     // The codes ride on the thrown error rather than in its message: the message is a fixed label, so
     // `EmailService` could not recover them by parsing it, and interpolating them would put digits
     // back into a string a log rule then has to scan.

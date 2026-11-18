@@ -21,6 +21,7 @@ import {
 import { dummyRepo } from './__tests__/otp-service.fixtures'
 import { EmailService } from './email.service'
 import { OtpService } from './otp.service'
+import { loggedText } from '../__tests__/logged'
 
 const CODE = 'BYMAX_NOTIFICATION_AUDIT_WRITE_FAILED'
 const WRONG = 'ABCDEF'
@@ -42,7 +43,7 @@ describe('swallowed audit failures leave a trace', () => {
   })
 
   const ours = (): string[] =>
-    warn.mock.calls.map((call) => String(call[0])).filter((line) => line.includes(CODE))
+    warn.mock.calls.map((call) => loggedText(call)).filter((line) => line.includes(CODE))
 
   const otpService = (
     audit: INotificationLogRepository,

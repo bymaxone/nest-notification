@@ -45,7 +45,8 @@ export {
   BYMAX_NOTIFICATION_SMS_PROVIDER,
   BYMAX_NOTIFICATION_PUSH_PROVIDER,
   BYMAX_NOTIFICATION_TEMPLATE_RENDERER,
-  BYMAX_NOTIFICATION_LOG_REPOSITORY
+  BYMAX_NOTIFICATION_LOG_REPOSITORY,
+  BYMAX_NOTIFICATION_OBSERVER
 } from './bymax-notification.constants'
 
 // Canonical constants
@@ -57,6 +58,18 @@ export {
   CANONICAL_EMAIL_TEMPLATES,
   type CanonicalEmailTemplate
 } from './constants/canonical-templates'
+
+// Observation contract (types)
+export type {
+  INotificationObserver,
+  NotificationObservedChannel,
+  NotificationOtpEvent,
+  NotificationOtpEventName,
+  NotificationSendEvent,
+  NotificationSendOutcome,
+  NotificationSpanAttributes,
+  NotificationSpanName
+} from './interfaces/notification-observer.interface'
 
 // Interface contracts (types)
 export type {

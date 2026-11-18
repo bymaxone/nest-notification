@@ -7,7 +7,7 @@ import {
   makeProvider,
   makeRenderer
 } from './__tests__/email-service.fixtures'
-import { EmailService } from './email.service'
+import { EmailService, templateSendInput } from './email.service'
 
 describe('EmailService.send', () => {
   // The happy path applies channel defaults, concatenates tags, and audits "sent".
@@ -614,19 +614,16 @@ describe('EmailService.sendTemplate', () => {
 
   // Absent optional fields must NOT be injected as `undefined` keys into the inner
   // send() input — pins the omission (`: {}`) side of every conditional spread in
-  // sendTemplate against the always-add (`? { x: undefined }`) mutant. Spying on the
-  // inner send observes the EmailSendInput sendTemplate actually builds.
-  it('should omit absent optional fields from the inner send input', async () => {
-    const renderer = makeRenderer()
-    renderer.render.mockResolvedValue({ subject: 'S', html: '<p>H</p>' })
-    const service = new EmailService(makeOptions(), makeProvider(), renderer, makeAudit())
-    const sendSpy = jest.spyOn(service, 'send').mockResolvedValue({ messageId: 'm' })
+  // sendTemplate against the always-add (`? { x: undefined }`) mutant.
+  it('should omit absent optional fields from the inner send input', () => {
+    const input = templateSendInput(
+      { tenantId: 't', to: 'a@x.com', template: 'welcome', data: {} },
+      { subject: 'S', html: '<p>H</p>' },
+      []
+    )
 
-    await service.sendTemplate({ tenantId: 't', to: 'a@x.com', template: 'welcome', data: {} })
-
-    const input = sendSpy.mock.calls[0]?.[0]
     for (const key of ['text', 'from', 'fromName', 'replyTo', 'userId', 'auditRedactValues']) {
-      expect(key in input!).toBe(false)
+      expect(key in input).toBe(false)
     }
   })
 })

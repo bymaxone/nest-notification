@@ -38,6 +38,14 @@ import {
 import type { NotificationErrorCode, OtpPurpose } from '@bymax-one/nest-notification/shared'
 import { NOTIFICATION_ERROR_CODES } from '@bymax-one/nest-notification/shared'
 import type { UseOtpInputState, UseOtpCountdownState } from '@bymax-one/nest-notification/react'
+import type { IHealthIndicator } from '@bymax-one/nest-core/health'
+import type { INotificationObserver } from '@bymax-one/nest-notification'
+import {
+  NotificationHealthIndicator,
+  NotificationMetrics,
+  NotificationObservabilityModule,
+  NotificationTracing
+} from '@bymax-one/nest-notification/observability'
 import type { OtpStorageContractCase } from '@bymax-one/nest-notification/testing'
 import { otpStorageContract } from '@bymax-one/nest-notification/testing'
 
@@ -240,3 +248,12 @@ declare const ioredisClient: Redis
 // Passing the client as the documentation does must compile; the narrowed `set` forms are what
 // make an ioredis overload set satisfy the interface.
 const _redisClient: RedisLike = ioredisClient
+
+// The observability subpath: the readiness check is a core health indicator, the metrics and the
+// tracing are each an observer the services accept, and registering returns a dynamic module.
+const _indicatorIsAHealthIndicator: IHealthIndicator = new NotificationHealthIndicator()
+const _metricsIsAnObserver: INotificationObserver = new NotificationMetrics()
+const _tracingIsAnObserver: INotificationObserver = new NotificationTracing()
+type _RegisterReturns = Expect<
+  Equal<ReturnType<typeof NotificationObservabilityModule.register>, DynamicModule>
+>

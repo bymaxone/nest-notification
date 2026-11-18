@@ -23,6 +23,7 @@ import { NoOpNotificationLogRepository } from './providers/no-op-notification-lo
 import { EmailService } from './services/email.service'
 import { NotificationService } from './services/notification.service'
 import { OtpService } from './services/otp.service'
+import { loggedEvent, loggedText } from './__tests__/logged'
 
 const emailProvider: IEmailProvider = {
   name: 'fake',
@@ -187,7 +188,8 @@ describe('BymaxNotificationModule.forRoot', () => {
 
     BymaxNotificationModule.forRoot({ email: validEmail, otp: { storage: new FakeOtpStorage() } })
 
-    const logged = String(logSpy.mock.calls[0]?.[0])
+    const logged = loggedText(logSpy.mock.calls[0])
+    expect(loggedEvent(logSpy.mock.calls[0])).toBe('NOTIFICATION_BOOTSTRAP_OK')
     expect(logged).toContain('BYMAX_NOTIFICATION_MODULE_BOOTSTRAP_OK')
     expect(logged).toContain('channels: email, otp')
   })
@@ -199,7 +201,7 @@ describe('BymaxNotificationModule.forRoot', () => {
 
     BymaxNotificationModule.forRoot({ email: validEmail })
 
-    const logged = String(logSpy.mock.calls[0]?.[0])
+    const logged = loggedText(logSpy.mock.calls[0])
     expect(logged).toContain('channels: email')
     expect(logged).not.toContain('otp')
   })
@@ -211,7 +213,7 @@ describe('BymaxNotificationModule.forRoot', () => {
 
     BymaxNotificationModule.forRoot({ otp: { storage: new FakeOtpStorage() } })
 
-    const logged = String(logSpy.mock.calls[0]?.[0])
+    const logged = loggedText(logSpy.mock.calls[0])
     expect(logged).toContain('channels: otp')
     expect(logged).not.toContain('email')
   })
