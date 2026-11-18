@@ -3,10 +3,11 @@
  * Dogfood smoke test — validates the published package shape before tagging.
  *
  * Validates:
- *   1. Build artifacts exist for all four subpaths (ESM, CJS, .d.ts)
+ *   1. Build artifacts exist for all five subpaths (ESM, CJS, .d.ts)
  *   2. ESM import resolves the expected named exports (server + shared)
  *   3. CJS require resolves the expected named exports (server + shared)
  *   4. The react subpath resolves; the testing subpath exposes otpStorageContract
+ *   4b. The built observability entry, wired beside the built server, records real samples
  *   5. Tarball contents (npm pack --dry-run) contain only dist/ + meta files
  *   6. A minimal consumer (file: link in an OS temp dir) resolves every subpath
  *      through the published `exports` map
