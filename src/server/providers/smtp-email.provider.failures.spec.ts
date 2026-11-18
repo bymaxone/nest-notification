@@ -78,12 +78,33 @@ describe('SmtpEmailProvider failure handling', () => {
       host: 'h',
       tls: {
         key: ['plain', { pem: 'pem', passphrase: 'key-entry-phrase' }],
-        pfx: { buf: 'buf', passphrase: 'pfx-entry-phrase' }
+        pfx: [{ buf: 'buf', passphrase: 'pfx-entry-phrase' }]
       }
     }).send(baseOptions)
 
     await expect(failure).rejects.toThrow('SMTP send failed: TLS failed: [redacted] and [redacted]')
     expect(String(warnSpy.mock.calls[0]?.[0])).not.toMatch(/entry-phrase/)
+    warnSpy.mockRestore()
+  })
+
+  // The passphrase that is scrubbed is the one that was checked: an entry whose getter answers
+  // differently later cannot leave the first answer unscrubbed.
+  it('should scrub the passphrase an entry gave when it was copied, not one it gives later', async () => {
+    mockSendMail.mockRejectedValue(new Error('TLS failed: first-phrase'))
+    let reads = 0
+    const entry = {
+      pem: 'pem',
+      get passphrase(): string | undefined {
+        reads += 1
+        return reads === 1 ? 'first-phrase' : undefined
+      }
+    }
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+    const failure = new SmtpEmailProvider({ host: 'h', tls: { key: [entry] } }).send(baseOptions)
+
+    await expect(failure).rejects.toThrow('SMTP send failed: TLS failed: [redacted]')
+    expect(String(warnSpy.mock.calls[0]?.[0])).not.toContain('first-phrase')
     warnSpy.mockRestore()
   })
 

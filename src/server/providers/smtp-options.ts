@@ -129,17 +129,20 @@ const isVersion = (value: unknown): boolean =>
 /** The words a refusal uses for a version bound and for PEM material. */
 const VERSION_WORDS = 'one of TLSv1, TLSv1.1, TLSv1.2 or TLSv1.3'
 const MATERIAL_WORDS = 'a string, a Buffer or an array of them'
-const KEY_WORDS = 'a string, a Buffer, a { pem, passphrase } object or an array of them'
-const PFX_WORDS = 'a string, a Buffer, a { buf, passphrase } object or an array of them'
+const KEY_WORDS =
+  'a string, a Buffer or an array of strings, Buffers and { pem, passphrase } objects'
+const PFX_WORDS =
+  'a string, a Buffer or an array of strings, Buffers and { buf, passphrase } objects'
 
 /**
- * A key or a bundle: PEM material, or an object carrying it with an optional passphrase, or an
- * array of them. `field` names the property that holds the material (`pem` for a key, `buf` for a
- * bundle).
+ * A key or a bundle: PEM material, or an array whose entries are PEM material or objects carrying
+ * it with an optional passphrase. Node takes the object form only inside an array, so a bare object
+ * is refused here and not at the first send. `field` names the property that holds the material
+ * (`pem` for a key, `buf` for a bundle).
  */
 function isTlsEntry(field: 'pem' | 'buf'): (value: unknown) => boolean {
   const material = (item: unknown): boolean => typeof item === 'string' || ArrayBuffer.isView(item)
-  const one = (item: unknown): boolean => {
+  const entry = (item: unknown): boolean => {
     if (typeof item !== 'object' || item === null || ArrayBuffer.isView(item)) {
       return material(item)
     }
@@ -149,7 +152,36 @@ function isTlsEntry(field: 'pem' | 'buf'): (value: unknown) => boolean {
       (passphrase === undefined || typeof passphrase === 'string')
     )
   }
-  return (value) => (Array.isArray(value) ? value.every(one) : one(value))
+  return (value) => (Array.isArray(value) ? value.every(entry) : material(value))
+}
+
+/**
+ * Copies the entries of a `key` or `pfx` array that are objects into plain objects, reading each
+ * once, so the entry that is checked, forwarded and scrubbed is the same one and a getter on the
+ * host's object cannot answer differently later. Strings and binary data are kept as they are.
+ *
+ * @param tls - The copy of the option, whose `key` or `pfx` may be an array.
+ * @param name - `key` or `pfx`.
+ * @param field - The property that holds the material: `pem` or `buf`.
+ */
+function copyTlsEntries(tls: object, name: 'key' | 'pfx', field: 'pem' | 'buf'): void {
+  const value: unknown = Reflect.get(tls, name)
+  if (!Array.isArray(value)) {
+    return
+  }
+  Reflect.set(
+    tls,
+    name,
+    value.map((item: unknown) => {
+      if (typeof item !== 'object' || item === null || ArrayBuffer.isView(item)) {
+        return item
+      }
+      const passphrase: unknown = Reflect.get(item, 'passphrase')
+      return passphrase === undefined
+        ? { [field]: Reflect.get(item, field) }
+        : { [field]: Reflect.get(item, field), passphrase }
+    })
+  )
 }
 
 /** What each forwarded key must be, and the words the refusal uses for it. */
@@ -211,6 +243,10 @@ export function readSmtpOptions(options: SmtpEmailProviderOptions): SmtpEmailPro
   if (own.tls !== undefined) {
     refuseUnknownTlsKeys(own.tls)
     own.tls = readOptionKeys(own.tls, SMTP_TLS_KEYS)
+    if (typeof own.tls === 'object' && own.tls !== null && !Array.isArray(own.tls)) {
+      copyTlsEntries(own.tls, 'key', 'pem')
+      copyTlsEntries(own.tls, 'pfx', 'buf')
+    }
     assertTlsValues(own.tls)
   }
   return own

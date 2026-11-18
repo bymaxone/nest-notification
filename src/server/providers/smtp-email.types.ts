@@ -10,7 +10,7 @@ export interface SmtpTlsKeyEntry {
   /** The key, in PEM form. */
   pem: string | Buffer
   /** The passphrase that decrypts it. A secret: it is never printed. */
-  passphrase?: string
+  passphrase?: string | undefined
 }
 
 /** A PKCS#12 bundle with its own passphrase, as Node takes it in `tls.pfx`. */
@@ -18,7 +18,7 @@ export interface SmtpTlsPfxEntry {
   /** The bundle. */
   buf: string | Buffer
   /** The passphrase that decrypts it. A secret: it is never printed. */
-  passphrase?: string
+  passphrase?: string | undefined
 }
 
 /**
@@ -53,17 +53,17 @@ export interface SmtpTlsOptions {
   /** The client certificate chain, in PEM form. */
   cert?: string | Buffer | ReadonlyArray<string | Buffer>
   /**
-   * The private key of the client certificate, in PEM form: a string, a Buffer, an encrypted key
-   * with its own passphrase as `{ pem, passphrase }`, or an array of them.
+   * The private key of the client certificate, in PEM form: a string, a Buffer, or an array whose
+   * entries are those or an encrypted key with its own passphrase as `{ pem, passphrase }`.
    */
-  key?: string | Buffer | SmtpTlsKeyEntry | ReadonlyArray<string | Buffer | SmtpTlsKeyEntry>
+  key?: string | Buffer | ReadonlyArray<string | Buffer | SmtpTlsKeyEntry>
   /** The passphrase of an encrypted `key` or `pfx`. A secret: it is never printed. */
   passphrase?: string
   /**
-   * The client certificate and key as a PKCS#12 bundle: a string, a Buffer, a bundle with its own
-   * passphrase as `{ buf, passphrase }`, or an array of them.
+   * The client certificate and key as a PKCS#12 bundle: a string, a Buffer, or an array whose
+   * entries are those or a bundle with its own passphrase as `{ buf, passphrase }`.
    */
-  pfx?: string | Buffer | SmtpTlsPfxEntry | ReadonlyArray<string | Buffer | SmtpTlsPfxEntry>
+  pfx?: string | Buffer | ReadonlyArray<string | Buffer | SmtpTlsPfxEntry>
 }
 
 /**
