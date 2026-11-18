@@ -13,11 +13,13 @@ import { randomUUID } from 'node:crypto'
 
 import { Injectable, Logger } from '@nestjs/common'
 
+import { NOTIFICATION_LOG_EVENTS } from '../constants/log-events.constants'
 import type {
   EmailSendOptions,
   EmailSendResult,
   IEmailProvider
 } from '../interfaces/email-provider.interface'
+import { logEvent } from '../utils/log-event'
 
 /**
  * Reduce an email address to a first-initial mask (`m***@example.com`).
@@ -61,7 +63,7 @@ export class NoOpEmailProvider implements IEmailProvider {
   async send(options: EmailSendOptions): Promise<EmailSendResult> {
     const recipients = Array.isArray(options.to) ? options.to : [options.to]
     const masked = recipients.map(maskEmail).join(',')
-    this.logger.debug(`[NoOpEmail] to=${masked}`)
+    logEvent(this.logger, 'debug', NOTIFICATION_LOG_EVENTS.NOOP_EMAIL, `[NoOpEmail] to=${masked}`)
     return { messageId: `noop-${randomUUID()}` }
   }
 }

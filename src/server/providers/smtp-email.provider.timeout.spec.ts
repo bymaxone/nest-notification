@@ -12,6 +12,7 @@ import { isUnavailableError } from '../utils/availability'
 
 import { baseOptions } from './__tests__/smtp-email-provider.fixtures'
 import { SmtpEmailProvider } from './smtp-email.provider'
+import { loggedText } from '../__tests__/logged'
 
 // `mock`-prefixed names are allowed inside the hoisted jest.mock factory.
 const mockSendMail = jest.fn()
@@ -243,7 +244,7 @@ describe('SmtpEmailProvider send timeout', () => {
 
     await jest.advanceTimersByTimeAsync(10)
 
-    const text = `${(outcome[0] as [string, Error])[1].message} ${String(warn.mock.calls[0]?.[0])}`
+    const text = `${(outcome[0] as [string, Error])[1].message} ${loggedText(warn.mock.calls[0])}`
     expect(text).not.toMatch(/smtp-user-x|smtp-pass-x|123456/)
   })
 

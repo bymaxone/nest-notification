@@ -28,6 +28,7 @@ import {
 } from '../bymax-notification.constants'
 import type { ResolvedNotificationOptions, ResolvedOtpOptions } from '../config/resolved-options'
 import { CANONICAL_EMAIL_TEMPLATES } from '../constants/canonical-templates'
+import { NOTIFICATION_LOG_EVENTS } from '../constants/log-events.constants'
 import { NotificationException } from '../errors/notification-exception'
 import type {
   INotificationLogRepository,
@@ -42,6 +43,7 @@ import { isCodeDigest } from '../utils/code-digest'
 import { generateOtpCode } from '../utils/code-generator'
 import { cooldownExpiresAt, toRetryAfterHeader } from '../utils/cooldown-helpers'
 import { describeError } from '../utils/describe-error'
+import { logEvent } from '../utils/log-event'
 import { normalizeRecipient } from '../utils/recipient'
 import { assertSingleMailbox } from '../utils/recipient-list'
 import {
@@ -429,7 +431,10 @@ export class OtpService implements OnModuleInit {
       return
     }
     this.warnedFailuresNotCarried = true
-    this.logger.warn(
+    logEvent(
+      this.logger,
+      'warn',
+      NOTIFICATION_LOG_EVENTS.OTP_FAILURES_NOT_CARRIED,
       `[BYMAX_NOTIFICATION_OTP_FAILURES_NOT_CARRIED] The ${storage.name} OTP storage does not implement ` +
         'getFailures, recordFailure and clearFailures, so issuing a new code gives it a fresh attempt budget; ' +
         'NIST SP 800-63B-4 §3.1.3.2 says generating a new secret SHALL NOT reset the failed authentication count. ' +
@@ -460,7 +465,10 @@ export class OtpService implements OnModuleInit {
       // The fallback is `en`, so for an `en` host there is one locale to name, not two.
       const resolution =
         locale === 'en' ? "does not resolve for 'en'" : `resolves for neither '${locale}' nor 'en'`
-      this.logger.warn(
+      logEvent(
+        this.logger,
+        'warn',
+        NOTIFICATION_LOG_EVENTS.OTP_TEMPLATE_NOT_RESOLVED,
         `[${TEMPLATE_WARNING_CODE}] The email template '${DEFAULT_OTP_TEMPLATE}' ${resolution}, ` +
           'so the first generate() that delivers by email fails with TEMPLATE_NOT_FOUND. ' +
           `Register '${DEFAULT_OTP_TEMPLATE}' in your template renderer (DefaultTemplateRenderer takes it under 'otp_code::en'). ` +
@@ -468,7 +476,10 @@ export class OtpService implements OnModuleInit {
           'or if your renderer loads its templates after startup.'
       )
     } catch (error) {
-      this.logger.warn(
+      logEvent(
+        this.logger,
+        'warn',
+        NOTIFICATION_LOG_EVENTS.OTP_TEMPLATE_NOT_RESOLVED,
         `[${TEMPLATE_WARNING_CODE}] Could not check whether the email template '${DEFAULT_OTP_TEMPLATE}' resolves ` +
           `(${escapeAuditString(describeError(error))}); if it does not, the first generate() that delivers by email fails with TEMPLATE_NOT_FOUND.`
       )

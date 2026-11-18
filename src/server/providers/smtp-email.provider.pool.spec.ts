@@ -466,7 +466,14 @@ describe('SmtpEmailProvider close', () => {
 
     await expect(provider.close()).resolves.toBeUndefined()
 
-    expect(warn.mock.calls).toEqual([['[SMTP_CLOSE_FAILED] The transport could not be closed.']])
+    expect(warn.mock.calls).toEqual([
+      [
+        {
+          event: 'NOTIFICATION_SMTP_CLOSE_FAILED',
+          message: '[SMTP_CLOSE_FAILED] The transport could not be closed.'
+        }
+      ]
+    ])
     warn.mockRestore()
   })
 

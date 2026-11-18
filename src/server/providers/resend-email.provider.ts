@@ -15,6 +15,7 @@
 
 import { Injectable, Logger } from '@nestjs/common'
 
+import { NOTIFICATION_LOG_EVENTS } from '../constants/log-events.constants'
 import type {
   EmailSendOptions,
   EmailSendResult,
@@ -24,6 +25,7 @@ import { escapeAuditString } from '../utils/audit-escape'
 import { errorCodeOf } from '../utils/availability'
 import { assertBodyParts } from '../utils/email-body'
 import { loadOptionalPeer } from '../utils/load-optional-peer'
+import { logEvent } from '../utils/log-event'
 import { assertOptionsObject, readOptionKeys } from '../utils/read-options'
 import {
   REDACTED_VALUE,
@@ -295,12 +297,22 @@ export class ResendEmailProvider implements IEmailProvider {
       // The body carries a credential, so nothing the API wrote may reach a
       // log line or the thrown message. Unlike SMTP there is no reply code to
       // fall back on here, so the failure publishes only that it happened.
-      this.logger.warn('[RESEND_SEND_FAILED] (provider text withheld)')
+      logEvent(
+        this.logger,
+        'warn',
+        NOTIFICATION_LOG_EVENTS.RESEND_SEND_FAILED,
+        '[RESEND_SEND_FAILED] (provider text withheld)'
+      )
       return withCode(new Error('Resend send failed'), code)
     }
     // Surface only the provider's message — never the email body.
     const reason = this.scrubSendError(rawMessage, options)
-    this.logger.warn(`[RESEND_SEND_FAILED] ${escapeAuditString(reason)}`)
+    logEvent(
+      this.logger,
+      'warn',
+      NOTIFICATION_LOG_EVENTS.RESEND_SEND_FAILED,
+      `[RESEND_SEND_FAILED] ${escapeAuditString(reason)}`
+    )
     return withCode(new Error(`Resend send failed: ${reason}`), code)
   }
 

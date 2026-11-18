@@ -13,6 +13,7 @@ import { Logger } from '@nestjs/common'
 import type { EmailSendOptions } from '../interfaces/email-provider.interface'
 
 import { ResendEmailProvider } from './resend-email.provider'
+import { loggedText } from '../__tests__/logged'
 
 const mockSend = jest.fn()
 const mockResendCtor = jest.fn()
@@ -211,7 +212,7 @@ describe('ResendEmailProvider timeout', () => {
       .catch((error: unknown) => error)
 
     expect(String((caught as Error).message)).not.toMatch(/re_SECRETKEY|123456/)
-    expect(String(warn.mock.calls[0]?.[0])).toBe(
+    expect(loggedText(warn.mock.calls[0])).toBe(
       '[RESEND_SEND_FAILED] Resend request timed out after 20 ms'
     )
   })

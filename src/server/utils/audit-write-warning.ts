@@ -14,6 +14,9 @@
  */
 import type { Logger } from '@nestjs/common'
 
+import { NOTIFICATION_LOG_EVENTS } from '../constants/log-events.constants'
+import { logEvent } from './log-event'
+
 /** The shortest time between two warnings of one channel. */
 export const AUDIT_WARNING_INTERVAL_MS = 60_000
 
@@ -99,7 +102,10 @@ export class AuditWriteWarning {
     const similar = this.suppressed > 0 ? `; ${this.suppressed} similar since the last line` : ''
     this.lastLoggedAt = now
     this.suppressed = 0
-    this.logger.warn(
+    logEvent(
+      this.logger,
+      'warn',
+      NOTIFICATION_LOG_EVENTS.AUDIT_WRITE_FAILED,
       `[${WARNING_CODE}] An audit entry could not be written by the ${this.channel} channel ` +
         `(${reasonOf(error)}${similar}); ` +
         "the operation's result is unaffected because audit.swallowErrors is true."

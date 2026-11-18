@@ -22,6 +22,7 @@
 import { Injectable, Logger } from '@nestjs/common'
 import type { OnModuleDestroy } from '@nestjs/common'
 
+import { NOTIFICATION_LOG_EVENTS } from '../constants/log-events.constants'
 import type {
   EmailAttachment,
   EmailSendOptions,
@@ -34,6 +35,7 @@ import { extractDeliveryStatus, withoutDeclaredValues } from '../utils/delivery-
 import { describeError, UNPRINTABLE_ERROR } from '../utils/describe-error'
 import { assertBodyParts } from '../utils/email-body'
 import { loadOptionalPeer } from '../utils/load-optional-peer'
+import { logEvent } from '../utils/log-event'
 import { assertPort } from '../utils/port-option'
 import { collectEchoedExcerpts, readRedactedMessage, redactValues } from '../utils/redact'
 import { assertTimerMs } from '../utils/timer-option'
@@ -312,7 +314,12 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
       transport.close?.()
     } catch {
       // What the failure carries can hold the relay's words or a credential: log a fixed line only.
-      this.logger.warn('[SMTP_CLOSE_FAILED] The transport could not be closed.')
+      logEvent(
+        this.logger,
+        'warn',
+        NOTIFICATION_LOG_EVENTS.SMTP_CLOSE_FAILED,
+        '[SMTP_CLOSE_FAILED] The transport could not be closed.'
+      )
     }
   }
 
@@ -370,7 +377,12 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
       return this.withheldFailure(raw, code, redactValuesList)
     }
     const reason = this.scrubTransportError(raw, payload, redactValuesList)
-    this.logger.warn(`[SMTP_SEND_FAILED] ${escapeAuditString(reason)}`)
+    logEvent(
+      this.logger,
+      'warn',
+      NOTIFICATION_LOG_EVENTS.SMTP_SEND_FAILED,
+      `[SMTP_SEND_FAILED] ${escapeAuditString(reason)}`
+    )
     return Object.assign(
       new Error(`SMTP send failed: ${reason}`),
       code === undefined ? {} : { code }
@@ -394,7 +406,12 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
   ): Error {
     const { status, enhanced } = withoutDeclaredValues(extractDeliveryStatus(raw), redactValuesList)
     const codes = [status, enhanced].filter((reply) => reply !== undefined).join(' ')
-    this.logger.warn(`[SMTP_SEND_FAILED] ${codes || 'no reply code'}`)
+    logEvent(
+      this.logger,
+      'warn',
+      NOTIFICATION_LOG_EVENTS.SMTP_SEND_FAILED,
+      `[SMTP_SEND_FAILED] ${codes || 'no reply code'}`
+    )
     // The codes ride on the thrown error rather than in its message: the message is a fixed label, so
     // `EmailService` could not recover them by parsing it, and interpolating them would put digits
     // back into a string a log rule then has to scan.

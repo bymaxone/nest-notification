@@ -33,6 +33,7 @@ import { resolveOptions } from './config/resolved-options'
 import type { ResolvedNotificationOptions } from './config/resolved-options'
 import { snapshotOptions } from './config/snapshot-options'
 import { validateOptions } from './config/validate-options'
+import { NOTIFICATION_LOG_EVENTS } from './constants/log-events.constants'
 import type { IEmailProvider } from './interfaces/email-provider.interface'
 import type { IEmailTemplateRenderer } from './interfaces/email-template-renderer.interface'
 import type { INotificationLogRepository } from './interfaces/notification-log-repository.interface'
@@ -47,6 +48,7 @@ import { NoOpNotificationLogRepository } from './providers/no-op-notification-lo
 import { EmailService } from './services/email.service'
 import { NotificationService } from './services/notification.service'
 import { OtpService } from './services/otp.service'
+import { logEvent } from './utils/log-event'
 
 /** A DI provider that carries a `provide` token (excludes bare-class providers). */
 type TokenProvider = ClassProvider | ValueProvider | FactoryProvider
@@ -79,7 +81,10 @@ export class BymaxNotificationModule {
    */
   private static warnPlaintextCodes(resolved: Readonly<ResolvedNotificationOptions>): void {
     if (resolved.otp && !resolved.otp.digestCode) {
-      BymaxNotificationModule.logger.warn(
+      logEvent(
+        BymaxNotificationModule.logger,
+        'warn',
+        NOTIFICATION_LOG_EVENTS.PLAINTEXT_OTP_CODES,
         '[BYMAX_NOTIFICATION_PLAINTEXT_OTP_CODES] otp.codeSecret is not set: OTP codes are stored in plaintext. ' +
           'Set otp.codeSecret (at least 32 bytes) to store an HMAC-SHA-256 digest instead.'
       )
@@ -101,7 +106,10 @@ export class BymaxNotificationModule {
     this.warnPlaintextCodes(resolved)
     const tokenProviders = this.buildProviders(own, resolved)
     const serviceProviders = this.buildServiceProviders(resolved)
-    this.logger.log(
+    logEvent(
+      this.logger,
+      'log',
+      NOTIFICATION_LOG_EVENTS.BOOTSTRAP_OK,
       `[BYMAX_NOTIFICATION_MODULE_BOOTSTRAP_OK] Initialized with channels: ${activeChannels(resolved).join(', ')}`
     )
     return {

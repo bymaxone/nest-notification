@@ -18,6 +18,7 @@ import { makeAudit, makeProvider, makeRenderer } from './__tests__/email-service
 import { dummyRepo } from './__tests__/otp-service.fixtures'
 import { EmailService } from './email.service'
 import { OtpService } from './otp.service'
+import { loggedEvent, loggedText } from '../__tests__/logged'
 
 const CODE = 'BYMAX_NOTIFICATION_OTP_TEMPLATE_NOT_RESOLVED'
 
@@ -84,7 +85,7 @@ describe('OtpService startup warning for an unresolved default template', () => 
   })
 
   const ours = (): string[] =>
-    warn.mock.calls.map((call) => String(call[0])).filter((line) => line.includes(CODE))
+    warn.mock.calls.map((call) => loggedText(call)).filter((line) => line.includes(CODE))
 
   // The case the warning exists for.
   it('should warn when otp_code resolves in neither the default locale nor en', async () => {
@@ -237,7 +238,10 @@ describe('OtpService startup warning for an unresolved default template', () => 
     service.onModuleInit()
     await settle()
 
-    const lines = warn.mock.calls.map((call) => String(call[0]))
+    const lines = warn.mock.calls.map((call) => loggedText(call))
+    expect(warn.mock.calls.map((call) => loggedEvent(call))).toContain(
+      'NOTIFICATION_OTP_FAILURES_NOT_CARRIED'
+    )
     expect(lines.filter((line) => line.includes('OTP_FAILURES_NOT_CARRIED'))).toHaveLength(1)
     expect(ours()).toHaveLength(1)
   })

@@ -473,6 +473,25 @@ Call `app.enableShutdownHooks()`, or close the application yourself, and Nest ca
 
 Without `otp.codeSecret`, codes are stored in plaintext and the startup warning `BYMAX_NOTIFICATION_PLAINTEXT_OTP_CODES` says so. In production set it to a secret of at least 32 bytes; see [Stored codes are keyed digests](#stored-codes-are-keyed-digests-when-you-set-otpcodesecret).
 
+## 📈 Observability
+
+### Log events
+
+Every operational line the library writes carries an `event` field and, in `message`, the text it has always had. With `@bymax-one/nest-logger` 1.4.23 or later `event` is a field of the entry, so match on it; with the default Nest logger the line prints as the object. The text, bracketed tag included, is kept word for word inside `message`, so a match on the text keeps working. An event names what happened and never what it happened to: no recipient, identifier or error text is a field of it.
+
+| Event                                    | Level   | When                                                                                       | Tag in the text                                  |
+| ---------------------------------------- | ------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------ |
+| `NOTIFICATION_BOOTSTRAP_OK`              | `log`   | The module was built; the message names the active channels.                               | `[BYMAX_NOTIFICATION_MODULE_BOOTSTRAP_OK]`       |
+| `NOTIFICATION_PLAINTEXT_OTP_CODES`       | `warn`  | `forRoot` with an `otp` channel and no `otp.codeSecret`.                                   | `[BYMAX_NOTIFICATION_PLAINTEXT_OTP_CODES]`       |
+| `NOTIFICATION_CHANNEL_NOT_USABLE`        | `warn`  | A configured channel's provider or storage reports `isConfigured()` as `false` at startup. | `[BYMAX_NOTIFICATION_CHANNEL_NOT_USABLE]`        |
+| `NOTIFICATION_OTP_FAILURES_NOT_CARRIED`  | `warn`  | The OTP storage lacks `getFailures`, `recordFailure` and `clearFailures`.                  | `[BYMAX_NOTIFICATION_OTP_FAILURES_NOT_CARRIED]`  |
+| `NOTIFICATION_OTP_TEMPLATE_NOT_RESOLVED` | `warn`  | The default OTP email template does not resolve, or could not be checked.                  | `[BYMAX_NOTIFICATION_OTP_TEMPLATE_NOT_RESOLVED]` |
+| `NOTIFICATION_AUDIT_WRITE_FAILED`        | `warn`  | An audit entry could not be written and the failure was swallowed (rate limited).          | `[BYMAX_NOTIFICATION_AUDIT_WRITE_FAILED]`        |
+| `NOTIFICATION_RESEND_SEND_FAILED`        | `warn`  | The Resend API call failed.                                                                | `[RESEND_SEND_FAILED]`                           |
+| `NOTIFICATION_SMTP_SEND_FAILED`          | `warn`  | The SMTP send failed.                                                                      | `[SMTP_SEND_FAILED]`                             |
+| `NOTIFICATION_SMTP_CLOSE_FAILED`         | `warn`  | The SMTP transport could not be closed at shutdown.                                        | `[SMTP_CLOSE_FAILED]`                            |
+| `NOTIFICATION_NOOP_EMAIL`                | `debug` | `NoOpEmailProvider` recorded a send, with the recipient masked.                            | `[NoOpEmail]`                                    |
+
 ## ⚙️ Configuration
 
 Configure via `forRoot(options)` or `forRootAsync({ useFactory })`. **At least one channel must be configured**, and configuring a channel the library does not implement throws at startup rather than failing on the first send. The full reference is in [`docs/technical_specification.md` §4](./docs/technical_specification.md); the most-used options:

@@ -11,6 +11,7 @@ import * as vm from 'node:vm'
 import { NotificationException } from '../errors/notification-exception'
 
 import { AUDIT_WARNING_INTERVAL_MS, AuditWriteWarning } from './audit-write-warning'
+import { loggedEvent, loggedText } from '../__tests__/logged'
 
 const CODE = 'BYMAX_NOTIFICATION_AUDIT_WRITE_FAILED'
 
@@ -33,7 +34,7 @@ describe('AuditWriteWarning', () => {
     jest.restoreAllMocks()
   })
 
-  const lines = (): string[] => warn.mock.calls.map((call) => String(call[0]))
+  const lines = (): string[] => warn.mock.calls.map((call) => loggedText(call))
 
   /** Warns once about `error` on a fresh instance and returns the line. */
   const warnAbout = (error: unknown, channel: 'otp' | 'email' | 'interceptor' = 'otp'): string => {
@@ -43,6 +44,14 @@ describe('AuditWriteWarning', () => {
   }
 
   describe('the line', () => {
+    it('should carry the audit write event beside the text', () => {
+      warn.mockClear()
+
+      new AuditWriteWarning(new Logger('Test'), 'otp').warn(new Error('store down'))
+
+      expect(loggedEvent(warn.mock.calls[0])).toBe('NOTIFICATION_AUDIT_WRITE_FAILED')
+    })
+
     it('should log the documented line for the first failure', () => {
       expect(warnAbout(new Error('store down'))).toBe(lineFor('otp', 'Error'))
     })
