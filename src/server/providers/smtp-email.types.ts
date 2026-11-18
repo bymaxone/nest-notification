@@ -22,7 +22,7 @@ export interface SmtpTlsOptions {
   /** SNI server name, when it differs from `host`. */
   servername?: string
   /** Additional trusted CA certificate(s), in PEM form. */
-  ca?: string | string[]
+  ca?: string | Buffer | ReadonlyArray<string | Buffer>
   /** The lowest TLS version the session may negotiate. */
   minVersion?: 'TLSv1' | 'TLSv1.1' | 'TLSv1.2' | 'TLSv1.3'
   /** The highest TLS version the session may negotiate. */

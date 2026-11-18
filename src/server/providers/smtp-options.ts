@@ -111,6 +111,62 @@ function refuseUnknownTlsKeys(tls: unknown): void {
   }
 }
 
+/** The versions a session may be bounded to. */
+const TLS_VERSIONS: readonly string[] = ['TLSv1', 'TLSv1.1', 'TLSv1.2', 'TLSv1.3']
+
+/** PEM material as the transport takes it: a string, binary data, or an array of them. */
+function isTlsMaterial(value: unknown): boolean {
+  const one = (item: unknown): boolean => typeof item === 'string' || ArrayBuffer.isView(item)
+  return Array.isArray(value) ? value.every(one) : one(value)
+}
+
+const isBoolean = (value: unknown): boolean => typeof value === 'boolean'
+const isString = (value: unknown): boolean => typeof value === 'string'
+const isFunction = (value: unknown): boolean => typeof value === 'function'
+const isVersion = (value: unknown): boolean =>
+  typeof value === 'string' && TLS_VERSIONS.includes(value)
+
+/** The words a refusal uses for a version bound and for PEM material. */
+const VERSION_WORDS = 'one of TLSv1, TLSv1.1, TLSv1.2 or TLSv1.3'
+const MATERIAL_WORDS = 'a string, a Buffer or an array of them'
+
+/** What each forwarded key must be, and the words the refusal uses for it. */
+const TLS_VALUE_RULES: ReadonlyArray<
+  readonly [(typeof SMTP_TLS_KEYS)[number], (value: unknown) => boolean, string]
+> = [
+  ['rejectUnauthorized', isBoolean, 'a boolean'],
+  ['servername', isString, 'a string'],
+  ['ciphers', isString, 'a string'],
+  ['passphrase', isString, 'a string'],
+  ['minVersion', isVersion, VERSION_WORDS],
+  ['maxVersion', isVersion, VERSION_WORDS],
+  ['ca', isTlsMaterial, MATERIAL_WORDS],
+  ['cert', isTlsMaterial, MATERIAL_WORDS],
+  ['key', isTlsMaterial, MATERIAL_WORDS],
+  ['pfx', isTlsMaterial, MATERIAL_WORDS],
+  ['checkServerIdentity', isFunction, 'a function']
+]
+
+/**
+ * Refuses a forwarded `tls` value of the wrong type, naming the key and the type it needs. The
+ * message never carries the value, which may be a passphrase, and checking it here means the
+ * transport's own error, which can quote what it was given, is not the one that reports it.
+ *
+ * @param tls - The copy of the option, whose keys were read once.
+ * @throws Error When a key that is set holds a value of the wrong type.
+ */
+function assertTlsValues(tls: unknown): void {
+  if (typeof tls !== 'object' || tls === null || Array.isArray(tls)) {
+    return
+  }
+  for (const [key, accepts, expected] of TLS_VALUE_RULES) {
+    const value: unknown = Reflect.get(tls, key)
+    if (value !== undefined && !accepts(value)) {
+      throw new Error(`SmtpEmailProvider: tls.${key} must be ${expected}`)
+    }
+  }
+}
+
 /**
  * Copies the options of the provider, reading every declared key once.
  *
@@ -133,6 +189,7 @@ export function readSmtpOptions(options: SmtpEmailProviderOptions): SmtpEmailPro
   if (own.tls !== undefined) {
     refuseUnknownTlsKeys(own.tls)
     own.tls = readOptionKeys(own.tls, SMTP_TLS_KEYS)
+    assertTlsValues(own.tls)
   }
   return own
 }

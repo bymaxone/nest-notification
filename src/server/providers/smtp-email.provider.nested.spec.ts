@@ -162,6 +162,70 @@ describe('SmtpEmailProvider options that are objects', () => {
     )
   })
 
+  // The value of a forwarded key is checked when the provider is built, so the transport's own
+  // error, which can carry a value, never has to be the one that reports a wrong type. The message
+  // names the key and the type it needs, and never prints what was given.
+  it.each([
+    ['rejectUnauthorized', 'yes', 'a boolean'],
+    ['rejectUnauthorized', 1, 'a boolean'],
+    ['servername', 5, 'a string'],
+    ['ciphers', ['A'], 'a string'],
+    ['passphrase', 12345, 'a string'],
+    ['passphrase', { toString: () => 'SECRET-PHRASE' }, 'a string'],
+    ['minVersion', 'TLSv1.4', 'one of TLSv1, TLSv1.1, TLSv1.2 or TLSv1.3'],
+    ['maxVersion', 12, 'one of TLSv1, TLSv1.1, TLSv1.2 or TLSv1.3'],
+    ['ca', 5, 'a string, a Buffer or an array of them'],
+    ['cert', { pem: 'x' }, 'a string, a Buffer or an array of them'],
+    ['key', [5], 'a string, a Buffer or an array of them'],
+    ['pfx', true, 'a string, a Buffer or an array of them'],
+    ['checkServerIdentity', 'always', 'a function']
+  ])('should refuse tls.%s of %p naming the key and the type', (key, value, type) => {
+    expect(() => new SmtpEmailProvider({ host: 'h', tls: { [key]: value } as never })).toThrow(
+      `SmtpEmailProvider: tls.${key} must be ${type}`
+    )
+  })
+
+  it('should never print the value it refuses', () => {
+    const attempt = (): unknown =>
+      new SmtpEmailProvider({ host: 'h', tls: { passphrase: ['SECRET-PHRASE'] } as never })
+
+    expect(attempt).toThrow('SmtpEmailProvider: tls.passphrase must be a string')
+    expect(attempt).not.toThrow(/SECRET/)
+  })
+
+  it.each([
+    ['rejectUnauthorized', false],
+    ['servername', 'relay.example'],
+    ['ciphers', 'TLS_AES_256_GCM_SHA384'],
+    ['passphrase', 'phrase'],
+    ['minVersion', 'TLSv1'],
+    ['maxVersion', 'TLSv1.3'],
+    ['ca', 'pem'],
+    ['ca', Buffer.from('pem')],
+    ['ca', ['pem', Buffer.from('pem')]],
+    ['cert', new Uint8Array([1])],
+    ['key', ['pem']],
+    ['pfx', Buffer.from('pfx')],
+    ['checkServerIdentity', () => undefined]
+  ])('should accept tls.%s of %p', (key, value) => {
+    expect(() => new SmtpEmailProvider({ host: 'h', tls: { [key]: value } as never })).not.toThrow()
+  })
+
+  it('should read a value once, so the one that was checked is the one that is kept', async () => {
+    let reads = 0
+    const tls = {
+      get minVersion(): string {
+        reads += 1
+        return reads === 1 ? 'TLSv1.3' : 'not-a-version'
+      }
+    }
+
+    const transport = await transportOf({ host: 'h', tls: tls as never })
+
+    expect((transport.tls as { minVersion: string }).minVersion).toBe('TLSv1.3')
+    expect(reads).toBe(1)
+  })
+
   // A tls that is not an object has no keys to refuse; it is passed through to the transport.
   it.each(['x', 5, true, []])('should leave a tls of %p to the transport', async (value) => {
     const transport = await transportOf({ host: 'h', tls: value as never })

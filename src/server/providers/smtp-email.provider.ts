@@ -451,7 +451,10 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
     const encoded = (secrets.length === 2 ? [...secrets, plainToken] : secrets).map((value) =>
       Buffer.from(value, 'utf-8').toString('base64')
     )
-    return [...secrets, ...encoded]
+    // The passphrase of a client key is secret too, and a transport error can quote the options.
+    const { passphrase } = (this.#options.tls ?? {}) as { passphrase?: unknown }
+    const keyPassphrase = typeof passphrase === 'string' && passphrase !== '' ? [passphrase] : []
+    return [...secrets, ...encoded, ...keyPassphrase]
   }
 
   /**
