@@ -11,6 +11,8 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 ## [Unreleased]
 
+## [1.4.16] - 2026-11-18
+
 ### Added
 
 - **Metrics, spans and a readiness check, in a new optional subpath.**
@@ -63,17 +65,19 @@ the entries that carry one, is the compatibility contract — read it, not the n
 - **The `tls` passphrase is scrubbed from a transport error.** A transport error that quotes the
   options carried the passphrase, and one carried by a `key` or `pfx` entry, into the thrown message
   and the log line, as it did the user and the password before; they are now replaced like them. Measured with a stand-in transport that quotes its
-  options: 1.4.15 threw a message holding the passphrase, and this release throws `[redacted]`.
+  options: 1.4.15 threw a message holding the passphrase, and this release writes `[redacted]` in its place.
 
 #### Apply to a derived backend
 
-The declarations gain `INotificationObserver`, its event types, `BYMAX_NOTIFICATION_OBSERVER` and
-`SmtpEmailProvider.verify()`; the constructors of `EmailService` and `OtpService` take an optional last
-parameter, which only matters if you build them by hand, and `SmtpTransportLike` gains an optional `verify`.
+The declarations gain `INotificationObserver`, its event types (`NotificationSendEvent`,
+`NotificationOtpEvent`, `NotificationSpanAttributes` and the name unions), `BYMAX_NOTIFICATION_OBSERVER`
+and `SmtpEmailProvider.verify()`, and the package gains the `./observability` subpath with its own
+declarations; the constructors of `EmailService` and `OtpService` take an optional last parameter, the
+observer, which only matters if you build them by hand. An `IEmailProvider` of your own needs no change.
 A log line is now an object where it was a string: with `@bymax-one/nest-logger` 1.4.23 or later `event` and
 `message` are fields of the entry, so match on `event`; with the default Nest logger the line prints as the
 object, and a custom logger that read the first argument as a string must read `message`. A match on the
-text of the Resend, SMTP or OTP template-check lines must read `err.message`. The package still
+provider's or renderer's own error text in the Resend, SMTP or OTP template-check lines must read `err.message`. The package still
 ships no dependencies, and the three new peers are optional. `GlobalOptions.redisNamespace` is marked
 `@deprecated`: it never reached `RedisOtpStorage`, so pass `namespace` to that constructor; the option is
 removed in v2.0.
@@ -1573,7 +1577,8 @@ rejected at startup rather than failing on the first send.
 
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.4.15...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.4.16...HEAD
+[1.4.16]: https://github.com/bymaxone/nest-notification/compare/v1.4.15...v1.4.16
 [1.4.15]: https://github.com/bymaxone/nest-notification/compare/v1.4.14...v1.4.15
 [1.4.14]: https://github.com/bymaxone/nest-notification/compare/v1.4.13...v1.4.14
 [1.4.13]: https://github.com/bymaxone/nest-notification/compare/v1.4.12...v1.4.13

@@ -25,7 +25,11 @@ const config: Config = {
     // Runs a repository script on source snippets and touches no code in `src`, so it kills no
     // mutant; `pnpm test` and CI still run it.
     '<rootDir>/internal-members\\.spec\\.ts$',
-    '<rootDir>/check-api-surface\\.spec\\.ts$'
+    '<rootDir>/check-api-surface\\.spec\\.ts$',
+    // Reads the README as text and compiles the entry points as files to compare their exports
+    // with it; it imports nothing from `src` at run time, so it kills no mutant, and `pnpm test`
+    // and CI still run it.
+    '<rootDir>/readme-exports\\.spec\\.ts$'
   ]
 }
 
