@@ -11,7 +11,11 @@ const PEER_EXTERNALS = [
   /^rxjs\//,
   'ioredis',
   'resend',
-  'nodemailer'
+  'nodemailer',
+  // The observability entry's optional peers: metrics, readiness and traces.
+  /^@bymax-one\/nest-core/,
+  'prom-client',
+  /^@opentelemetry\//
 ]
 
 export default defineConfig([
@@ -67,6 +71,24 @@ export default defineConfig([
   // and imported by no runtime entry, so it never reaches a production bundle.
   {
     entry: { 'testing/index': 'src/testing/index.ts' },
+    format: ['esm', 'cjs'],
+    dts: true,
+    tsconfig: 'tsconfig.build.json',
+    outDir: 'dist',
+    outExtension: ({ format }) => ({ js: format === 'esm' ? '.mjs' : '.cjs' }),
+    external: PEER_EXTERNALS,
+    target: 'node24',
+    clean: false,
+    splitting: false,
+    treeshake: true,
+    sourcemap: false
+  },
+
+  // Observability entry — metrics, readiness and spans, for a host that has the optional peers
+  // (`@bymax-one/nest-core`, `prom-client`, `@opentelemetry/api`). Node-targeted, imported by no
+  // runtime entry, so a host that does not use it never loads a byte of it.
+  {
+    entry: { 'observability/index': 'src/observability/index.ts' },
     format: ['esm', 'cjs'],
     dts: true,
     tsconfig: 'tsconfig.build.json',

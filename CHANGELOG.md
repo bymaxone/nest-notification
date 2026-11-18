@@ -11,6 +11,40 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 ## [Unreleased]
 
+### Added
+
+- **Metrics, spans and a readiness check, in a new optional subpath.**
+  `@bymax-one/nest-notification/observability` publishes `bymax_notification_messages_total`
+  (`channel`, `outcome` of `sent`, `failed` or `rejected`), `bymax_notification_send_duration_seconds`
+  (`channel`) and `bymax_notification_otp_total` (`event` of `issued`, `verified`, `failed` or `locked`)
+  on the registry `@bymax-one/nest-core` serves; the spans `notification.send` and
+  `notification.otp.verify`; and `NotificationHealthIndicator`, which reports `up` or `down` for the email
+  channel and never sends a message. Register it with `NotificationObservabilityModule.register()`. It needs
+  the optional peers `@bymax-one/nest-core`, `prom-client` and `@opentelemetry/api`; the main entry imports
+  none of them, and without the module the services record nothing.
+- **`SmtpEmailProvider.verify()`.** Connects, reads the greeting, upgrades to TLS and logs in, and sends
+  nothing; a failure is answered in fixed words that carry nothing of the relay's text.
+- **`INotificationObserver` and `BYMAX_NOTIFICATION_OBSERVER`.** The contract the services report to, and its
+  token, for a host that wants its own metrics or tracing instead of the subpath's.
+
+### Changed
+
+- **Every operational log line carries an `event`.** The ten lines the library writes (the module bootstrap,
+  the plaintext-code and unusable-channel warnings, the OTP storage and template warnings, the audit write
+  failure, and the Resend, SMTP and no-op provider lines) are now written as `{ event, message }`, where
+  `event` is one of the `NOTIFICATION_*` names in the README's "Log events" table and `message` is the text
+  the line has always had, bracketed tag included.
+
+#### Apply to a derived backend
+
+The declarations gain `INotificationObserver`, its event types, `BYMAX_NOTIFICATION_OBSERVER` and
+`SmtpEmailProvider.verify()`; the constructors of `EmailService` and `OtpService` take an optional last
+parameter, which only matters if you build them by hand, and `SmtpTransportLike` gains an optional `verify`.
+A log line is now an object where it was a string: with `@bymax-one/nest-logger` 1.4.23 or later `event` and
+`message` are fields of the entry, so match on `event`; with the default Nest logger the line prints as the
+object, and a custom logger that read the first argument as a string must read `message`. The package still
+ships no dependencies, and the three new peers are optional.
+
 ## [1.4.15] - 2026-11-17
 
 ### Fixed

@@ -190,6 +190,11 @@ export interface SmtpSendPayload {
 /** The slim transport surface this adapter relies on. */
 export interface SmtpTransportLike {
   sendMail(payload: SmtpSendPayload): Promise<{ messageId?: string }>
+  /**
+   * Nodemailer's transports have it: connects, greets, upgrades and logs in, and sends nothing. The
+   * stand-ins of a test may not.
+   */
+  verify?(): Promise<true>
   /** Nodemailer's transports have it; the stand-ins of a test may not. */
   close?(): void
 }

@@ -289,6 +289,25 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
   }
 
   /**
+   * Checks that the relay answers, without sending a message: the transport connects, reads the
+   * greeting, upgrades to TLS when the options ask for it, and logs in when credentials are set.
+   * Meant for a readiness check, which should call it rarely and bound it with a timeout.
+   *
+   * The failure carries no text of the relay's or of Nodemailer's, which can quote the options, so
+   * what it reports is the same words every time.
+   *
+   * @throws Error `SmtpEmailProvider: the relay did not accept the connection`, whatever the cause.
+   */
+  async verify(): Promise<void> {
+    try {
+      const transport = await this.getTransport()
+      await transport.verify?.()
+    } catch {
+      throw new Error('SmtpEmailProvider: the relay did not accept the connection')
+    }
+  }
+
+  /**
    * Closes the transport this provider built, so a pooled connection does not keep the process
    * alive. A send already in flight on a pooled transport finishes; one still waiting for a
    * connection fails with `Connection pool was closed`. Idempotent, and it never builds a transport

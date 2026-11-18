@@ -17,7 +17,7 @@
  */
 
 import { execSync, spawnSync } from 'node:child_process'
-import { existsSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { resolve, dirname, join } from 'node:path'
@@ -44,7 +44,10 @@ const EXPECTED_DIST_FILES = [
   'dist/react/index.d.ts',
   'dist/testing/index.mjs',
   'dist/testing/index.cjs',
-  'dist/testing/index.d.ts'
+  'dist/testing/index.d.ts',
+  'dist/observability/index.mjs',
+  'dist/observability/index.cjs',
+  'dist/observability/index.d.ts'
 ]
 
 const EXPECTED_SERVER_EXPORTS = [
@@ -64,6 +67,15 @@ const EXPECTED_SERVER_EXPORTS = [
 
 const EXPECTED_SHARED_EXPORTS = ['NOTIFICATION_ERROR_CODES', 'DEFAULT_TTLS']
 const EXPECTED_TESTING_EXPORTS = ['otpStorageContract']
+// The observability entry needs optional peers a bare tarball does not carry, so it is read as text
+// and its export list is checked, not imported.
+const EXPECTED_OBSERVABILITY_EXPORTS = [
+  'NotificationObservabilityModule',
+  'NotificationMetrics',
+  'NotificationTracing',
+  'NotificationHealthIndicator',
+  'NOTIFICATION_METRIC_NAMES'
+]
 
 const ALLOWED_TARBALL_PATHS = ['package.json', 'README.md', 'CHANGELOG.md', 'LICENSE', 'dist/']
 
@@ -128,6 +140,20 @@ for (const name of EXPECTED_TESTING_EXPORTS) {
   typeof exported === 'function'
     ? pass(`cjs testing ${name}`)
     : fail(`Missing or non-callable CJS export (testing): ${name}`)
+}
+
+// The observability entry in both formats: the ESM file ends in one export statement listing its
+// names, and the CJS file assigns each name to `exports`.
+const observabilityEsm = readFileSync(resolve(PACKAGE.root, 'dist/observability/index.mjs'), 'utf8')
+const esmExportList = observabilityEsm.match(/export\s*\{([^}]*)\}\s*;?\s*$/)?.[1] ?? ''
+const observabilityCjs = readFileSync(resolve(PACKAGE.root, 'dist/observability/index.cjs'), 'utf8')
+for (const name of EXPECTED_OBSERVABILITY_EXPORTS) {
+  esmExportList.split(',').some((entry) => entry.trim() === name)
+    ? pass(`esm observability ${name}`)
+    : fail(`Missing ESM export (observability): ${name}`)
+  new RegExp(`exports\\.${name}\\b`).test(observabilityCjs)
+    ? pass(`cjs observability ${name}`)
+    : fail(`Missing CJS export (observability): ${name}`)
 }
 
 // -- 5. Tarball contents -----------------------------------------------------

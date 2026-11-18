@@ -64,6 +64,16 @@
         "default": "./dist/testing/index.cjs"
       }
     },
+    "./observability": {
+      "import": {
+        "types": "./dist/observability/index.d.ts",
+        "default": "./dist/observability/index.mjs"
+      },
+      "require": {
+        "types": "./dist/observability/index.d.cts",
+        "default": "./dist/observability/index.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "typesVersions": {
@@ -76,6 +86,9 @@
       ],
       "testing": [
         "./dist/testing/index.d.cts"
+      ],
+      "observability": [
+        "./dist/observability/index.d.cts"
       ]
     }
   },
@@ -118,7 +131,10 @@
     "ioredis": "^6.0.0",
     "resend": "^4.0.0 || ^5.0.0 || ^6.0.0",
     "nodemailer": "^10.1.4",
-    "react": "^19.0.0"
+    "react": "^19.0.0",
+    "@bymax-one/nest-core": "^1.1.0",
+    "@opentelemetry/api": "^1.9.0",
+    "prom-client": "^15.0.0"
   },
   "peerDependenciesMeta": {
     "ioredis": {
@@ -132,16 +148,27 @@
     },
     "react": {
       "optional": true
+    },
+    "@bymax-one/nest-core": {
+      "optional": true
+    },
+    "@opentelemetry/api": {
+      "optional": true
+    },
+    "prom-client": {
+      "optional": true
     }
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
+    "@bymax-one/nest-core": "1.6.7",
     "@commitlint/cli": "^21.2.1",
     "@commitlint/config-conventional": "^21.2.0",
     "@eslint/js": "^10.0.1",
     "@nestjs/common": "^11.1.20",
     "@nestjs/core": "^11.1.20",
     "@nestjs/testing": "^11.1.20",
+    "@opentelemetry/api": "^1.10.0",
     "@stryker-mutator/core": "^9",
     "@stryker-mutator/jest-runner": "^9",
     "@stryker-mutator/typescript-checker": "^9",
@@ -165,6 +192,7 @@
     "jest-environment-jsdom": "^30",
     "lint-staged": "^17.2.0",
     "prettier": "^3.8.3",
+    "prom-client": "^15.1.3",
     "react": "^19",
     "react-dom": "^19",
     "reflect-metadata": "^0.2.2",

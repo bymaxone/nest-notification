@@ -83,14 +83,15 @@ Everything that touches the outside world — the email transport, the OTP store
 
 ## 📦 Subpath Exports
 
-One package, four entry points — import only what your app needs:
+One package, five entry points — import only what your app needs:
 
-| Subpath     | Import                                 | Purpose                                                |               Peer deps                |
-| ----------- | -------------------------------------- | ------------------------------------------------------ | :------------------------------------: |
-| **Server**  | `@bymax-one/nest-notification`         | NestJS module, services, providers, errors, tokens     | NestJS 11 (+ your provider/store SDKs) |
-| **Shared**  | `@bymax-one/nest-notification/shared`  | Types + constants (error codes, TTLs)                  |                  None                  |
-| **React**   | `@bymax-one/nest-notification/react`   | `useOtpInput` + `useOtpCountdown` (UX/state only)      |                React 19                |
-| **Testing** | `@bymax-one/nest-notification/testing` | Executable `IOtpStorage` contract for your own storage |                  None                  |
+| Subpath           | Import                                       | Purpose                                                |                                 Peer deps                                  |
+| ----------------- | -------------------------------------------- | ------------------------------------------------------ | :------------------------------------------------------------------------: |
+| **Server**        | `@bymax-one/nest-notification`               | NestJS module, services, providers, errors, tokens     |                   NestJS 11 (+ your provider/store SDKs)                   |
+| **Shared**        | `@bymax-one/nest-notification/shared`        | Types + constants (error codes, TTLs)                  |                                    None                                    |
+| **React**         | `@bymax-one/nest-notification/react`         | `useOtpInput` + `useOtpCountdown` (UX/state only)      |                                  React 19                                  |
+| **Testing**       | `@bymax-one/nest-notification/testing`       | Executable `IOtpStorage` contract for your own storage |                                    None                                    |
+| **Observability** | `@bymax-one/nest-notification/observability` | Metrics, spans and a readiness check                   | `@bymax-one/nest-core`, `prom-client`, `@opentelemetry/api` (all optional) |
 
 ```
 shared (zero deps) ← server        react
@@ -492,6 +493,40 @@ Every operational line the library writes carries an `event` field and, in `mess
 | `NOTIFICATION_SMTP_CLOSE_FAILED`         | `warn`  | The SMTP transport could not be closed at shutdown.                                        | `[SMTP_CLOSE_FAILED]`                            |
 | `NOTIFICATION_NOOP_EMAIL`                | `debug` | `NoOpEmailProvider` recorded a send, with the recipient masked.                            | `[NoOpEmail]`                                    |
 
+### Metrics
+
+The `./observability` subpath publishes three Prometheus metrics on the registry that `@bymax-one/nest-core` serves at its scrape endpoint. It needs the optional peers `@bymax-one/nest-core` and `prom-client`; the main entry imports neither, and an application that never imports the subpath pays nothing.
+
+```ts
+import { Module } from '@nestjs/common'
+import { BymaxNotificationModule } from '@bymax-one/nest-notification'
+import type { BymaxNotificationModuleOptions } from '@bymax-one/nest-notification'
+import { NotificationObservabilityModule } from '@bymax-one/nest-notification/observability'
+
+declare const options: BymaxNotificationModuleOptions
+
+@Module({
+  imports: [BymaxNotificationModule.forRoot(options), NotificationObservabilityModule.register()]
+})
+export class AppModule {}
+```
+
+| Metric                                     | Type      | Labels                                                        | Meaning                                                                                                                                                                            |
+| ------------------------------------------ | --------- | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bymax_notification_messages_total`        | counter   | `channel` (`email`), `outcome` (`sent`, `failed`, `rejected`) | Sends the library was asked to make. `sent`: the provider accepted the message. `failed`: the provider did not. `rejected`: the library refused it before the provider was called. |
+| `bymax_notification_send_duration_seconds` | histogram | `channel` (`email`)                                           | Seconds from the call to its end, in the default Prometheus buckets.                                                                                                               |
+| `bymax_notification_otp_total`             | counter   | `event` (`issued`, `verified`, `failed`, `locked`)            | What happened to one-time codes: a code issued; a code accepted; a wrong code or none live; a recipient that ran into the attempt ceiling.                                         |
+
+A label value is always one of the listed ones: no recipient, tenant, identifier or error text is ever a label. Every series exists at zero from the first scrape, so a rate is defined from the start. A send that delivered the message and then failed to write its audit entry (with `audit.swallowErrors` off) counts as `sent`.
+
+### Traces
+
+With the optional peer `@opentelemetry/api`, the same module runs two operations inside spans: `notification.send` (a raw or a template email send) and `notification.otp.verify`. A span carries one attribute, `bymax.notification.channel` (`email` or `otp`). When the operation throws, the span ends with status `ERROR` and the library's error code as its message, for example `notification.email_send_failed`, or `unknown` for an error that is not the library's, and never the text of an error. With no OpenTelemetry SDK registered the API's tracer does nothing, so the peer costs nothing until you register one.
+
+### Health
+
+`NotificationHealthIndicator` reports the readiness of the email channel as `up` or `down`, with no detail, under the name `notification`. It is marked `@BymaxHealthIndicator()`, so `@bymax-one/nest-core` discovers it when `health.autoDiscover` is on. It never sends a message. A provider that reports `isConfigured()` as `false` is `down`. `SmtpEmailProvider` is verified with its new `verify()` method (connect, greeting, TLS upgrade, login) at most once per window: a success is trusted for five minutes and a failure for thirty seconds, callers that arrive together share one verification, and it is bounded by four seconds, under the five of the core's indicator timeout. A provider that cannot verify, such as `ResendEmailProvider`, is `up` once it is configured, because that is all that can be known without a network call. Tune the windows with `register({ health: { successTtlMs, failureTtlMs, timeoutMs } })`. `verify()` answers a failure in fixed words that carry nothing of the relay's text.
+
 ## ⚙️ Configuration
 
 Configure via `forRoot(options)` or `forRootAsync({ useFactory })`. **At least one channel must be configured**, and configuring a channel the library does not implement throws at startup rather than failing on the first send. The full reference is in [`docs/technical_specification.md` §4](./docs/technical_specification.md); the most-used options:
@@ -721,16 +756,16 @@ A one-time password is a credential, so every behavior is pinned so that a regre
 - ✅ **Invariants asserted, not assumed** — the never-log-codes rule is a test (`JSON.stringify(entry).includes(code) === false` on every audit entry, and the thrown exception serialized recursively at every depth), not a review convention
 - ✅ **Published shape verified** — `attw` resolves every entrypoint against the packed tarball, and a dogfood smoke test installs the package into a scratch consumer before any tag is cut
 
-| Gate           | Standard                                                                                 |
-| -------------- | ---------------------------------------------------------------------------------------- |
-| Type safety    | TypeScript `strict`, zero `any`                                                          |
-| Coverage       | **100%** line/branch/function/statement per file (`pnpm test:cov:all`)                   |
-| Mutation       | Stryker score **100%** (`break: 100`), no survivors                                      |
-| Lint           | ESLint flat config + `eslint-plugin-security`, zero warnings                             |
-| Bundle budgets | server < 37.61 KB · shared < 4 KB · react < 8 KB · testing < 4.5 KB brotli (`pnpm size`) |
-| Prisma-free    | `pnpm check:no-prisma` — the library never imports `@prisma/client`                      |
-| Export map     | `pnpm check:exports` — `attw` against the packed tarball, ESM and CJS                    |
-| Supply chain   | published with npm provenance (OIDC), CodeQL + OpenSSF Scorecard                         |
+| Gate           | Standard                                                                                                           |
+| -------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Type safety    | TypeScript `strict`, zero `any`                                                                                    |
+| Coverage       | **100%** line/branch/function/statement per file (`pnpm test:cov:all`)                                             |
+| Mutation       | Stryker score **100%** (`break: 100`), no survivors                                                                |
+| Lint           | ESLint flat config + `eslint-plugin-security`, zero warnings                                                       |
+| Bundle budgets | server < 38.76 KB · shared < 4 KB · react < 8 KB · testing < 4.5 KB · observability < 4.79 KB brotli (`pnpm size`) |
+| Prisma-free    | `pnpm check:no-prisma` — the library never imports `@prisma/client`                                                |
+| Export map     | `pnpm check:exports` — `attw` against the packed tarball, ESM and CJS                                              |
+| Supply chain   | published with npm provenance (OIDC), CodeQL + OpenSSF Scorecard                                                   |
 
 ```bash
 pnpm test          # unit suite
