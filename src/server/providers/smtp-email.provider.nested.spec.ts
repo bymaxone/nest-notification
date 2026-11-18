@@ -475,3 +475,66 @@ describe('SmtpEmailProvider options that are objects', () => {
     expect(new SmtpEmailProvider(new Options()).isConfigured()).toBe(true)
   })
 })
+
+describe('SmtpEmailProvider: the TLS version bounds and the passphrases it redacts', () => {
+  it.each(['TLSv1', 'TLSv1.1', 'TLSv1.2', 'TLSv1.3'])(
+    'should accept %s as a minVersion and as a maxVersion',
+    async (version) => {
+      const config = await transportOf({
+        host: 'relay.example',
+        tls: { minVersion: version, maxVersion: version } as SmtpTlsOptions
+      } as SmtpEmailProviderOptions)
+
+      expect(config.tls).toMatchObject({ minVersion: version, maxVersion: version })
+    }
+  )
+
+  // A null `tls` is an unset one: the transport gets none, and nothing reads entries from null.
+  it('should build the provider with a null tls and give the transport none', async () => {
+    const config = await transportOf({
+      host: 'relay.example',
+      tls: null
+    } as unknown as SmtpEmailProviderOptions)
+
+    expect(config.tls).toBeUndefined()
+  })
+
+  // The passphrases are read through the private method that feeds the redaction, so the exact list
+  // is asserted: a value that is not a string must never reach the text search, which would look
+  // for the word "undefined" in a message.
+  describe('the passphrases collected for redaction', () => {
+    const passphrasesOf = (tls: unknown): string[] =>
+      (
+        new SmtpEmailProvider({
+          ...baseOptions,
+          tls
+        } as unknown as SmtpEmailProviderOptions) as unknown as {
+          tlsPassphrases(): string[]
+        }
+      ).tlsPassphrases()
+
+    it('should be empty when no tls is configured', () => {
+      expect(
+        (
+          new SmtpEmailProvider({ host: 'relay.example' }) as unknown as {
+            tlsPassphrases(): string[]
+          }
+        ).tlsPassphrases()
+      ).toEqual([])
+    })
+
+    it('should list the tls passphrase and those of the key and pfx entries, as given', () => {
+      expect(
+        passphrasesOf({
+          passphrase: 'p0',
+          key: [{ pem: 'k1', passphrase: 'p1' }, { pem: 'k2' }, 'plain'],
+          pfx: [{ buf: 'b1', passphrase: 'p2' }, { buf: 'b2' }]
+        })
+      ).toEqual(['p0', 'p1', 'p2'])
+    })
+
+    it('should list nothing for entries and a tls that carry no passphrase', () => {
+      expect(passphrasesOf({ key: [{ pem: 'k' }], pfx: [{ buf: 'b' }] })).toEqual([])
+    })
+  })
+})

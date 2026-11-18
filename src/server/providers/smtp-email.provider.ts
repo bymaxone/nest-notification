@@ -441,7 +441,7 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
    * The passphrases the TLS options carry, which a transport error that quotes the options would
    * show: the one on `tls`, and those of the `key` and `pfx` entries that bring their own.
    *
-   * @returns Each non-empty passphrase, as given.
+   * @returns Each passphrase that is a string, as given (an empty one is skipped by the redaction).
    */
   private tlsPassphrases(): string[] {
     const tls = this.#options.tls as unknown
@@ -455,7 +455,7 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
         typeof entry === 'object' && entry !== null ? Reflect.get(entry, 'passphrase') : undefined
       )
     ]
-    return found.filter((value): value is string => typeof value === 'string' && value !== '')
+    return found.filter((value): value is string => typeof value === 'string')
   }
 
   /**
