@@ -5,6 +5,22 @@
  * @layer infrastructure
  */
 
+/** An encrypted private key with its own passphrase, as Node takes it in `tls.key`. */
+export interface SmtpTlsKeyEntry {
+  /** The key, in PEM form. */
+  pem: string | Buffer
+  /** The passphrase that decrypts it. A secret: it is never printed. */
+  passphrase?: string
+}
+
+/** A PKCS#12 bundle with its own passphrase, as Node takes it in `tls.pfx`. */
+export interface SmtpTlsPfxEntry {
+  /** The bundle. */
+  buf: string | Buffer
+  /** The passphrase that decrypts it. A secret: it is never printed. */
+  passphrase?: string
+}
+
 /**
  * TLS knobs forwarded to the transport: a private CA, the protocol bounds, the ciphers, a custom
  * identity check and a client certificate. These are the only keys accepted; any other key of `tls`
@@ -36,12 +52,18 @@ export interface SmtpTlsOptions {
   checkServerIdentity?(hostname: string, cert: object): Error | undefined
   /** The client certificate chain, in PEM form. */
   cert?: string | Buffer | ReadonlyArray<string | Buffer>
-  /** The private key of the client certificate, in PEM form. */
-  key?: string | Buffer | ReadonlyArray<string | Buffer>
+  /**
+   * The private key of the client certificate, in PEM form: a string, a Buffer, an encrypted key
+   * with its own passphrase as `{ pem, passphrase }`, or an array of them.
+   */
+  key?: string | Buffer | SmtpTlsKeyEntry | ReadonlyArray<string | Buffer | SmtpTlsKeyEntry>
   /** The passphrase of an encrypted `key` or `pfx`. A secret: it is never printed. */
   passphrase?: string
-  /** The client certificate and key as a PKCS#12 bundle. */
-  pfx?: string | Buffer | ReadonlyArray<string | Buffer>
+  /**
+   * The client certificate and key as a PKCS#12 bundle: a string, a Buffer, a bundle with its own
+   * passphrase as `{ buf, passphrase }`, or an array of them.
+   */
+  pfx?: string | Buffer | SmtpTlsPfxEntry | ReadonlyArray<string | Buffer | SmtpTlsPfxEntry>
 }
 
 /**

@@ -68,6 +68,25 @@ describe('SmtpEmailProvider failure handling', () => {
     warnSpy.mockRestore()
   })
 
+  // A client key can carry its own passphrase, as a { pem, passphrase } entry and as a { buf,
+  // passphrase } pfx: each is secret material and is scrubbed like the one on tls itself.
+  it('should scrub the passphrase carried by a key entry and a pfx entry', async () => {
+    mockSendMail.mockRejectedValue(new Error('TLS failed: key-entry-phrase and pfx-entry-phrase'))
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+    const failure = new SmtpEmailProvider({
+      host: 'h',
+      tls: {
+        key: ['plain', { pem: 'pem', passphrase: 'key-entry-phrase' }],
+        pfx: { buf: 'buf', passphrase: 'pfx-entry-phrase' }
+      }
+    }).send(baseOptions)
+
+    await expect(failure).rejects.toThrow('SMTP send failed: TLS failed: [redacted] and [redacted]')
+    expect(String(warnSpy.mock.calls[0]?.[0])).not.toMatch(/entry-phrase/)
+    warnSpy.mockRestore()
+  })
+
   // SECURITY (regression for the community-core finding): a policy/DLP relay
   // that quotes the rejected content in its 550 puts the body — and the OTP
   // inside it — into the transport error. The echoed excerpt is scrubbed

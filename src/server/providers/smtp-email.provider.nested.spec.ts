@@ -110,6 +110,31 @@ describe('SmtpEmailProvider options that are objects', () => {
     expect(tls.key).toBe(key)
   })
 
+  // Node takes a key or a pfx as an object carrying its own passphrase, and as an array of them. It
+  // is forwarded as given, the host's own object, and the passphrase in it is never printed.
+  it('should hand a key and a pfx that carry their own passphrase to the transport as given', async () => {
+    const key = [{ pem: 'pem', passphrase: 'key-phrase' }, 'plain']
+    const pfx = { buf: Buffer.from('pfx'), passphrase: 'pfx-phrase' }
+
+    const tls = (await transportOf({ host: 'h', tls: { key, pfx } })).tls as Record<string, unknown>
+
+    expect(tls.key).toBe(key)
+    expect(tls.pfx).toBe(pfx)
+  })
+
+  it('should not print the passphrase of an entry it refuses', () => {
+    const attempt = (): unknown =>
+      new SmtpEmailProvider({
+        host: 'h',
+        tls: { key: { pem: 5, passphrase: 'SECRET-ENTRY' } } as never
+      })
+
+    expect(attempt).toThrow(
+      'SmtpEmailProvider: tls.key must be a string, a Buffer, a { pem, passphrase } object'
+    )
+    expect(attempt).not.toThrow(/SECRET/)
+  })
+
   it('should hand a passphrase and a pfx to the transport as given', async () => {
     const pfx = Buffer.from('pfx')
 
@@ -176,8 +201,25 @@ describe('SmtpEmailProvider options that are objects', () => {
     ['maxVersion', 12, 'one of TLSv1, TLSv1.1, TLSv1.2 or TLSv1.3'],
     ['ca', 5, 'a string, a Buffer or an array of them'],
     ['cert', { pem: 'x' }, 'a string, a Buffer or an array of them'],
-    ['key', [5], 'a string, a Buffer or an array of them'],
-    ['pfx', true, 'a string, a Buffer or an array of them'],
+    ['key', [5], 'a string, a Buffer, a { pem, passphrase } object or an array of them'],
+    ['key', { pem: 5 }, 'a string, a Buffer, a { pem, passphrase } object or an array of them'],
+    [
+      'key',
+      { pem: 'k', passphrase: 5 },
+      'a string, a Buffer, a { pem, passphrase } object or an array of them'
+    ],
+    [
+      'key',
+      { passphrase: 'only' },
+      'a string, a Buffer, a { pem, passphrase } object or an array of them'
+    ],
+    ['pfx', true, 'a string, a Buffer, a { buf, passphrase } object or an array of them'],
+    ['pfx', { pem: 'k' }, 'a string, a Buffer, a { buf, passphrase } object or an array of them'],
+    [
+      'pfx',
+      [{ buf: 'b', passphrase: [] }],
+      'a string, a Buffer, a { buf, passphrase } object or an array of them'
+    ],
     ['checkServerIdentity', 'always', 'a function']
   ])('should refuse tls.%s of %p naming the key and the type', (key, value, type) => {
     expect(() => new SmtpEmailProvider({ host: 'h', tls: { [key]: value } as never })).toThrow(
@@ -205,7 +247,12 @@ describe('SmtpEmailProvider options that are objects', () => {
     ['ca', ['pem', Buffer.from('pem')]],
     ['cert', new Uint8Array([1])],
     ['key', ['pem']],
+    ['key', { pem: 'pem' }],
+    ['key', { pem: Buffer.from('pem'), passphrase: 'phrase' }],
+    ['key', ['pem', { pem: 'pem', passphrase: 'phrase' }]],
     ['pfx', Buffer.from('pfx')],
+    ['pfx', { buf: Buffer.from('pfx'), passphrase: 'phrase' }],
+    ['pfx', [Buffer.from('a'), { buf: 'b' }]],
     ['checkServerIdentity', () => undefined]
   ])('should accept tls.%s of %p', (key, value) => {
     expect(() => new SmtpEmailProvider({ host: 'h', tls: { [key]: value } as never })).not.toThrow()

@@ -129,6 +129,28 @@ const isVersion = (value: unknown): boolean =>
 /** The words a refusal uses for a version bound and for PEM material. */
 const VERSION_WORDS = 'one of TLSv1, TLSv1.1, TLSv1.2 or TLSv1.3'
 const MATERIAL_WORDS = 'a string, a Buffer or an array of them'
+const KEY_WORDS = 'a string, a Buffer, a { pem, passphrase } object or an array of them'
+const PFX_WORDS = 'a string, a Buffer, a { buf, passphrase } object or an array of them'
+
+/**
+ * A key or a bundle: PEM material, or an object carrying it with an optional passphrase, or an
+ * array of them. `field` names the property that holds the material (`pem` for a key, `buf` for a
+ * bundle).
+ */
+function isTlsEntry(field: 'pem' | 'buf'): (value: unknown) => boolean {
+  const material = (item: unknown): boolean => typeof item === 'string' || ArrayBuffer.isView(item)
+  const one = (item: unknown): boolean => {
+    if (typeof item !== 'object' || item === null || ArrayBuffer.isView(item)) {
+      return material(item)
+    }
+    const passphrase: unknown = Reflect.get(item, 'passphrase')
+    return (
+      material(Reflect.get(item, field)) &&
+      (passphrase === undefined || typeof passphrase === 'string')
+    )
+  }
+  return (value) => (Array.isArray(value) ? value.every(one) : one(value))
+}
 
 /** What each forwarded key must be, and the words the refusal uses for it. */
 const TLS_VALUE_RULES: ReadonlyArray<
@@ -142,8 +164,8 @@ const TLS_VALUE_RULES: ReadonlyArray<
   ['maxVersion', isVersion, VERSION_WORDS],
   ['ca', isTlsMaterial, MATERIAL_WORDS],
   ['cert', isTlsMaterial, MATERIAL_WORDS],
-  ['key', isTlsMaterial, MATERIAL_WORDS],
-  ['pfx', isTlsMaterial, MATERIAL_WORDS],
+  ['key', isTlsEntry('pem'), KEY_WORDS],
+  ['pfx', isTlsEntry('buf'), PFX_WORDS],
   ['checkServerIdentity', isFunction, 'a function']
 ]
 

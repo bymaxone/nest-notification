@@ -53,7 +53,9 @@ export type {
   SmtpCredentials,
   SmtpEmailProviderOptions,
   SmtpPoolOptions,
-  SmtpTlsOptions
+  SmtpTlsKeyEntry,
+  SmtpTlsOptions,
+  SmtpTlsPfxEntry
 } from './smtp-email.types'
 
 /** Submission port, used when no `port` is supplied. */
@@ -436,6 +438,27 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
   }
 
   /**
+   * The passphrases the TLS options carry, which a transport error that quotes the options would
+   * show: the one on `tls`, and those of the `key` and `pfx` entries that bring their own.
+   *
+   * @returns Each non-empty passphrase, as given.
+   */
+  private tlsPassphrases(): string[] {
+    const tls = this.#options.tls as unknown
+    if (typeof tls !== 'object' || tls === null) {
+      return []
+    }
+    const carriers = [Reflect.get(tls, 'key'), Reflect.get(tls, 'pfx')].flat() as unknown[]
+    const found = [
+      Reflect.get(tls, 'passphrase'),
+      ...carriers.map((entry) =>
+        typeof entry === 'object' && entry !== null ? Reflect.get(entry, 'passphrase') : undefined
+      )
+    ]
+    return found.filter((value): value is string => typeof value === 'string' && value !== '')
+  }
+
+  /**
    * The configured credentials that qualify as secret material, if any, and the base64 forms the
    * AUTH exchange carries them in: the user and the password as AUTH LOGIN sends them, and the
    * AUTH PLAIN token, which has an empty authorization identity. A relay that quotes the exchange
@@ -452,9 +475,7 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
       Buffer.from(value, 'utf-8').toString('base64')
     )
     // The passphrase of a client key is secret too, and a transport error can quote the options.
-    const { passphrase } = (this.#options.tls ?? {}) as { passphrase?: unknown }
-    const keyPassphrase = typeof passphrase === 'string' && passphrase !== '' ? [passphrase] : []
-    return [...secrets, ...encoded, ...keyPassphrase]
+    return [...secrets, ...encoded, ...this.tlsPassphrases()]
   }
 
   /**

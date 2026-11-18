@@ -15,21 +15,23 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 - **The `tls` values are checked when the provider is built.** `rejectUnauthorized` must be a
   boolean; `servername`, `ciphers` and `passphrase` strings; `minVersion` and `maxVersion` one of
-  `TLSv1`, `TLSv1.1`, `TLSv1.2` or `TLSv1.3`; `ca`, `cert`, `key` and `pfx` a string, a Buffer or an
-  array of them; and `checkServerIdentity` a function. A value of the wrong type fails the build naming
+  `TLSv1`, `TLSv1.1`, `TLSv1.2` or `TLSv1.3`; `ca` and `cert` a string, a Buffer or an array of them;
+  `key` and `pfx` the same, or Node's own object that carries a passphrase (`{ pem, passphrase }` for
+  a key, `{ buf, passphrase }` for a bundle) or an array of them; and `checkServerIdentity` a function. A value of the wrong type fails the build naming
   the key and the type, and never the value, so the transport's own error, which can quote what it was
   given, is not the one that reports it. In 1.4.15 a number as the `passphrase`, a `minVersion` of
   `TLSv1.4` and a string as `rejectUnauthorized` were accepted and reached the transport.
 - **The `tls` passphrase is scrubbed from a transport error.** A transport error that quotes the
-  options carried the passphrase into the thrown message and the log line, as it did the user and the
-  password before; it is now replaced like them. Measured with a stand-in transport that quotes its
+  options carried the passphrase, and one carried by a `key` or `pfx` entry, into the thrown message
+  and the log line, as it did the user and the password before; they are now replaced like them. Measured with a stand-in transport that quotes its
   options: 1.4.15 threw a message holding the passphrase, and this release throws `[redacted]`.
 
 #### Apply to a derived backend
 
 The declaration `SmtpTlsOptions.ca` widens from `string | string[]` to
 `string | Buffer | ReadonlyArray<string | Buffer>`, the form Node takes and `cert`, `key` and `pfx`
-already had; nothing else in the declarations changes. A `tls` value of the wrong type, which 1.4.15
+already had, and `key` and `pfx` also take Node's object forms; the entry types `SmtpTlsKeyEntry` and
+`SmtpTlsPfxEntry` are exported; nothing else in the declarations changes. A `tls` value of the wrong type, which 1.4.15
 handed to the transport, now fails when the provider is built, naming the key: fix the value.
 
 ## [1.4.15] - 2026-11-17
