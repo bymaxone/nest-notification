@@ -21,7 +21,7 @@ import { dummyRepo } from './services/__tests__/otp-service.fixtures'
 import { EmailService } from './services/email.service'
 import { NotificationService } from './services/notification.service'
 import { OtpService } from './services/otp.service'
-import { loggedErr, loggedEvent, loggedText } from './__tests__/logged'
+import { loggedAll, loggedEvent, loggedText } from './__tests__/logged'
 import { AuditWriteWarning } from './utils/audit-write-warning'
 
 // `mock`-prefixed names are allowed inside the hoisted jest.mock factories.
@@ -217,14 +217,20 @@ describe('log event messages', () => {
 
     it(
       row.errCarriesSentinel
-        ? 'should carry the error in the err field, as an Error'
-        : 'should carry no error text anywhere in its entry',
+        ? 'should carry the error in the err field and in no other field'
+        : 'should carry no error at all: its entry has only an event and a message',
       async () => {
         await row.provoke()
 
         const mine = calls.filter((entry) => loggedEvent(entry.call) === event)
-        const carried = mine.map((entry) => loggedErr(entry.call)?.message ?? '').join('\n')
-        expect(carried.includes(SENTINEL)).toBe(row.errCarriesSentinel)
+        for (const entry of mine) {
+          // Every key of the entry is read, so a field added to it cannot hold error text unseen.
+          expect(Object.keys(entry.call[0] as object)).toEqual(
+            row.errCarriesSentinel ? ['event', 'message', 'err'] : ['event', 'message']
+          )
+          expect(loggedAll(entry.call).includes(SENTINEL)).toBe(row.errCarriesSentinel)
+        }
+        expect(mine.length).toBeGreaterThan(0)
       }
     )
   })

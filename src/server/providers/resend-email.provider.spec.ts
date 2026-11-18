@@ -238,9 +238,6 @@ describe('ResendEmailProvider', () => {
     )
   })
 
-  // The SDK's message is not ours: a line feed in it would start a second record in any log that
-  // writes lines. The warn line carries the reason with every control written as a visible
-  // sequence; the thrown message keeps the text as it came.
   it('should keep every word of the provider out of the line itself', async () => {
     mockSend.mockResolvedValue({ data: null, error: { message: 'mailbox jane@acme.com unknown' } })
     const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
@@ -255,6 +252,9 @@ describe('ResendEmailProvider', () => {
     warnSpy.mockRestore()
   })
 
+  // The SDK's message is not ours: a line feed in it would start a second record in any log that
+  // writes lines. The warn line carries the reason with every control written as a visible
+  // sequence; the thrown message keeps the text as it came.
   it('should write a control character of an SDK error as a visible sequence', async () => {
     const message = `rate\nforged [RESEND_SEND_FAILED] ok${BIDI_OVERRIDE}`
     mockSend.mockResolvedValue({ data: null, error: { message } })

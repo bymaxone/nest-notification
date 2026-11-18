@@ -28,9 +28,8 @@ function exportsOf(subpath: string): string[] {
 
 /** Whether the README names `name` as a whole word, not as part of a longer identifier. */
 function named(readme: string, name: string): boolean {
-  return new RegExp(`(^|[^A-Za-z0-9_$])${name.replace(/\$/g, '\\$')}($|[^A-Za-z0-9_$])`).test(
-    readme
-  )
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return new RegExp(`(^|[^A-Za-z0-9_$])${escaped}($|[^A-Za-z0-9_$])`).test(readme)
 }
 
 describe('README public exports', () => {
