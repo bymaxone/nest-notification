@@ -21,11 +21,11 @@ import type {
   EmailSendResult,
   IEmailProvider
 } from '../interfaces/email-provider.interface'
-import { escapeAuditString } from '../utils/audit-escape'
 import { errorCodeOf } from '../utils/availability'
 import { assertBodyParts } from '../utils/email-body'
 import { loadOptionalPeer } from '../utils/load-optional-peer'
 import { logEvent } from '../utils/log-event'
+import { loggableError } from '../utils/loggable-error'
 import { assertOptionsObject, readOptionKeys } from '../utils/read-options'
 import {
   REDACTED_VALUE,
@@ -307,13 +307,15 @@ export class ResendEmailProvider implements IEmailProvider {
     }
     // Surface only the provider's message — never the email body.
     const reason = this.scrubSendError(rawMessage, options)
+    const failure = withCode(new Error(`Resend send failed: ${reason}`), code)
     logEvent(
       this.logger,
       'warn',
       NOTIFICATION_LOG_EVENTS.RESEND_SEND_FAILED,
-      `[RESEND_SEND_FAILED] ${escapeAuditString(reason)}`
+      '[RESEND_SEND_FAILED] The send failed; the provider error is in the err field.',
+      loggableError(failure)
     )
-    return withCode(new Error(`Resend send failed: ${reason}`), code)
+    return failure
   }
 
   /**

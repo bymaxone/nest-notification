@@ -18,7 +18,7 @@ import { makeAudit, makeProvider, makeRenderer } from './__tests__/email-service
 import { dummyRepo } from './__tests__/otp-service.fixtures'
 import { EmailService } from './email.service'
 import { OtpService } from './otp.service'
-import { loggedEvent, loggedText } from '../__tests__/logged'
+import { loggedAll, loggedErr, loggedEvent, loggedText } from '../__tests__/logged'
 
 const CODE = 'BYMAX_NOTIFICATION_OTP_TEMPLATE_NOT_RESOLVED'
 
@@ -85,7 +85,7 @@ describe('OtpService startup warning for an unresolved default template', () => 
   })
 
   const ours = (): string[] =>
-    warn.mock.calls.map((call) => loggedText(call)).filter((line) => line.includes(CODE))
+    warn.mock.calls.map((call) => loggedAll(call)).filter((line) => line.includes(CODE))
 
   // The case the warning exists for.
   it('should warn when otp_code resolves in neither the default locale nor en', async () => {
@@ -151,10 +151,13 @@ describe('OtpService startup warning for an unresolved default template', () => 
     service.onModuleInit()
     await settle()
 
-    expect(ours()).toEqual([
+    const call = warn.mock.calls.find((entry) => loggedText(entry).includes(CODE))
+    // The line is the library's own text; the renderer's words are in the error, not in it.
+    expect(loggedText(call)).toBe(
       "[BYMAX_NOTIFICATION_OTP_TEMPLATE_NOT_RESOLVED] Could not check whether the email template 'otp_code' resolves " +
-        '(store down); if it does not, the first generate() that delivers by email fails with TEMPLATE_NOT_FOUND.'
-    ])
+        '(the renderer error is in the err field); if it does not, the first generate() that delivers by email fails with TEMPLATE_NOT_FOUND.'
+    )
+    expect(loggedErr(call)?.message).toBe('store down')
   })
 
   // The renderer's error text is not ours: a line feed in it would start a second record in any
@@ -169,7 +172,7 @@ describe('OtpService startup warning for an unresolved default template', () => 
     const lines = ours()
     expect(lines).toHaveLength(1)
     expect(hasRawControl(String(lines[0]))).toBe(false)
-    expect(lines[0]).toContain('(store\\ndown \\u202e)')
+    expect(lines[0]).toContain('store\\ndown \\u202e')
   })
 
   // One line per process, however often the hook runs.
@@ -238,7 +241,7 @@ describe('OtpService startup warning for an unresolved default template', () => 
     service.onModuleInit()
     await settle()
 
-    const lines = warn.mock.calls.map((call) => loggedText(call))
+    const lines = warn.mock.calls.map((call) => loggedAll(call))
     expect(warn.mock.calls.map((call) => loggedEvent(call))).toContain(
       'NOTIFICATION_OTP_FAILURES_NOT_CARRIED'
     )
@@ -291,14 +294,30 @@ describe('OtpService startup warning for an unresolved default template', () => 
         'rejects with an object with no prototype',
         async (): Promise<boolean> => Promise.reject(Object.create(null)),
         'unprintable error'
+      ],
+      // A type test on this value throws; the line is written from a detached promise, so a throw
+      // there would be an unhandled rejection that ends the process.
+      [
+        'rejects with a revoked proxy',
+        async (): Promise<boolean> => {
+          const { proxy, revoke } = Proxy.revocable({}, {})
+          revoke()
+          return Promise.reject(proxy)
+        },
+        'unprintable error'
       ]
     ])('should warn, not throw, when hasTemplate %s', async (_label, hasTemplate, reason) => {
       const { service, renderer } = build()
       renderer.hasTemplate.mockImplementation(hasTemplate)
 
+      const unhandled = jest.fn()
+      process.on('unhandledRejection', unhandled)
+
       expect(() => service.onModuleInit()).not.toThrow()
       await settle()
+      process.off('unhandledRejection', unhandled)
 
+      expect(unhandled).not.toHaveBeenCalled()
       expect(ours()).toHaveLength(1)
       expect(ours()[0]).toContain('Could not check')
       expect(ours()[0]).toContain(reason)

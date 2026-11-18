@@ -11,7 +11,7 @@ import { Logger } from '@nestjs/common'
 
 import { baseOptions } from './__tests__/smtp-email-provider.fixtures'
 import { SmtpEmailProvider } from './smtp-email.provider'
-import { loggedText } from '../__tests__/logged'
+import { loggedAll, loggedText } from '../__tests__/logged'
 
 // `mock`-prefixed names are allowed inside the hoisted jest.mock factory.
 const mockSendMail = jest.fn()
@@ -38,7 +38,7 @@ function plainToken(user: string, pass: string): string {
 async function failWith(
   message: string,
   credentials: { user: string; pass: string } | null = { user: USER, pass: PASS }
-): Promise<{ thrown: string; logged: string }> {
+): Promise<{ thrown: string; logged: string; line: string }> {
   mockSendMail.mockRejectedValue(new Error(message))
   const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
   const caught: unknown = await new SmtpEmailProvider({
@@ -47,7 +47,13 @@ async function failWith(
   })
     .send(baseOptions)
     .catch((error: unknown) => error)
-  return { thrown: (caught as Error).message, logged: loggedText(warn.mock.calls[0]) }
+  // `logged` is what the line writes in full (its text and its `err`); `line` is its text alone,
+  // which carries no word of the relay.
+  return {
+    thrown: (caught as Error).message,
+    logged: loggedAll(warn.mock.calls[0]),
+    line: loggedText(warn.mock.calls[0])
+  }
 }
 
 describe('SmtpEmailProvider credentials echoed in base64', () => {
@@ -70,21 +76,21 @@ describe('SmtpEmailProvider credentials echoed in base64', () => {
     const { thrown, logged } = await failWith(`535 5.7.8 rejected: AUTH PLAIN ${token}`)
 
     expect(thrown).toBe('SMTP send failed: 535 5.7.8 rejected: AUTH PLAIN [redacted]')
-    expect(logged).toBe('[SMTP_SEND_FAILED] 535 5.7.8 rejected: AUTH PLAIN [redacted]')
+    expect(logged).toContain('SMTP send failed: 535 5.7.8 rejected: AUTH PLAIN [redacted]')
   })
 
   it('should scrub the AUTH LOGIN user line from the thrown message and the log line', async () => {
     const { thrown, logged } = await failWith(`501 bad login line ${b64(USER)} refused`)
 
     expect(thrown).toBe('SMTP send failed: 501 bad login line [redacted] refused')
-    expect(logged).toBe('[SMTP_SEND_FAILED] 501 bad login line [redacted] refused')
+    expect(logged).toContain('SMTP send failed: 501 bad login line [redacted] refused')
   })
 
   it('should scrub the AUTH LOGIN password line from the thrown message and the log line', async () => {
     const { thrown, logged } = await failWith(`501 bad login line ${b64(PASS)} refused`)
 
     expect(thrown).toBe('SMTP send failed: 501 bad login line [redacted] refused')
-    expect(logged).toBe('[SMTP_SEND_FAILED] 501 bad login line [redacted] refused')
+    expect(logged).toContain('SMTP send failed: 501 bad login line [redacted] refused')
   })
 
   it('should scrub every form when one message carries them all', async () => {
@@ -110,7 +116,7 @@ describe('SmtpEmailProvider credentials echoed in base64', () => {
     )
 
     expect(thrown).toBe('SMTP send failed: x [redacted] y [redacted] z [redacted]')
-    expect(logged).toBe('[SMTP_SEND_FAILED] x [redacted] y [redacted] z [redacted]')
+    expect(logged).toContain('SMTP send failed: x [redacted] y [redacted] z [redacted]')
   })
 
   // A password built from the username: the encodings overlap or nest, and one marker covers them.
@@ -136,13 +142,19 @@ describe('SmtpEmailProvider credentials echoed in base64', () => {
     expect(thrown).toBe('SMTP send failed: 535 rejected [redacted]/[redacted]')
   })
 
+  it('should keep every word of the relay out of the line itself', async () => {
+    const { line } = await failWith('550 relay says jane@acme.com is unknown')
+
+    expect(line).toBe('[SMTP_SEND_FAILED] The send failed; the relay error is in the err field.')
+  })
+
   it('should leave a message without credentials untouched', async () => {
     const message = `535 rejected AUTH PLAIN ${plainToken(USER, PASS)}`
 
     const { thrown, logged } = await failWith(message, null)
 
     expect(thrown).toBe(`SMTP send failed: ${message}`)
-    expect(logged).toBe(`[SMTP_SEND_FAILED] ${message}`)
+    expect(logged).toContain(`SMTP send failed: ${message}`)
   })
 
   // With no credentials there is nothing to encode: a text that happens to hold the encoding of an

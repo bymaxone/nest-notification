@@ -94,6 +94,25 @@ export class BymaxNotificationModule {
   }
 
   /**
+   * Logs one warning when `global.redisNamespace` is set. The option is resolved and read by nothing:
+   * `RedisOtpStorage` is built by the host and takes its own `namespace`, so a host that set only the
+   * global one writes under the default prefix. Whether the value differs from the default cannot be
+   * known without the host's storage instance, so the warning does not compare and never writes the
+   * value.
+   */
+  private static warnRedisNamespaceUnused(options: BymaxNotificationModuleOptions): void {
+    if (options.global?.redisNamespace !== undefined) {
+      logEvent(
+        BymaxNotificationModule.logger,
+        'warn',
+        NOTIFICATION_LOG_EVENTS.REDIS_NAMESPACE_UNUSED,
+        '[BYMAX_NOTIFICATION_REDIS_NAMESPACE_UNUSED] global.redisNamespace is deprecated and does not reach ' +
+          'RedisOtpStorage: pass the `namespace` constructor option of RedisOtpStorage instead.'
+      )
+    }
+  }
+
+  /**
    * Registers the module synchronously from static options.
    *
    * @param options - The channel configuration; at least one channel is required.
@@ -106,6 +125,7 @@ export class BymaxNotificationModule {
     validateOptions(own)
     const resolved = resolveOptions(own)
     this.warnPlaintextCodes(resolved)
+    this.warnRedisNamespaceUnused(own)
     const tokenProviders = this.buildProviders(own, resolved)
     const serviceProviders = this.buildServiceProviders(resolved)
     logEvent(
@@ -234,6 +254,7 @@ export class BymaxNotificationModule {
         ): Readonly<ResolvedNotificationOptions> => {
           const resolved = resolveOptions(raw)
           BymaxNotificationModule.warnPlaintextCodes(resolved)
+          BymaxNotificationModule.warnRedisNamespaceUnused(raw)
           return resolved
         },
         inject: [RAW_NOTIFICATION_OPTIONS]

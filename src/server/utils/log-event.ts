@@ -20,15 +20,19 @@ export type LogEventLevel = 'log' | 'warn' | 'debug'
  * @param logger - The Nest logger of the class that writes the line.
  * @param level - The level to write at.
  * @param event - The event of the line, from the closed set.
- * @param message - The human text. It never carries a value a host supplied that is not escaped.
+ * @param message - The human text of the library. It never carries the text of an error from a
+ *   provider or from code the host supplied: that error goes in `err`.
+ * @param err - The error behind the line, as an `Error` object for the logger's `err` field, scrubbed
+ *   of secrets the way the error the caller receives is.
  */
 export function logEvent(
   logger: Logger,
   level: LogEventLevel,
   event: NotificationLogEvent,
-  message: string
+  message: string,
+  err?: Error
 ): void {
-  const entry = { event, message }
+  const entry = err === undefined ? { event, message } : { event, message, err }
   switch (level) {
     case 'log':
       logger.log(entry)

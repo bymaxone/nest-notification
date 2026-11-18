@@ -16,7 +16,7 @@ import { NotificationException } from '../errors/notification-exception'
 
 import { BIDI_OVERRIDE, hasRawControl } from './__tests__/has-raw-control'
 import { SmtpEmailProvider } from './smtp-email.provider'
-import { loggedEvent, loggedText } from '../__tests__/logged'
+import { loggedEvent, loggedAll } from '../__tests__/logged'
 
 // `mock`-prefixed names are allowed inside the hoisted jest.mock factory.
 const mockSendMail = jest.fn()
@@ -46,7 +46,7 @@ describe('SmtpEmailProvider failure handling', () => {
     await expect(new SmtpEmailProvider({ host: 'h' }).send(baseOptions)).rejects.toThrow(
       'SMTP send failed: 550 mailbox unavailable'
     )
-    const logged = loggedText(warnSpy.mock.calls[0])
+    const logged = loggedAll(warnSpy.mock.calls[0])
     expect(loggedEvent(warnSpy.mock.calls[0])).toBe('NOTIFICATION_SMTP_SEND_FAILED')
     expect(logged).toContain('550 mailbox unavailable')
     expect(logged).not.toContain('Secret 123456')
@@ -124,7 +124,7 @@ describe('SmtpEmailProvider failure handling', () => {
     await expect(new SmtpEmailProvider({ host: 'h' }).send(baseOptions)).rejects.toThrow(
       /^SMTP send failed: 550 5\.7\.1 rejected by policy/
     )
-    const logged = loggedText(warnSpy.mock.calls[0])
+    const logged = loggedAll(warnSpy.mock.calls[0])
     expect(logged).toContain('550 5.7.1 rejected by policy')
     expect(logged).toContain('[redacted]')
     expect(logged).not.toContain('Secret 123456')
@@ -143,9 +143,9 @@ describe('SmtpEmailProvider failure handling', () => {
     await expect(new SmtpEmailProvider({ host: 'h' }).send(baseOptions)).rejects.toThrow(
       `SMTP send failed: ${reply}`
     )
-    const logged = loggedText(warnSpy.mock.calls[0])
+    const logged = loggedAll(warnSpy.mock.calls[0])
     expect(hasRawControl(logged)).toBe(false)
-    expect(logged).toBe('[SMTP_SEND_FAILED] 550 no\\nforged [SMTP_SEND_FAILED] ok\\u202e')
+    expect(logged).toContain('SMTP send failed: 550 no\\nforged [SMTP_SEND_FAILED] ok\\u202e')
     warnSpy.mockRestore()
   })
 
@@ -158,7 +158,7 @@ describe('SmtpEmailProvider failure handling', () => {
     await expect(
       new SmtpEmailProvider({ host: 'h' }).send({ ...baseOptions, redactValues: ['pass\nword'] })
     ).rejects.toThrow('SMTP send failed: 550 rejected: [redacted]')
-    expect(loggedText(warnSpy.mock.calls[0])).toBe('[SMTP_SEND_FAILED] 550 rejected: [redacted]')
+    expect(loggedAll(warnSpy.mock.calls[0])).toContain('SMTP send failed: 550 rejected: [redacted]')
     warnSpy.mockRestore()
   })
 
@@ -184,7 +184,7 @@ describe('SmtpEmailProvider failure handling', () => {
     expect((caught as Error).message).toMatch(/^SMTP send failed: 535 login \[redacted\] failed/)
     for (const leaked of ['hunter2', 'secret42', '998877']) {
       expect((caught as Error).message).not.toContain(leaked)
-      expect(loggedText(warnSpy.mock.calls[0])).not.toContain(leaked)
+      expect(loggedAll(warnSpy.mock.calls[0])).not.toContain(leaked)
     }
     warnSpy.mockRestore()
   })
@@ -221,7 +221,7 @@ describe('SmtpEmailProvider failure handling', () => {
     await expect(
       new SmtpEmailProvider({ host: 'h' }).send({ ...baseOptions, text: textOnly })
     ).rejects.toThrow(/^SMTP send failed: 550 quoted: \[redacted\]/)
-    const logged = loggedText(warnSpy.mock.calls[0])
+    const logged = loggedAll(warnSpy.mock.calls[0])
     expect(logged).not.toContain('998877')
     warnSpy.mockRestore()
   })
@@ -264,7 +264,7 @@ describe('SmtpEmailProvider failure handling', () => {
     expect(message).toContain('550 quoted:')
     expect(message).not.toContain('998877')
     expect(message).not.toContain(pass)
-    expect(loggedText(warnSpy.mock.calls[0])).not.toContain('998877')
+    expect(loggedAll(warnSpy.mock.calls[0])).not.toContain('998877')
     warnSpy.mockRestore()
   })
 
@@ -286,7 +286,7 @@ describe('SmtpEmailProvider failure handling', () => {
       .catch((error: unknown) => error)
 
     expect((thrown as Error).message).toBe('SMTP send failed')
-    expect(loggedText(warnSpy.mock.calls[0])).not.toContain('998877')
+    expect(loggedAll(warnSpy.mock.calls[0])).not.toContain('998877')
     warnSpy.mockRestore()
   })
 
@@ -299,7 +299,7 @@ describe('SmtpEmailProvider failure handling', () => {
     await expect(
       new SmtpEmailProvider({ host: 'h' }).send({ ...baseOptions, redactValues: ['998877'] })
     ).rejects.toThrow('SMTP send failed: 550 rejected: [redacted]')
-    const logged = loggedText(warnSpy.mock.calls[0])
+    const logged = loggedAll(warnSpy.mock.calls[0])
     expect(logged).not.toContain('998877')
     warnSpy.mockRestore()
   })
@@ -318,8 +318,8 @@ describe('SmtpEmailProvider failure handling', () => {
       .catch((error: unknown) => error)
 
     expect((thrown as Error).message).toBe('SMTP send failed')
-    expect(loggedText(warnSpy.mock.calls[0])).toBe('[SMTP_SEND_FAILED] 550 5.7.1')
-    expect(loggedText(warnSpy.mock.calls[0])).not.toContain('998877')
+    expect(loggedAll(warnSpy.mock.calls[0])).toBe('[SMTP_SEND_FAILED] 550 5.7.1')
+    expect(loggedAll(warnSpy.mock.calls[0])).not.toContain('998877')
     warnSpy.mockRestore()
   })
 
@@ -379,7 +379,7 @@ describe('SmtpEmailProvider failure handling', () => {
       .send({ ...baseOptions, publishProviderText: false, redactValues: ['55'] })
       .catch((error: unknown) => error)) as Error & { deliveryStatus?: number }
 
-    expect(loggedText(warnSpy.mock.calls[0])).toBe('[SMTP_SEND_FAILED] 5.7.1')
+    expect(loggedAll(warnSpy.mock.calls[0])).toBe('[SMTP_SEND_FAILED] 5.7.1')
     expect('deliveryStatus' in thrown).toBe(false)
     warnSpy.mockRestore()
   })
@@ -393,7 +393,7 @@ describe('SmtpEmailProvider failure handling', () => {
     await expect(
       new SmtpEmailProvider({ host: 'h' }).send({ ...baseOptions, publishProviderText: false })
     ).rejects.toThrow('SMTP send failed')
-    expect(loggedText(warnSpy.mock.calls[0])).toBe('[SMTP_SEND_FAILED] no reply code')
+    expect(loggedAll(warnSpy.mock.calls[0])).toBe('[SMTP_SEND_FAILED] no reply code')
     warnSpy.mockRestore()
   })
 
@@ -406,7 +406,7 @@ describe('SmtpEmailProvider failure handling', () => {
     await expect(
       new SmtpEmailProvider({ host: 'h' }).send({ ...baseOptions, publishProviderText: false })
     ).rejects.toThrow('SMTP send failed')
-    expect(loggedText(warnSpy.mock.calls[0])).toBe('[SMTP_SEND_FAILED] 421')
+    expect(loggedAll(warnSpy.mock.calls[0])).toBe('[SMTP_SEND_FAILED] 421')
     warnSpy.mockRestore()
   })
 
@@ -436,7 +436,7 @@ describe('SmtpEmailProvider failure handling', () => {
     await expect(provider.send(baseOptions)).rejects.toThrow(
       'SMTP send failed: 535 auth failed for AUTH PLAIN [redacted]'
     )
-    expect(loggedText(warnSpy.mock.calls[0])).not.toContain(pass)
+    expect(loggedAll(warnSpy.mock.calls[0])).not.toContain(pass)
     warnSpy.mockRestore()
   })
 
@@ -564,7 +564,7 @@ describe('SmtpEmailProvider failure handling', () => {
     await expect(provider.send(baseOptions)).rejects.toThrow(
       'SMTP send failed: 535 rejected [redacted] / [redacted]'
     )
-    const logged = loggedText(warnSpy.mock.calls[0])
+    const logged = loggedAll(warnSpy.mock.calls[0])
     expect(logged).not.toContain(user)
     expect(logged).not.toContain(pass)
     warnSpy.mockRestore()
@@ -586,7 +586,7 @@ describe('SmtpEmailProvider failure handling', () => {
     await expect(provider.send(baseOptions)).rejects.toThrow(
       new Error('SMTP send failed: 535 rejected [redacted]')
     )
-    expect(loggedText(warnSpy.mock.calls[0])).not.toContain('secret')
+    expect(loggedAll(warnSpy.mock.calls[0])).not.toContain('secret')
     warnSpy.mockRestore()
   })
 
@@ -641,7 +641,7 @@ describe('SmtpEmailProvider failure handling', () => {
       .catch((error: unknown) => error)
 
     expect(String((caught as Error).message).includes('998877')).toBe(false)
-    expect(loggedText(warnSpy.mock.calls[0]).includes('998877')).toBe(false)
+    expect(loggedAll(warnSpy.mock.calls[0]).includes('998877')).toBe(false)
     warnSpy.mockRestore()
   })
 

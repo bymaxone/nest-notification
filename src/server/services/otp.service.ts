@@ -39,13 +39,12 @@ import type {
 import type { OtpPurposeConfig } from '../interfaces/notification-module-options.interface'
 import type { INotificationObserver } from '../interfaces/notification-observer.interface'
 import type { IOtpStorage, OtpEntry, OtpVerifyResult } from '../interfaces/otp-storage.interface'
-import { escapeAuditString } from '../utils/audit-escape'
 import { AuditWriteWarning } from '../utils/audit-write-warning'
 import { isCodeDigest } from '../utils/code-digest'
 import { generateOtpCode } from '../utils/code-generator'
 import { cooldownExpiresAt, toRetryAfterHeader } from '../utils/cooldown-helpers'
-import { describeError } from '../utils/describe-error'
 import { logEvent } from '../utils/log-event'
+import { loggableError } from '../utils/loggable-error'
 import { reportOtp, runInSpan } from '../utils/observe'
 import { normalizeRecipient } from '../utils/recipient'
 import { assertSingleMailbox } from '../utils/recipient-list'
@@ -520,7 +519,8 @@ export class OtpService implements OnModuleInit {
         'warn',
         NOTIFICATION_LOG_EVENTS.OTP_TEMPLATE_NOT_RESOLVED,
         `[${TEMPLATE_WARNING_CODE}] Could not check whether the email template '${DEFAULT_OTP_TEMPLATE}' resolves ` +
-          `(${escapeAuditString(describeError(error))}); if it does not, the first generate() that delivers by email fails with TEMPLATE_NOT_FOUND.`
+          '(the renderer error is in the err field); if it does not, the first generate() that delivers by email fails with TEMPLATE_NOT_FOUND.',
+        loggableError(error)
       )
     }
   }

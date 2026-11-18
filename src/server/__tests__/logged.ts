@@ -1,7 +1,8 @@
 /**
  * @fileoverview Reads what a spy on a Nest `Logger` method was called with. The library writes the
- * structured form `{ event, message }`, so a case that wants the text of a line, or its event,
- * reads it here instead of from the first argument directly.
+ * structured form `{ event, message }`, with an `err` field when an error stands behind the line,
+ * so a case that wants the text of a line, its event or its error reads it here instead of from the
+ * first argument directly.
  * @layer test
  */
 
@@ -32,4 +33,33 @@ export function loggedEvent(call: readonly unknown[] | undefined): string | unde
     return String((first as { event: unknown }).event)
   }
   return undefined
+}
+
+/**
+ * The error a logged call carries in its `err` field, or `undefined` when it carries none.
+ *
+ * @param call - One entry of a spy's `mock.calls`.
+ * @returns The error.
+ */
+export function loggedErr(call: readonly unknown[] | undefined): Error | undefined {
+  const first = call?.[0]
+  if (typeof first === 'object' && first !== null && 'err' in first) {
+    const err = (first as { err: unknown }).err
+    return err instanceof Error ? err : undefined
+  }
+  return undefined
+}
+
+/**
+ * Everything one logged call writes: its text, and the name, message and code of its error. A case
+ * that holds a secret out of the log reads this, so the error field cannot be where it hides.
+ *
+ * @param call - One entry of a spy's `mock.calls`.
+ * @returns The text and the error's fields, joined.
+ */
+export function loggedAll(call: readonly unknown[] | undefined): string {
+  const err = loggedErr(call) as (Error & { code?: unknown }) | undefined
+  return err === undefined
+    ? loggedText(call)
+    : [loggedText(call), err.name, err.message, String(err.code ?? '')].join(' | ')
 }
