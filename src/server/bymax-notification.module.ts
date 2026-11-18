@@ -25,6 +25,7 @@ import {
   BYMAX_NOTIFICATION_AUDIT_SINK,
   BYMAX_NOTIFICATION_EMAIL_PROVIDER,
   BYMAX_NOTIFICATION_LOG_REPOSITORY,
+  BYMAX_NOTIFICATION_OBSERVER,
   BYMAX_NOTIFICATION_OPTIONS,
   BYMAX_NOTIFICATION_OTP_STORAGE,
   BYMAX_NOTIFICATION_TEMPLATE_RENDERER
@@ -41,6 +42,7 @@ import type {
   BymaxNotificationModuleAsyncOptions,
   BymaxNotificationModuleOptions
 } from './interfaces/notification-module-options.interface'
+import type { INotificationObserver } from './interfaces/notification-observer.interface'
 import type { IOtpStorage } from './interfaces/otp-storage.interface'
 import { DefaultTemplateRenderer } from './providers/default-template-renderer'
 import { EscapingLogRepository } from './providers/escaping-log-repository'
@@ -181,14 +183,16 @@ export class BymaxNotificationModule {
           options: ResolvedNotificationOptions,
           provider: IEmailProvider | null,
           renderer: IEmailTemplateRenderer,
-          auditLog: INotificationLogRepository
+          auditLog: INotificationLogRepository,
+          observer?: INotificationObserver
         ): EmailService | undefined =>
-          provider ? new EmailService(options, provider, renderer, auditLog) : undefined,
+          provider ? new EmailService(options, provider, renderer, auditLog, observer) : undefined,
         inject: [
           BYMAX_NOTIFICATION_OPTIONS,
           BYMAX_NOTIFICATION_EMAIL_PROVIDER,
           BYMAX_NOTIFICATION_TEMPLATE_RENDERER,
-          BYMAX_NOTIFICATION_AUDIT_SINK
+          BYMAX_NOTIFICATION_AUDIT_SINK,
+          { token: BYMAX_NOTIFICATION_OBSERVER, optional: true }
         ]
       },
       {
@@ -197,15 +201,17 @@ export class BymaxNotificationModule {
           options: ResolvedNotificationOptions,
           storage: IOtpStorage | null,
           auditLog: INotificationLogRepository,
-          emailService?: EmailService
+          emailService?: EmailService,
+          observer?: INotificationObserver
         ): OtpService | undefined =>
-          storage ? new OtpService(options, storage, auditLog, emailService) : undefined,
+          storage ? new OtpService(options, storage, auditLog, emailService, observer) : undefined,
         inject: [
           BYMAX_NOTIFICATION_OPTIONS,
           BYMAX_NOTIFICATION_OTP_STORAGE,
           BYMAX_NOTIFICATION_AUDIT_SINK,
           // Stryker disable next-line BooleanLiteral: the EmailService token is ALWAYS registered in async mode (as a factory that resolves to `undefined` when email is absent), so Nest resolves it whether optional is true or false — `optional: false` would still inject `undefined`, never throw, making the flag observationally inert here.
-          { token: EmailService, optional: true }
+          { token: EmailService, optional: true },
+          { token: BYMAX_NOTIFICATION_OBSERVER, optional: true }
         ]
       },
       NotificationService

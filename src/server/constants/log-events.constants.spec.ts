@@ -5,7 +5,7 @@
  * @layer constants
  */
 
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { NOTIFICATION_LOG_EVENTS } from './log-events.constants'
@@ -14,9 +14,9 @@ const ROOT = join(__dirname, '..', '..', '..')
 
 /** Every source file of the server entry that is not a spec, as `[path, text]`. */
 function sources(directory: string): Array<[string, string]> {
-  return readdirSync(directory).flatMap((name) => {
-    const path = join(directory, name)
-    if (statSync(path).isDirectory()) {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(directory, entry.name)
+    if (entry.isDirectory()) {
       return sources(path)
     }
     return path.endsWith('.ts') && !path.endsWith('.spec.ts')

@@ -6,6 +6,7 @@
  * @layer observability
  */
 
+import type { DynamicModule } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 import { Registry } from 'prom-client'
 
@@ -163,5 +164,83 @@ describe('NotificationObservabilityModule.register', () => {
     )
 
     expect(provided).toMatchObject({ useValue: { timeoutMs: 1234 } })
+  })
+})
+
+// The module is registered in two forms and builds the two channel services in two places, so the
+// same cases run against both: a form whose factory forgot the observer, or that hands the readiness
+// check a different shape for an absent channel, is caught here and not by a host in production.
+const FORMS: ReadonlyArray<{
+  readonly form: string
+  readonly register: (options: typeof channels | Pick<typeof channels, 'otp'>) => DynamicModule
+}> = [
+  { form: 'forRoot', register: (options) => BymaxNotificationModule.forRoot(options) },
+  {
+    form: 'forRootAsync',
+    register: (options) => BymaxNotificationModule.forRootAsync({ useFactory: () => options })
+  }
+]
+
+describe.each(FORMS)('NotificationObservabilityModule with $form', ({ register }) => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
+
+  it('should leave the samples of a real send and a real code on the registry', async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [register(channels), NotificationObservabilityModule.register()]
+    }).compile()
+    const registry = new Registry()
+    moduleRef.get(NotificationMetrics).registerMetrics(registry)
+
+    await moduleRef.get(EmailService).send({
+      tenantId: 'acme',
+      to: 'jane@acme.com',
+      subject: 'Hello',
+      html: '<p>Hello</p>'
+    })
+    const otp = moduleRef.get(OtpService)
+    const scope = { tenantId: 'acme', recipient: 'jane@acme.com', purpose: 'email_verification' }
+    await otp.generate({ ...scope, deliverVia: 'manual' })
+    await otp.verify({ ...scope, code: 'wrong' })
+
+    expect(
+      await sample(
+        registry,
+        `${NOTIFICATION_METRIC_NAMES.messages}{channel="email",outcome="sent"}`
+      )
+    ).toBe(1)
+    expect(await sample(registry, `${NOTIFICATION_METRIC_NAMES.otp}{event="issued"}`)).toBe(1)
+    expect(await sample(registry, `${NOTIFICATION_METRIC_NAMES.otp}{event="failed"}`)).toBe(1)
+    await moduleRef.close()
+  })
+
+  it('should verify the transport when the email channel is configured', async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [register(channels), NotificationObservabilityModule.register()]
+    }).compile()
+
+    await expect(moduleRef.get(NotificationHealthIndicator).check()).resolves.toEqual({
+      status: 'up'
+    })
+
+    expect(relay.verify).toHaveBeenCalledTimes(1)
+    await moduleRef.close()
+  })
+
+  it('should be up, with nothing to verify, when only the OTP channel is configured', async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [
+        register({ otp: { storage: new InMemoryOtpStorage(), resendCooldownSeconds: 0 } }),
+        NotificationObservabilityModule.register()
+      ]
+    }).compile()
+
+    await expect(moduleRef.get(NotificationHealthIndicator).check()).resolves.toEqual({
+      status: 'up'
+    })
+
+    expect(relay.verify).not.toHaveBeenCalled()
+    await moduleRef.close()
   })
 })

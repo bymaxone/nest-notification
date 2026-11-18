@@ -16,7 +16,7 @@ import {
   makeRenderer
 } from './__tests__/email-service.fixtures'
 import { freezeClockAwayFromCodes } from './__tests__/otp-service.fixtures'
-import { EmailService } from './email.service'
+import { EmailService, templateSendInput } from './email.service'
 
 describe('EmailService.send redaction', () => {
   // SECURITY (regression for the community-core finding on 1.2.0): a provider
@@ -657,23 +657,14 @@ describe('EmailService.send with publishProviderText: false', () => {
 describe('EmailService.sendTemplate redaction', () => {
   // The flag must ride sendTemplate → send, or the template path — the one OTP
   // delivery uses — silently keeps publishing provider text.
-  it('should forward publishProviderText to the inner send input', async () => {
-    const service = new EmailService(makeOptions(), makeProvider(), makeRenderer(), makeAudit())
-    const sendSpy = jest
-      .spyOn(service as unknown as { sendUnobserved: EmailService['send'] }, 'sendUnobserved')
-      .mockResolvedValue({ messageId: 'm' })
+  it('should forward publishProviderText to the inner send input', () => {
+    const base = { tenantId: 't', to: 'a@x.com', template: 'welcome', data: {} }
+    const rendered = { subject: 'S', html: '<p>H</p>' }
 
-    await service.sendTemplate({
-      tenantId: 't',
-      to: 'a@x.com',
-      template: 'welcome',
-      data: {},
+    expect(templateSendInput({ ...base, publishProviderText: false }, rendered, [])).toMatchObject({
       publishProviderText: false
     })
-    await service.sendTemplate({ tenantId: 't', to: 'a@x.com', template: 'welcome', data: {} })
-
-    expect(sendSpy.mock.calls[0]?.[0]?.publishProviderText).toBe(false)
-    expect('publishProviderText' in (sendSpy.mock.calls[1]?.[0] ?? {})).toBe(false)
+    expect('publishProviderText' in templateSendInput(base, rendered, [])).toBe(false)
   })
 
   // A renderer error can echo the template data (which carries the caller's
@@ -700,21 +691,19 @@ describe('EmailService.sendTemplate redaction', () => {
 
   // Declared secret values must ride sendTemplate → send so the failed-audit
   // redaction works on the template path (the one OTP delivery uses).
-  it('should forward auditRedactValues to the inner send input', async () => {
-    const renderer = makeRenderer()
-    const service = new EmailService(makeOptions(), makeProvider(), renderer, makeAudit())
-    const sendSpy = jest
-      .spyOn(service as unknown as { sendUnobserved: EmailService['send'] }, 'sendUnobserved')
-      .mockResolvedValue({ messageId: 'm' })
+  it('should forward auditRedactValues to the inner send input', () => {
+    const input = templateSendInput(
+      {
+        tenantId: 't',
+        to: 'a@x.com',
+        template: 'welcome',
+        data: {},
+        auditRedactValues: ['998877']
+      },
+      { subject: 'S', html: '<p>H</p>' },
+      []
+    )
 
-    await service.sendTemplate({
-      tenantId: 't',
-      to: 'a@x.com',
-      template: 'welcome',
-      data: {},
-      auditRedactValues: ['998877']
-    })
-
-    expect(sendSpy.mock.calls[0]?.[0]?.auditRedactValues).toEqual(['998877'])
+    expect(input.auditRedactValues).toEqual(['998877'])
   })
 })

@@ -66,7 +66,7 @@ export class NotificationHealthIndicator implements IHealthIndicator {
   constructor(
     @Optional()
     @Inject(BYMAX_NOTIFICATION_EMAIL_PROVIDER)
-    private readonly provider?: IEmailProvider,
+    private readonly provider?: IEmailProvider | null,
     @Optional()
     @Inject(NOTIFICATION_HEALTH_OPTIONS)
     options?: NotificationHealthOptions
@@ -90,7 +90,8 @@ export class NotificationHealthIndicator implements IHealthIndicator {
   /** Whether the channel can be used: no provider means there is nothing to check. */
   private async isUp(): Promise<boolean> {
     const provider = this.provider
-    if (provider === undefined) {
+    // The module provides `null` for an absent channel when it is registered asynchronously.
+    if (provider === undefined || provider === null) {
       return true
     }
     if (!provider.isConfigured()) {
