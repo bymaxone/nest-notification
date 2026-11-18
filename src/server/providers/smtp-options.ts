@@ -169,10 +169,12 @@ function copyTlsEntries(tls: object, name: 'key' | 'pfx', field: 'pem' | 'buf'):
   if (!Array.isArray(value)) {
     return
   }
+  // `Array.from` reads every index once, so a hole becomes an `undefined` entry that the check
+  // refuses, where `map` and `every` would skip it.
   Reflect.set(
     tls,
     name,
-    value.map((item: unknown) => {
+    Array.from(value as unknown[], (item: unknown) => {
       if (typeof item !== 'object' || item === null || ArrayBuffer.isView(item)) {
         return item
       }

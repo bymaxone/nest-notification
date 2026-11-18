@@ -39,6 +39,15 @@ beforeEach(() => {
   mockSendMail.mockResolvedValue({ messageId: '<abc@relay>' })
 })
 
+/** A copy of `items` with a hole, an index that has no value, inserted at `index`. */
+function withHole(items: unknown[], index: number): unknown[] {
+  const holey = new Array<unknown>(items.length + 1)
+  items.forEach((item, position) => {
+    holey[position < index ? position : position + 1] = item
+  })
+  return holey
+}
+
 // Node takes the object form of a key or a bundle only inside an array, so a bare object is refused
 // here and not at the first send.
 const KEY_WORDS =
@@ -130,6 +139,59 @@ describe('SmtpEmailProvider options that are objects', () => {
     expect(tls.key).toEqual(key)
     expect(tls.pfx).toEqual(pfx)
     expect((tls.pfx as Array<{ buf: unknown }>)[0]?.buf).toBe(material)
+  })
+
+  // The forms of a key and of a bundle, one case each: an array is read through every index, so a
+  // hole counts as a missing entry, an entry keeps only what Node reads from it, and an array that
+  // holds something that is not material, a nested array least of all, is refused.
+  it.each([
+    ['a sparse key array', withHole(['pem'], 0)],
+    ['a sparse pfx array', withHole([Buffer.from('a'), 'b'], 1)],
+    ['a nested array in key', [['pem']]],
+    ['a null entry in key', [null]],
+    ['a function entry in pfx', [() => 'x']]
+  ])('should refuse %s', (label, value) => {
+    const name = label.includes('pfx') ? 'pfx' : 'key'
+
+    expect(() => new SmtpEmailProvider({ host: 'h', tls: { [name]: value } as never })).toThrow(
+      `SmtpEmailProvider: tls.${name} must be`
+    )
+  })
+
+  it.each([
+    ['an empty string', 'ca', ''],
+    ['an empty array', 'cert', []],
+    ['a DataView', 'key', new DataView(new ArrayBuffer(1))],
+    ['a Float32Array', 'pfx', new Float32Array(1)],
+    ['an array of typed arrays', 'ca', [new Uint8Array(1), Buffer.from('x')]]
+  ])('should accept %s for tls.%s', (_label, name, value) => {
+    expect(
+      () => new SmtpEmailProvider({ host: 'h', tls: { [name]: value } as never })
+    ).not.toThrow()
+  })
+
+  it.each(['ca', 'cert'])(
+    'should refuse an object entry in tls.%s, which Node does not take',
+    (name) => {
+      expect(
+        () => new SmtpEmailProvider({ host: 'h', tls: { [name]: [{ pem: 'x' }] } as never })
+      ).toThrow(`SmtpEmailProvider: tls.${name} must be a string, a Buffer or an array of them`)
+    }
+  )
+
+  it('should keep only what Node reads from a key entry and from a pfx entry', async () => {
+    const tls = (
+      await transportOf({
+        host: 'h',
+        tls: {
+          key: [{ pem: 'k', passphrase: 'p', extra: 1 }],
+          pfx: [{ buf: 'b', extra: 2 }]
+        } as never
+      })
+    ).tls as Record<string, unknown>
+
+    expect(tls.key).toEqual([{ pem: 'k', passphrase: 'p' }])
+    expect(tls.pfx).toEqual([{ buf: 'b' }])
   })
 
   it('should read each entry once and hand the transport a copy of it', async () => {
