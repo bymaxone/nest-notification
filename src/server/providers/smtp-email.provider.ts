@@ -29,13 +29,13 @@ import type {
   EmailSendResult,
   IEmailProvider
 } from '../interfaces/email-provider.interface'
-import { escapeAuditString } from '../utils/audit-escape'
 import { errorCodeOf } from '../utils/availability'
 import { extractDeliveryStatus, withoutDeclaredValues } from '../utils/delivery-status'
 import { describeError, UNPRINTABLE_ERROR } from '../utils/describe-error'
 import { assertBodyParts } from '../utils/email-body'
 import { loadOptionalPeer } from '../utils/load-optional-peer'
 import { logEvent } from '../utils/log-event'
+import { loggableError } from '../utils/loggable-error'
 import { assertPort } from '../utils/port-option'
 import { collectEchoedExcerpts, readRedactedMessage, redactValues } from '../utils/redact'
 import { assertTimerMs } from '../utils/timer-option'
@@ -398,16 +398,18 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
       return this.withheldFailure(raw, code, redactValuesList)
     }
     const reason = this.scrubTransportError(raw, payload, redactValuesList)
+    const failure = Object.assign(
+      new Error(`SMTP send failed: ${reason}`),
+      code === undefined ? {} : { code }
+    )
     logEvent(
       this.logger,
       'warn',
       NOTIFICATION_LOG_EVENTS.SMTP_SEND_FAILED,
-      `[SMTP_SEND_FAILED] ${escapeAuditString(reason)}`
+      '[SMTP_SEND_FAILED] The send failed; the relay error is in the err field.',
+      loggableError(failure)
     )
-    return Object.assign(
-      new Error(`SMTP send failed: ${reason}`),
-      code === undefined ? {} : { code }
-    )
+    return failure
   }
 
   /**
