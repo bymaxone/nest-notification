@@ -42,6 +42,19 @@ const build = (observer?: INotificationObserver, audit = makeAudit()): EmailServ
   new EmailService(makeOptions(), makeProvider(), makeRenderer(), audit, observer)
 
 describe('EmailService observer', () => {
+  it('should report the time a send took, in seconds', async () => {
+    const observer = recorder()
+    const clock = jest
+      .spyOn(process.hrtime, 'bigint')
+      .mockReturnValueOnce(1_000_000_000n)
+      .mockReturnValueOnce(3_500_000_000n)
+
+    await build(observer).send(baseInput)
+    clock.mockRestore()
+
+    expect(observer.onSend).toHaveBeenCalledWith(expect.objectContaining({ seconds: 2.5 }))
+  })
+
   it('should report one sent send, with the channel and a duration, inside a span', async () => {
     const observer = recorder()
 

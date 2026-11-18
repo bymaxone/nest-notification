@@ -73,6 +73,7 @@ describe('NotificationTracing', () => {
 
     expect(result).toBe('done')
     expect(requestedTracers).toEqual([NOTIFICATION_TRACER_NAME])
+    expect(NOTIFICATION_TRACER_NAME).toBe('@bymax-one/nest-notification')
     expect(recorded).toEqual([
       {
         name: 'notification.send',

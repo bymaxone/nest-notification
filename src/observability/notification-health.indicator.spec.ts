@@ -103,6 +103,25 @@ describe('NotificationHealthIndicator', () => {
     expect(relay.verify).toHaveBeenCalledTimes(2)
   })
 
+  it('should verify again exactly when the success window ends', async () => {
+    const relay = provider()
+    const indicator = new NotificationHealthIndicator(relay, OPTIONS)
+
+    await indicator.check()
+    jest.advanceTimersByTime(OPTIONS.successTtlMs)
+    await indicator.check()
+
+    expect(relay.verify).toHaveBeenCalledTimes(2)
+  })
+
+  it('should leave no timer running once the verification has answered', async () => {
+    const indicator = new NotificationHealthIndicator(provider(), OPTIONS)
+
+    await indicator.check()
+
+    expect(jest.getTimerCount()).toBe(0)
+  })
+
   it('should share one verification between callers that arrive together', async () => {
     const relay = provider()
     const indicator = new NotificationHealthIndicator(relay, OPTIONS)

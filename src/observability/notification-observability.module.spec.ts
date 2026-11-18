@@ -20,7 +20,10 @@ import { EmailService } from '../server/services/email.service'
 import { OtpService } from '../server/services/otp.service'
 
 import { NOTIFICATION_METRIC_NAMES } from './constants'
-import { NotificationHealthIndicator } from './notification-health.indicator'
+import {
+  NOTIFICATION_HEALTH_OPTIONS,
+  NotificationHealthIndicator
+} from './notification-health.indicator'
 import { NotificationMetrics } from './notification-metrics'
 import { NotificationObservabilityModule } from './notification-observability.module'
 
@@ -130,5 +133,35 @@ describe('NotificationObservabilityModule', () => {
       })
     ).resolves.toEqual({ messageId: 'm1' })
     await moduleRef.close()
+  })
+})
+
+describe('NotificationObservabilityModule.register', () => {
+  it('should be global, so the services see the observer without importing it', () => {
+    expect(NotificationObservabilityModule.register().global).toBe(true)
+  })
+
+  it('should give the readiness check an empty options object when none are given', () => {
+    const provided = NotificationObservabilityModule.register().providers?.find(
+      (entry) =>
+        typeof entry === 'object' &&
+        'provide' in entry &&
+        entry.provide === NOTIFICATION_HEALTH_OPTIONS
+    )
+
+    expect(provided).toMatchObject({ useValue: {} })
+  })
+
+  it('should hand the readiness options the host gave', () => {
+    const provided = NotificationObservabilityModule.register({
+      health: { timeoutMs: 1234 }
+    }).providers?.find(
+      (entry) =>
+        typeof entry === 'object' &&
+        'provide' in entry &&
+        entry.provide === NOTIFICATION_HEALTH_OPTIONS
+    )
+
+    expect(provided).toMatchObject({ useValue: { timeoutMs: 1234 } })
   })
 })

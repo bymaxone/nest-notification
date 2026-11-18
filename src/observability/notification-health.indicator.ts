@@ -119,7 +119,7 @@ export class NotificationHealthIndicator implements IHealthIndicator {
     let timer: NodeJS.Timeout | undefined
     const timedOut = new Promise<never>((_, reject) => {
       timer = setTimeout(() => {
-        reject(new Error('verification timed out'))
+        reject(new Error())
       }, this.#options.timeoutMs)
     })
     let up = true
