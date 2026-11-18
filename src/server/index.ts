@@ -132,7 +132,9 @@ export {
   type SmtpEmailProviderOptions,
   type SmtpCredentials,
   type SmtpPoolOptions,
-  type SmtpTlsOptions
+  type SmtpTlsKeyEntry,
+  type SmtpTlsOptions,
+  type SmtpTlsPfxEntry
 } from './providers/smtp-email.provider'
 export { InMemoryOtpStorage, type InMemoryStorageSize } from './providers/in-memory-otp.storage'
 export {

@@ -5,6 +5,22 @@
  * @layer infrastructure
  */
 
+/** An encrypted private key with its own passphrase, as Node takes it in `tls.key`. */
+export interface SmtpTlsKeyEntry {
+  /** The key, in PEM form. */
+  pem: string | Buffer
+  /** The passphrase that decrypts it. A secret: it is never printed. */
+  passphrase?: string | undefined
+}
+
+/** A PKCS#12 bundle with its own passphrase, as Node takes it in `tls.pfx`. */
+export interface SmtpTlsPfxEntry {
+  /** The bundle. */
+  buf: string | Buffer
+  /** The passphrase that decrypts it. A secret: it is never printed. */
+  passphrase?: string | undefined
+}
+
 /**
  * TLS knobs forwarded to the transport: a private CA, the protocol bounds, the ciphers, a custom
  * identity check and a client certificate. These are the only keys accepted; any other key of `tls`
@@ -22,7 +38,7 @@ export interface SmtpTlsOptions {
   /** SNI server name, when it differs from `host`. */
   servername?: string
   /** Additional trusted CA certificate(s), in PEM form. */
-  ca?: string | string[]
+  ca?: string | Buffer | ReadonlyArray<string | Buffer>
   /** The lowest TLS version the session may negotiate. */
   minVersion?: 'TLSv1' | 'TLSv1.1' | 'TLSv1.2' | 'TLSv1.3'
   /** The highest TLS version the session may negotiate. */
@@ -36,12 +52,18 @@ export interface SmtpTlsOptions {
   checkServerIdentity?(hostname: string, cert: object): Error | undefined
   /** The client certificate chain, in PEM form. */
   cert?: string | Buffer | ReadonlyArray<string | Buffer>
-  /** The private key of the client certificate, in PEM form. */
-  key?: string | Buffer | ReadonlyArray<string | Buffer>
+  /**
+   * The private key of the client certificate, in PEM form: a string, a Buffer, or an array whose
+   * entries are those or an encrypted key with its own passphrase as `{ pem, passphrase }`.
+   */
+  key?: string | Buffer | ReadonlyArray<string | Buffer | SmtpTlsKeyEntry>
   /** The passphrase of an encrypted `key` or `pfx`. A secret: it is never printed. */
   passphrase?: string
-  /** The client certificate and key as a PKCS#12 bundle. */
-  pfx?: string | Buffer | ReadonlyArray<string | Buffer>
+  /**
+   * The client certificate and key as a PKCS#12 bundle: a string, a Buffer, or an array whose
+   * entries are those or a bundle with its own passphrase as `{ buf, passphrase }`.
+   */
+  pfx?: string | Buffer | ReadonlyArray<string | Buffer | SmtpTlsPfxEntry>
 }
 
 /**
