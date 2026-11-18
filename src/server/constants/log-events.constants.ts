@@ -1,7 +1,7 @@
 /**
  * @fileoverview The closed set of log events this library writes. Every operational log line
- * carries one of these as its `event` field, beside the text it has always had in `message`, so a
- * log pipeline matches on `event` and a person still reads the same words.
+ * carries one of these as its `event` field, beside the human-readable text in `message`, so a
+ * log pipeline matches on `event` and a person reads the words.
  * @layer constants
  */
 

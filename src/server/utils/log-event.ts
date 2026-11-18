@@ -13,8 +13,9 @@ export type LogEventLevel = 'log' | 'warn' | 'debug'
 
 /**
  * Writes `{ event, message }` through a Nest `Logger`. With `@bymax-one/nest-logger` the two are
- * fields of the entry; the default Nest logger prints the object. The message is exactly the text
- * the line has always carried, so a match on the text keeps working beside the new `event` match.
+ * fields of the entry; the default Nest logger prints the object. `message` must keep the
+ * human-readable text, its bracketed tag included, so a consumer that matches on the text stays
+ * compatible with one that matches on `event`.
  *
  * @param logger - The Nest logger of the class that writes the line.
  * @param level - The level to write at.
