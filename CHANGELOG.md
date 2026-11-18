@@ -32,8 +32,16 @@ the entries that carry one, is the compatibility contract — read it, not the n
 - **Every operational log line carries an `event`.** The ten lines the library writes (the module bootstrap,
   the plaintext-code and unusable-channel warnings, the OTP storage and template warnings, the audit write
   failure, and the Resend, SMTP and no-op provider lines) are now written as `{ event, message }`, where
-  `event` is one of the `NOTIFICATION_*` names in the README's "Log events" table and `message` is the text
-  the line has always had, bracketed tag included.
+  `event` is one of the `NOTIFICATION_*` names in the README's "Log events" table and `message` is the
+  library's own text, bracketed tag included. The three lines that report an error of a provider or of your
+  template renderer (`NOTIFICATION_RESEND_SEND_FAILED`, `NOTIFICATION_SMTP_SEND_FAILED` and
+  `NOTIFICATION_OTP_TEMPLATE_NOT_RESOLVED`) no longer put that error's text in `message`: it travels as an
+  `Error` in the `err` field, escaped and scrubbed the way the error your call receives is, so an address a
+  relay echoes is not part of a message. A spec holds every event to this with a sentinel.
+- **The README names every export.** Each type, option shape and constant of the five entry points is in the
+  README with its defaults, ranges and failure modes, and a spec fails when an export is not named there.
+  It also corrects the statements the reference check found false: `global.redisNamespace` is resolved but
+  not read by the bundled storages (`RedisOtpStorage` takes its own `namespace`), and the error-code count.
 
 ### Fixed
 
@@ -58,7 +66,8 @@ The declarations gain `INotificationObserver`, its event types, `BYMAX_NOTIFICAT
 parameter, which only matters if you build them by hand, and `SmtpTransportLike` gains an optional `verify`.
 A log line is now an object where it was a string: with `@bymax-one/nest-logger` 1.4.23 or later `event` and
 `message` are fields of the entry, so match on `event`; with the default Nest logger the line prints as the
-object, and a custom logger that read the first argument as a string must read `message`. The package still
+object, and a custom logger that read the first argument as a string must read `message`. A match on the
+text of the Resend, SMTP or OTP template-check lines must read `err.message`. The package still
 ships no dependencies, and the three new peers are optional.
 
 The declaration `SmtpTlsOptions.ca` widens from `string | string[]` to
