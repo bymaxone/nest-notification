@@ -85,6 +85,63 @@ describe('runInSpan', () => {
     ).rejects.toBe(failure)
   })
 
+  // Every ordering of what the span does with the operation, one case each; the outcome is always
+  // the operation's own, and the operation runs exactly once.
+  const ORDERINGS: ReadonlyArray<{
+    readonly label: string
+    readonly span: NonNullable<INotificationObserver['span']>
+  }> = [
+    { label: 'resolves without running it', span: async () => undefined as never },
+    { label: 'resolves another value without running it', span: async () => 'other' as never },
+    { label: 'rejects without running it', span: async () => Promise.reject(new Error('no')) },
+    {
+      label: 'runs it and returns another value',
+      span: async (_name, _attributes, inner) => {
+        await inner().catch(() => undefined)
+        return 'other' as never
+      }
+    },
+    {
+      label: 'runs it twice',
+      span: async (_name, _attributes, inner) => {
+        await inner().catch(() => undefined)
+        return inner()
+      }
+    },
+    {
+      label: 'resolves while the operation is still running',
+      span: (_name, _attributes, inner) => {
+        void inner().catch(() => undefined)
+        return Promise.resolve('other' as never)
+      }
+    }
+  ]
+
+  describe.each(ORDERINGS)('when the span $label', ({ span }) => {
+    it('should return the operation result and run it once', async () => {
+      const run = jest.fn(async () => {
+        await Promise.resolve()
+        return 'done'
+      })
+
+      await expect(runInSpan({ span }, SPAN[0], SPAN[1], run)).resolves.toBe('done')
+
+      expect(run).toHaveBeenCalledTimes(1)
+    })
+
+    it('should rethrow the operation own error and run it once', async () => {
+      const failure = new Error('the operation failed')
+      const run = jest.fn(async () => {
+        await Promise.resolve()
+        throw failure
+      })
+
+      await expect(runInSpan({ span }, SPAN[0], SPAN[1], run)).rejects.toBe(failure)
+
+      expect(run).toHaveBeenCalledTimes(1)
+    })
+  })
+
   it('should rethrow the operation own error when the span lets it through', async () => {
     const failure = new Error('the operation failed')
     const observer: INotificationObserver = { span: async (_n, _a, inner) => inner() }

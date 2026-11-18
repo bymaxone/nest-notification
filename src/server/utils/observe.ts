@@ -12,16 +12,11 @@ import type {
   NotificationSpanName
 } from '../interfaces/notification-observer.interface'
 
-/** How the operation settled, once it has. */
-type Settled<T> =
-  { readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: unknown }
-
 /**
  * Runs `run` inside the observer's span when it has one, and plainly when it has none, and never
- * lets the span change the operation. If the span fails before it runs the operation, the
- * operation is run here; if it fails after the operation succeeded, the operation's result is
- * returned; and if the operation itself threw, its own error is what is rethrown, whatever the span
- * made of it.
+ * lets the span change the operation: the operation runs exactly once, however often the span
+ * calls it, and when the span never calls it, here; and its outcome, the value or its own error, is
+ * what this returns, whatever the span returned, resolved or threw.
  *
  * @param observer - The observer, when one is registered.
  * @param name - The span name.
@@ -38,30 +33,17 @@ export async function runInSpan<T>(
   if (observer?.span === undefined) {
     return run()
   }
-  let settled: Settled<T> | undefined
-  const recorded = async (): Promise<T> => {
-    try {
-      const value = await run()
-      settled = { ok: true, value }
-      return value
-    } catch (error) {
-      settled = { ok: false, error }
-      throw error
-    }
+  let operation: Promise<T> | undefined
+  const once = (): Promise<T> => {
+    operation ??= run()
+    return operation
   }
   try {
-    return await observer.span(name, attributes, recorded)
+    await observer.span(name, attributes, once)
   } catch {
-    if (settled === undefined) {
-      // The observer failed before it ran the operation, which must still happen.
-      return run()
-    }
-    if (settled.ok) {
-      return settled.value
-    }
-    // The operation's own error, not the one the observer made of it.
-    throw settled.error
+    // What the span made of the operation is not the operation's outcome.
   }
+  return once()
 }
 
 /**
