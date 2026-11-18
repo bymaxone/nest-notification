@@ -34,5 +34,9 @@
   {
     "file": "src/check-function-length.key.spec.ts",
     "reason": "Tests scripts/function-length-key.mjs, a repository script, and imports nothing under src/, so it judges no mutant."
+  },
+  {
+    "file": "src/readme-exports.spec.ts",
+    "reason": "Reads the README as text and compiles the entry points as files to compare their exports with it; it imports nothing from src at run time, so it covers no published code and judges no mutant. Stryker's Jest config also leaves it out."
   }
 ]
