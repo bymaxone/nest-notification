@@ -16,6 +16,8 @@ export const NOTIFICATION_LOG_EVENTS = {
   BOOTSTRAP_OK: 'NOTIFICATION_BOOTSTRAP_OK',
   /** `otp.codeSecret` is not set, so OTP codes are stored in plaintext. */
   PLAINTEXT_OTP_CODES: 'NOTIFICATION_PLAINTEXT_OTP_CODES',
+  /** `global.redisNamespace` is set, but it does not reach `RedisOtpStorage`. */
+  REDIS_NAMESPACE_UNUSED: 'NOTIFICATION_REDIS_NAMESPACE_UNUSED',
   /** A configured channel reports `isConfigured() = false` and is not enabled. */
   CHANNEL_NOT_USABLE: 'NOTIFICATION_CHANNEL_NOT_USABLE',
   /** The OTP storage does not carry the failed-attempt count across re-issues. */

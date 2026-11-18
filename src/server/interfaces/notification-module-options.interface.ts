@@ -37,7 +37,12 @@ export interface NotificationRequest {
 
 /** Library-wide settings applied across channels unless overridden. */
 export interface GlobalOptions {
-  /** Namespace prefixed to every storage key. Default: `'notification'`. */
+  /**
+   * Resolved and read by nothing: the bundled `RedisOtpStorage` takes its own `namespace`
+   * constructor option, so this value never reaches a store key. Setting it logs one startup warning.
+   *
+   * @deprecated Pass `namespace` to the `RedisOtpStorage` constructor. Removed in v2.0.
+   */
   redisNamespace?: string
   /** Default template locale when the caller does not specify. Default: `'en'`. */
   defaultLocale?: string

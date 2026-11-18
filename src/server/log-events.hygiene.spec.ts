@@ -90,6 +90,15 @@ const ROWS: Record<NotificationLogEvent, Row> = {
     },
     errCarriesSentinel: false
   },
+  NOTIFICATION_REDIS_NAMESPACE_UNUSED: {
+    provoke: () => {
+      BymaxNotificationModule.forRoot({
+        email: { provider: new NoOpEmailProvider(), defaultFrom: 'noreply@acme.com' },
+        global: { redisNamespace: SENTINEL }
+      })
+    },
+    errCarriesSentinel: false
+  },
   NOTIFICATION_CHANNEL_NOT_USABLE: {
     provoke: () => {
       const provider = makeProvider()
