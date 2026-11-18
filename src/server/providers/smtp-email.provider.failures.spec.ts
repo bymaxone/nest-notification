@@ -51,6 +51,63 @@ describe('SmtpEmailProvider failure handling', () => {
     warnSpy.mockRestore()
   })
 
+  // The passphrase of a client key is secret material like a password: a transport error that
+  // quotes the connection options must not put it in the thrown message or the warn line.
+  it('should scrub the tls passphrase out of a transport error', async () => {
+    mockSendMail.mockRejectedValue(new Error('TLS setup failed with passphrase tls-secret-phrase'))
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+    const failure = new SmtpEmailProvider({
+      host: 'h',
+      tls: { passphrase: 'tls-secret-phrase' }
+    }).send(baseOptions)
+
+    await expect(failure).rejects.toThrow('SMTP send failed: TLS setup failed with passphrase')
+    await expect(failure).rejects.not.toThrow(/tls-secret-phrase/)
+    expect(String(warnSpy.mock.calls[0]?.[0])).not.toContain('tls-secret-phrase')
+    warnSpy.mockRestore()
+  })
+
+  // A client key can carry its own passphrase, as a { pem, passphrase } entry and as a { buf,
+  // passphrase } pfx: each is secret material and is scrubbed like the one on tls itself.
+  it('should scrub the passphrase carried by a key entry and a pfx entry', async () => {
+    mockSendMail.mockRejectedValue(new Error('TLS failed: key-entry-phrase and pfx-entry-phrase'))
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+    const failure = new SmtpEmailProvider({
+      host: 'h',
+      tls: {
+        key: ['plain', { pem: 'pem', passphrase: 'key-entry-phrase' }],
+        pfx: [{ buf: 'buf', passphrase: 'pfx-entry-phrase' }]
+      }
+    }).send(baseOptions)
+
+    await expect(failure).rejects.toThrow('SMTP send failed: TLS failed: [redacted] and [redacted]')
+    expect(String(warnSpy.mock.calls[0]?.[0])).not.toMatch(/entry-phrase/)
+    warnSpy.mockRestore()
+  })
+
+  // The passphrase that is scrubbed is the one that was checked: an entry whose getter answers
+  // differently later cannot leave the first answer unscrubbed.
+  it('should scrub the passphrase an entry gave when it was copied, not one it gives later', async () => {
+    mockSendMail.mockRejectedValue(new Error('TLS failed: first-phrase'))
+    let reads = 0
+    const entry = {
+      pem: 'pem',
+      get passphrase(): string | undefined {
+        reads += 1
+        return reads === 1 ? 'first-phrase' : undefined
+      }
+    }
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+    const failure = new SmtpEmailProvider({ host: 'h', tls: { key: [entry] } }).send(baseOptions)
+
+    await expect(failure).rejects.toThrow('SMTP send failed: TLS failed: [redacted]')
+    expect(String(warnSpy.mock.calls[0]?.[0])).not.toContain('first-phrase')
+    warnSpy.mockRestore()
+  })
+
   // SECURITY (regression for the community-core finding): a policy/DLP relay
   // that quotes the rejected content in its 550 puts the body — and the OTP
   // inside it — into the transport error. The echoed excerpt is scrubbed
