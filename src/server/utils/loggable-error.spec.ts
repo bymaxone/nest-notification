@@ -11,8 +11,7 @@ describe('loggableError', () => {
   it('should write a line break of the message as a visible sequence', () => {
     const copy = loggableError(new Error('550 rejected\nFAKE [LOG] line'))
 
-    expect(copy.message).not.toContain('\n')
-    expect(copy.message).toContain('550 rejected')
+    expect(copy.message).toBe('550 rejected\\nFAKE [LOG] line')
   })
 
   it('should escape the name and a string code, and leave a code that is not a string out', () => {

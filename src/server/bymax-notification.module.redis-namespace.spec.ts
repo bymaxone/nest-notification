@@ -82,7 +82,7 @@ describe.each(FORMS)('global.redisNamespace warning with $form', ({ register }) 
     )
   })
 
-  it('should never write the value the host gave', async () => {
+  it('should not write the value the host gave in the warning', async () => {
     await register(withGlobal({ redisNamespace: SENTINEL_NAMESPACE }))
 
     expect(JSON.stringify(unused())).not.toContain(SENTINEL_NAMESPACE)
