@@ -36,8 +36,8 @@ the entries that carry one, is the compatibility contract — read it, not the n
   library's own text, bracketed tag included. The three lines that report an error of a provider or of your
   template renderer (`NOTIFICATION_RESEND_SEND_FAILED`, `NOTIFICATION_SMTP_SEND_FAILED` and
   `NOTIFICATION_OTP_TEMPLATE_NOT_RESOLVED`) no longer put that error's text in `message`: it travels as an
-  `Error` in the `err` field, escaped and scrubbed the way the error your call receives is, so an address a
-  relay echoes is not part of a message. A spec holds every event to this with a sentinel.
+  `Error` in the `err` field, escaped, and for Resend and SMTP scrubbed like the error your call gets, so an
+  address a relay echoes is not part of a message. A spec holds every event to this with a sentinel.
 - **The README names every export.** Each type, option shape and constant of the five entry points is in the
   README with its defaults, ranges and failure modes, and a spec fails when an export is not named there.
   It also corrects the statements the reference check found false: `global.redisNamespace` is resolved but
