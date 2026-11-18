@@ -5,8 +5,16 @@
  * @layer observability
  */
 
-import { SpanStatusCode, trace } from '@opentelemetry/api'
-import type { Span, Tracer } from '@opentelemetry/api'
+import { INVALID_SPAN_CONTEXT, SpanStatusCode, trace } from '@opentelemetry/api'
+import type {
+  Context,
+  Link,
+  Span,
+  SpanContext,
+  SpanOptions,
+  SpanStatus,
+  Tracer
+} from '@opentelemetry/api'
 
 import { NotificationException } from '../server/errors/notification-exception'
 
@@ -23,31 +31,99 @@ interface RecordedSpan {
 const recorded: RecordedSpan[] = []
 const requestedTracers: string[] = []
 
+/** A span that writes what the adapter does to it into a record, and does nothing else. */
+class RecordingSpan implements Span {
+  constructor(private readonly entry: RecordedSpan) {}
+
+  spanContext(): SpanContext {
+    return INVALID_SPAN_CONTEXT
+  }
+
+  setAttribute(): this {
+    return this
+  }
+
+  setAttributes(): this {
+    return this
+  }
+
+  addEvent(): this {
+    return this
+  }
+
+  addLink(_link: Link): this {
+    return this
+  }
+
+  addLinks(_links: Link[]): this {
+    return this
+  }
+
+  setStatus(status: SpanStatus): this {
+    this.entry.status = status
+    return this
+  }
+
+  updateName(): this {
+    return this
+  }
+
+  end(): void {
+    this.entry.ended += 1
+  }
+
+  isRecording(): boolean {
+    return true
+  }
+
+  recordException(): void {
+    // The adapter reports a failure through the status only, so there is nothing to record.
+  }
+}
+
 /** A tracer whose active spans are recorded, so a case can read what the adapter did to them. */
-const tracer = {
-  startActiveSpan: (
-    name: string,
-    options: { attributes?: Record<string, unknown> },
-    run: (span: Span) => unknown
-  ): unknown => {
+class RecordingTracer implements Tracer {
+  startSpan(name: string, options?: SpanOptions): Span {
     const entry: RecordedSpan = {
       name,
-      attributes: { ...options.attributes },
+      attributes: { ...options?.attributes },
       ended: 0,
       status: undefined
     }
     recorded.push(entry)
-    const span = {
-      setStatus: (status: RecordedSpan['status']): void => {
-        entry.status = status
-      },
-      end: (): void => {
-        entry.ended += 1
-      }
-    }
-    return run(span as unknown as Span)
+    return new RecordingSpan(entry)
   }
-} as unknown as Tracer
+
+  startActiveSpan<F extends (span: Span) => unknown>(name: string, fn: F): ReturnType<F>
+  startActiveSpan<F extends (span: Span) => unknown>(
+    name: string,
+    options: SpanOptions,
+    fn: F
+  ): ReturnType<F>
+  startActiveSpan<F extends (span: Span) => unknown>(
+    name: string,
+    options: SpanOptions,
+    context: Context,
+    fn: F
+  ): ReturnType<F>
+  startActiveSpan<F extends (span: Span) => unknown>(
+    name: string,
+    second: SpanOptions | F,
+    third?: Context | F,
+    fourth?: F
+  ): ReturnType<F> {
+    const options = typeof second === 'function' ? undefined : second
+    const run = [second, third, fourth].find(
+      (candidate): candidate is F => typeof candidate === 'function'
+    )
+    if (run === undefined) {
+      throw new TypeError('startActiveSpan needs a callback')
+    }
+    return run(this.startSpan(name, options)) as ReturnType<F>
+  }
+}
+
+const tracer = new RecordingTracer()
 
 beforeAll(() => {
   trace.setGlobalTracerProvider({
