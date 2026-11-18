@@ -7,7 +7,7 @@ import type { EmailSendOptions } from '../interfaces/email-provider.interface'
 
 import { BIDI_OVERRIDE, hasRawControl } from './__tests__/has-raw-control'
 import { ResendEmailProvider } from './resend-email.provider'
-import { loggedEvent, loggedAll } from '../__tests__/logged'
+import { loggedAll, loggedEvent, loggedText } from '../__tests__/logged'
 
 // `mock`-prefixed names are allowed inside the hoisted jest.mock factory.
 const mockSend = jest.fn()
@@ -241,6 +241,20 @@ describe('ResendEmailProvider', () => {
   // The SDK's message is not ours: a line feed in it would start a second record in any log that
   // writes lines. The warn line carries the reason with every control written as a visible
   // sequence; the thrown message keeps the text as it came.
+  it('should keep every word of the provider out of the line itself', async () => {
+    mockSend.mockResolvedValue({ data: null, error: { message: 'mailbox jane@acme.com unknown' } })
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+    await new ResendEmailProvider({ apiKey: 're_logescape_key' })
+      .send(baseOptions)
+      .catch(() => undefined)
+
+    expect(loggedText(warnSpy.mock.calls[0])).toBe(
+      '[RESEND_SEND_FAILED] The send failed; the provider error is in the err field.'
+    )
+    warnSpy.mockRestore()
+  })
+
   it('should write a control character of an SDK error as a visible sequence', async () => {
     const message = `rate\nforged [RESEND_SEND_FAILED] ok${BIDI_OVERRIDE}`
     mockSend.mockResolvedValue({ data: null, error: { message } })
