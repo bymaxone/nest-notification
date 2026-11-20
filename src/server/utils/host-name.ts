@@ -23,7 +23,7 @@ function sequenceOf(character: string): string {
  * The text a name from the host may take in a log or error line: cut at 200 characters (a cut is
  * marked with `…`) and with each control, format and separator character written as a visible
  * sequence. The 200 counts characters of the name, so an escaped character counts once and the
- * written text is at most 2000 characters. The cut never splits a surrogate pair. A value that is not a string is written as `[unreadable]`,
+ * written text is at most 2000 characters plus the mark of a cut. The cut never splits a surrogate pair. A value that is not a string is written as `[unreadable]`,
  * because a host can hand over anything where the interface says `string`.
  *
  * @param value - The name, as the host supplied it.
