@@ -15,7 +15,8 @@ export type LogEventLevel = 'log' | 'warn' | 'debug'
  * Writes `{ event, message }` through a Nest `Logger`. With `@bymax-one/nest-logger` the two are
  * fields of the entry; the default Nest logger prints the object. `message` must keep the
  * human-readable text, its bracketed tag included, so a consumer that matches on the text stays
- * compatible with one that matches on `event`.
+ * compatible with one that matches on `event`. A logger that throws is absorbed: the line is lost and
+ * the caller is not affected.
  *
  * @param logger - The Nest logger of the class that writes the line.
  * @param level - The level to write at.
@@ -32,16 +33,23 @@ export function logEvent(
   message: string,
   err?: Error
 ): void {
-  const entry = err === undefined ? { event, message } : { event, message, err }
-  switch (level) {
-    case 'log':
-      logger.log(entry)
-      break
-    case 'warn':
-      logger.warn(entry)
-      break
-    case 'debug':
-      logger.debug(entry)
-      break
+  const entry = err === undefined ? { event, message } : { err, event, message }
+  try {
+    switch (level) {
+      case 'log':
+        logger.log(entry)
+        break
+      case 'warn':
+        logger.warn(entry)
+        break
+      case 'debug':
+        logger.debug(entry)
+        break
+    }
+  } catch {
+    // The host's logger is code the library does not own: a line that cannot be written must not
+    // turn a send, a verification or the module's bootstrap into a failure. Only a synchronous
+    // throw is absorbed here. Nest's `Logger` discards what the host logger returns, so a promise
+    // it rejects is never seen by this call.
   }
 }

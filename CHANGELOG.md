@@ -11,6 +11,29 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 ## [Unreleased]
 
+## [1.4.19] - 2026-11-20
+
+### Fixed
+
+- **A host logger that throws no longer fails the operation that logged.** Every library log line goes through one
+  helper, and the helper now catches a synchronous throw of the host's logger, so a send, a verification, an
+  audit-swallow warning or the module's start is not turned into an error by a broken log sink. The line is lost.
+- **The entry puts `event` and `message` last.** The keys of a line that carries an error are now `err`, `event`,
+  `message` (they were `event`, `message`, `err`). A line without an error is unchanged.
+
+### Documentation
+
+- The README's bundle budget row moves from `40.07 KB` to `40.12 KB` for the helper's `try`/`catch`.
+- The README states the limit: Nest's `Logger` discards what the host logger returns, so a logger method that is
+  `async` and rejects cannot be caught by the library. The rejection is unhandled and ends the Node process unless
+  the application handles `unhandledRejection`. Keep the logger methods synchronous, or catch inside them.
+
+#### Apply to a derived backend
+
+No declaration changes and no option changes. A host that reads the keys of a log entry by position sees `err`
+first; a host that reads them by name is unaffected. A host logger that threw used to surface the throw to the
+caller of the operation; it no longer does.
+
 ## [1.4.18] - 2026-11-20
 
 ### Documentation
@@ -1618,7 +1641,8 @@ rejected at startup rather than failing on the first send.
 
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.4.18...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.4.19...HEAD
+[1.4.19]: https://github.com/bymaxone/nest-notification/compare/v1.4.18...v1.4.19
 [1.4.18]: https://github.com/bymaxone/nest-notification/compare/v1.4.17...v1.4.18
 [1.4.17]: https://github.com/bymaxone/nest-notification/compare/v1.4.16...v1.4.17
 [1.4.16]: https://github.com/bymaxone/nest-notification/compare/v1.4.15...v1.4.16
