@@ -41,10 +41,11 @@ describe('plaintext OTP code storage warning', () => {
 
     const messages = warned().filter((m) => m.includes('otp.codeSecret'))
     expect(messages).toHaveLength(1)
-    expect(messages[0]).toContain('plaintext')
     // The remedy is part of the message: what to set, how long, and what it stores instead.
-    expect(messages[0]).toContain('at least 32 bytes')
-    expect(messages[0]).toContain('HMAC-SHA-256')
+    expect(messages[0]).toBe(
+      '[BYMAX_NOTIFICATION_PLAINTEXT_OTP_CODES] otp.codeSecret is not set: OTP codes are stored in plaintext. ' +
+        'Set otp.codeSecret (at least 32 bytes) to store an HMAC-SHA-256 digest instead.'
+    )
     expect(warnSpy.mock.calls.map((call) => loggedEvent(call))).toContain(
       'NOTIFICATION_PLAINTEXT_OTP_CODES'
     )

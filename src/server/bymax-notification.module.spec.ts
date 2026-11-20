@@ -190,8 +190,9 @@ describe('BymaxNotificationModule.forRoot', () => {
 
     const logged = loggedText(logSpy.mock.calls[0])
     expect(loggedEvent(logSpy.mock.calls[0])).toBe('NOTIFICATION_BOOTSTRAP_OK')
-    expect(logged).toContain('BYMAX_NOTIFICATION_MODULE_BOOTSTRAP_OK')
-    expect(logged).toContain('channels: email, otp')
+    expect(logged).toBe(
+      '[BYMAX_NOTIFICATION_MODULE_BOOTSTRAP_OK] Initialized with channels: email, otp'
+    )
   })
 
   // An email-only bootstrap lists ONLY 'email' — pins the `if (resolved.otp)` push

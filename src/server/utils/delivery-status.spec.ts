@@ -46,6 +46,21 @@ describe('extractDeliveryStatus', () => {
     expect(extractDeliveryStatus('connect ECONNREFUSED 127.0.0.1:1099')).toEqual({})
   })
 
+  // The relay's own words are not a reply: three digits glued to a word (an identifier such as
+  // `TEN456`) are part of that word and must not be read as a status.
+  it('should not read digits that end a word as a reply code', () => {
+    expect(extractDeliveryStatus('x user=USER123 tenant=TEN456 token=SECRET789')).toEqual({})
+    expect(extractDeliveryStatus('ref_450 id5.1.1')).toEqual({})
+    expect(extractDeliveryStatus('Message failed: 550 5.1.1 user unknown')).toEqual({
+      status: 550,
+      enhanced: '5.1.1'
+    })
+    expect(extractDeliveryStatus('550-5.1.1 first line\n550 5.1.1 last line')).toEqual({
+      status: 550,
+      enhanced: '5.1.1'
+    })
+  })
+
   // SECURITY: a cause chain can place two replies in one text. Picking either
   // would publish a value assembled from two different answers, so ambiguity
   // resolves to silence — per field, since one may be unambiguous while the

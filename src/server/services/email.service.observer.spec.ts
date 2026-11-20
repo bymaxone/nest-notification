@@ -15,7 +15,7 @@ import {
   makeProvider,
   makeRenderer
 } from './__tests__/email-service.fixtures'
-import { EmailService } from './email.service'
+import { EmailService, type EmailSendInput } from './email.service'
 
 /** An observer that records what it is told, running the operation inside its "span". */
 function recorder(): jest.Mocked<Required<INotificationObserver>> & { order: string[] } {
@@ -89,6 +89,22 @@ describe('EmailService observer', () => {
 
     expect(observer.onSend).toHaveBeenCalledWith(expect.objectContaining({ outcome: 'failed' }))
     expect(observer.onSend).toHaveBeenCalledTimes(1)
+  })
+
+  // The README says so: `rejected` is the library's own refusal, and a raw error from malformed
+  // input that never reaches the provider is `failed`.
+  it('should report a malformed recipient that raises a TypeError as failed', async () => {
+    const observer = recorder()
+    const provider = makeProvider()
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), makeAudit(), observer)
+
+    await expect(
+      service.send({ ...baseInput, ...(JSON.parse('{"to":null}') as Partial<EmailSendInput>) })
+    ).rejects.toBeInstanceOf(TypeError)
+
+    expect(observer.onSend).toHaveBeenCalledTimes(1)
+    expect(observer.onSend).toHaveBeenCalledWith(expect.objectContaining({ outcome: 'failed' }))
+    expect(provider.send).not.toHaveBeenCalled()
   })
 
   it('should report a send the library refused as rejected, without calling the provider', async () => {

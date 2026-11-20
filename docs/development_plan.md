@@ -509,7 +509,7 @@ The interface mirrors `docs/technical_specification.md §4.1` (`BymaxNotificatio
 
 - `BymaxNotificationModuleOptions` — top-level with optional channel sections (`global`, `email`, `otp`, `sms`, `push`, `audit`)
 - `NotificationRequest` — `{ headers: Record<string, string | string[] | undefined>; hostname?: string }` (framework-agnostic request shape — works for Express and Fastify)
-- `GlobalOptions` — `redisNamespace?` (default `'notification'`), `defaultLocale?` (default `'en'`), `tenantIdResolver?(req: NotificationRequest) => string | Promise<string>`
+- `GlobalOptions` — `redisNamespace?` (deprecated, unused; the key prefix is `RedisOtpStorage`'s `namespace`, default `'notification'`), `defaultLocale?` (default `'en'`), `tenantIdResolver?(req: NotificationRequest) => string | Promise<string>`
 - `EmailChannelOptions` — `provider: IEmailProvider | (new (...args: never[]) => IEmailProvider)` (required), `defaultFrom: string` (required), `defaultFromName?`, `templateRenderer?`, `defaultReplyTo?`, `defaultTags?`, `maxAttachmentBytes?` (default `10485760` = 10 MiB; enforced by `EmailService`)
 - `OtpChannelOptions` — `storage: IOtpStorage | (new () => IOtpStorage)` (required), `defaultLength?` (6), `defaultCodeType?` ('numeric'), `defaultTtlSeconds?` (600), `defaultMaxAttempts?` (5), `resendCooldownSeconds?` (60), `consumeOnVerify?` (false), `perPurpose?: Record<string, Partial<OtpPurposeConfig>>`
 - `OtpPurposeConfig` — `{ length, codeType, ttlSeconds, maxAttempts, resendCooldownSeconds }` (all required when overriding)
@@ -3746,12 +3746,12 @@ npm view @bymax-one/nest-notification@0.1.0
 
 All keys follow the format: `{namespace}:{prefix}:{purpose}:{identifier}`
 
-| Component    | Meaning                                                    | Default          |
-| ------------ | ---------------------------------------------------------- | ---------------- |
-| `namespace`  | Prefix configurable via `global.redisNamespace`            | `'notification'` |
-| `prefix`     | Key type — `'otp'` or `'otp_cd'`                           | hardcoded        |
-| `purpose`    | OTP purpose (`email_verification`, `password_reset`, etc.) | consumer string  |
-| `identifier` | `sha256(tenantId:recipient)` hex-encoded (64 chars)        | calculated       |
+| Component    | Meaning                                                            | Default          |
+| ------------ | ------------------------------------------------------------------ | ---------------- |
+| `namespace`  | `RedisOtpStorage` `namespace` option (not `global.redisNamespace`) | `'notification'` |
+| `prefix`     | Key type — `'otp'` or `'otp_cd'`                                   | hardcoded        |
+| `purpose`    | OTP purpose (`email_verification`, `password_reset`, etc.)         | consumer string  |
+| `identifier` | `hashTenantRecipient(tenantId, recipient)`, hex (64 chars)         | calculated       |
 
 ### E.2 Complete keys table
 

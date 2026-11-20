@@ -719,8 +719,9 @@ export interface BymaxNotificationModuleOptions {
    */
   global?: {
     /**
-     * Namespace for Redis keys. Default: 'notification'
-     * All keys will be prefixed with this namespace.
+     * @deprecated Read by nothing and removed in v2.0. It never reached `RedisOtpStorage`;
+     * pass `namespace` to `new RedisOtpStorage({ client, namespace })` instead (default 'notification').
+     * Setting it logs one `NOTIFICATION_REDIS_NAMESPACE_UNUSED` warning at startup.
      */
     redisNamespace?: string
 
@@ -929,32 +930,32 @@ export interface NotificationRequest {
 
 ### 4.2 Options table with defaults
 
-| Option                      | Type                                     | Required                 | Default                   | Description                                    |
-| --------------------------- | ---------------------------------------- | ------------------------ | ------------------------- | ---------------------------------------------- |
-| `global.redisNamespace`     | `string`                                 | No                       | `'notification'`          | Redis key prefix                               |
-| `global.defaultLocale`      | `string`                                 | No                       | `'en'`                    | Default locale for templates                   |
-| `global.tenantIdResolver`   | `function`                               | No                       | `undefined`               | tenantId resolver from Request                 |
-| `email.provider`            | `IEmailProvider`                         | Yes (if `email` defined) | —                         | Email send adapter                             |
-| `email.defaultFrom`         | `string`                                 | Yes (if `email` defined) | —                         | Default from address                           |
-| `email.defaultFromName`     | `string`                                 | No                       | `undefined`               | Sender name                                    |
-| `email.templateRenderer`    | `IEmailTemplateRenderer`                 | No                       | `DefaultTemplateRenderer` | Template renderer                              |
-| `email.defaultReplyTo`      | `string`                                 | No                       | `undefined`               | Default reply-to                               |
-| `email.defaultTags`         | `Array<{...}>`                           | No                       | `[]`                      | Default tags                                   |
-| `email.maxAttachmentBytes`  | `number`                                 | No                       | `10485760`                | Max total attachment size (10 MiB)             |
-| `otp.storage`               | `IOtpStorage`                            | Yes (if `otp` defined)   | —                         | Storage backend                                |
-| `otp.defaultLength`         | `number`                                 | No                       | `6`                       | Default code length                            |
-| `otp.defaultCodeType`       | `'numeric' \| 'alpha' \| 'alphanumeric'` | No                       | `'numeric'`               | Code type                                      |
-| `otp.defaultTtlSeconds`     | `number`                                 | No                       | `600`                     | OTP TTL (10 min)                               |
-| `otp.defaultMaxAttempts`    | `number`                                 | No                       | `5`                       | Maximum attempts                               |
-| `otp.resendCooldownSeconds` | `number`                                 | No                       | `60`                      | Cooldown between resends                       |
-| `otp.consumeOnVerify`       | `boolean`                                | No                       | `false`                   | Auto-consumes OTP on verify                    |
-| `otp.codeSecret`            | `string` (>= 32 bytes)                   | No                       | — (plaintext + warning)   | Keys the stored code as `hmac-sha256:v1:<hex>` |
-| `otp.perPurpose`            | `Record<...>`                            | No                       | `{}`                      | Overrides per purpose                          |
-| `sms.provider`              | `ISmsProvider`                           | Not implemented          | —                         | SMS adapter                                    |
-| `push.provider`             | `IPushProvider`                          | Not implemented          | —                         | Push adapter                                   |
-| `audit.repository`          | `INotificationLogRepository`             | Yes (if `audit` defined) | —                         | Log repository                                 |
-| `audit.swallowErrors`       | `boolean`                                | No                       | `true`                    | Does not propagate audit errors                |
-| `audit.maskRecipient`       | `(s: string) => string`                  | No                       | identity                  | Masks recipient before audit write (PII)       |
+| Option                      | Type                                     | Required                 | Default                   | Description                                           |
+| --------------------------- | ---------------------------------------- | ------------------------ | ------------------------- | ----------------------------------------------------- |
+| `global.redisNamespace`     | `string`                                 | No                       | `'notification'`          | Deprecated, unused; set `RedisOtpStorage` `namespace` |
+| `global.defaultLocale`      | `string`                                 | No                       | `'en'`                    | Default locale for templates                          |
+| `global.tenantIdResolver`   | `function`                               | No                       | `undefined`               | tenantId resolver from Request                        |
+| `email.provider`            | `IEmailProvider`                         | Yes (if `email` defined) | —                         | Email send adapter                                    |
+| `email.defaultFrom`         | `string`                                 | Yes (if `email` defined) | —                         | Default from address                                  |
+| `email.defaultFromName`     | `string`                                 | No                       | `undefined`               | Sender name                                           |
+| `email.templateRenderer`    | `IEmailTemplateRenderer`                 | No                       | `DefaultTemplateRenderer` | Template renderer                                     |
+| `email.defaultReplyTo`      | `string`                                 | No                       | `undefined`               | Default reply-to                                      |
+| `email.defaultTags`         | `Array<{...}>`                           | No                       | `[]`                      | Default tags                                          |
+| `email.maxAttachmentBytes`  | `number`                                 | No                       | `10485760`                | Max total attachment size (10 MiB)                    |
+| `otp.storage`               | `IOtpStorage`                            | Yes (if `otp` defined)   | —                         | Storage backend                                       |
+| `otp.defaultLength`         | `number`                                 | No                       | `6`                       | Default code length                                   |
+| `otp.defaultCodeType`       | `'numeric' \| 'alpha' \| 'alphanumeric'` | No                       | `'numeric'`               | Code type                                             |
+| `otp.defaultTtlSeconds`     | `number`                                 | No                       | `600`                     | OTP TTL (10 min)                                      |
+| `otp.defaultMaxAttempts`    | `number`                                 | No                       | `5`                       | Maximum attempts                                      |
+| `otp.resendCooldownSeconds` | `number`                                 | No                       | `60`                      | Cooldown between resends                              |
+| `otp.consumeOnVerify`       | `boolean`                                | No                       | `false`                   | Auto-consumes OTP on verify                           |
+| `otp.codeSecret`            | `string` (>= 32 bytes)                   | No                       | — (plaintext + warning)   | Keys the stored code as `hmac-sha256:v1:<hex>`        |
+| `otp.perPurpose`            | `Record<...>`                            | No                       | `{}`                      | Overrides per purpose                                 |
+| `sms.provider`              | `ISmsProvider`                           | Not implemented          | —                         | SMS adapter                                           |
+| `push.provider`             | `IPushProvider`                          | Not implemented          | —                         | Push adapter                                          |
+| `audit.repository`          | `INotificationLogRepository`             | Yes (if `audit` defined) | —                         | Log repository                                        |
+| `audit.swallowErrors`       | `boolean`                                | No                       | `true`                    | Does not propagate audit errors                       |
+| `audit.maskRecipient`       | `(s: string) => string`                  | No                       | identity                  | Masks recipient before audit write (PII)              |
 
 ### 4.3 Registration example with `forRootAsync`
 
@@ -983,7 +984,6 @@ import { RedisService } from './redis/redis.service'
       inject: [ConfigService, RedisService],
       useFactory: (config: ConfigService, redis: RedisService) => ({
         global: {
-          redisNamespace: 'notification',
           defaultLocale: 'pt-BR',
           tenantIdResolver: (req) => req.headers['x-tenant-id'] as string
         },
@@ -2625,7 +2625,7 @@ All keys follow the format: `{namespace}:{prefix}:{purpose}:{identifier}`
 
 Where:
 
-- `{namespace}` is `global.redisNamespace` (default: `notification`)
+- `{namespace}` is the `namespace` option of `RedisOtpStorage` (default: `notification`); `global.redisNamespace` is deprecated and does not reach it
 - `{prefix}` indicates the type (`otp` or `otp_cd`)
 - `{purpose}` is the purpose (`email_verification`, `password_reset`, etc.)
 - `{identifier}` is `hashTenantRecipient(tenantId, recipient)` = `sha256(sha256(tenantId):sha256(recipient))`; both components must be non-empty (§5.2)
@@ -3349,7 +3349,6 @@ const TEMPLATES = {
       inject: [ConfigService, RedisService],
       useFactory: (config: ConfigService, redis: RedisService) => ({
         global: {
-          redisNamespace: 'notification',
           defaultLocale: 'pt-BR'
         },
         email: {
