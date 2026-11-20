@@ -3751,7 +3751,7 @@ All keys follow the format: `{namespace}:{prefix}:{purpose}:{identifier}`
 | `namespace`  | `RedisOtpStorage` `namespace` option (not `global.redisNamespace`) | `'notification'` |
 | `prefix`     | Key type — `'otp'` or `'otp_cd'`                                   | hardcoded        |
 | `purpose`    | OTP purpose (`email_verification`, `password_reset`, etc.)         | consumer string  |
-| `identifier` | `sha256(tenantId:recipient)` hex-encoded (64 chars)                | calculated       |
+| `identifier` | `hashTenantRecipient(tenantId, recipient)`, hex (64 chars)         | calculated       |
 
 ### E.2 Complete keys table
 
