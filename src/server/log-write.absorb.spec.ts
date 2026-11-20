@@ -5,7 +5,7 @@
  * @layer logging
  */
 
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { Logger } from '@nestjs/common'
@@ -25,10 +25,10 @@ const email = { provider, defaultFrom: 'noreply@example.com' }
 
 /** Every non-spec source file of the library, with its text. */
 function sources(dir: string): Array<{ file: string; text: string }> {
-  return readdirSync(dir).flatMap((name) => {
-    const path = join(dir, name)
-    if (statSync(path).isDirectory()) {
-      return name === '__tests__' ? [] : sources(path)
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(dir, entry.name)
+    if (entry.isDirectory()) {
+      return entry.name === '__tests__' ? [] : sources(path)
     }
     return path.endsWith('.ts') && !path.endsWith('.spec.ts')
       ? [{ file: path, text: readFileSync(path, 'utf8') }]
