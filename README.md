@@ -329,7 +329,7 @@ export class SendGridEmailProvider implements IEmailProvider {
 }
 ```
 
-A custom `IOtpStorage` implements the interface the package exports, including `deleteIfCode` when you set `consumeOnVerify`; the `/testing` subpath runs it against the contract. Besides the attempt and cooldown methods, the interface requires `getCooldown(tenantId, recipient, purpose)`, which answers the seconds left on an active cooldown or `0`, and `clearCooldown(tenantId, recipient, purpose)`, which is idempotent and is called when a delivery fails and on `consume()`.
+A custom `IOtpStorage` implements the interface the package exports, including `deleteIfCode` when you set `consumeOnVerify`; the `/testing` subpath runs it against the contract. Besides the attempt and cooldown methods, the interface requires `getCooldown(tenantId, recipient, purpose)`, which answers the seconds left on an active cooldown or `0`, and `clearCooldown(tenantId, recipient, purpose)`, which is idempotent and is called when a delivery fails, on `consume()`, and after a successful `verify()` when `consumeOnVerify` is set.
 
 > [!IMPORTANT]
 > `consumeAttempt` and `tryAcquireCooldown` **must be atomic** — one indivisible read-modify-write (a Redis Lua script, or a synchronous operation for an in-memory store). Implemented as a `get` followed by an `update`, two concurrent requests both read the same attempt count and the `maxAttempts` ceiling stops being a ceiling.
@@ -1177,7 +1177,7 @@ The library attaches the underlying error as the native `Error.cause`, as a **lo
 A relay that quotes the rejected content puts the rendered body into the provider error, which rides the `cause` into your logs. Two controls, both per send:
 
 - **Declare the secret.** `auditRedactValues: [code]` scrubs it from the `cause`, from the failed-audit `errorMessage`, and from the provider's own error logging (as `EmailSendOptions.redactValues`). Any run of 16+ characters of the rendered body found in a provider error is also redacted.
-- **Withhold the provider text.** `publishProviderText: false` (the built-in OTP delivery already sets it) removes every byte the provider wrote: no `cause`, and an `errorMessage` of `[provider text withheld]`. It publishes only the SMTP reply code and the RFC 3463 enhanced code, which are independent of the secret. The audit entry names them `deliveryStatus` / `deliveryEnhancedStatus`; the exception's `details` names them `status` / `enhanced`.
+- **Withhold the provider text.** `publishProviderText: false` (the built-in OTP delivery already sets it) removes every byte the provider wrote: no `cause`, and an `errorMessage` of `[provider text withheld]`. It publishes only the SMTP reply code and the RFC 3463 enhanced code, which are independent of the secret. Each code is read only when it is the sole such token in the relay text, and only when it stands alone, not against a letter, digit, underscore or dot: `550 5.1.1 ... tenant=TEN456` yields `550` and `5.1.1`, and a text with two different reply-shaped numbers yields none. A number that stands alone (`port 587`, `tenant=250`) is still published when it is the only one, because the grammar cannot tell it from a reply code. The audit entry names them `deliveryStatus` / `deliveryEnhancedStatus`; the exception's `details` names them `status` / `enhanced`.
 
 ```ts
 await emailService.send({

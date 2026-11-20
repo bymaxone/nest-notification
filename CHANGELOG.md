@@ -11,6 +11,22 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 ## [Unreleased]
 
+## [1.4.18] - 2026-11-20
+
+### Documentation
+
+- The README says `IOtpStorage.clearCooldown` is also called after a successful `verify()` when
+  `consumeOnVerify` is set, not only on a delivery failure and on `consume()`.
+- The README states what the withheld SMTP line can still publish. A number that stands alone in the relay text,
+  such as `port 587` or `tenant=250`, is read as a reply code when it is the only such token, because the grammar
+  cannot tell it from one. Since 1.4.17 a real reply code beside a number glued to a word (`550 5.1.1 ... TEN456`)
+  is recovered, so `deliveryStatus` and `details.status` appear where 1.4.16 gave only the enhanced code.
+- The bundle budget row of the README moved from `40.03 KB` to `40.07 KB` in 1.4.17; this release records it.
+
+#### Apply to a derived backend
+
+No declaration changes, no option changes and no runtime change. `dist/` is identical to the 1.4.17 tarball.
+
 ## [1.4.17] - 2026-11-20
 
 ### Fixed
@@ -1602,7 +1618,8 @@ rejected at startup rather than failing on the first send.
 
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.4.17...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.4.18...HEAD
+[1.4.18]: https://github.com/bymaxone/nest-notification/compare/v1.4.17...v1.4.18
 [1.4.17]: https://github.com/bymaxone/nest-notification/compare/v1.4.16...v1.4.17
 [1.4.16]: https://github.com/bymaxone/nest-notification/compare/v1.4.15...v1.4.16
 [1.4.15]: https://github.com/bymaxone/nest-notification/compare/v1.4.14...v1.4.15
