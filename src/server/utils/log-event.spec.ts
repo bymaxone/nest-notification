@@ -61,7 +61,40 @@ describe('logEvent', () => {
     )
 
     const entry = warn.mock.calls[0]?.[0] as { event: string; message: string; err: Error }
-    expect(Object.keys(entry)).toEqual(['event', 'message', 'err'])
+    expect(Object.keys(entry)).toEqual(['err', 'event', 'message'])
     expect(entry.err).toBe(failure)
+  })
+
+  describe('a host logger that throws', () => {
+    afterEach(() => {
+      Logger.overrideLogger(['log', 'warn', 'error', 'debug'])
+    })
+
+    it.each(['log', 'warn', 'debug'] as const)(
+      'should absorb a synchronous throw at %s through a real Nest Logger',
+      (level) => {
+        const calls: string[] = []
+        Logger.overrideLogger({
+          log: () => {
+            calls.push('log')
+            throw new Error('log sink down')
+          },
+          warn: () => {
+            calls.push('warn')
+            throw new Error('warn sink down')
+          },
+          debug: () => {
+            calls.push('debug')
+            throw new Error('debug sink down')
+          },
+          error: () => undefined
+        })
+
+        expect(() =>
+          logEvent(new Logger('Test'), level, NOTIFICATION_LOG_EVENTS.BOOTSTRAP_OK, 'the text')
+        ).not.toThrow()
+        expect(calls).toEqual([level])
+      }
+    )
   })
 })

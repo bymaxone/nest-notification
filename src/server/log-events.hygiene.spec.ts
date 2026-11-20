@@ -226,7 +226,7 @@ describe('log event messages', () => {
         for (const entry of mine) {
           // Every key of the entry is read, so a field added to it cannot hold error text unseen.
           expect(Object.keys(entry.call[0] as object)).toEqual(
-            row.errCarriesSentinel ? ['event', 'message', 'err'] : ['event', 'message']
+            row.errCarriesSentinel ? ['err', 'event', 'message'] : ['event', 'message']
           )
           expect(loggedAll(entry.call).includes(SENTINEL)).toBe(row.errCarriesSentinel)
         }
