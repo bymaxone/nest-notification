@@ -329,7 +329,7 @@ export class SendGridEmailProvider implements IEmailProvider {
 }
 ```
 
-A custom `IOtpStorage` implements the interface the package exports, including `deleteIfCode` when you set `consumeOnVerify`; the `/testing` subpath runs it against the contract.
+A custom `IOtpStorage` implements the interface the package exports, including `deleteIfCode` when you set `consumeOnVerify`; the `/testing` subpath runs it against the contract. Besides the attempt and cooldown methods, the interface requires `getCooldown(tenantId, recipient, purpose)`, which answers the seconds left on an active cooldown or `0`, and `clearCooldown(tenantId, recipient, purpose)`, which is idempotent and is called when a delivery fails and on `consume()`.
 
 > [!IMPORTANT]
 > `consumeAttempt` and `tryAcquireCooldown` **must be atomic** — one indivisible read-modify-write (a Redis Lua script, or a synchronous operation for an in-memory store). Implemented as a `get` followed by an `update`, two concurrent requests both read the same attempt count and the `maxAttempts` ceiling stops being a ceiling.
@@ -517,7 +517,7 @@ export class AppModule {}
 | `bymax_notification_send_duration_seconds` | histogram | `channel` (`email`)                                           | Seconds from the call to its end, in the default Prometheus buckets.                                                                                                               |
 | `bymax_notification_otp_total`             | counter   | `event` (`issued`, `verified`, `failed`, `locked`)            | What happened to one-time codes: a code issued; a code accepted; a wrong code or none live; a recipient that ran into the attempt ceiling.                                         |
 
-A label value is always one of the listed ones: no recipient, tenant, identifier or error text is ever a label. Every series exists at zero from the first scrape, so a rate is defined from the start. The outcome follows how far the send got and not the error it ended in: a message the provider accepted counts as `sent` even when the audit write that followed failed (with `audit.swallowErrors` off), and a provider failure counts as `failed` even when the audit write of that failure failed too. A code delivered by email is also a send: `OtpService` goes through `EmailService`, so it adds to `bymax_notification_messages_total` and the send histogram as well as to `bymax_notification_otp_total`. A call the library refuses outright (an invalid argument, a cooldown) records no `bymax_notification_otp_total` event.
+A label value is always one of the listed ones: no recipient, tenant, identifier or error text is ever a label. Every series exists at zero from the first scrape, so a rate is defined from the start. The outcome follows how far the send got and not the error it ended in: a message the provider accepted counts as `sent` even when the audit write that followed failed (with `audit.swallowErrors` off), and a provider failure counts as `failed` even when the audit write of that failure failed too. A send that fails before the provider with an error that is not the library's own, such as a `TypeError` from `to: null`, counts as `failed`, not `rejected`: `rejected` is only the library's own refusal. A code delivered by email is also a send: `OtpService` goes through `EmailService`, so it adds to `bymax_notification_messages_total` and the send histogram as well as to `bymax_notification_otp_total`. A call the library refuses outright (an invalid argument, a cooldown) records no `bymax_notification_otp_total` event.
 
 ### Traces
 
@@ -564,7 +564,7 @@ Numeric options are checked when the module is built, and a value the library ca
 
 ## 🎨 Templates
 
-Email rendering goes through `IEmailTemplateRenderer`. The bundled `DefaultTemplateRenderer` does `{{var}}` interpolation with **automatic HTML escaping in the HTML body** — subject and plaintext are left raw, since neither is an HTML context. That closes a stored-XSS vector: a display name containing markup renders as text, not as an element, in the recipient's mail client.
+Email rendering goes through `IEmailTemplateRenderer`. The bundled `DefaultTemplateRenderer` does `{{var}}` interpolation with **automatic HTML escaping in the HTML body** — subject and plaintext are left raw, since neither is an HTML context. That closes a stored-XSS vector: a display name containing markup renders as text, not as an element, in the recipient's mail client. A custom renderer implements `render()` and `hasTemplate(templateName, locale)`, which answers whether the template is registered for the locale so that a missing one fails early; both are required.
 
 Register named templates per `name::locale`; the renderer falls back to the `en` locale when a locale-specific template is missing.
 
@@ -711,7 +711,7 @@ When integrating `@bymax-one/nest-notification` in production, verify each of th
 - Validate the email address in your own controller before calling `generate()`. The library refuses a recipient that is not exactly one mailbox, but it cannot tell whether the mailbox belongs to the caller
 - `tenantIdResolver` reads from a **verified** source (JWT claim, subdomain, gateway-signed header) — never the request body
 - `audit.maskRecipient` is configured if audit rows are retained beyond the operational minimum
-- A custom `IOtpStorage` implements `consumeAttempt` and `tryAcquireCooldown` atomically
+- A custom `IOtpStorage` implements `consumeAttempt` and `tryAcquireCooldown` atomically (`getCooldown` and `clearCooldown` are plain reads and deletes, and are required too)
 - `OtpService` keys its state on the recipient with surrounding whitespace trimmed and an email address lower-cased, so `Jane@Acme.com`, `jane@acme.com` and ` jane@acme.com` share one cooldown and one attempt counter; the message is still delivered to the address exactly as you pass it (RFC 5321 §2.4). A recipient that is not an email is only trimmed. Store and compare the same canonical form on your side
 - `otp.codeSecret` is set, from a secret store and not from the same place as the Redis credentials, so a reader of the store cannot test a guess against a stored code
 - `resendCooldownSeconds` and `defaultMaxAttempts` are tuned per purpose, not left at the defaults for high-value flows
@@ -762,7 +762,7 @@ A one-time password is a credential, so every behavior is pinned so that a regre
 | Coverage       | **100%** line/branch/function/statement per file (`pnpm test:cov:all`)                                             |
 | Mutation       | Stryker score **100%** (`break: 100`), no survivors                                                                |
 | Lint           | ESLint flat config + `eslint-plugin-security`, zero warnings                                                       |
-| Bundle budgets | server < 40.03 KB · shared < 4 KB · react < 8 KB · testing < 4.5 KB · observability < 2.66 KB brotli (`pnpm size`) |
+| Bundle budgets | server < 40.07 KB · shared < 4 KB · react < 8 KB · testing < 4.5 KB · observability < 2.66 KB brotli (`pnpm size`) |
 | Prisma-free    | `pnpm check:no-prisma` — the library never imports `@prisma/client`                                                |
 | Export map     | `pnpm check:exports` — `attw` against the packed tarball, ESM and CJS                                              |
 | Supply chain   | published with npm provenance (OIDC), CodeQL + OpenSSF Scorecard                                                   |

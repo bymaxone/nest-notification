@@ -23,12 +23,12 @@
 /** Longest RFC 3463 subfield this accepts, bounding what a hostile relay can encode. */
 const MAX_SUBFIELD_DIGITS = 3
 
-/** Basic SMTP reply code: three digits opening a 2xx/4xx/5xx reply. */
-const BASIC_STATUS = /(?<![\d.])([245]\d\d)(?![\d.])/g
+/** Basic SMTP reply code: three digits opening a 2xx/4xx/5xx reply, and not the tail or head of a word. */
+const BASIC_STATUS = /(?<![\w.])([245]\d\d)(?![\w.])/g
 
 /** RFC 3463 enhanced status code: `class.subject.detail`, each subfield bounded. */
 const ENHANCED_STATUS = new RegExp(
-  `(?<![\\d.])([245])\\.(\\d{1,${MAX_SUBFIELD_DIGITS}})\\.(\\d{1,${MAX_SUBFIELD_DIGITS}})(?![\\d.])`,
+  `(?<![\\w.])([245])\\.(\\d{1,${MAX_SUBFIELD_DIGITS}})\\.(\\d{1,${MAX_SUBFIELD_DIGITS}})(?![\\w.])`,
   'g'
 )
 

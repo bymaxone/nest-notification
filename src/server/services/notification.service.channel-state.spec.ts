@@ -154,13 +154,14 @@ describe('NotificationService channel state', () => {
         'NOTIFICATION_CHANNEL_NOT_USABLE',
         'NOTIFICATION_CHANNEL_NOT_USABLE'
       ])
-      expect(messages[0]).toContain('BYMAX_NOTIFICATION_CHANNEL_NOT_USABLE')
-      expect(messages[0]).toContain('email')
-      expect(messages[0]).toContain('isConfigured()')
-      expect(messages[1]).toContain('otp')
-      // The remedy names the part to check, so the operator knows where to look.
-      expect(messages[0]).toContain("check the provider's credentials or environment")
-      expect(messages[1]).toContain("check the storage's credentials or environment")
+      expect(messages[0]).toBe(
+        '[BYMAX_NOTIFICATION_CHANNEL_NOT_USABLE] The email channel is configured but its provider reports isConfigured() = false, ' +
+          "so it is not enabled: check the provider's credentials or environment."
+      )
+      expect(messages[1]).toBe(
+        '[BYMAX_NOTIFICATION_CHANNEL_NOT_USABLE] The otp channel is configured but its storage reports isConfigured() = false, ' +
+          "so it is not enabled: check the storage's credentials or environment."
+      )
     })
 
     it('should stay silent for usable and absent channels', () => {

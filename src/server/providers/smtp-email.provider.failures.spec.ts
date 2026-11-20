@@ -397,6 +397,18 @@ describe('SmtpEmailProvider failure handling', () => {
     warnSpy.mockRestore()
   })
 
+  // The relay's words never reach the line: digits that end an identifier are not a reply code.
+  it('should not publish digits from a word of the relay text in a withheld failure', async () => {
+    mockSendMail.mockRejectedValue(new Error('x user=USER123 tenant=TEN456 token=SECRET789'))
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+    await expect(
+      new SmtpEmailProvider({ host: 'h' }).send({ ...baseOptions, publishProviderText: false })
+    ).rejects.toThrow('SMTP send failed')
+    expect(loggedAll(warnSpy.mock.calls[0])).toBe('[SMTP_SEND_FAILED] no reply code')
+    warnSpy.mockRestore()
+  })
+
   // Only the basic code present: the line carries it alone, with no separator
   // left dangling and no invented enhanced value.
   it('should publish a lone basic status without padding', async () => {

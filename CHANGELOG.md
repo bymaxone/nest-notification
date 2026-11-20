@@ -11,6 +11,31 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 ## [Unreleased]
 
+## [1.4.17] - 2026-11-20
+
+### Fixed
+
+- **A word of the relay's error text no longer leaks a status code into the withheld SMTP line.** With
+  `publishProviderText: false` the line reads the reply codes out of the relay's error text. Three digits that
+  ended an identifier, such as the `456` of `tenant=TEN456`, were read as a reply code and written to the log
+  line and the thrown error's `deliveryStatus`. A code now has to stand alone, not at the end or start of a
+  word, so such text yields `[SMTP_SEND_FAILED] no reply code`. A real reply (`550 5.1.1 ...`, `550-5.1.1 ...`)
+  is read as before.
+
+### Documentation
+
+- The README names the three required members it left out: `IOtpStorage.getCooldown` and `clearCooldown`, and
+  `IEmailTemplateRenderer.hasTemplate`.
+- The README states that a send which fails before the provider with an error that is not the library's own
+  (a `TypeError` from `to: null`) counts as `failed`, and that `rejected` is only the library's own refusal.
+
+#### Apply to a derived backend
+
+No declaration changes and no option changes. The only runtime change is the stricter reply-code reading above;
+a host that parses `deliveryStatus` from a relay whose reply code sits against a letter or digit (`x550`) now
+sees no code instead of one.
+Against the 1.4.16 tarball, `dist/` differs in the two reply-code patterns of the server entry (ESM and CJS) and nowhere else.
+
 ## [1.4.16] - 2026-11-18
 
 ### Added
@@ -1577,7 +1602,8 @@ rejected at startup rather than failing on the first send.
 
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.4.16...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.4.17...HEAD
+[1.4.17]: https://github.com/bymaxone/nest-notification/compare/v1.4.16...v1.4.17
 [1.4.16]: https://github.com/bymaxone/nest-notification/compare/v1.4.15...v1.4.16
 [1.4.15]: https://github.com/bymaxone/nest-notification/compare/v1.4.14...v1.4.15
 [1.4.14]: https://github.com/bymaxone/nest-notification/compare/v1.4.13...v1.4.14

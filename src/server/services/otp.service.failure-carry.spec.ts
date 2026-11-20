@@ -321,9 +321,12 @@ describe('OtpService failed attempts across re-issues', () => {
 
       const messages = warn.mock.calls.map((call) => loggedText(call))
       expect(messages).toHaveLength(1)
-      expect(messages[0]).toContain('BYMAX_NOTIFICATION_OTP_FAILURES_NOT_CARRIED')
-      expect(messages[0]).toContain('recordFailure')
-      expect(messages[0]).toContain('800-63B')
+      expect(messages[0]).toBe(
+        '[BYMAX_NOTIFICATION_OTP_FAILURES_NOT_CARRIED] The memory OTP storage does not implement ' +
+          'getFailures, recordFailure and clearFailures, so issuing a new code gives it a fresh attempt budget; ' +
+          'NIST SP 800-63B-4 §3.1.3.2 says generating a new secret SHALL NOT reset the failed authentication count. ' +
+          'Implement the three optional methods to carry the count across re-issues.'
+      )
     })
 
     // The three methods work together: every combination short of all three is treated as none,
