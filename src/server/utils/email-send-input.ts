@@ -9,6 +9,7 @@
  */
 
 import { NotificationException } from '../errors/notification-exception'
+import type { EmailAttachment, EmailSendOptions } from '../interfaces/email-provider.interface'
 import { boundedList, refuseInput } from './bounded-list'
 
 const OWNER = 'EmailService'
@@ -19,6 +20,36 @@ const isObject = (entry: unknown): entry is object => typeof entry === 'object' 
 /** An attachment's content is text or bytes; anything else has no length the budget can read. */
 function hasReadableContent(entry: { content?: unknown }): boolean {
   return typeof entry.content === 'string' || entry.content instanceof Uint8Array
+}
+
+type EmailTag = NonNullable<EmailSendOptions['tags']>[number]
+
+/** Every field of a tag and of an attachment, read by name. */
+const TAG_KEYS = ['name', 'value'] as const satisfies readonly (keyof EmailTag)[]
+const ATTACHMENT_KEYS = [
+  'filename',
+  'content',
+  'contentType'
+] as const satisfies readonly (keyof EmailAttachment)[]
+
+/** The fields of a tag or an attachment that the lists above leave out; `never` while they list them all. */
+export type UnlistedEntryKey =
+  | Exclude<keyof EmailTag, (typeof TAG_KEYS)[number]>
+  | Exclude<keyof EmailAttachment, (typeof ATTACHMENT_KEYS)[number]>
+
+/**
+ * Copies the named fields of `source` into a new object, each read once by property access, so a
+ * prototype getter or a non-enumerable field is kept and a getter is never asked twice.
+ */
+function copyByName(source: object, keys: readonly string[]): Record<string, unknown> {
+  const copy: Record<string, unknown> = {}
+  for (const key of keys) {
+    const value: unknown = Reflect.get(source, key)
+    if (value !== undefined) {
+      Reflect.set(copy, key, value)
+    }
+  }
+  return copy
 }
 
 /** A recipient field: one string or a bounded list of them, read into a copy. */
@@ -54,13 +85,7 @@ function recipients(label: string, value: unknown): string | string[] {
  */
 export function readSendInput<T extends object>(input: T, keys: readonly (keyof T & string)[]): T {
   // Each named field is read once, by property access, and the copy is what the send goes on with.
-  const read: Record<string, unknown> = {}
-  for (const key of keys) {
-    const value: unknown = Reflect.get(input, key)
-    if (value !== undefined) {
-      Reflect.set(read, key, value)
-    }
-  }
+  const read = copyByName(input, keys)
   const publish = read.publishProviderText
   if (publish !== undefined && typeof publish !== 'boolean') {
     throw refuseInput(OWNER, 'publishProviderText', 'expected a boolean')
@@ -79,12 +104,12 @@ export function readSendInput<T extends object>(input: T, keys: readonly (keyof 
   // check and the byte budget and a large one to the provider is read once, here, and never again.
   const tags: unknown = read.tags
   if (tags !== undefined) {
-    read.tags = boundedList(OWNER, 'tags', tags, isObject).map((tag) => ({ ...tag }))
+    read.tags = boundedList(OWNER, 'tags', tags, isObject).map((tag) => copyByName(tag, TAG_KEYS))
   }
   const attachments: unknown = read.attachments
   if (attachments !== undefined) {
     read.attachments = boundedList(OWNER, 'attachments', attachments, isObject).map((entry) => {
-      const copy: { content?: unknown } = { ...entry }
+      const copy: { content?: unknown } = copyByName(entry, ATTACHMENT_KEYS)
       if (!hasReadableContent(copy)) {
         throw refuseInput(OWNER, 'attachments', 'an attachment has no readable content')
       }

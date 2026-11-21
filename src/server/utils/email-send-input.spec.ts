@@ -218,4 +218,28 @@ describe('the send input reader', () => {
     expect(read.auditRedactValues).toEqual(['secret'])
     expect(read.text).toBe('plain')
   })
+
+  it('should keep the fields of an attachment and a tag that are inherited getters', () => {
+    class Attachment {
+      get filename(): string {
+        return 'f.txt'
+      }
+      get content(): string {
+        return 'body'
+      }
+    }
+    class Tag {
+      get name(): string {
+        return 'n'
+      }
+      get value(): string {
+        return 'v'
+      }
+    }
+
+    const read = readSendInput({ ...base, attachments: [new Attachment()], tags: [new Tag()] })
+
+    expect(read.attachments).toEqual([{ filename: 'f.txt', content: 'body' }])
+    expect(read.tags).toEqual([{ name: 'n', value: 'v' }])
+  })
 })
