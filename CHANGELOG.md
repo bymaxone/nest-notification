@@ -35,7 +35,7 @@ the entries that carry one, is the compatibility contract — read it, not the n
   so an escaped character counts once.
 - The README's Traces section states that the failure is rethrown unchanged, with the span status `unknown` for an
   object whose class cannot be read.
-- The README's bundle budget row moves from `40.26 KB` to `40.27 KB`, the measured size of the server entry.
+- The README's bundle budget row moves from `40.26 KB` to `40.27 KB`, the server budget.
 
 #### Apply to a derived backend
 
