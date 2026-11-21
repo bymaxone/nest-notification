@@ -110,4 +110,25 @@ describe('maskRecipientsInText', () => {
 
     expect(Date.now() - started).toBeLessThan(2_000)
   })
+
+  it('should find an address written in another normalization form', () => {
+    expect(maskRecipientsInText('e\u0301@x.com', ['\u00e9@x.com'], mask)).toBe('<7>')
+    expect(maskRecipientsInText('\u00e9@x.com', ['e\u0301@x.com'], mask)).toBe('<8>')
+  })
+
+  it('should find an address written with a capital or a lower-case sharp s', () => {
+    expect(maskRecipientsInText('STRA\u1e9eE@X.COM', ['stra\u00dfe@x.com'], () => '#')).toBe('#')
+    expect(maskRecipientsInText('stra\u00dfe@x.com', ['STRASSE@x.com'], () => '#')).toBe('#')
+  })
+
+  it('should ask the mask only for the addresses the text quotes, and once for each', () => {
+    const asked: string[] = []
+
+    maskRecipientsInText('a@b.c and a@b.c', ['a@b.c', 'never@x.com'], (address) => {
+      asked.push(address)
+      return '#'
+    })
+
+    expect(asked).toEqual(['a@b.c'])
+  })
 })
