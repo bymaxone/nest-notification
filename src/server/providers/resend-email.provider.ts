@@ -160,10 +160,17 @@ function toPayload(options: EmailSendOptions, from: string): ResendSendPayload {
     bcc: options.bcc,
     tags: options.tags,
     headers: options.headers,
-    attachments: options.attachments?.map(({ cid, contentDisposition: _ignored, ...rest }) => ({
-      ...rest,
-      ...(cid !== undefined ? { contentId: cid } : {})
-    }))
+    attachments: options.attachments?.map((attachment) => {
+      // Each supported field is read by name, once, so one that comes from a getter or the
+      // prototype of a class is sent like any other.
+      const { filename, content, contentType, cid } = attachment
+      return {
+        ...(filename !== undefined ? { filename } : {}),
+        content,
+        ...(contentType !== undefined ? { contentType } : {}),
+        ...(cid !== undefined ? { contentId: cid } : {})
+      }
+    })
   }
 }
 

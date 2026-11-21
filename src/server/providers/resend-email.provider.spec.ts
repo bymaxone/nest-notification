@@ -106,6 +106,47 @@ describe('ResendEmailProvider', () => {
     ])
   })
 
+  it('should send an attachment that has no filename and no content type as its content alone', async () => {
+    await new ResendEmailProvider({ apiKey: 'k' }).send({
+      ...baseOptions,
+      attachments: [{ content: 'eA==' } as never]
+    })
+
+    expect(mockSend.mock.calls[0]?.[0].attachments).toStrictEqual([{ content: 'eA==' }])
+  })
+
+  // An attachment can be an instance of a class whose fields are getters; they are sent like any other.
+  it('should send the fields of an attachment that come from prototype getters', async () => {
+    class FromClass {
+      get filename(): string {
+        return 'logo.png'
+      }
+      get content(): Buffer {
+        return Buffer.from('png')
+      }
+      get contentType(): string {
+        return 'image/png'
+      }
+      get cid(): string {
+        return 'logo-image'
+      }
+    }
+
+    await new ResendEmailProvider({ apiKey: 'k' }).send({
+      ...baseOptions,
+      attachments: [new FromClass()]
+    })
+
+    expect(mockSend.mock.calls[0]?.[0].attachments).toStrictEqual([
+      {
+        filename: 'logo.png',
+        content: Buffer.from('png'),
+        contentType: 'image/png',
+        contentId: 'logo-image'
+      }
+    ])
+  })
+
   // Identity + configured-state derive purely from the presence of an API key.
   it('should report name "resend" and reflect apiKey presence in isConfigured', () => {
     expect(new ResendEmailProvider({ apiKey: 'k' }).name).toBe('resend')
