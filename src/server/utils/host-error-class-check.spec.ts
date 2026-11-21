@@ -94,4 +94,31 @@ describe('a class check on a host error', () => {
 
     await expect(sending).rejects.toBeInstanceOf(NotificationException)
   })
+
+  it('should treat a hostile outage-shaped storage failure as no library error, not as one', async () => {
+    const thrown = new Proxy(
+      { code: 'ECONNREFUSED' },
+      {
+        getPrototypeOf() {
+          throw new Error(TRAP)
+        }
+      }
+    )
+    const storage = new InMemoryOtpStorage()
+    storage.tryAcquireCooldown = async () => {
+      throw thrown
+    }
+    const service = new OtpService(makeOptions({}), storage, makeAudit())
+
+    const generating = service.generate({
+      tenantId: 'acme',
+      recipient: 'a@example.com',
+      purpose: 'login',
+      deliverVia: 'manual'
+    })
+
+    await expect(generating).rejects.toMatchObject({
+      getResponse: expect.any(Function)
+    })
+  })
 })
