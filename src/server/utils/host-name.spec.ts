@@ -22,7 +22,9 @@ describe('textOfHostName', () => {
     ['a bidi override', 'a\u202eb', 'a\\u202eb'],
     ['a bidi isolate', 'a\u2066b', 'a\\u2066b'],
     ['a line separator', 'a\u2028b', 'a\\u2028b'],
-    ['a paragraph separator', 'a\u2029b', 'a\\u2029b']
+    ['a paragraph separator', 'a\u2029b', 'a\\u2029b'],
+    ['a lone high surrogate', 'a\ud800b', 'a\\ud800b'],
+    ['a lone low surrogate', 'a\udc00b', 'a\\udc00b']
   ])('should write %s as a visible sequence', (_label, input, expected) => {
     expect(textOfHostName(input)).toBe(expected)
   })
@@ -30,6 +32,10 @@ describe('textOfHostName', () => {
   it('should write a format character beyond U+FFFF in the braced form', () => {
     // U+E0041 is a tag letter; it is a format character and invisible.
     expect(textOfHostName('a\u{e0041}b')).toBe('a\\u{e0041}b')
+  })
+
+  it('should keep a well-formed surrogate pair as one character', () => {
+    expect(textOfHostName('a\ud83d\ude00b')).toBe('a\u{1f600}b')
   })
 
   it('should keep a printable character beyond U+FFFF', () => {

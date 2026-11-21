@@ -19,7 +19,7 @@ the entries that carry one, is the compatibility contract — read it, not the n
   (in the `consumeOnVerify` refusal and in the `OTP_FAILURES_NOT_CARRIED` line), `global.defaultLocale` (in the
   `OTP_TEMPLATE_NOT_RESOLVED` line) and the class name `forRootAsync` refuses to construct are cut at 200
   characters, marked with `…`, and have every control, format, line-separator and paragraph-separator
-  character written as a visible `\uXXXX` sequence (`\u{XXXXX}` past U+FFFF). A name with a line feed could start a
+  character, and each lone surrogate, written as a visible `\uXXXX` sequence (`\u{XXXXX}` past U+FFFF). A name with a line feed could start a
   second log record; one with a bidi override could reorder the text.
 
 ### Documentation

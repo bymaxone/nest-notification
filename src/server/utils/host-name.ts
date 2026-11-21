@@ -7,8 +7,8 @@
 /** The longest host name that reaches a line, in characters. */
 const MAX_HOST_NAME = 200
 
-/** Controls, format characters (bidi, zero-width, BOM), and the line and paragraph separators. */
-const INVISIBLE = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu
+/** Controls, format characters (bidi, zero-width, BOM), lone surrogates, and line and paragraph separators. */
+const INVISIBLE = /[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/gu
 
 /** The text written for a value that is not a string. */
 const UNREADABLE = '[unreadable]'
