@@ -47,16 +47,12 @@ import { assertFailureCount } from '../utils/failure-count'
 import { readHostName, textOfHostName } from '../utils/host-name'
 import { logEvent } from '../utils/log-event'
 import { loggableError } from '../utils/loggable-error'
+import { maskRecipientInText } from '../utils/mask-in-text'
 import { reportOtp, runInSpan } from '../utils/observe'
+import { outgoingError } from '../utils/outgoing-error'
 import { normalizeRecipient } from '../utils/recipient'
 import { assertSingleMailbox } from '../utils/recipient-list'
-import {
-  attachCauseIfAbsent,
-  coerceRedacted,
-  isSafeError,
-  readRedactedMessage,
-  scrubValuesFromErrorChain
-} from '../utils/redact'
+import { attachCauseIfAbsent, readRedactedMessage } from '../utils/redact'
 import { withStorageFailures } from '../utils/storage-failures'
 import { causeOf, storageCauseOf } from '../utils/store-error-cause'
 import { assertIdentifies, assertPurpose, assertRegisteredPurpose } from '../utils/tenant-scope'
@@ -267,6 +263,16 @@ export class OtpService implements OnModuleInit {
    * @returns Whether the code is valid, and why not when it is not.
    */
   private async verifyUnobserved(input: OtpVerifyInput): Promise<OtpVerifyResult> {
+    try {
+      return await this.verifyChecked(input)
+    } catch (error) {
+      // Whatever the store raised leaves the way a failed generate's does, with the guess removed.
+      throw outgoingError(error, typeof input.code === 'string' ? [input.code] : [])
+    }
+  }
+
+  /** The verification, whose failures {@link OtpService.verifyUnobserved} cleans. */
+  private async verifyChecked(input: OtpVerifyInput): Promise<OtpVerifyResult> {
     const otp = this.requireOtpOptions()
     this.assertScope(input)
     const scope = this.keyed(input)
@@ -442,14 +448,16 @@ export class OtpService implements OnModuleInit {
       }
       failure = cleanupError
     }
-    const outgoing: unknown = isSafeError(failure)
-      ? scrubValuesFromErrorChain(failure, [code])
-      : coerceRedacted(failure, [code])
+    const outgoing = outgoingError(failure, [code])
     await this.audit(
       this.otpAuditEntry('failed', scope, {
         // `outgoing` is already fully redacted by the scrub above; this read
         // only needs the fail-closed guard, not a second redaction pass.
-        errorMessage: readRedactedMessage(storageCauseOf(outgoing) ?? outgoing)
+        errorMessage: maskRecipientInText(
+          readRedactedMessage(storageCauseOf(outgoing) ?? outgoing),
+          scope.recipient,
+          this.options.audit.maskRecipient(scope.recipient)
+        )
       })
     )
     return outgoing
