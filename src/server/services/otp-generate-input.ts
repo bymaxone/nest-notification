@@ -10,7 +10,12 @@
 
 import { copyByName } from '../utils/bounded-list'
 import { assertDeliverVia } from '../utils/otp-input'
-import type { OtpGenerateInput, OtpVerifyInput } from './otp.service'
+import type {
+  OtpConsumeInput,
+  OtpGenerateInput,
+  OtpStatusInput,
+  OtpVerifyInput
+} from './otp.service'
 
 /** Every field of {@link OtpGenerateInput}, read by name. */
 const GENERATE_KEYS = [
@@ -60,4 +65,27 @@ export type UnlistedVerifyKey = Exclude<keyof OtpVerifyInput, (typeof VERIFY_KEY
  */
 export function readVerifyInput(input: OtpVerifyInput): OtpVerifyInput {
   return copyByName(input, VERIFY_KEYS) as unknown as OtpVerifyInput
+}
+
+/** Every field of {@link OtpConsumeInput} and of {@link OtpStatusInput}, read by name. */
+const REF_KEYS = [
+  'tenantId',
+  'recipient',
+  'purpose',
+  'userId'
+] as const satisfies readonly (keyof OtpConsumeInput)[]
+
+/** The fields of the two inputs that the list leaves out; `never` while it lists them all. */
+export type UnlistedRefKey =
+  | Exclude<keyof OtpConsumeInput, (typeof REF_KEYS)[number]>
+  | Exclude<keyof OtpStatusInput, (typeof REF_KEYS)[number]>
+
+/**
+ * Copies the input of a consume or a status, each field read once.
+ *
+ * @param input - The input as the caller gave it.
+ * @returns A plain copy that the rest of the call uses.
+ */
+export function readRefInput<T extends OtpConsumeInput | OtpStatusInput>(input: T): T {
+  return copyByName(input, REF_KEYS) as unknown as T
 }
