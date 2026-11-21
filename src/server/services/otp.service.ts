@@ -43,7 +43,7 @@ import { AuditWriteWarning } from '../utils/audit-write-warning'
 import { isCodeDigest } from '../utils/code-digest'
 import { generateOtpCode } from '../utils/code-generator'
 import { cooldownExpiresAt, toRetryAfterHeader } from '../utils/cooldown-helpers'
-import { textOfHostName } from '../utils/host-name'
+import { readHostName, textOfHostName } from '../utils/host-name'
 import { logEvent } from '../utils/log-event'
 import { loggableError } from '../utils/loggable-error'
 import { reportOtp, runInSpan } from '../utils/observe'
@@ -192,7 +192,7 @@ export class OtpService implements OnModuleInit {
     if (options.otp?.consumeOnVerify && store.deleteIfCode === undefined) {
       throw new Error(
         `[BymaxNotificationModule] otp.consumeOnVerify requires an IOtpStorage that implements ` +
-          `deleteIfCode (the ${textOfHostName(store.name)} storage does not); implement it, or set consumeOnVerify to false`
+          `deleteIfCode (the ${readHostName(() => store.name)} storage does not); implement it, or set consumeOnVerify to false`
       )
     }
     this.storage = withStorageFailures(store)
@@ -474,7 +474,7 @@ export class OtpService implements OnModuleInit {
       this.logger,
       'warn',
       NOTIFICATION_LOG_EVENTS.OTP_FAILURES_NOT_CARRIED,
-      `[BYMAX_NOTIFICATION_OTP_FAILURES_NOT_CARRIED] The ${textOfHostName(storage.name)} OTP storage does not implement ` +
+      `[BYMAX_NOTIFICATION_OTP_FAILURES_NOT_CARRIED] The ${storage.name} OTP storage does not implement ` +
         'getFailures, recordFailure and clearFailures, so issuing a new code gives it a fresh attempt budget; ' +
         'NIST SP 800-63B-4 §3.1.3.2 says generating a new secret SHALL NOT reset the failed authentication count. ' +
         'Implement the three optional methods to carry the count across re-issues.'

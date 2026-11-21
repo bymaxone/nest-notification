@@ -41,6 +41,7 @@ import {
   withoutDeclaredValues
 } from '../utils/delivery-status'
 import { assertBodyParts } from '../utils/email-body'
+import { readHostName } from '../utils/host-name'
 import { reportSend, runInSpan } from '../utils/observe'
 import { countRecipients } from '../utils/recipient-list'
 import {
@@ -418,7 +419,7 @@ export class EmailService {
       )
       throw new NotificationException(
         'EMAIL_SEND_FAILED',
-        { providerName: this.provider.name },
+        { providerName: readHostName(() => this.provider.name) },
         {
           cause: secretValues.length > 0 ? scrubValuesFromErrorChain(error, secretValues) : error,
           ...status
@@ -621,7 +622,7 @@ export class EmailService {
       channel: 'email',
       verb,
       recipient,
-      providerName: this.provider.name,
+      providerName: readHostName(() => this.provider.name),
       ...(extra.messageId !== undefined ? { messageId: extra.messageId } : {}),
       ...(extra.errorMessage !== undefined ? { errorMessage: extra.errorMessage } : {}),
       ...(extra.status !== undefined ? { deliveryStatus: extra.status } : {}),
@@ -681,7 +682,7 @@ export class EmailService {
     )
     throw new NotificationException(
       'EMAIL_SEND_FAILED',
-      { providerName: this.provider.name, ...status },
+      { providerName: readHostName(() => this.provider.name), ...status },
       unavailableStatus(error)
     )
   }

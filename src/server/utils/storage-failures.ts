@@ -12,6 +12,7 @@
 import { NotificationException } from '../errors/notification-exception'
 import type { IOtpStorage } from '../interfaces/otp-storage.interface'
 import { isUnavailableError } from './availability'
+import { readHostName } from './host-name'
 
 /** The operations of an `IOtpStorage` that return a promise, required and optional alike. */
 const OPERATIONS = [
@@ -65,7 +66,7 @@ function translate(storage: IOtpStorage, error: unknown): unknown {
   }
   return new NotificationException(
     'OTP_STORAGE_UNAVAILABLE',
-    { providerName: storage.name },
+    { providerName: readHostName(() => storage.name) },
     { cause: error }
   )
 }
@@ -82,7 +83,9 @@ function translate(storage: IOtpStorage, error: unknown): unknown {
  */
 export function withStorageFailures(storage: IOtpStorage): IOtpStorage {
   const wrapped: Record<string, unknown> = {
-    name: storage.name,
+    // The name is read once, here, so every line and audit entry that names the store reads the
+    // bounded, escaped text and never the host's getter.
+    name: readHostName(() => storage.name),
     isConfigured: (): boolean => storage.isConfigured()
   }
   for (const operation of OPERATIONS) {

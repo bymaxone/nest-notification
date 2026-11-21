@@ -22,11 +22,20 @@ the entries that carry one, is the compatibility contract — read it, not the n
   SMTP provider returns an `Error` carrying the scrubbed text, the storage failure reaches the caller as the object
   the store threw, and the span is ended and marked `unknown` while the operation's failure is rethrown unchanged.
 
+- **A name read from the host is read under a guard, and it is cut and escaped wherever it is data.** A storage
+  `name`, an email provider `name` or a class name whose getter throws no longer replaces the library's error or
+  line with the host's: the name reads as `[unreadable]`, as does a value that is not a string. The storage name
+  is read once, when the store is wrapped, and the same bounded text fills `providerName` in the audit entry and in
+  the `OTP_STORAGE_UNAVAILABLE` details, which carried it raw and uncut. The email provider's `name` fills
+  `providerName` of the audit entry and of the `EMAIL_SEND_FAILED` details the same way.
+
 ### Documentation
 
+- The README names `[unreadable]` and states that the 200 is counted in code points of the name before escaping,
+  so an escaped character counts once.
 - The README's Traces section states that the failure is rethrown unchanged, with the span status `unknown` for an
   object whose class cannot be read.
-- The README's bundle budget row moves from `40.26 KB` to `40.22 KB`, the measured size of the server entry.
+- The README's bundle budget row moves from `40.26 KB` to `40.30 KB`, the measured size of the server entry.
 
 #### Apply to a derived backend
 

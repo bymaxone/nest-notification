@@ -9,6 +9,7 @@ import { Logger } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 
 import { BymaxNotificationModule } from './bymax-notification.module'
+import type { NotificationException } from './errors/notification-exception'
 import type { IOtpStorage } from './interfaces'
 import { InMemoryOtpStorage } from './providers/in-memory-otp.storage'
 import { resolveOptions } from './config/resolved-options'
@@ -26,7 +27,7 @@ const LONG = 'n'.repeat(5000)
 function namedStorage(name: string, withDelete: boolean): IOtpStorage {
   const inner = new InMemoryOtpStorage()
   const named = Object.create(inner) as IOtpStorage & { name: string }
-  Object.defineProperty(named, 'name', { value: name })
+  Object.defineProperty(named, 'name', { value: name, configurable: true })
   if (!withDelete) {
     Object.defineProperty(named, 'deleteIfCode', { value: undefined })
   }
@@ -105,5 +106,108 @@ describe('host names in library text', () => {
     }).compile()
 
     await expect(compiling).rejects.toThrow(`cannot construct '${ESCAPED}'`)
+  })
+
+  describe('a name that is a getter which throws', () => {
+    /** A storage whose `name` getter throws, as host code may define it. */
+    function throwingNameStorage(withDelete: boolean): IOtpStorage {
+      const storage = namedStorage('placeholder', withDelete)
+      Object.defineProperty(storage, 'name', {
+        get() {
+          throw new Error('name getter of the host')
+        }
+      })
+      return storage
+    }
+
+    it('should read the storage name as unreadable in the consumeOnVerify refusal', () => {
+      const build = (): OtpService =>
+        new OtpService(
+          makeOptions({ consumeOnVerify: true }),
+          throwingNameStorage(false),
+          makeAudit()
+        )
+
+      expect(build).toThrow('(the [unreadable] storage does not)')
+    })
+
+    it('should read the storage name as unreadable in the failures-not-carried line', () => {
+      const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+      const storage = throwingNameStorage(true)
+      Object.defineProperty(storage, 'getFailures', { value: undefined })
+
+      new OtpService(makeOptions({}), storage, makeAudit()).onModuleInit()
+
+      expect(loggedText(warn.mock.calls[0])).toContain('The [unreadable] OTP storage')
+    })
+
+    it('should read the class name as unreadable in the forRootAsync refusal', async () => {
+      class Placeholder {
+        constructor(readonly dependency: unknown) {}
+      }
+      Object.defineProperty(Placeholder, 'name', {
+        get() {
+          throw new Error('name getter of the host')
+        }
+      })
+
+      const compiling = Test.createTestingModule({
+        imports: [
+          BymaxNotificationModule.forRootAsync({
+            useFactory: () => ({ otp: { storage: Placeholder as unknown as IOtpStorage } })
+          })
+        ]
+      }).compile()
+
+      await expect(compiling).rejects.toThrow("cannot construct '[unreadable]'")
+    })
+  })
+
+  describe('the storage name as data', () => {
+    it('should cut and escape it in the details of the unavailable storage error', async () => {
+      const storage = namedStorage(`${HOSTILE}${LONG}`, true)
+      Object.defineProperty(storage, 'tryAcquireCooldown', {
+        value: async () => {
+          throw Object.assign(new Error('down'), { code: 'ECONNREFUSED' })
+        }
+      })
+      const service = new OtpService(makeOptions({}), storage, makeAudit())
+
+      const generating = service.generate({
+        tenantId: 'acme',
+        recipient: 'a@example.com',
+        purpose: 'login',
+        deliverVia: 'manual'
+      })
+
+      const failure = (await generating.catch((error: unknown) => error)) as NotificationException
+      const details = (failure.getResponse() as { error: { details: { providerName: string } } })
+        .error.details
+      expect(details.providerName.startsWith(ESCAPED)).toBe(true)
+      expect(details.providerName.endsWith('…')).toBe(true)
+      expect(details.providerName).not.toContain('\n')
+      expect(details.providerName).not.toContain('n'.repeat(201))
+    })
+
+    it('should cut and escape it in the audit entry', async () => {
+      const audit = makeAudit()
+      const service = new OtpService(
+        makeOptions({}),
+        namedStorage(`${HOSTILE}${LONG}`, true),
+        audit
+      )
+
+      await service.generate({
+        tenantId: 'acme',
+        recipient: 'a@example.com',
+        purpose: 'login',
+        deliverVia: 'manual'
+      })
+
+      const entry = audit.create.mock.calls[0]?.[0]
+      expect(entry?.providerName.startsWith(ESCAPED)).toBe(true)
+      expect(entry?.providerName.endsWith('…')).toBe(true)
+      expect(entry?.providerName.length).toBeLessThan(2100)
+    })
   })
 })
