@@ -3,8 +3,12 @@
  * @layer utils
  */
 
-/** A character and the combining marks that follow it, or a run of marks with nothing before it. */
-const CLUSTER = /\p{M}+|\P{M}\p{M}*/gu
+/**
+ * A character and the combining marks that follow it, or a run of marks with nothing before it, at
+ * most thirty marks to a cluster (the length a stream-safe text allows), so a text that is one long
+ * run of marks is read in pieces and the cost of decomposing a cluster stays bounded.
+ */
+const CLUSTER = /\p{M}{1,30}|\P{M}\p{M}{0,30}/gu
 
 /** A node of the tree of addresses: the code points that may follow, and the mask where one ends. */
 interface Node {

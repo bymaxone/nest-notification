@@ -147,4 +147,19 @@ describe('maskRecipientsInText', () => {
   it('should answer an empty text with the empty text', () => {
     expect(maskRecipientsInText('', ['a@b.c'], mask)).toBe('')
   })
+
+  it('should read a long run of combining marks in time that follows its length', () => {
+    const text = `a${'\u0301\u0323'.repeat(40_000)}`
+    const started = Date.now()
+
+    maskRecipientsInText(text, ['a@b.c'], mask)
+
+    expect(Date.now() - started).toBeLessThan(1_000)
+  })
+
+  it('should still mask an address that follows a run of more than thirty marks', () => {
+    expect(maskRecipientsInText(`a${'\u0301'.repeat(100)} a@b.c`, ['a@b.c'], () => '#')).toBe(
+      `a${'\u0301'.repeat(100)} #`
+    )
+  })
 })
