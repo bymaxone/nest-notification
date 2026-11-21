@@ -333,6 +333,77 @@ describe('OtpService.generate — delivery-error redaction', () => {
     expect(((caught as Error).cause as Error).message).toBe('delivery failed')
   })
 
+  // A library error the store raised is the host's own object, and the failure path reads its
+  // accessors: one that throws, with the code in what it throws, must not escape the scrub and the
+  // audit, wherever in the path it is read.
+  // The thrown object is the host's own, so its accessors are the host's: the chain is read only
+  // where the accessor leaves it readable, and the audit entry is held to it for both.
+  const ACCESSORS = [
+    ['cause', true],
+    ['code', false]
+  ] as const
+  const hostileError = (accessor: (typeof ACCESSORS)[number][0], code: () => string): Error =>
+    Object.defineProperty(new NotificationException('OTP_STORAGE_FAILED'), accessor, {
+      get: (): never => {
+        throw new Error(`${accessor} getter holding ${code()}`)
+      }
+    })
+
+  it.each(ACCESSORS)(
+    'should scrub and audit a failed cleanup whose library error has a %s getter that throws',
+    async (accessor, readable) => {
+      let leakedCode = ''
+      emailSendTemplate.mockImplementation((input: { data: { code: string } }) => {
+        leakedCode = input.data.code
+        return Promise.reject(new Error('delivery failed'))
+      })
+      jest.spyOn(storage, 'clearCooldown').mockImplementation(async () => {
+        throw hostileError(accessor, () => leakedCode)
+      })
+      const service = new OtpService(makeOptions(), storage, audit, emailServiceStub)
+
+      const caught: unknown = await service
+        .generate({ ...ref, deliverVia: 'email' })
+        .catch((error: unknown) => error)
+
+      expect(leakedCode).not.toBe('')
+      if (readable) {
+        expect(serializeErrorChain(caught).includes(leakedCode)).toBe(false)
+      }
+      expect(audit.create).toHaveBeenCalledWith(expect.objectContaining({ verb: 'failed' }))
+      for (const call of audit.create.mock.calls) {
+        expect(JSON.stringify(call[0]).includes(leakedCode)).toBe(false)
+      }
+    }
+  )
+
+  it.each(ACCESSORS)(
+    'should scrub and audit a failed store whose OTP_STORAGE_FAILED has a %s getter that throws',
+    async (accessor, readable) => {
+      let leakedCode = ''
+      jest
+        .spyOn(storage, 'set')
+        .mockImplementation(async (_tenantId, _recipient, _purpose, entry) => {
+          leakedCode = entry.code
+          throw hostileError(accessor, () => entry.code)
+        })
+      const service = new OtpService(makeOptions(), storage, audit, emailServiceStub)
+
+      const caught: unknown = await service
+        .generate({ ...ref, deliverVia: 'manual' })
+        .catch((error: unknown) => error)
+
+      expect(leakedCode).not.toBe('')
+      if (readable) {
+        expect(serializeErrorChain(caught).includes(leakedCode)).toBe(false)
+      }
+      expect(audit.create).toHaveBeenCalledWith(expect.objectContaining({ verb: 'failed' }))
+      for (const call of audit.create.mock.calls) {
+        expect(JSON.stringify(call[0]).includes(leakedCode)).toBe(false)
+      }
+    }
+  )
+
   it('should keep the cause a cleanup failure already has', async () => {
     emailSendTemplate.mockRejectedValue(new Error('delivery failed'))
     const ownCause = new Error('disk full')
