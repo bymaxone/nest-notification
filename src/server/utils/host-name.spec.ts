@@ -42,6 +42,10 @@ describe('textOfHostName', () => {
     expect(cut).toBe(`${'x'.repeat(200)}…`)
   })
 
+  it('should cut a name of 201 characters and keep the first 200', () => {
+    expect(textOfHostName(`${'x'.repeat(200)}y`)).toBe(`${'x'.repeat(200)}…`)
+  })
+
   it('should not cut a name of exactly 200 characters', () => {
     expect(textOfHostName('x'.repeat(200))).toBe('x'.repeat(200))
   })
