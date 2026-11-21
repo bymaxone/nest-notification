@@ -199,4 +199,25 @@ describe('NotificationTracing', () => {
     expect(JSON.stringify(recorded[0])).not.toContain('hunter2')
     expect(JSON.stringify(recorded[0])).not.toContain('jane@acme.com')
   })
+
+  // The class check on a thrown value can itself throw; the span must still end, with no text.
+  it('should mark a hostile failure as unknown and end the span', async () => {
+    const thrown = new Proxy(
+      {},
+      {
+        getPrototypeOf() {
+          throw new Error('getPrototypeOf trap of the host object')
+        }
+      }
+    )
+
+    await new NotificationTracing()
+      .span('notification.send', { channel: 'email' }, async () => {
+        throw thrown
+      })
+      .catch(() => undefined)
+
+    expect(recorded[0]?.status).toEqual({ code: SpanStatusCode.ERROR, message: 'unknown' })
+    expect(recorded[0]?.ended).toBe(1)
+  })
 })

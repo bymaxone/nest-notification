@@ -56,17 +56,17 @@ function isLibraryError(error: unknown): boolean {
 /**
  * Turns a failure of the store into what the caller should see.
  *
- * @param storage - The store that failed.
+ * @param name - The store's name as the wrapper read it when the store was wrapped.
  * @param error - What the operation rejected with.
  * @returns A `NotificationException` for an outage; the same `error` for anything else.
  */
-function translate(storage: IOtpStorage, error: unknown): unknown {
+function translate(name: string, error: unknown): unknown {
   if (isLibraryError(error) || !isUnavailableError(error)) {
     return error
   }
   return new NotificationException(
     'OTP_STORAGE_UNAVAILABLE',
-    { providerName: readHostName(() => storage.name) },
+    { providerName: name },
     { cause: error }
   )
 }
@@ -82,10 +82,11 @@ function translate(storage: IOtpStorage, error: unknown): unknown {
  * @returns A store with the same name, the same operations and the translated failures.
  */
 export function withStorageFailures(storage: IOtpStorage): IOtpStorage {
+  // The name is read once, here, so every line, error and audit entry that names the store carries
+  // the same bounded, escaped text and never the host's getter.
+  const name = readHostName(() => storage.name)
   const wrapped: Record<string, unknown> = {
-    // The name is read once, here, so every line and audit entry that names the store reads the
-    // bounded, escaped text and never the host's getter.
-    name: readHostName(() => storage.name),
+    name,
     isConfigured: (): boolean => storage.isConfigured()
   }
   for (const operation of OPERATIONS) {
@@ -100,7 +101,7 @@ export function withStorageFailures(storage: IOtpStorage): IOtpStorage {
             Reflect.get(storage, operation) as (...a: unknown[]) => Promise<unknown>
           ).apply(storage, args)
         } catch (error) {
-          throw translate(storage, error)
+          throw translate(name, error)
         }
       }
     })
