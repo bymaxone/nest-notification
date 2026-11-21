@@ -269,7 +269,7 @@ export class OtpService implements OnModuleInit {
       return await this.verifyChecked(input)
     } catch (error) {
       // Whatever the store raised leaves the way a failed generate's does, with the guess removed.
-      throw outgoingError(error, typeof input.code === 'string' ? [input.code] : [])
+      throw outgoingError(error, typeof input.code === 'string' ? [input.code] : [], true)
     }
   }
 

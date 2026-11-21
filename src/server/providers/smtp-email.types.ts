@@ -178,6 +178,8 @@ export interface SmtpAttachment {
   content: Buffer | string
   contentType: string | undefined
   encoding: string | undefined
+  cid: string | undefined
+  contentDisposition: 'attachment' | 'inline' | undefined
 }
 
 /**

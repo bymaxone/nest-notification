@@ -99,4 +99,36 @@ describe('the failure of a verify', () => {
 
     expect(reads).toBe(1)
   })
+
+  // A guess is any text the caller chose; one that is a stretch of the library's own error code must
+  // not rewrite the code a client matches on.
+  it.each(['otp', 'storage', 'failed', 'notification', 'OTP storage'])(
+    'should leave the code of the library error as it is for the guess %p',
+    async (guess) => {
+      const service = new OtpService(makeOptions({}), throwing('boom'), makeAudit())
+
+      const caught = (await service
+        .verify({ ...ref, code: guess })
+        .catch((error: unknown) => error)) as NotificationException
+
+      expect(caught.code).toBe('notification.otp_storage_failed')
+      expect(caught.getResponse()).toMatchObject({
+        error: { code: 'notification.otp_storage_failed', message: 'OTP storage failed' }
+      })
+    }
+  )
+
+  it("should still remove a guess that is not the library's own text from the cause", async () => {
+    const service = new OtpService(
+      makeOptions({}),
+      throwing(new Error('rejected 987654 here')),
+      makeAudit()
+    )
+
+    const caught = (await service
+      .verify({ ...ref, code: '987654' })
+      .catch((error: unknown) => error)) as NotificationException
+
+    expect((caught.cause as Error).message).not.toContain('987654')
+  })
 })

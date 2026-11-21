@@ -51,10 +51,14 @@ the entries that carry one, is the compatibility contract — read it, not the n
   unrequested code, and a `deliverVia` read four times could be `'manual'` at the mailbox check and `'email'` at the
   delivery. A template send also used its raw `tags`, `to` and `auditRedactValues` before its input was read; it now
   reads first, so a list over the bound is refused before the renderer is asked.
-- **An attachment carries `filename`, `content` and `contentType`, and nothing else.** Any other field (`cid`,
-  `encoding`, `headers`, `path`) is refused with a refusal that names the attachments, where a copy would drop it
-  without a word. `filename` and `contentType` must be strings. The byte budget measures a `Buffer` or a `Uint8Array`
-  through the typed array's own getter, so an own `length` or `byteLength` property cannot make it look empty.
+- **An attachment carries `filename`, `content`, `contentType`, `cid` and `contentDisposition`, and nothing else.** An
+  inline image is `cid` (1 to 128 printable ASCII characters, no space, quote or angle bracket) with
+  `contentDisposition: 'inline'`; SMTP writes them as the `Content-ID` and the `Content-Disposition`, and Resend takes the
+  `cid` as its content id and has no disposition field, so it ignores that one. Any other field (`encoding`, `headers`,
+  `path`) is refused with a refusal that names the attachments, where a copy would drop it without a word. The kinds of
+  `filename`, `contentType`, `cid` and `contentDisposition` are checked. The byte budget measures a `Buffer` or a
+  `Uint8Array` through the typed array's own getter, so an own `length` or `byteLength` property cannot make it look
+  empty.
 - **A store that counted more attempts than the entry's ceiling is `max_attempts`,** where the remainder was negative.
 - **A failed delivery releases the cooldown and the entry, whichever step fails.** A `clearCooldown` that threw left the
   entry behind; both now run and the first failure is the one the caller sees.
@@ -68,13 +72,13 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 #### Apply to a derived backend
 
-The only declaration change is the name of the parameter of `generate()`, `consume()` and `getStatus()` (`raw`, where it was `input`); no type changes. A configuration that was accepted before now fails when the module is built: a boolean option
+The declaration changes are the name of the parameter of `generate()`, `consume()` and `getStatus()` (`raw`, where it was `input`) and two optional fields of `EmailAttachment`, `cid` and `contentDisposition`. A configuration that was accepted before now fails when the module is built: a boolean option
 given as a string, a `maskRecipient` that is not a function, a `perPurpose` of `null`. A custom `IOtpStorage` that
 answered `tryAcquireCooldown`, `deleteIfCode` or `isConfigured` with something other than a boolean, `recordFailure`
 with something other than an integer of at least `1`, or `consumeAttempt` with an unknown status or an entry of the
 wrong kinds, now ends the call in `OTP_STORAGE_FAILED` (or `OTP_STORAGE_NOT_CONFIGURED` for `isConfigured()`); the
 bundled stores answer correctly. A caller of `send()` that passed a list over 1000 entries, an attachment with a
-non-text, non-binary `content` or with a field other than `filename`, `content` and `contentType`, or a string for a boolean now gets a refusal (`EMAIL_INVALID_RECIPIENT` for the
+non-text, non-binary `content` or with a field other than `filename`, `content`, `contentType`, `cid` and `contentDisposition`, or a string for a boolean now gets a refusal (`EMAIL_INVALID_RECIPIENT` for the
 recipient fields, `INVALID_SCOPE_IDENTIFIER` for the rest). A dispatch with an unknown `action` or `deliverVia` now
 raises `INVALID_SCOPE_IDENTIFIER` instead of sending or storing a code.
 

@@ -78,6 +78,34 @@ describe('ResendEmailProvider', () => {
     )
   })
 
+  // The SDK takes the content id of an inline image as `contentId`; the disposition has no field of
+  // its own at Resend, so it is not sent.
+  it('should send the content id of an inline attachment as contentId, and no disposition', async () => {
+    await new ResendEmailProvider({ apiKey: 'k' }).send({
+      ...baseOptions,
+      attachments: [
+        {
+          filename: 'logo.png',
+          content: Buffer.from('png'),
+          contentType: 'image/png',
+          cid: 'logo-image',
+          contentDisposition: 'inline'
+        },
+        { filename: 'plain.txt', content: 'eA==' }
+      ]
+    })
+
+    expect(mockSend.mock.calls[0]?.[0].attachments).toEqual([
+      {
+        filename: 'logo.png',
+        content: Buffer.from('png'),
+        contentType: 'image/png',
+        contentId: 'logo-image'
+      },
+      { filename: 'plain.txt', content: 'eA==' }
+    ])
+  })
+
   // Identity + configured-state derive purely from the presence of an API key.
   it('should report name "resend" and reflect apiKey presence in isConfigured', () => {
     expect(new ResendEmailProvider({ apiKey: 'k' }).name).toBe('resend')

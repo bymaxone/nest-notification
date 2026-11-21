@@ -243,7 +243,7 @@ describe('the send input reader', () => {
     expect(read.tags).toEqual([{ name: 'n', value: 'v' }])
   })
 
-  it.each(['cid', 'encoding', 'headers', 'path'])(
+  it.each(['encoding', 'headers', 'path', 'content_id', 'contentId'])(
     'should refuse an attachment that carries the field %s the library does not',
     (key) => {
       const caught = refusal({
@@ -276,4 +276,47 @@ describe('the send input reader', () => {
       { filename: 'f.txt', content: 'x', contentType: 'text/plain' }
     ])
   })
+
+  it('should keep the content id and the disposition of an inline attachment', () => {
+    const read = readSendInput({
+      ...base,
+      attachments: [
+        { filename: 'l.png', content: 'x', cid: 'logo-image', contentDisposition: 'inline' }
+      ]
+    })
+
+    expect(read.attachments).toEqual([
+      { filename: 'l.png', content: 'x', cid: 'logo-image', contentDisposition: 'inline' }
+    ])
+  })
+
+  it.each(['', 'has space', 'a"b', '<a>', 'caf\u00e9', 'a'.repeat(129), 5, null, {}])(
+    'should refuse the content id %p',
+    (cid) => {
+      expect(
+        refusal({ ...base, attachments: [{ filename: 'f', content: 'x', cid }] })
+      ).toBeInstanceOf(NotificationException)
+    }
+  )
+
+  it.each(['Inline', 'attached', '', 5, null])('should refuse the disposition %p', (value) => {
+    expect(
+      refusal({
+        ...base,
+        attachments: [{ filename: 'f', content: 'x', contentDisposition: value }]
+      })
+    ).toBeInstanceOf(NotificationException)
+  })
+
+  it.each(['logo-image', 'img1@acme.com', 'a'.repeat(128)])(
+    'should accept the content id %p',
+    (cid) => {
+      expect(
+        refusal({
+          ...base,
+          attachments: [{ filename: 'f', content: 'x', cid, contentDisposition: 'attachment' }]
+        })
+      ).toBeUndefined()
+    }
+  )
 })

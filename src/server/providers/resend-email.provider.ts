@@ -144,7 +144,7 @@ interface ResendSendPayload {
   bcc: string | string[] | undefined
   tags: ReadonlyArray<{ name: string; value: string }> | undefined
   headers: Record<string, string> | undefined
-  attachments: EmailSendOptions['attachments']
+  attachments: ReadonlyArray<Record<string, unknown>> | undefined
 }
 
 /** The payload the SDK is given: the envelope and the body, and nothing else of the input. */
@@ -160,7 +160,10 @@ function toPayload(options: EmailSendOptions, from: string): ResendSendPayload {
     bcc: options.bcc,
     tags: options.tags,
     headers: options.headers,
-    attachments: options.attachments
+    attachments: options.attachments?.map(({ cid, contentDisposition: _ignored, ...rest }) => ({
+      ...rest,
+      ...(cid !== undefined ? { contentId: cid } : {})
+    }))
   }
 }
 

@@ -24,7 +24,9 @@ const TAG_KEYS = ['name', 'value'] as const satisfies readonly (keyof EmailTag)[
 const ATTACHMENT_KEYS = [
   'filename',
   'content',
-  'contentType'
+  'contentType',
+  'cid',
+  'contentDisposition'
 ] as const satisfies readonly (keyof EmailAttachment)[]
 
 const KNOWN_ATTACHMENT_KEYS: readonly string[] = ATTACHMENT_KEYS
@@ -52,6 +54,11 @@ export function attachmentBytes(content: string | Uint8Array): number {
   return typeof content === 'string' ? Buffer.byteLength(content) : byteLengthOf.call(content)
 }
 
+/** A content id: 1 to 128 printable ASCII characters, with no space, quote or angle bracket, so it is safe in a header. */
+const CONTENT_ID = /^[\x21\x23-\x3b\x3d\x3f-\x7e]{1,128}$/
+
+const DISPOSITIONS: readonly unknown[] = ['attachment', 'inline']
+
 /**
  * Copies an attachment, each field read once by name, after refusing a field the library does not
  * carry (it would be dropped, and a dropped inline-image field breaks the message without a word)
@@ -62,10 +69,12 @@ function readAttachment(entry: object): Record<string, unknown> {
     throw refuseInput(OWNER, 'attachments', 'an attachment has a field the library does not carry')
   }
   const copy = copyByName(entry, ATTACHMENT_KEYS)
-  const { filename, content, contentType } = copy
+  const { filename, content, contentType, cid, contentDisposition } = copy
   if (
     (filename !== undefined && typeof filename !== 'string') ||
-    (contentType !== undefined && typeof contentType !== 'string')
+    (contentType !== undefined && typeof contentType !== 'string') ||
+    (cid !== undefined && !(typeof cid === 'string' && CONTENT_ID.test(cid))) ||
+    (contentDisposition !== undefined && !DISPOSITIONS.includes(contentDisposition))
   ) {
     throw refuseInput(OWNER, 'attachments', 'an attachment has a field of an unexpected kind')
   }
