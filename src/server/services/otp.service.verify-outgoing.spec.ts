@@ -55,4 +55,14 @@ describe('the failure of a verify', () => {
     expect(caught).toBeInstanceOf(NotificationException)
     expect(JSON.stringify(caught)).not.toContain(GUESS)
   })
+
+  it('should still clean a failure when the guess is not a string', async () => {
+    const service = new OtpService(makeOptions({}), throwing(new Error('store down')), makeAudit())
+
+    const caught: unknown = await service
+      .verify({ ...ref, ...(JSON.parse('{"code":123456}') as { code: string }) })
+      .catch((error: unknown) => error)
+
+    expect(caught).toBeInstanceOf(Error)
+  })
 })

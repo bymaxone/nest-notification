@@ -43,12 +43,12 @@ import { AuditWriteWarning } from '../utils/audit-write-warning'
 import { isCodeDigest } from '../utils/code-digest'
 import { generateOtpCode } from '../utils/code-generator'
 import { cooldownExpiresAt, toRetryAfterHeader } from '../utils/cooldown-helpers'
-import { assertFailureCount } from '../utils/failure-count'
 import { readHostName, textOfHostName } from '../utils/host-name'
 import { logEvent } from '../utils/log-event'
 import { loggableError } from '../utils/loggable-error'
 import { maskRecipientInText } from '../utils/mask-in-text'
 import { reportOtp, runInSpan } from '../utils/observe'
+import { assertDeliverVia } from '../utils/otp-input'
 import { outgoingError } from '../utils/outgoing-error'
 import { normalizeRecipient } from '../utils/recipient'
 import { assertSingleMailbox } from '../utils/recipient-list'
@@ -218,6 +218,7 @@ export class OtpService implements OnModuleInit {
     const otp = this.requireOtpOptions()
     this.assertScope(input)
     const scope = this.keyed(input)
+    assertDeliverVia('OtpService', input.deliverVia)
     this.assertDeliverable(input, otp.digestCode)
     this.assertMailbox(input)
     const cfg = otp.resolveForPurpose(input.purpose)
@@ -560,10 +561,7 @@ export class OtpService implements OnModuleInit {
     if (live === null) {
       return null
     }
-    return assertFailureCount(
-      await storage.recordFailure(scope.tenantId, scope.recipient, scope.purpose, ttlSeconds),
-      readHostName(() => storage.name)
-    )
+    return storage.recordFailure(scope.tenantId, scope.recipient, scope.purpose, ttlSeconds)
   }
 
   /** How a generated code reaches the recipient: by email when asked or when an email channel exists. */

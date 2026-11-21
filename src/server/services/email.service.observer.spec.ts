@@ -91,19 +91,19 @@ describe('EmailService observer', () => {
     expect(observer.onSend).toHaveBeenCalledTimes(1)
   })
 
-  // The README says so: `rejected` is the library's own refusal, and a raw error from malformed
-  // input that never reaches the provider is `failed`.
-  it('should report a malformed recipient that raises a TypeError as failed', async () => {
+  // The README says so: `rejected` is the library's own refusal, and a raw error that never
+  // reaches the provider is `failed`. A recipient of the wrong kind is now the library's refusal.
+  it('should report a malformed recipient as rejected, a refusal of the library', async () => {
     const observer = recorder()
     const provider = makeProvider()
     const service = new EmailService(makeOptions(), provider, makeRenderer(), makeAudit(), observer)
 
     await expect(
       service.send({ ...baseInput, ...(JSON.parse('{"to":null}') as Partial<EmailSendInput>) })
-    ).rejects.toBeInstanceOf(TypeError)
+    ).rejects.toBeInstanceOf(NotificationException)
 
     expect(observer.onSend).toHaveBeenCalledTimes(1)
-    expect(observer.onSend).toHaveBeenCalledWith(expect.objectContaining({ outcome: 'failed' }))
+    expect(observer.onSend).toHaveBeenCalledWith(expect.objectContaining({ outcome: 'rejected' }))
     expect(provider.send).not.toHaveBeenCalled()
   })
 
@@ -182,7 +182,7 @@ describe('EmailService observer', () => {
     }
     const service = new EmailService(makeOptions(), provider, makeRenderer(), makeAudit(), observer)
 
-    await expect(service.send(input as never)).rejects.toBeInstanceOf(TypeError)
+    await expect(service.send(input as never)).rejects.toBeInstanceOf(NotificationException)
 
     expect(observer.onSend).toHaveBeenCalledWith(expect.objectContaining({ outcome: 'failed' }))
   })

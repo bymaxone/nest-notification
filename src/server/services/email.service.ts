@@ -41,6 +41,7 @@ import {
   withoutDeclaredValues
 } from '../utils/delivery-status'
 import { assertBodyParts } from '../utils/email-body'
+import { readSendInput } from '../utils/email-send-input'
 import { readHostName } from '../utils/host-name'
 import { isLibraryError } from '../utils/is-library-error'
 import { reportSend, runInSpan } from '../utils/observe'
@@ -270,7 +271,12 @@ function providerNameOf(provider: IEmailProvider): string {
  */
 function providerConfigured(provider: IEmailProvider): boolean {
   try {
-    return provider.isConfigured()
+    const answer: unknown = provider.isConfigured()
+    // A truthy string or object is not `true`: only a boolean says whether the provider is ready.
+    if (typeof answer !== 'boolean') {
+      throw new NotificationException('EMAIL_PROVIDER_NOT_CONFIGURED')
+    }
+    return answer
   } catch (error) {
     throw new NotificationException('EMAIL_PROVIDER_NOT_CONFIGURED', undefined, { cause: error })
   }
@@ -360,10 +366,11 @@ export class EmailService {
    * @returns The provider's message id.
    */
   private async sendUnobserved(
-    input: EmailSendInput,
+    raw: EmailSendInput,
     progress: SendProgress
   ): Promise<{ messageId: string }> {
     const email = this.requireEmailOptions()
+    const input = this.readInput(raw, progress)
     assertIdentifies('EmailService', 'tenantId', input.tenantId)
     assertBodyParts(input.html, input.text)
     this.guardAttachmentSize(input.attachments, email.maxAttachmentBytes)
@@ -519,6 +526,27 @@ export class EmailService {
         reason: 'too_many_recipients',
         limit
       })
+    }
+  }
+
+  /**
+   * Reads the caller's input once. The library's own refusal of a field of the wrong kind passes
+   * as it is; an input that cannot be read at all (a getter that throws) is a failed send whose
+   * cause is the caller's error, as it was when the fields were read later.
+   */
+  private readInput(raw: EmailSendInput, progress: SendProgress): EmailSendInput {
+    try {
+      return readSendInput(raw)
+    } catch (error) {
+      if (isLibraryError(error)) {
+        throw error
+      }
+      progress.stage = 'failed'
+      throw new NotificationException(
+        'EMAIL_SEND_FAILED',
+        { providerName: providerNameOf(this.provider) },
+        { cause: error }
+      )
     }
   }
 

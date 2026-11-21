@@ -47,7 +47,7 @@ function canVerify(provider: IEmailProvider): provider is VerifiableProvider {
 /** Whether the provider says it is configured; one that throws is down, and its text goes nowhere. */
 function configured(provider: IEmailProvider): boolean {
   try {
-    return provider.isConfigured()
+    return provider.isConfigured() === true
   } catch {
     return false
   }

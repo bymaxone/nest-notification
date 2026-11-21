@@ -1,0 +1,131 @@
+/**
+ * @fileoverview Holds the lists and flags of a send to the kinds the send uses them as: a table of
+ * every field with its accepted and refused values, and the bound on the length of a list.
+ * @layer utils
+ */
+
+import { NotificationException } from '../errors/notification-exception'
+import { MAX_LIST_ENTRIES } from './bounded-list'
+import { readSendInput } from './email-send-input'
+
+const base = { to: 'a@b.com', subject: 's', html: '<p>x</p>' }
+
+function refusal(input: object): unknown {
+  try {
+    readSendInput(input)
+  } catch (error) {
+    return error
+  }
+  return undefined
+}
+
+describe('the send input reader', () => {
+  it.each(['false', 'true', 0, 1, {}, null])('should refuse publishProviderText of %p', (value) => {
+    const caught = refusal({ ...base, publishProviderText: value })
+
+    expect(caught).toBeInstanceOf(NotificationException)
+    expect(JSON.stringify((caught as NotificationException).getResponse())).toContain(
+      'publishProviderText'
+    )
+  })
+
+  it.each([true, false, undefined])('should accept publishProviderText of %p', (value) => {
+    expect(refusal({ ...base, publishProviderText: value })).toBeUndefined()
+  })
+
+  it.each(['to', 'cc', 'bcc'])(
+    'should refuse %s that is a number, an object or holds a number',
+    (field) => {
+      for (const value of [5, {}, [1], ['a@b.com', null]]) {
+        expect(refusal({ ...base, [field]: value })).toBeInstanceOf(NotificationException)
+      }
+    }
+  )
+
+  it.each(['attachments', 'tags', 'auditRedactValues'])(
+    'should refuse %s that is not a list',
+    (field) => {
+      for (const value of ['abc', {}, 5, null]) {
+        expect(refusal({ ...base, [field]: value })).toBeInstanceOf(NotificationException)
+      }
+    }
+  )
+
+  it.each([5, null, {}, [], undefined, true])(
+    'should refuse an attachment whose content is %p',
+    (content) => {
+      expect(refusal({ ...base, attachments: [{ filename: 'f', content }] })).toBeInstanceOf(
+        NotificationException
+      )
+    }
+  )
+
+  it.each([5, null, 'x'])('should refuse an attachment that is %p, not an object', (entry) => {
+    expect(refusal({ ...base, attachments: [entry] })).toBeInstanceOf(NotificationException)
+  })
+
+  it.each(['text', Buffer.from('x'), new Uint8Array([1])])(
+    'should accept an attachment whose content is %p',
+    (content) => {
+      expect(refusal({ ...base, attachments: [{ filename: 'f', content }] })).toBeUndefined()
+    }
+  )
+
+  it.each(['auditRedactValues', 'attachments', 'tags', 'to', 'cc', 'bcc'])(
+    'should refuse %s of more than the bound before reading an entry',
+    (field) => {
+      let reads = 0
+      const huge = new Proxy([] as unknown[], {
+        get(target, property, receiver) {
+          if (typeof property === 'string' && /^\d+$/.test(property)) {
+            reads += 1
+          }
+          return property === 'length'
+            ? MAX_LIST_ENTRIES + 1
+            : Reflect.get(target, property, receiver)
+        }
+      })
+
+      expect(refusal({ ...base, [field]: huge })).toBeInstanceOf(NotificationException)
+      expect(reads).toBe(0)
+    }
+  )
+
+  it('should accept a list of exactly the bound', () => {
+    const values = Array.from({ length: MAX_LIST_ENTRIES }, () => 'v')
+
+    expect(refusal({ ...base, auditRedactValues: values })).toBeUndefined()
+  })
+
+  it.each([-1, 1.5, Number.NaN, '3'])('should refuse a list whose length reads as %p', (length) => {
+    const odd = new Proxy([] as unknown[], {
+      get: (target, property, receiver) =>
+        property === 'length' ? length : Reflect.get(target, property, receiver)
+    })
+
+    expect(refusal({ ...base, auditRedactValues: odd })).toBeInstanceOf(NotificationException)
+  })
+
+  it('should read each entry of a list once and return a copy', () => {
+    let reads = 0
+    const list = ['a'] as string[]
+    const watched = new Proxy(list, {
+      get(target, property, receiver) {
+        if (property === '0') {
+          reads += 1
+        }
+        return Reflect.get(target, property, receiver)
+      }
+    })
+
+    const read = readSendInput({ ...base, auditRedactValues: watched })
+
+    expect(reads).toBe(1)
+    expect(read.auditRedactValues).toEqual(['a'])
+    expect(read.auditRedactValues).not.toBe(watched)
+  })
+
+  it('should leave a field that is absent absent', () => {
+    expect(Object.keys(readSendInput(base))).toEqual(['to', 'subject', 'html'])
+  })
+})

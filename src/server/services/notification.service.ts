@@ -16,6 +16,7 @@ import { NOTIFICATION_LOG_EVENTS } from '../constants/log-events.constants'
 import { NotificationException } from '../errors/notification-exception'
 import type { OtpVerifyResult } from '../interfaces/otp-storage.interface'
 import { logEvent } from '../utils/log-event'
+import { assertOtpAction } from '../utils/otp-input'
 import { EmailService } from './email.service'
 import type { EmailSendInput, EmailSendTemplateInput } from './email.service'
 import { OtpService } from './otp.service'
@@ -198,6 +199,7 @@ export class NotificationService implements OnModuleInit {
     payload: OtpDispatchPayload
   ): Promise<OtpGenerateResult | OtpVerifyResult | void> {
     const otp = this.getOtp()
+    assertOtpAction('NotificationService', payload.action)
     // Stryker disable next-line StringLiteral: 'generate' is the default only; it is never compared with `===` (the code branches on 'verify'/'consume' and falls through otherwise), so any non-'verify'/'consume' default — including the empty-string mutant — routes identically to generate.
     const action = payload.action ?? 'generate'
     const ref = {

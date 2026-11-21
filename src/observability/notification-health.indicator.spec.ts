@@ -76,6 +76,19 @@ describe('NotificationHealthIndicator', () => {
     expect(relay.verify).not.toHaveBeenCalled()
   })
 
+  it.each(['false', 'yes', 1, {}, null])(
+    'should be down, not up, when isConfigured answers %p',
+    async (answer) => {
+      const relay = provider()
+      relay.isConfigured = () => answer as boolean
+
+      const result = await new NotificationHealthIndicator(relay, OPTIONS).check()
+
+      expect(result).toEqual({ status: 'down' })
+      expect(relay.verify).not.toHaveBeenCalled()
+    }
+  )
+
   it('should be up once the transport has been verified, and say nothing else', async () => {
     const result = await new NotificationHealthIndicator(provider(), OPTIONS).check()
 
