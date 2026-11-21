@@ -15,6 +15,7 @@ import { NotificationException } from '../errors/notification-exception'
 import type { IOtpStorage } from '../interfaces/otp-storage.interface'
 import { isUnavailableError } from './availability'
 import { readHostName } from './host-name'
+import { isLibraryError } from './is-library-error'
 
 /** The operations of an `IOtpStorage` that return a promise, required and optional alike. */
 const OPERATIONS = [
@@ -41,19 +42,6 @@ export type UncoveredStorageOperation = Exclude<
   keyof IOtpStorage,
   'name' | 'isConfigured' | (typeof OPERATIONS)[number]
 >
-
-/**
- * Whether the store's failure is already one of the library's own. The class check runs on a
- * value the store supplied, and a hostile or revoked proxy throws from it, so a check that cannot
- * run counts as no.
- */
-function isLibraryError(error: unknown): boolean {
-  try {
-    return error instanceof NotificationException
-  } catch {
-    return false
-  }
-}
 
 /**
  * Whether the store has the operation. One whose getter throws is counted as having it, so a

@@ -45,6 +45,7 @@ import { isCodeDigest } from '../utils/code-digest'
 import { generateOtpCode } from '../utils/code-generator'
 import { cooldownExpiresAt, toRetryAfterHeader } from '../utils/cooldown-helpers'
 import { readHostName, textOfHostName } from '../utils/host-name'
+import { isLibraryError } from '../utils/is-library-error'
 import { logEvent } from '../utils/log-event'
 import { loggableError } from '../utils/loggable-error'
 import { reportOtp, runInSpan } from '../utils/observe'
@@ -160,7 +161,7 @@ function otpEventOf(result: OtpVerifyResult): 'verified' | 'failed' | 'locked' {
  * its text, which the scrub has already cleaned, because the answer's own message names no cause.
  */
 function storageCauseOf(outgoing: unknown): unknown {
-  return outgoing instanceof NotificationException &&
+  return isLibraryError(outgoing) &&
     (outgoing.code === NOTIFICATION_ERROR_CODES.OTP_STORAGE_FAILED ||
       outgoing.code === NOTIFICATION_ERROR_CODES.OTP_STORAGE_UNAVAILABLE)
     ? outgoing.cause

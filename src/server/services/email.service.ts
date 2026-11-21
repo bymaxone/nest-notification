@@ -42,6 +42,7 @@ import {
 } from '../utils/delivery-status'
 import { assertBodyParts } from '../utils/email-body'
 import { readHostName } from '../utils/host-name'
+import { isLibraryError } from '../utils/is-library-error'
 import { reportSend, runInSpan } from '../utils/observe'
 import { countRecipients } from '../utils/recipient-list'
 import {
@@ -256,19 +257,6 @@ function sendOutcomeOf(progress: SendProgress, error: unknown): 'sent' | 'failed
     return 'failed'
   }
   return isLibraryError(error) ? 'rejected' : 'failed'
-}
-
-/**
- * Whether what a send threw is one of the library's own errors. The class check runs on a value
- * that can come from host code, and a revoked or trapped proxy throws from it, so a check that
- * cannot run counts as no and must not cost the send its metric.
- */
-function isLibraryError(error: unknown): boolean {
-  try {
-    return error instanceof NotificationException
-  } catch {
-    return false
-  }
 }
 
 /** The provider's name as text that is safe to write: bounded, escaped, `[unreadable]` when it cannot be read. */
