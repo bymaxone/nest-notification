@@ -101,5 +101,21 @@ describe('loggableError', () => {
       expect(loggableError({ message: 'm', name: 5 }).name).toBe('Error')
       expect(loggableError({ message: 'm', name: 'Odd\nName' }).name).toBe('Odd\\nName')
     })
+
+    // The name comes from code that is not ours: a getter can answer differently the second time,
+    // so the copy must be made from the one value that was tested.
+    it('should read the name once', () => {
+      let reads = 0
+      const source = {
+        message: 'm',
+        get name(): unknown {
+          reads += 1
+          return reads === 1 ? 'First' : 5
+        }
+      }
+
+      expect(loggableError(source).name).toBe('First')
+      expect(reads).toBe(1)
+    })
   })
 })

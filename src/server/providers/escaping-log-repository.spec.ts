@@ -111,4 +111,25 @@ describe('EscapingLogRepository', () => {
 
     expect(received[0]).toEqual(plain)
   })
+
+  // The repository is the host's: a name getter that throws must not fail the module's build.
+  it('should read a name that cannot be read as [unreadable]', () => {
+    const hostile: INotificationLogRepository = {
+      create: jest.fn(async (): Promise<void> => undefined),
+      get name(): string {
+        throw new Error('name getter of the host')
+      }
+    }
+
+    expect(new EscapingLogRepository(hostile).name).toBe('[unreadable]')
+  })
+
+  it('should write the name of the repository as visible text', () => {
+    const named: INotificationLogRepository = {
+      name: 'sink\nforged',
+      create: jest.fn(async (): Promise<void> => undefined)
+    }
+
+    expect(new EscapingLogRepository(named).name).toBe('sink\\u000aforged')
+  })
 })

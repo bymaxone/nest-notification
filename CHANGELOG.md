@@ -11,6 +11,52 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 ## [Unreleased]
 
+## [1.4.22] - 2026-11-21
+
+### Added
+
+- **`OTP_STORAGE_FAILED` (`notification.otp_storage_failed`, 500).** A method of the OTP store that throws,
+  rejects or cannot be read, and is not an outage, is answered with this code and no longer reaches the caller as the
+  store's own object. An outage keeps `OTP_STORAGE_UNAVAILABLE` (503). The store's error is the `cause`, a log-safe
+  copy, and its text is not in the message or the body. A method whose getter throws counts as present, so the call
+  fails with the code each time, and a store whose `isConfigured()` throws is answered with `OTP_STORAGE_NOT_CONFIGURED`, its error the
+  cause.
+
+### Fixed
+
+- **A send whose renderer rejected with a revoked or trapped proxy is reported.** The class check that sorts a send into
+  `rejected` or `failed` ran unguarded, so the proxy's own error escaped and the send metric was not reported. The check
+  now counts as "no" when it cannot run, and the send is reported as `failed`.
+- **A provider whose `isConfigured()` throws is refused with `EMAIL_PROVIDER_NOT_CONFIGURED`.** The host's error was
+  raised from `send()` and from start-up; it is now the cause of the refusal, which still fails start-up, and the health
+  indicator reports `down` and says nothing of it.
+- **The provider name is read once per failed send,** so a getter cannot answer the audit entry and the
+  `EMAIL_SEND_FAILED` details differently.
+- **The audit repository's `name`, a log copy's `name` and the storage name in the `OTP_FAILURES_NOT_CARRIED` line are
+  read once and under a guard.** A getter that throws no longer fails the module's build for the repository, and the
+  line no longer depends on which object it was handed.
+- **The audit entry of a failed OTP delivery keeps the store's text.** It reads the store's own error, which is the
+  cause of the answer, and not the answer's generic message.
+
+### Documentation
+
+- The README catalog lists `OTP_STORAGE_FAILED`; its status paragraph says a store failure that is not an outage
+  answers with it, and the section on names says the options, `global.defaultLocale` among them, are read once while
+  the module is built, so a getter that throws there fails the build with the host's own error.
+- 1.4.21 said a storage failure reaches the caller as the object the store threw; from this release it is the cause of
+  `OTP_STORAGE_FAILED`.
+- The README's bundle budget row follows the new server and observability budgets.
+
+#### Apply to a derived backend
+
+`NOTIFICATION_ERROR_CODES` and `NOTIFICATION_ERROR_DEFINITIONS` gain `OTP_STORAGE_FAILED`; nothing else in a declaration
+changes. A caller that catches what `generate()`, `verify()` or `consumeAttempt` throws and compared it with the error
+its own store raised now receives a `NotificationException` with `code: 'notification.otp_storage_failed'`; read
+`error.cause` for what the store threw, and map the code to the response you want (the default is 500). A store whose
+failures are outages is unaffected, and so is one that throws the library's own errors. An email provider
+or store whose `isConfigured()` throws now ends an accessor and start-up (and, for the provider, a send) in
+`EMAIL_PROVIDER_NOT_CONFIGURED` or `OTP_STORAGE_NOT_CONFIGURED`, its error the cause.
+
 ## [1.4.21] - 2026-11-20
 
 ### Fixed
@@ -1693,7 +1739,8 @@ rejected at startup rather than failing on the first send.
 
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.4.21...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.4.22...HEAD
+[1.4.22]: https://github.com/bymaxone/nest-notification/compare/v1.4.21...v1.4.22
 [1.4.21]: https://github.com/bymaxone/nest-notification/compare/v1.4.20...v1.4.21
 [1.4.20]: https://github.com/bymaxone/nest-notification/compare/v1.4.19...v1.4.20
 [1.4.19]: https://github.com/bymaxone/nest-notification/compare/v1.4.18...v1.4.19

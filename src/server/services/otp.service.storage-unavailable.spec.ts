@@ -137,8 +137,18 @@ describe('OtpService when the store is unavailable', () => {
   })
 })
 
+/** The answer for a failure that is not an outage: 500, with the store's own object as the cause. */
+async function failedWith(failure: unknown): Promise<NotificationException> {
+  const service = new OtpService(
+    makeOptions({}),
+    failing({ set: () => Promise.reject(failure) }),
+    makeAudit()
+  )
+  return (await catching(service.generate(base))) as NotificationException
+}
+
 describe('OtpService when the store fails for another reason', () => {
-  it('should let a defect through unchanged, as the same object', async () => {
+  it('should answer a defect with OTP_STORAGE_FAILED and keep it as the cause', async () => {
     const defect = new TypeError("Cannot read properties of undefined (reading 'get')")
     const service = new OtpService(
       makeOptions({}),
@@ -146,37 +156,37 @@ describe('OtpService when the store fails for another reason', () => {
       makeAudit()
     )
 
-    expect(await catching(service.generate(base))).toBe(defect)
+    const caught = (await catching(service.generate(base))) as NotificationException
+
+    expect(caught).toMatchObject({ code: 'notification.otp_storage_failed' })
+    expect((caught.cause as Error).message).toBe(defect.message)
+    expect(JSON.stringify(caught.getResponse())).not.toContain('Cannot read properties')
   })
 
   // The reply number is what an SMTP client sets. A store of your own that sets one (an HTTP-backed
   // one answering 400 for a bad request, say) has reported a fault, not an outage.
   it.each([400, 421, 451, 499])(
-    'should let a store error with a response code of %i through unchanged',
+    'should answer a store error with a response code of %i with OTP_STORAGE_FAILED',
     async (responseCode) => {
       const failure = Object.assign(new Error('bad request'), { responseCode })
-      const service = new OtpService(
-        makeOptions({}),
-        failing({ set: () => Promise.reject(failure) }),
-        makeAudit()
-      )
 
-      expect(await catching(service.generate(base))).toBe(failure)
+      const caught = await failedWith(failure)
+
+      expect(caught).toMatchObject({ code: 'notification.otp_storage_failed' })
+      expect((caught.cause as Error).message).toBe('bad request')
     }
   )
 
-  it('should let a Redis reply that names a fault through unchanged', async () => {
+  it('should answer a Redis reply that names a fault with OTP_STORAGE_FAILED', async () => {
     class ReplyError extends Error {
       override name = 'ReplyError'
     }
     const reply = new ReplyError('NOAUTH Authentication required.')
-    const service = new OtpService(
-      makeOptions({}),
-      failing({ set: () => Promise.reject(reply) }),
-      makeAudit()
-    )
 
-    expect(await catching(service.generate(base))).toBe(reply)
+    const caught = await failedWith(reply)
+
+    expect(caught).toMatchObject({ code: 'notification.otp_storage_failed' })
+    expect((caught.cause as Error).message).toBe(reply.message)
   })
 
   it('should let a NotificationException the store raises through unchanged', async () => {
@@ -212,5 +222,59 @@ describe('OtpService around the store it is given', () => {
     await service.generate(base)
 
     expect(calls).toEqual(expect.arrayContaining(['tryAcquireCooldown', 'set']))
+  })
+})
+
+/** What the failed-generate audit entry says, for a store whose `set` rejects with `failure`. */
+async function auditedErrorMessage(failure: unknown): Promise<unknown> {
+  const audit = makeAudit()
+  const service = new OtpService(
+    makeOptions({}),
+    failing({ set: () => Promise.reject(failure) }),
+    audit
+  )
+
+  await catching(service.generate(base))
+
+  return audit.create.mock.calls.map((call) => call[0]).find((entry) => entry.verb === 'failed')
+    ?.metadata?.errorMessage
+}
+
+// The answer's own message is the generic one and names no cause, so the audit entry reads the
+// store's error, for an outage and for any other failure of it; for the library's own error it reads
+// the error itself and never a cause that error happens to carry.
+describe('OtpService audit entry of a failed generate', () => {
+  it('should carry the text of the store error when the store is unavailable', async () => {
+    expect(await auditedErrorMessage(CLOSED())).toBe('Connection is closed.')
+  })
+
+  it('should carry the text of the store error when the store fails for another reason', async () => {
+    expect(await auditedErrorMessage(new TypeError('defect of the store'))).toBe(
+      'defect of the store'
+    )
+  })
+
+  it('should carry the message of a library error of the store, not the cause it carries', async () => {
+    const own = new NotificationException(
+      'INVALID_SCOPE_IDENTIFIER',
+      { reason: 'x' },
+      { cause: new Error('cause of the library error') }
+    )
+
+    expect(await auditedErrorMessage(own)).toBe('Notification Exception')
+  })
+
+  it('should name the store in the details of OTP_STORAGE_FAILED as it does for an outage', async () => {
+    const service = new OtpService(
+      makeOptions({}),
+      failing({ set: () => Promise.reject(new TypeError('defect of the store')) }),
+      makeAudit()
+    )
+
+    const caught = (await catching(service.generate(base))) as NotificationException
+
+    expect(caught.getResponse()).toMatchObject({
+      error: { code: 'notification.otp_storage_failed', details: { providerName: 'memory' } }
+    })
   })
 })

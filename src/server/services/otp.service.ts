@@ -57,6 +57,7 @@ import {
   scrubValuesFromErrorChain
 } from '../utils/redact'
 import { withStorageFailures } from '../utils/storage-failures'
+import { causeOf, storageCauseOf } from '../utils/store-error-cause'
 import { assertIdentifies, assertPurpose, assertRegisteredPurpose } from '../utils/tenant-scope'
 import { safeCompare } from '../utils/timing-safe-compare'
 import { EmailService } from './email.service'
@@ -433,7 +434,11 @@ export class OtpService implements OnModuleInit {
     try {
       await this.releaseOtp(scope)
     } catch (cleanupError) {
-      attachCauseIfAbsent(cleanupError, error)
+      // A failed store method arrives as `OTP_STORAGE_FAILED` or `_UNAVAILABLE` already carrying the
+      // store's own error as its cause, so the delivery error goes onto that cause.
+      if (!attachCauseIfAbsent(cleanupError, error)) {
+        attachCauseIfAbsent(causeOf(cleanupError), error)
+      }
       failure = cleanupError
     }
     const outgoing: unknown = isSafeError(failure)
@@ -443,7 +448,7 @@ export class OtpService implements OnModuleInit {
       this.otpAuditEntry('failed', scope, {
         // `outgoing` is already fully redacted by the scrub above; this read
         // only needs the fail-closed guard, not a second redaction pass.
-        errorMessage: readRedactedMessage(outgoing)
+        errorMessage: readRedactedMessage(storageCauseOf(outgoing) ?? outgoing)
       })
     )
     return outgoing
@@ -474,7 +479,7 @@ export class OtpService implements OnModuleInit {
       this.logger,
       'warn',
       NOTIFICATION_LOG_EVENTS.OTP_FAILURES_NOT_CARRIED,
-      `[BYMAX_NOTIFICATION_OTP_FAILURES_NOT_CARRIED] The ${storage.name} OTP storage does not implement ` +
+      `[BYMAX_NOTIFICATION_OTP_FAILURES_NOT_CARRIED] The ${readHostName(() => storage.name)} OTP storage does not implement ` +
         'getFailures, recordFailure and clearFailures, so issuing a new code gives it a fresh attempt budget; ' +
         'NIST SP 800-63B-4 §3.1.3.2 says generating a new secret SHALL NOT reset the failed authentication count. ' +
         'Implement the three optional methods to carry the count across re-issues.'

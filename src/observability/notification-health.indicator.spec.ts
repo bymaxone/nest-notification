@@ -62,6 +62,20 @@ describe('NotificationHealthIndicator', () => {
     expect(relay.verify).not.toHaveBeenCalled()
   })
 
+  // The provider is the host's: a throw from isConfigured is a down channel with nothing of the
+  // host's text in the answer, and it is never verified.
+  it('should be down, saying nothing else, when isConfigured throws', async () => {
+    const relay = provider()
+    relay.isConfigured = () => {
+      throw new Error('isConfigured of the host')
+    }
+
+    const result = await new NotificationHealthIndicator(relay, OPTIONS).check()
+
+    expect(result).toEqual({ status: 'down' })
+    expect(relay.verify).not.toHaveBeenCalled()
+  })
+
   it('should be up once the transport has been verified, and say nothing else', async () => {
     const result = await new NotificationHealthIndicator(provider(), OPTIONS).check()
 

@@ -33,6 +33,7 @@ export const NOTIFICATION_ERROR_CODES = {
   OTP_MAX_ATTEMPTS_EXCEEDED: 'notification.otp_max_attempts_exceeded',
   OTP_INVALID_CODE: 'notification.otp_invalid_code',
   OTP_STORAGE_UNAVAILABLE: 'notification.otp_storage_unavailable',
+  OTP_STORAGE_FAILED: 'notification.otp_storage_failed',
   OTP_INVALID_LENGTH: 'notification.otp_invalid_length',
   SMS_PROVIDER_NOT_CONFIGURED: 'notification.sms_provider_not_configured',
   SMS_SEND_FAILED: 'notification.sms_send_failed',

@@ -44,6 +44,15 @@ function canVerify(provider: IEmailProvider): provider is VerifiableProvider {
   return typeof (provider as Partial<VerifiableProvider>).verify === 'function'
 }
 
+/** Whether the provider says it is configured; one that throws is down, and its text goes nowhere. */
+function configured(provider: IEmailProvider): boolean {
+  try {
+    return provider.isConfigured()
+  } catch {
+    return false
+  }
+}
+
 /**
  * Reports whether the email channel can be used: `down` when the provider says it is not
  * configured or the relay does not answer, `up` otherwise. A provider that cannot verify (the Resend
@@ -94,7 +103,7 @@ export class NotificationHealthIndicator implements IHealthIndicator {
     if (provider === undefined || provider === null) {
       return true
     }
-    if (!provider.isConfigured()) {
+    if (!configured(provider)) {
       return false
     }
     return canVerify(provider) ? this.verified(provider) : true

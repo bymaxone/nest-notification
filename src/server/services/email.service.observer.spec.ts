@@ -251,4 +251,26 @@ describe('EmailService observer', () => {
 
     expect(onSend).toHaveBeenCalledTimes(1)
   })
+
+  // A renderer that rejects with an object whose class check throws, as a revoked or trapped proxy
+  // does: the send is still reported, and as failed, because it is not the library's own error.
+  it('should report a hostile rejection of the renderer as failed', async () => {
+    const observer = recorder()
+    const renderer = makeRenderer()
+    const { proxy, revoke } = Proxy.revocable({}, {})
+    revoke()
+    renderer.hasTemplate.mockRejectedValue(proxy)
+
+    const sending = new EmailService(
+      makeOptions(),
+      makeProvider(),
+      renderer,
+      makeAudit(),
+      observer
+    ).sendTemplate({ tenantId: 't', to: 'jane@acme.com', template: 'welcome', data: {} })
+    await sending.catch(() => undefined)
+
+    expect(observer.onSend).toHaveBeenCalledTimes(1)
+    expect(observer.onSend).toHaveBeenCalledWith(expect.objectContaining({ outcome: 'failed' }))
+  })
 })
