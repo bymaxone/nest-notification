@@ -27,19 +27,20 @@ export function maskRecipientsInText(
 }
 
 /**
- * Replaces each occurrence of `needle` in `text`, ignoring letter case where lower-casing keeps the
- * text's length (so an index in the one is an index in the other), and exactly otherwise.
+ * Replaces each occurrence of `needle` in `text`, ignoring letter case. Each stretch of the text is
+ * compared on its own, so a character elsewhere whose lower case has another length cannot turn the
+ * comparison off for the rest of the text.
  */
 function replaceAll(text: string, needle: string, replacement: string): string {
-  const lowered = text.toLowerCase()
-  const fold = lowered.length === text.length
-  const hay = fold ? lowered : text
-  const target = fold ? needle.toLowerCase() : needle
+  const target = needle.toLowerCase()
   let out = ''
   let from = 0
-  for (let at = hay.indexOf(target); at !== -1; at = hay.indexOf(target, from)) {
-    out += text.slice(from, at) + replacement
-    from = at + target.length
+  for (let at = 0; at + needle.length <= text.length; at += 1) {
+    if (text.slice(at, at + needle.length).toLowerCase() === target) {
+      out += text.slice(from, at) + replacement
+      from = at + needle.length
+      at = from - 1
+    }
   }
   return out + text.slice(from)
 }

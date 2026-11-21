@@ -39,7 +39,7 @@ describe('maskRecipientsInText', () => {
     expect(maskRecipientsInText('abc', [''], mask)).toBe('abc')
   })
 
-  it('should match exactly when lower-casing would change the length of the text', () => {
-    expect(maskRecipientsInText('\u0130 a@b.c A@B.C', ['a@b.c'], mask)).toBe('\u0130 <5> A@B.C')
+  it('should still mask when a character elsewhere changes length in lower case', () => {
+    expect(maskRecipientsInText('\u0130 Bob@X.com', ['bob@x.com'], mask)).toBe('\u0130 <9>')
   })
 })

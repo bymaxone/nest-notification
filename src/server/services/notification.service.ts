@@ -15,8 +15,10 @@ import type { NotificationChannel } from '../../shared/types/notification-channe
 import { NOTIFICATION_LOG_EVENTS } from '../constants/log-events.constants'
 import { NotificationException } from '../errors/notification-exception'
 import type { OtpVerifyResult } from '../interfaces/otp-storage.interface'
+import { copyByName } from '../utils/bounded-list'
 import { logEvent } from '../utils/log-event'
 import { readOtpAction } from '../utils/otp-input'
+import { DISPATCH_EMAIL_KEYS } from './dispatch-email-keys'
 import { EmailService } from './email.service'
 import type { EmailSendInput, EmailSendTemplateInput } from './email.service'
 import { OtpService } from './otp.service'
@@ -178,8 +180,10 @@ export class NotificationService implements OnModuleInit {
   }
 
   /** Routes an email dispatch to `sendTemplate` (template) or `send` (raw body). */
-  private async dispatchEmail(tenantId: string, payload: EmailDispatchPayload): Promise<string> {
+  private async dispatchEmail(tenantId: string, raw: EmailDispatchPayload): Promise<string> {
     const email = this.getEmail()
+    // Each field of the payload is read once, here, and only the copy is used below.
+    const payload = copyByName(raw, DISPATCH_EMAIL_KEYS) as unknown as EmailDispatchPayload
     if (payload.template !== undefined) {
       const input = this.toTemplateInput(tenantId, payload.template, payload)
       return (await email.sendTemplate(input)).messageId

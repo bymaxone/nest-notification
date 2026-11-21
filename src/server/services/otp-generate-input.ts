@@ -10,7 +10,7 @@
 
 import { copyByName } from '../utils/bounded-list'
 import { assertDeliverVia } from '../utils/otp-input'
-import type { OtpGenerateInput } from './otp.service'
+import type { OtpGenerateInput, OtpVerifyInput } from './otp.service'
 
 /** Every field of {@link OtpGenerateInput}, read by name. */
 const GENERATE_KEYS = [
@@ -38,4 +38,26 @@ export function readGenerateInput(input: OtpGenerateInput): OtpGenerateInput {
   const copy = copyByName(input, GENERATE_KEYS)
   assertDeliverVia('OtpService', copy.deliverVia)
   return copy as unknown as OtpGenerateInput
+}
+
+/** Every field of {@link OtpVerifyInput}, read by name. */
+const VERIFY_KEYS = [
+  'tenantId',
+  'recipient',
+  'purpose',
+  'userId',
+  'code'
+] as const satisfies readonly (keyof OtpVerifyInput)[]
+
+/** The fields of {@link OtpVerifyInput} that the list leaves out; `never` while it lists them all. */
+export type UnlistedVerifyKey = Exclude<keyof OtpVerifyInput, (typeof VERIFY_KEYS)[number]>
+
+/**
+ * Copies the input of a verify, each field read once.
+ *
+ * @param input - The input as the caller gave it.
+ * @returns A plain copy that the rest of the call uses.
+ */
+export function readVerifyInput(input: OtpVerifyInput): OtpVerifyInput {
+  return copyByName(input, VERIFY_KEYS) as unknown as OtpVerifyInput
 }

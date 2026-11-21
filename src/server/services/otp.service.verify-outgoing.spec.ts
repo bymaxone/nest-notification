@@ -82,4 +82,21 @@ describe('the failure of a verify', () => {
       expect(((caught as Error).cause as Error).message).toBe(text)
     }
   )
+
+  it('should read the guess once when it cleans a failure', async () => {
+    const service = new OtpService(makeOptions({}), throwing(new Error('store down')), makeAudit())
+    let reads = 0
+
+    await service
+      .verify({
+        ...ref,
+        get code(): string {
+          reads += 1
+          return reads === 1 ? GUESS : 'other'
+        }
+      })
+      .catch(() => undefined)
+
+    expect(reads).toBe(1)
+  })
 })

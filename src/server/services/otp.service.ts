@@ -59,7 +59,7 @@ import { assertIdentifies, assertPurpose, assertRegisteredPurpose } from '../uti
 import { safeCompare } from '../utils/timing-safe-compare'
 import { EmailService } from './email.service'
 import type { EmailSendTemplateInput } from './email.service'
-import { readGenerateInput } from './otp-generate-input'
+import { readGenerateInput, readVerifyInput } from './otp-generate-input'
 
 /** Milliseconds in one second. */
 const MS_PER_SECOND = 1000
@@ -264,7 +264,8 @@ export class OtpService implements OnModuleInit {
    * @param input - The recipient, purpose and the code to check.
    * @returns Whether the code is valid, and why not when it is not.
    */
-  private async verifyUnobserved(input: OtpVerifyInput): Promise<OtpVerifyResult> {
+  private async verifyUnobserved(raw: OtpVerifyInput): Promise<OtpVerifyResult> {
+    const input = readVerifyInput(raw)
     try {
       return await this.verifyChecked(input)
     } catch (error) {

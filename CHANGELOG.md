@@ -40,7 +40,7 @@ the entries that carry one, is the compatibility contract — read it, not the n
   false, and passed the byte budget), and `publishProviderText` is a boolean (`'false'` was read as "publish the
   provider's text"). Each list is read into a copy before anything uses it. A `to: null` is now a refusal of the
   library (`rejected` for the observer), not a `TypeError` (`failed`).
-- **The input of a generate, a dispatch and a template send is read once, by name, before anything uses it.** A getter
+- **The input of a generate, a verify, a dispatch and a template send is read once, by name, before anything uses it.** A getter
   that answered `'verify'` to the action check and another word to the dispatch fell through to `generate` and sent an
   unrequested code, and a `deliverVia` read four times could be `'manual'` at the mailbox check and `'email'` at the
   delivery. A template send also used its raw `tags`, `to` and `auditRedactValues` before its input was read; it now

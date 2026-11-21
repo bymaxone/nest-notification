@@ -6,13 +6,16 @@
 
 import type { UnlistedEntryKey } from '../utils/email-send-input'
 import type { UnlistedSendKey, UnlistedTemplateKey } from './email-send-keys'
-import type { UnlistedGenerateKey } from './otp-generate-input'
+import type { UnlistedDispatchEmailKey } from './dispatch-email-keys'
+import type { UnlistedGenerateKey, UnlistedVerifyKey } from './otp-generate-input'
 
 // `[X] extends [never]` is `true` only when nothing is unlisted; the literal `true` then fails to
 // compile for any other answer, which an assignment of `[]` to an array of the keys never does.
 const sendKeysComplete: [UnlistedSendKey] extends [never] ? true : false = true
 const templateKeysComplete: [UnlistedTemplateKey] extends [never] ? true : false = true
 const generateKeysComplete: [UnlistedGenerateKey] extends [never] ? true : false = true
+const dispatchKeysComplete: [UnlistedDispatchEmailKey] extends [never] ? true : false = true
+const verifyKeysComplete: [UnlistedVerifyKey] extends [never] ? true : false = true
 const entryKeysComplete: [UnlistedEntryKey] extends [never] ? true : false = true
 
 describe('the fields of a send the reader copies', () => {
