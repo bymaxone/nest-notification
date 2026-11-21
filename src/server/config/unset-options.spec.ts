@@ -83,8 +83,10 @@ describe('a perPurpose entry option that reads as not set', () => {
     }
   )
 
-  it.each([undefined, null])('should take the default for a perPurpose that is %p', (value) => {
-    expect(resolved({ otp: { storage, perPurpose: value } })).toEqual(
+  // A present-but-nullish allowlist is refused (see the weaker-posture group below), never read as
+  // an empty one; only an absent perPurpose takes the default.
+  it('should take the default for a perPurpose that is undefined', () => {
+    expect(resolved({ otp: { storage, perPurpose: undefined } })).toEqual(
       resolved({ otp: { storage } })
     )
   })
@@ -109,6 +111,7 @@ describe('an option whose default is the weaker posture', () => {
     ['otp', 'codeSecret'],
     ['otp', 'strictPurposes'],
     ['otp', 'consumeOnVerify'],
+    ['otp', 'perPurpose'],
     ['audit', 'swallowErrors'],
     ['audit', 'maskRecipient']
   ] as const
@@ -140,5 +143,37 @@ describe('an option whose default is the weaker posture', () => {
   it('should keep refusing a null storage and a null repository', () => {
     expect(() => resolved(sections.otp({ storage: null }))).toThrow()
     expect(() => resolved(sections.audit({ repository: null }))).toThrow()
+  })
+})
+
+// A boolean option is `true` or `false`; a string such as 'false' is truthy and would be read as true.
+describe('a typed option', () => {
+  const build = (section: 'otp' | 'audit', extra: object): Record<string, unknown> =>
+    section === 'otp'
+      ? { otp: { storage, ...extra } }
+      : { email: { provider, defaultFrom: 'a@b.com' }, audit: { repository: {}, ...extra } }
+  const BOOLEANS = [
+    ['otp', 'consumeOnVerify'],
+    ['otp', 'strictPurposes'],
+    ['audit', 'swallowErrors']
+  ] as const
+  const NOT_BOOLEAN = ['false', 'true', 0, 1, {}, [], () => true]
+
+  describe.each(BOOLEANS)('%s.%s', (section, key) => {
+    it.each(NOT_BOOLEAN)('should be refused as %p', (value) => {
+      expect(() => resolved(build(section, { [key]: value }))).toThrow(
+        `options.${section}.${key} must be a boolean`
+      )
+    })
+
+    it.each([true, false])('should accept %p', (value) => {
+      expect(() => resolved(build(section, { [key]: value }))).not.toThrow()
+    })
+  })
+
+  it.each(['x', 42, true, {}, []])('should refuse a maskRecipient of %p', (value) => {
+    expect(() => resolved(build('audit', { maskRecipient: value }))).toThrow(
+      'options.audit.maskRecipient must be a function'
+    )
   })
 })

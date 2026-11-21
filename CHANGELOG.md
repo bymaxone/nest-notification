@@ -11,6 +11,77 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 ## [Unreleased]
 
+## [1.4.23] - 2026-11-21
+
+### Fixed
+
+- **A store whose `recordFailure` answered anything but a whole number let the failure budget go unenforced.** An
+  `undefined`, `NaN`, an object, `0`, `-1`, `true` or a string compared false against the ceiling, so after several
+  wrong guesses and a re-issue the right code returned `valid: true`. The count must now be an integer of at least `1`,
+  and any other answer is `OTP_STORAGE_FAILED`.
+- **The same check for the other answers a store gives.** `tryAcquireCooldown` and `deleteIfCode` must resolve a boolean
+  (a truthy string was read as a lock taken or a code removed), `consumeAttempt` must resolve one of its three statuses
+  with an entry of the declared kinds (an unknown status fell through as success, then raised a raw `TypeError`), and
+  `isConfigured()` of a store or an email provider must return a boolean. Each is refused instead of read.
+- **`audit.maskRecipient` now covers the error text of a failed audit row.** The row of a failed delivery or send carried
+  the store's or the provider's own text, which can quote the address it refused. Every token of that text that holds an
+  at-sign (`@`, fullwidth `\uff20` or small `\ufe6b`) is replaced, whole, by what `audit.maskRecipient` answers for it,
+  whoever the address belongs to and however it is spelled (`550 <bob@x.com> unknown` keeps its brackets). A token is a
+  run of characters that are not white space and not one of `<>(),[]`, a quoted string counting as one piece
+  (`"first last"@x.com`, escapes and all), and the escapes `%40`, `&#64;`, `&#x40;` and `\u0040` count as the at-sign. Words that merely contain an at-sign are
+  masked too, since a missed address is the worse mistake; a recipient that is not an address (a phone number) is
+  replaced where the OTP path wrote it exactly.
+- **A failed `verify()` leaves the way a failed `generate()` does,** with the guess removed from the error's chain and a
+  value that is not an error flattened.
+- **An OTP action or delivery channel the library does not know is refused.** An `action` such as `'verfy'` fell through
+  to `generate` and sent a code nobody asked for; a `deliverVia` such as `'sms'` was read as `'manual'` and stored a code
+  that was never delivered. Both raise `INVALID_SCOPE_IDENTIFIER`.
+- **Options are checked for their kind.** `otp.consumeOnVerify`, `otp.strictPurposes` and `audit.swallowErrors` must be
+  `true` or `false`: the string `'false'` was read as `true` (`swallowErrors: 'false'` swallowed audit failures that the
+  host had asked to see). `audit.maskRecipient` must be a function. `otp.perPurpose: null` is refused, not read as an
+  empty allowlist.
+- **What a caller passes to `send()` is checked for its kind and read once.** `to`, `cc` and `bcc` are a string or a list
+  of at most 1000 strings, `attachments`, `tags` and `auditRedactValues` are lists of at most 1000 entries of the right
+  kind, an attachment's `content` is a string, a `Buffer` or a `Uint8Array` (a number gave `NaN > limit`, which is
+  false, and passed the byte budget), and `publishProviderText` is a boolean (`'false'` was read as "publish the
+  provider's text"). Each list is read into a copy before anything uses it. A `to: null` is now a refusal of the
+  library (`rejected` for the observer), not a `TypeError` (`failed`).
+- **The input of every entry point that takes a caller's object (generate, verify, consume, status, dispatch, send and template send) is read once, by name, before anything uses it.** A getter
+  that answered `'verify'` to the action check and another word to the dispatch fell through to `generate` and sent an
+  unrequested code, and a `deliverVia` read four times could be `'manual'` at the mailbox check and `'email'` at the
+  delivery. A template send also used its raw `tags`, `to` and `auditRedactValues` before its input was read; it now
+  reads first, so a list over the bound is refused before the renderer is asked.
+- **An attachment carries `filename`, `content`, `contentType`, `cid` and `contentDisposition`, and nothing else.** An
+  inline image is `cid` (1 to 128 printable ASCII characters, no space, quote or angle bracket) with
+  `contentDisposition: 'inline'`; SMTP writes them as the `Content-ID` and the `Content-Disposition`, and Resend takes the
+  `cid` as its content id and has no disposition field, so it ignores that one. Any other field (`encoding`, `headers`,
+  `path`) is refused with a refusal that names the attachments, where a copy would drop it without a word. The kinds of
+  `filename`, `contentType`, `cid` and `contentDisposition` are checked. The byte budget measures a `Buffer` or a
+  `Uint8Array` through the typed array's own getter, so an own `length` or `byteLength` property cannot make it look
+  empty.
+- **A store that counted more attempts than the entry's ceiling is `max_attempts`,** where the remainder was negative.
+- **A failed delivery releases the cooldown and the entry, whichever step fails.** A `clearCooldown` that threw left the
+  entry behind; both now run and the first failure is the one the caller sees.
+- **The health indicator counts a `verify` it cannot read as present,** so the check runs and reports `down`, and the
+  log copy of an error reads its `code` once.
+
+### Documentation
+
+- The README lists the answers the library requires of a store, the kinds of the boolean options and of the `send()`
+  lists, the refusal of an unknown `action` and `deliverVia`, and the new server budget row.
+
+#### Apply to a derived backend
+
+The declaration changes are the name of the parameter of `generate()`, `consume()` and `getStatus()` (`raw`, where it was `input`) and two optional fields of `EmailAttachment`, `cid` and `contentDisposition`. A configuration that was accepted before now fails when the module is built: a boolean option
+given as a string, a `maskRecipient` that is not a function, a `perPurpose` of `null`. A custom `IOtpStorage` that
+answered `tryAcquireCooldown`, `deleteIfCode` or `isConfigured` with something other than a boolean, `recordFailure`
+with something other than an integer of at least `1`, or `consumeAttempt` with an unknown status or an entry of the
+wrong kinds, now ends the call in `OTP_STORAGE_FAILED` (or `OTP_STORAGE_NOT_CONFIGURED` for `isConfigured()`); the
+bundled stores answer correctly. A caller of `send()` that passed a list over 1000 entries, an attachment with a
+non-text, non-binary `content` or with a field other than `filename`, `content`, `contentType`, `cid` and `contentDisposition`, or a string for a boolean now gets a refusal (`EMAIL_INVALID_RECIPIENT` for the
+recipient fields, `INVALID_SCOPE_IDENTIFIER` for the rest). A dispatch with an unknown `action` or `deliverVia` now
+raises `INVALID_SCOPE_IDENTIFIER` instead of sending or storing a code.
+
 ## [1.4.22] - 2026-11-21
 
 ### Added
@@ -1739,7 +1810,8 @@ rejected at startup rather than failing on the first send.
 
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.4.22...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.4.23...HEAD
+[1.4.23]: https://github.com/bymaxone/nest-notification/compare/v1.4.22...v1.4.23
 [1.4.22]: https://github.com/bymaxone/nest-notification/compare/v1.4.21...v1.4.22
 [1.4.21]: https://github.com/bymaxone/nest-notification/compare/v1.4.20...v1.4.21
 [1.4.20]: https://github.com/bymaxone/nest-notification/compare/v1.4.19...v1.4.20

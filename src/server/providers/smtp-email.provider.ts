@@ -630,7 +630,9 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
       filename: attachment.filename,
       content: attachment.content,
       contentType: attachment.contentType,
-      encoding: typeof attachment.content === 'string' ? 'base64' : undefined
+      encoding: typeof attachment.content === 'string' ? 'base64' : undefined,
+      cid: attachment.cid,
+      contentDisposition: attachment.contentDisposition
     }))
   }
 

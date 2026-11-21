@@ -41,8 +41,10 @@ import {
   withoutDeclaredValues
 } from '../utils/delivery-status'
 import { assertBodyParts } from '../utils/email-body'
+import { attachmentBytes, readSendInput } from '../utils/email-send-input'
 import { readHostName } from '../utils/host-name'
 import { isLibraryError } from '../utils/is-library-error'
+import { maskAddressTokens } from '../utils/mask-in-text'
 import { reportSend, runInSpan } from '../utils/observe'
 import { countRecipients } from '../utils/recipient-list'
 import {
@@ -53,6 +55,7 @@ import {
   scrubValuesFromErrorChain
 } from '../utils/redact'
 import { assertIdentifies } from '../utils/tenant-scope'
+import { SEND_KEYS, TEMPLATE_KEYS } from './email-send-keys'
 
 /** Locale used as the fallback when the requested locale has no template. */
 const FALLBACK_LOCALE = 'en'
@@ -270,7 +273,12 @@ function providerNameOf(provider: IEmailProvider): string {
  */
 function providerConfigured(provider: IEmailProvider): boolean {
   try {
-    return provider.isConfigured()
+    const answer: unknown = provider.isConfigured()
+    // A truthy string or object is not `true`: only a boolean says whether the provider is ready.
+    if (typeof answer !== 'boolean') {
+      throw new NotificationException('EMAIL_PROVIDER_NOT_CONFIGURED')
+    }
+    return answer
   } catch (error) {
     throw new NotificationException('EMAIL_PROVIDER_NOT_CONFIGURED', undefined, { cause: error })
   }
@@ -360,10 +368,11 @@ export class EmailService {
    * @returns The provider's message id.
    */
   private async sendUnobserved(
-    input: EmailSendInput,
+    raw: EmailSendInput,
     progress: SendProgress
   ): Promise<{ messageId: string }> {
     const email = this.requireEmailOptions()
+    const input = this.readInput(raw, progress, SEND_KEYS)
     assertIdentifies('EmailService', 'tenantId', input.tenantId)
     assertBodyParts(input.html, input.text)
     this.guardAttachmentSize(input.attachments, email.maxAttachmentBytes)
@@ -441,7 +450,7 @@ export class EmailService {
       const providerName = providerNameOf(this.provider)
       await this.audit(
         this.auditEntry('failed', providerName, input.tenantId, recipient, input.userId, {
-          errorMessage: readRedactedMessage(error, secretValues)
+          errorMessage: this.auditText(error, secretValues)
         })
       )
       throw new NotificationException(
@@ -453,6 +462,14 @@ export class EmailService {
         }
       )
     }
+  }
+
+  /** The provider's text for the audit row: secrets removed, and every address-shaped token masked. */
+  private auditText(error: unknown, secretValues: readonly string[]): string {
+    return maskAddressTokens(
+      readRedactedMessage(error, secretValues),
+      this.options.audit.maskRecipient
+    )
   }
 
   /**
@@ -475,9 +492,11 @@ export class EmailService {
    * @returns The provider's message id.
    */
   private async sendTemplateUnobserved(
-    input: EmailSendTemplateInput,
+    raw: EmailSendTemplateInput,
     progress: SendProgress
   ): Promise<{ messageId: string }> {
+    // Read first, so nothing below touches the caller's own lists or getters.
+    const input = this.readInput(raw, progress, TEMPLATE_KEYS)
     assertIdentifies('EmailService', 'tenantId', input.tenantId)
     // Refused before rendering: a template is not rendered to be thrown away.
     if (this.options.email) {
@@ -522,6 +541,31 @@ export class EmailService {
     }
   }
 
+  /**
+   * Reads the caller's input once. The library's own refusal of a field of the wrong kind passes
+   * as it is; an input that cannot be read at all (a getter that throws) is a failed send whose
+   * cause is the caller's error.
+   */
+  private readInput<T extends object>(
+    raw: T,
+    progress: SendProgress,
+    keys: readonly (keyof T & string)[]
+  ): T {
+    try {
+      return readSendInput(raw, keys)
+    } catch (error) {
+      if (isLibraryError(error)) {
+        throw error
+      }
+      progress.stage = 'failed'
+      throw new NotificationException(
+        'EMAIL_SEND_FAILED',
+        { providerName: providerNameOf(this.provider) },
+        { cause: error }
+      )
+    }
+  }
+
   /** Throws `EMAIL_ATTACHMENTS_TOO_LARGE` when the attachments exceed the byte budget. */
   private guardAttachmentSize(
     attachments: EmailSendOptions['attachments'],
@@ -530,12 +574,7 @@ export class EmailService {
     if (!attachments) {
       return
     }
-    const totalBytes = attachments.reduce(
-      (sum, { content }) =>
-        // Stryker disable next-line ConditionalExpression: equivalent — `Buffer.byteLength` answers a Buffer's own length, so both arms measure the same bytes; the conditional says where the number comes from
-        sum + (typeof content === 'string' ? Buffer.byteLength(content) : content.length),
-      0
-    )
+    const totalBytes = attachments.reduce((sum, { content }) => sum + attachmentBytes(content), 0)
     if (totalBytes > maxBytes) {
       throw new NotificationException('EMAIL_ATTACHMENTS_TOO_LARGE', {
         totalBytes,

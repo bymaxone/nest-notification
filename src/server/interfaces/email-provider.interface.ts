@@ -41,6 +41,14 @@ export interface EmailAttachment {
   filename: string
   content: Buffer | string
   contentType?: string
+  /**
+   * The content id an HTML body refers to with `<img src="cid:...">`, so the attachment is shown
+   * inline. A header-safe string of 1 to 128 characters; SMTP sends it as the `Content-ID`, and
+   * Resend as its content id.
+   */
+  cid?: string
+  /** `'inline'` shows the attachment in the message body; `'attachment'` (the default) lists it. SMTP only: Resend has no such field and ignores it. */
+  contentDisposition?: 'attachment' | 'inline'
 }
 
 /** Options describing one transactional email to send. */
