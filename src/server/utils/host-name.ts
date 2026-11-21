@@ -13,7 +13,7 @@ const INVISIBLE = /[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/gu
 /** The text written for a value that is not a string. */
 const UNREADABLE = '[unreadable]'
 
-/** The visible sequence for one invisible character: `\uXXXX`, or `\u{X…}` for a surrogate pair. */
+/** The visible sequence for one invisible character: `\uXXXX`, or `\u{X…}` for a character past U+FFFF. */
 function sequenceOf(character: string): string {
   const point = character.codePointAt(0) as number
   return character.length === 1
