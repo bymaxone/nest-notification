@@ -46,3 +46,19 @@ export function textOfHostName(value: unknown): string {
   }
   return characters.join('')
 }
+
+/**
+ * Reads a name from a host object and writes it as {@link textOfHostName} does. The read runs
+ * under a guard, because the name can be a getter of host code, and one that throws reads as
+ * `[unreadable]` instead of replacing the library's own error or line with the host's.
+ *
+ * @param read - Reads the name, for example `() => storage.name`.
+ * @returns The bounded, escaped text.
+ */
+export function readHostName(read: () => unknown): string {
+  try {
+    return textOfHostName(read())
+  } catch {
+    return UNREADABLE
+  }
+}

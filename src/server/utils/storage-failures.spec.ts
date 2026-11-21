@@ -76,4 +76,25 @@ describe('withStorageFailures', () => {
     })
     expect((caught.cause as Error).message).toBe('Connection is closed.')
   })
+
+  // The name is read once, when the store is wrapped: a getter that answers differently later
+  // cannot make the error name a different store than the wrapper does.
+  it('should name the store in the error as the wrapper named it, whatever the getter answers later', async () => {
+    const store = new InMemoryOtpStorage()
+    let reads = 0
+    Object.defineProperty(store, 'name', {
+      configurable: true,
+      get: () => `store-${(reads += 1)}`
+    })
+    Object.assign(store, { get: () => Promise.reject(new Error('Connection is closed.')) })
+
+    const wrapped = withStorageFailures(store)
+    const caught = (await wrapped.get('t', 'r', 'p').catch((error: unknown) => error)) as {
+      getResponse(): unknown
+    }
+
+    expect(wrapped.name).toBe('store-1')
+    expect(caught.getResponse()).toMatchObject({ error: { details: { providerName: 'store-1' } } })
+    expect(reads).toBe(1)
+  })
 })

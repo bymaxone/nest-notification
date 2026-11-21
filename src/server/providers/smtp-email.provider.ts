@@ -37,7 +37,12 @@ import { loadOptionalPeer } from '../utils/load-optional-peer'
 import { logEvent } from '../utils/log-event'
 import { loggableError } from '../utils/loggable-error'
 import { assertPort } from '../utils/port-option'
-import { collectEchoedExcerpts, readRedactedMessage, redactValues } from '../utils/redact'
+import {
+  collectEchoedExcerpts,
+  isSafeError,
+  readRedactedMessage,
+  redactValues
+} from '../utils/redact'
 import { assertTimerMs } from '../utils/timer-option'
 import type {
   NodemailerLike,
@@ -713,7 +718,7 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
     const text = describeError(error)
     const message = this.redact(text)
     // The original keeps its type and stack only when it is a readable Error that needed no scrubbing.
-    return error instanceof Error && message === text && text !== UNPRINTABLE_ERROR
+    return isSafeError(error) && message === text && text !== UNPRINTABLE_ERROR
       ? error
       : new Error(message)
   }
