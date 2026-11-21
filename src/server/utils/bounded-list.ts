@@ -71,3 +71,22 @@ export function boundedList<T>(
   }
   return copy
 }
+
+/**
+ * Copies the named fields of `source` into a new object, each read once by property access, so a
+ * prototype getter or a non-enumerable field is kept and a getter is never asked twice.
+ *
+ * @param source - The object a host or a caller supplied.
+ * @param keys - Every field of its type, by name.
+ * @returns A plain object holding each named field that is not `undefined`.
+ */
+export function copyByName(source: object, keys: readonly string[]): Record<string, unknown> {
+  const copy: Record<string, unknown> = {}
+  for (const key of keys) {
+    const value: unknown = Reflect.get(source, key)
+    if (value !== undefined) {
+      Reflect.set(copy, key, value)
+    }
+  }
+  return copy
+}

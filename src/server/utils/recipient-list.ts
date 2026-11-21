@@ -65,3 +65,25 @@ export function countRecipients(field: string | readonly string[] | undefined): 
     .flatMap((entry) => entry.split(RECIPIENT_DELIMITERS))
     .filter((segment) => segment.trim() !== '').length
 }
+
+/**
+ * The addresses a message names, from `to`, `cc` and `bcc`, split the way the transport splits
+ * them and trimmed, with no empty one.
+ *
+ * @param input - The message envelope.
+ * @returns Every address, in field order.
+ */
+export function addressesOf(input: {
+  to: string | readonly string[]
+  cc?: string | readonly string[] | undefined
+  bcc?: string | readonly string[] | undefined
+}): string[] {
+  return [input.to, input.cc, input.bcc].flatMap((field) =>
+    field === undefined
+      ? []
+      : (typeof field === 'string' ? [field] : field)
+          .flatMap((entry) => entry.split(RECIPIENT_DELIMITERS))
+          .map((segment) => segment.trim())
+          .filter((segment) => segment !== '')
+  )
+}

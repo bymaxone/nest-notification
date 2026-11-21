@@ -15,17 +15,28 @@ const ACTIONS: readonly unknown[] = ['generate', 'verify', 'consume']
 /** The ways a generated code reaches the recipient. */
 const DELIVERIES: readonly unknown[] = ['email', 'manual']
 
+/** What an OTP dispatch does. */
+export type OtpAction = 'generate' | 'verify' | 'consume'
+
 /**
- * Throws unless the action is absent or one of `generate`, `verify` and `consume`.
+ * Validates the action the caller gave and answers the one to run, `generate` when none was given.
+ * The caller reads the field once and hands the value here, so what is checked is what is run: a
+ * getter that answers `'verify'` to a check and another word to the dispatch would otherwise send
+ * a code nobody asked for.
  *
  * @param owner - The component that refuses.
- * @param action - The action as the caller gave it.
+ * @param action - The action as the caller gave it, read once.
+ * @returns The action to run.
  * @throws NotificationException `INVALID_SCOPE_IDENTIFIER` for any other value.
  */
-export function assertOtpAction(owner: string, action: unknown): void {
-  if (action !== undefined && !ACTIONS.includes(action)) {
+export function readOtpAction(owner: string, action: unknown): OtpAction {
+  if (action === undefined) {
+    return 'generate'
+  }
+  if (!ACTIONS.includes(action)) {
     throw refuseInput(owner, 'action', 'expected generate, verify or consume')
   }
+  return action as OtpAction
 }
 
 /**

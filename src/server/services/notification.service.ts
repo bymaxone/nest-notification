@@ -16,11 +16,11 @@ import { NOTIFICATION_LOG_EVENTS } from '../constants/log-events.constants'
 import { NotificationException } from '../errors/notification-exception'
 import type { OtpVerifyResult } from '../interfaces/otp-storage.interface'
 import { logEvent } from '../utils/log-event'
-import { assertOtpAction } from '../utils/otp-input'
+import { readOtpAction } from '../utils/otp-input'
 import { EmailService } from './email.service'
 import type { EmailSendInput, EmailSendTemplateInput } from './email.service'
 import { OtpService } from './otp.service'
-import type { OtpGenerateInput, OtpGenerateResult } from './otp.service'
+import type { OtpGenerateResult } from './otp.service'
 
 /** An email tag pair. */
 type EmailTag = { name: string; value: string }
@@ -199,22 +199,38 @@ export class NotificationService implements OnModuleInit {
     payload: OtpDispatchPayload
   ): Promise<OtpGenerateResult | OtpVerifyResult | void> {
     const otp = this.getOtp()
-    assertOtpAction('NotificationService', payload.action)
-    // Stryker disable next-line StringLiteral: 'generate' is the default only; it is never compared with `===` (the code branches on 'verify'/'consume' and falls through otherwise), so any non-'verify'/'consume' default — including the empty-string mutant — routes identically to generate.
-    const action = payload.action ?? 'generate'
+    // Each field of the payload is read once, here, and only these values are used below.
+    const {
+      action,
+      recipient,
+      purpose,
+      userId,
+      code,
+      deliverVia,
+      emailTemplate,
+      emailData,
+      locale
+    } = payload
+    const run = readOtpAction('NotificationService', action)
     const ref = {
       tenantId,
-      recipient: payload.recipient,
-      purpose: payload.purpose,
-      ...(payload.userId !== undefined ? { userId: payload.userId } : {})
+      recipient,
+      purpose,
+      ...(userId !== undefined ? { userId } : {})
     }
-    if (action === 'verify') {
-      return otp.verify({ ...ref, code: payload.code ?? '' })
+    if (run === 'verify') {
+      return otp.verify({ ...ref, code: code ?? '' })
     }
-    if (action === 'consume') {
+    if (run === 'consume') {
       return otp.consume(ref)
     }
-    return otp.generate(this.toGenerateInput(ref, payload))
+    return otp.generate({
+      ...ref,
+      ...(deliverVia !== undefined ? { deliverVia } : {}),
+      ...(emailTemplate !== undefined ? { emailTemplate } : {}),
+      ...(emailData !== undefined ? { emailData } : {}),
+      ...(locale !== undefined ? { locale } : {})
+    })
   }
 
   /** Builds the `sendTemplate` input from a resolved template name and payload. */
@@ -260,20 +276,6 @@ export class NotificationService implements OnModuleInit {
       ...(payload.replyTo !== undefined ? { replyTo: payload.replyTo } : {}),
       ...(payload.tags !== undefined ? { tags: payload.tags } : {}),
       ...(payload.userId !== undefined ? { userId: payload.userId } : {})
-    }
-  }
-
-  /** Builds the `generate` input from a reference and an OTP dispatch payload. */
-  private toGenerateInput(
-    ref: { tenantId: string; recipient: string; purpose: string; userId?: string },
-    payload: OtpDispatchPayload
-  ): OtpGenerateInput {
-    return {
-      ...ref,
-      ...(payload.deliverVia !== undefined ? { deliverVia: payload.deliverVia } : {}),
-      ...(payload.emailTemplate !== undefined ? { emailTemplate: payload.emailTemplate } : {}),
-      ...(payload.emailData !== undefined ? { emailData: payload.emailData } : {}),
-      ...(payload.locale !== undefined ? { locale: payload.locale } : {})
     }
   }
 }

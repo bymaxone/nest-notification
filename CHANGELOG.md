@@ -40,7 +40,18 @@ the entries that carry one, is the compatibility contract — read it, not the n
   false, and passed the byte budget), and `publishProviderText` is a boolean (`'false'` was read as "publish the
   provider's text"). Each list is read into a copy before anything uses it. A `to: null` is now a refusal of the
   library (`rejected` for the observer), not a `TypeError` (`failed`).
-
+- **The input of a generate, a dispatch and a template send is read once, by name, before anything uses it.** A getter
+  that answered `'verify'` to the action check and another word to the dispatch fell through to `generate` and sent an
+  unrequested code, and a `deliverVia` read four times could be `'manual'` at the mailbox check and `'email'` at the
+  delivery. A template send also used its raw `tags`, `to` and `auditRedactValues` before its input was read; it now
+  reads first, so a list over the bound is refused before the renderer is asked.
+- **An attachment carries `filename`, `content` and `contentType`, and nothing else.** Any other field (`cid`,
+  `encoding`, `headers`, `path`) is refused with a refusal that names the attachments, where a copy would drop it
+  without a word. `filename` and `contentType` must be strings. The byte budget measures a `Buffer` or a `Uint8Array`
+  through the typed array's own getter, so an own `length` or `byteLength` property cannot make it look empty.
+- **The failed audit row of a send masks every address of `to`, `cc` and `bcc` that the provider's text quotes,** in
+  any letter case (`550 <Bob@X.com> unknown`), through `audit.maskRecipient`, as the OTP path does.
+- **A store that counted more attempts than the entry's ceiling is `max_attempts`,** where the remainder was negative.
 - **A failed delivery releases the cooldown and the entry, whichever step fails.** A `clearCooldown` that threw left the
   entry behind; both now run and the first failure is the one the caller sees.
 - **The health indicator counts a `verify` it cannot read as present,** so the check runs and reports `down`, and the
@@ -59,7 +70,7 @@ answered `tryAcquireCooldown`, `deleteIfCode` or `isConfigured` with something o
 with something other than an integer of at least `1`, or `consumeAttempt` with an unknown status or an entry of the
 wrong kinds, now ends the call in `OTP_STORAGE_FAILED` (or `OTP_STORAGE_NOT_CONFIGURED` for `isConfigured()`); the
 bundled stores answer correctly. A caller of `send()` that passed a list over 1000 entries, an attachment with a
-non-text, non-binary `content`, or a string for a boolean now gets a refusal (`EMAIL_INVALID_RECIPIENT` for the
+non-text, non-binary `content` or with a field other than `filename`, `content` and `contentType`, or a string for a boolean now gets a refusal (`EMAIL_INVALID_RECIPIENT` for the
 recipient fields, `INVALID_SCOPE_IDENTIFIER` for the rest). A dispatch with an unknown `action` or `deliverVia` now
 raises `INVALID_SCOPE_IDENTIFIER` instead of sending or storing a code.
 

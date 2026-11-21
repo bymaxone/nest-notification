@@ -46,9 +46,8 @@ import { cooldownExpiresAt, toRetryAfterHeader } from '../utils/cooldown-helpers
 import { readHostName, textOfHostName } from '../utils/host-name'
 import { logEvent } from '../utils/log-event'
 import { loggableError } from '../utils/loggable-error'
-import { maskRecipientInText } from '../utils/mask-in-text'
+import { maskRecipientsInText } from '../utils/mask-in-text'
 import { reportOtp, runInSpan } from '../utils/observe'
-import { assertDeliverVia } from '../utils/otp-input'
 import { outgoingError } from '../utils/outgoing-error'
 import { normalizeRecipient } from '../utils/recipient'
 import { assertSingleMailbox } from '../utils/recipient-list'
@@ -60,6 +59,7 @@ import { assertIdentifies, assertPurpose, assertRegisteredPurpose } from '../uti
 import { safeCompare } from '../utils/timing-safe-compare'
 import { EmailService } from './email.service'
 import type { EmailSendTemplateInput } from './email.service'
+import { readGenerateInput } from './otp-generate-input'
 
 /** Milliseconds in one second. */
 const MS_PER_SECOND = 1000
@@ -215,11 +215,11 @@ export class OtpService implements OnModuleInit {
    * `OTP_EMAIL_DELIVERY_NOT_CONFIGURED`, or rethrows a persistence/delivery error after
    * releasing the cooldown lock.
    */
-  async generate(input: OtpGenerateInput): Promise<OtpGenerateResult> {
+  async generate(raw: OtpGenerateInput): Promise<OtpGenerateResult> {
+    const input = readGenerateInput(raw)
     const otp = this.requireOtpOptions()
     this.assertScope(input)
     const scope = this.keyed(input)
-    assertDeliverVia('OtpService', input.deliverVia)
     this.assertDeliverable(input, otp.digestCode)
     this.assertMailbox(input)
     const cfg = otp.resolveForPurpose(input.purpose)
@@ -299,6 +299,9 @@ export class OtpService implements OnModuleInit {
       return this.rejectMaxAttempts(scope)
     }
     const { entry } = result
+    if (entry.attempts > entry.maxAttempts) {
+      return this.rejectMaxAttempts(scope)
+    }
     if (!this.matchesStoredCode(entry.code, scope.code, otp.digestCode)) {
       await this.audit(this.otpAuditEntry('failed', scope, { reason: 'invalid_code' }))
       const ofCode = entry.maxAttempts - entry.attempts
@@ -455,10 +458,10 @@ export class OtpService implements OnModuleInit {
       this.otpAuditEntry('failed', scope, {
         // `outgoing` is already fully redacted by the scrub above; this read
         // only needs the fail-closed guard, not a second redaction pass.
-        errorMessage: maskRecipientInText(
+        errorMessage: maskRecipientsInText(
           readRedactedMessage(storageCauseOf(outgoing) ?? outgoing),
-          scope.recipient,
-          this.options.audit.maskRecipient(scope.recipient)
+          [scope.recipient],
+          this.options.audit.maskRecipient
         )
       })
     )

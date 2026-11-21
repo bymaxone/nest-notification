@@ -41,10 +41,12 @@ import {
   withoutDeclaredValues
 } from '../utils/delivery-status'
 import { assertBodyParts } from '../utils/email-body'
-import { readSendInput } from '../utils/email-send-input'
+import { attachmentBytes, readSendInput } from '../utils/email-send-input'
 import { readHostName } from '../utils/host-name'
 import { isLibraryError } from '../utils/is-library-error'
+import { maskRecipientsInText } from '../utils/mask-in-text'
 import { reportSend, runInSpan } from '../utils/observe'
+import { addressesOf } from '../utils/recipient-list'
 import { countRecipients } from '../utils/recipient-list'
 import {
   collectEchoedExcerpts,
@@ -54,6 +56,7 @@ import {
   scrubValuesFromErrorChain
 } from '../utils/redact'
 import { assertIdentifies } from '../utils/tenant-scope'
+import { SEND_KEYS, TEMPLATE_KEYS } from './email-send-keys'
 
 /** Locale used as the fallback when the requested locale has no template. */
 const FALLBACK_LOCALE = 'en'
@@ -115,32 +118,6 @@ export interface EmailSendInput {
    */
   publishProviderText?: boolean
 }
-
-/**
- * Every field of {@link EmailSendInput}, read by name: a send whose fields come from a class
- * (getters, a prototype, non-enumerable properties) keeps every one of them, which a spread of own
- * enumerable properties would drop. A field the type gains and this list misses fails to compile.
- */
-const SEND_KEYS = [
-  'tenantId',
-  'to',
-  'subject',
-  'html',
-  'text',
-  'from',
-  'fromName',
-  'replyTo',
-  'cc',
-  'bcc',
-  'tags',
-  'attachments',
-  'userId',
-  'auditRedactValues',
-  'publishProviderText'
-] as const satisfies readonly (keyof EmailSendInput)[]
-
-/** The fields of {@link EmailSendInput} that {@link SEND_KEYS} leaves out; `never` while it lists them all. */
-export type UnlistedSendKey = Exclude<keyof EmailSendInput, (typeof SEND_KEYS)[number]>
 
 /** Input for {@link EmailService.sendTemplate} — the renderer produces the body. */
 export interface EmailSendTemplateInput {
@@ -396,7 +373,7 @@ export class EmailService {
     progress: SendProgress
   ): Promise<{ messageId: string }> {
     const email = this.requireEmailOptions()
-    const input = this.readInput(raw, progress)
+    const input = this.readInput(raw, progress, SEND_KEYS)
     assertIdentifies('EmailService', 'tenantId', input.tenantId)
     assertBodyParts(input.html, input.text)
     this.guardAttachmentSize(input.attachments, email.maxAttachmentBytes)
@@ -474,7 +451,7 @@ export class EmailService {
       const providerName = providerNameOf(this.provider)
       await this.audit(
         this.auditEntry('failed', providerName, input.tenantId, recipient, input.userId, {
-          errorMessage: readRedactedMessage(error, secretValues)
+          errorMessage: this.auditText(error, secretValues, input)
         })
       )
       throw new NotificationException(
@@ -486,6 +463,19 @@ export class EmailService {
         }
       )
     }
+  }
+
+  /** The provider's text for the audit row: secrets removed, and every address of the message masked. */
+  private auditText(
+    error: unknown,
+    secretValues: readonly string[],
+    input: EmailSendInput
+  ): string {
+    return maskRecipientsInText(
+      readRedactedMessage(error, secretValues),
+      addressesOf(input),
+      this.options.audit.maskRecipient
+    )
   }
 
   /**
@@ -508,9 +498,11 @@ export class EmailService {
    * @returns The provider's message id.
    */
   private async sendTemplateUnobserved(
-    input: EmailSendTemplateInput,
+    raw: EmailSendTemplateInput,
     progress: SendProgress
   ): Promise<{ messageId: string }> {
+    // Read first, so nothing below touches the caller's own lists or getters.
+    const input = this.readInput(raw, progress, TEMPLATE_KEYS)
     assertIdentifies('EmailService', 'tenantId', input.tenantId)
     // Refused before rendering: a template is not rendered to be thrown away.
     if (this.options.email) {
@@ -560,9 +552,13 @@ export class EmailService {
    * as it is; an input that cannot be read at all (a getter that throws) is a failed send whose
    * cause is the caller's error.
    */
-  private readInput(raw: EmailSendInput, progress: SendProgress): EmailSendInput {
+  private readInput<T extends object>(
+    raw: T,
+    progress: SendProgress,
+    keys: readonly (keyof T & string)[]
+  ): T {
     try {
-      return readSendInput(raw, SEND_KEYS)
+      return readSendInput(raw, keys)
     } catch (error) {
       if (isLibraryError(error)) {
         throw error
@@ -584,12 +580,7 @@ export class EmailService {
     if (!attachments) {
       return
     }
-    const totalBytes = attachments.reduce(
-      (sum, { content }) =>
-        // Stryker disable next-line ConditionalExpression: equivalent — `Buffer.byteLength` answers a Buffer's own length, so both arms measure the same bytes; the conditional says where the number comes from
-        sum + (typeof content === 'string' ? Buffer.byteLength(content) : content.length),
-      0
-    )
+    const totalBytes = attachments.reduce((sum, { content }) => sum + attachmentBytes(content), 0)
     if (totalBytes > maxBytes) {
       throw new NotificationException('EMAIL_ATTACHMENTS_TOO_LARGE', {
         totalBytes,

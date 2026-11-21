@@ -10,17 +10,12 @@
 
 import { NotificationException } from '../errors/notification-exception'
 import type { EmailAttachment, EmailSendOptions } from '../interfaces/email-provider.interface'
-import { boundedList, refuseInput } from './bounded-list'
+import { boundedList, copyByName, refuseInput } from './bounded-list'
 
 const OWNER = 'EmailService'
 
 const isString = (entry: unknown): entry is string => typeof entry === 'string'
 const isObject = (entry: unknown): entry is object => typeof entry === 'object' && entry !== null
-
-/** An attachment's content is text or bytes; anything else has no length the budget can read. */
-function hasReadableContent(entry: { content?: unknown }): boolean {
-  return typeof entry.content === 'string' || entry.content instanceof Uint8Array
-}
 
 type EmailTag = NonNullable<EmailSendOptions['tags']>[number]
 
@@ -32,22 +27,50 @@ const ATTACHMENT_KEYS = [
   'contentType'
 ] as const satisfies readonly (keyof EmailAttachment)[]
 
+const KNOWN_ATTACHMENT_KEYS: readonly string[] = ATTACHMENT_KEYS
+
 /** The fields of a tag or an attachment that the lists above leave out; `never` while they list them all. */
 export type UnlistedEntryKey =
   | Exclude<keyof EmailTag, (typeof TAG_KEYS)[number]>
   | Exclude<keyof EmailAttachment, (typeof ATTACHMENT_KEYS)[number]>
 
+/** The prototype getter of a typed array's byte length, which an own property cannot shadow. */
+const byteLengthOf = Object.getOwnPropertyDescriptor(
+  Object.getPrototypeOf(Uint8Array.prototype) as object,
+  'byteLength'
+)?.get as (this: Uint8Array) => number
+
 /**
- * Copies the named fields of `source` into a new object, each read once by property access, so a
- * prototype getter or a non-enumerable field is kept and a getter is never asked twice.
+ * The size of an attachment's content in bytes: the UTF-8 length of a string, and for bytes the
+ * length the typed array's own getter answers, so an own `length` or `byteLength` property set on
+ * a `Uint8Array` or a `Buffer` cannot make the content look smaller than it is.
+ *
+ * @param content - A string, a `Buffer` or a `Uint8Array`.
+ * @returns The number of bytes.
  */
-function copyByName(source: object, keys: readonly string[]): Record<string, unknown> {
-  const copy: Record<string, unknown> = {}
-  for (const key of keys) {
-    const value: unknown = Reflect.get(source, key)
-    if (value !== undefined) {
-      Reflect.set(copy, key, value)
-    }
+export function attachmentBytes(content: string | Uint8Array): number {
+  return typeof content === 'string' ? Buffer.byteLength(content) : byteLengthOf.call(content)
+}
+
+/**
+ * Copies an attachment, each field read once by name, after refusing a field the library does not
+ * carry (it would be dropped, and a dropped inline-image field breaks the message without a word)
+ * and a field of another kind than the contract declares.
+ */
+function readAttachment(entry: object): Record<string, unknown> {
+  if (Object.keys(entry).some((key) => !KNOWN_ATTACHMENT_KEYS.includes(key))) {
+    throw refuseInput(OWNER, 'attachments', 'an attachment has a field the library does not carry')
+  }
+  const copy = copyByName(entry, ATTACHMENT_KEYS)
+  const { filename, content, contentType } = copy
+  if (
+    (filename !== undefined && typeof filename !== 'string') ||
+    (contentType !== undefined && typeof contentType !== 'string')
+  ) {
+    throw refuseInput(OWNER, 'attachments', 'an attachment has a field of an unexpected kind')
+  }
+  if (typeof content !== 'string' && !(content instanceof Uint8Array)) {
+    throw refuseInput(OWNER, 'attachments', 'an attachment has no readable content')
   }
   return copy
 }
@@ -108,13 +131,7 @@ export function readSendInput<T extends object>(input: T, keys: readonly (keyof 
   }
   const attachments: unknown = read.attachments
   if (attachments !== undefined) {
-    read.attachments = boundedList(OWNER, 'attachments', attachments, isObject).map((entry) => {
-      const copy: { content?: unknown } = copyByName(entry, ATTACHMENT_KEYS)
-      if (!hasReadableContent(copy)) {
-        throw refuseInput(OWNER, 'attachments', 'an attachment has no readable content')
-      }
-      return copy
-    })
+    read.attachments = boundedList(OWNER, 'attachments', attachments, isObject).map(readAttachment)
   }
   return read as T
 }

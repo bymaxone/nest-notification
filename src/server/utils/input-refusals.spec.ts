@@ -8,7 +8,7 @@ import { NotificationException } from '../errors/notification-exception'
 import { assertFunction } from '../config/option-numbers'
 import { boundedList } from './bounded-list'
 import { readSendInput } from './email-send-input'
-import { assertDeliverVia, assertOtpAction } from './otp-input'
+import { assertDeliverVia, readOtpAction } from './otp-input'
 
 const isString = (entry: unknown): entry is string => typeof entry === 'string'
 const base = { to: 'a@b.com', subject: 's', html: '<p>x</p>' }
@@ -90,7 +90,7 @@ describe('the message and the details of each refusal', () => {
     ],
     [
       'an unknown action',
-      () => assertOtpAction('Owner', 'verfy'),
+      () => readOtpAction('Owner', 'verfy'),
       '[Owner] action expected generate, verify or consume',
       'expected generate, verify or consume'
     ],

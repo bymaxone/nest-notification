@@ -94,4 +94,25 @@ describe('a store answer of the wrong kind', () => {
       expect(codeOf(error)).toBe('notification.otp_storage_not_configured')
     }
   )
+
+  // A store that counted past the ceiling has no attempts left: never a negative remainder.
+  it('should answer max_attempts when the entry has more attempts than its ceiling', async () => {
+    const storage = new InMemoryOtpStorage()
+    const service = new OtpService(makeOptions({ resendCooldownSeconds: 0 }), storage, makeAudit())
+    await service.generate(base)
+    const entry = (await storage.get('acme', ref.recipient, ref.purpose)) ?? {
+      code: '',
+      expiresAt: 0,
+      attempts: 0,
+      maxAttempts: 0
+    }
+    storage.consumeAttempt = async () => ({
+      status: 'ok',
+      entry: { ...entry, attempts: entry.maxAttempts + 2 }
+    })
+
+    const result = await service.verify({ ...base, code: 'ABCDEF' })
+
+    expect(result).toEqual({ valid: false, reason: 'max_attempts' })
+  })
 })

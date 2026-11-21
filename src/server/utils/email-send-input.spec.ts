@@ -242,4 +242,38 @@ describe('the send input reader', () => {
     expect(read.attachments).toEqual([{ filename: 'f.txt', content: 'body' }])
     expect(read.tags).toEqual([{ name: 'n', value: 'v' }])
   })
+
+  it.each(['cid', 'encoding', 'headers', 'path'])(
+    'should refuse an attachment that carries the field %s the library does not',
+    (key) => {
+      const caught = refusal({
+        ...base,
+        attachments: [{ filename: 'f', content: 'x', [key]: 'v' }]
+      })
+
+      expect(caught).toBeInstanceOf(NotificationException)
+    }
+  )
+
+  it.each([5, {}, null])(
+    'should refuse an attachment whose filename or contentType is %p',
+    (value) => {
+      for (const field of ['filename', 'contentType']) {
+        expect(
+          refusal({ ...base, attachments: [{ filename: 'f', content: 'x', [field]: value }] })
+        ).toBeInstanceOf(NotificationException)
+      }
+    }
+  )
+
+  it('should keep the filename, content and contentType of an attachment', () => {
+    const read = readSendInput({
+      ...base,
+      attachments: [{ filename: 'f.txt', content: 'x', contentType: 'text/plain' }]
+    })
+
+    expect(read.attachments).toEqual([
+      { filename: 'f.txt', content: 'x', contentType: 'text/plain' }
+    ])
+  })
 })
