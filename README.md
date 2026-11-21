@@ -521,7 +521,7 @@ A label value is always one of the listed ones: no recipient, tenant, identifier
 
 ### Traces
 
-With the optional peer `@opentelemetry/api`, the same module runs two operations inside spans: `notification.send` (a raw or a template email send) and `notification.otp.verify`. A span carries one attribute, `bymax.notification.channel` (`email` or `otp`). When the operation throws, the span ends with status `ERROR` and the library's error code as its message, for example `notification.email_send_failed`, or `unknown` for an error that is not the library's, and never the text of an error. A code delivered by email runs a `notification.send` span of its own. With no OpenTelemetry SDK registered the API's tracer does nothing, so the peer costs nothing until you register one.
+With the optional peer `@opentelemetry/api`, the same module runs two operations inside spans: `notification.send` (a raw or a template email send) and `notification.otp.verify`. A span carries one attribute, `bymax.notification.channel` (`email` or `otp`). When the operation throws, the span ends with status `ERROR` and the library's error code as its message, for example `notification.email_send_failed`, or `unknown` for an error that is not the library's, and never the text of an error. A code delivered by email runs a `notification.send` span of its own. With no OpenTelemetry SDK registered the API's tracer does nothing, so the peer costs nothing until you register one. The operation's failure is rethrown unchanged whatever it is, including an object whose class cannot be read (a revoked proxy); the span's status message is then `unknown`.
 
 ### Health
 
@@ -762,7 +762,7 @@ A one-time password is a credential, so every behavior is pinned so that a regre
 | Coverage       | **100%** line/branch/function/statement per file (`pnpm test:cov:all`)                                             |
 | Mutation       | Stryker score **100%** (`break: 100`), no survivors                                                                |
 | Lint           | ESLint flat config + `eslint-plugin-security`, zero warnings                                                       |
-| Bundle budgets | server < 40.26 KB · shared < 4 KB · react < 8 KB · testing < 4.5 KB · observability < 2.66 KB brotli (`pnpm size`) |
+| Bundle budgets | server < 40.22 KB · shared < 4 KB · react < 8 KB · testing < 4.5 KB · observability < 2.66 KB brotli (`pnpm size`) |
 | Prisma-free    | `pnpm check:no-prisma` — the library never imports `@prisma/client`                                                |
 | Export map     | `pnpm check:exports` — `attw` against the packed tarball, ESM and CJS                                              |
 | Supply chain   | published with npm provenance (OIDC), CodeQL + OpenSSF Scorecard                                                   |

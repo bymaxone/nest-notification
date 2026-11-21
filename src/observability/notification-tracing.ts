@@ -19,7 +19,12 @@ import { NOTIFICATION_SPAN_CHANNEL_ATTRIBUTE, NOTIFICATION_TRACER_NAME } from '.
 
 /** The status message of a failed span: the library's error code, or a fixed word, never text. */
 function statusMessageOf(error: unknown): string {
-  return error instanceof NotificationException ? error.code : 'unknown'
+  try {
+    return error instanceof NotificationException ? error.code : 'unknown'
+  } catch {
+    // The class check runs on a value the operation threw, and a hostile proxy throws from it.
+    return 'unknown'
+  }
 }
 
 /**

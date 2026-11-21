@@ -11,6 +11,27 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 ## [Unreleased]
 
+## [1.4.21] - 2026-11-20
+
+### Fixed
+
+- **A class check on a value the host threw can no longer replace the library's own error.** Three checks ran
+  `instanceof` on a failure supplied by host code outside a guard, and a hostile or revoked proxy throws from that
+  check: the SMTP provider's transport-build failure (the host may supply its own transport), the OTP storage
+  outage translation, and the tracing adapter's span status. The check now counts as "no" when it cannot run. The
+  SMTP provider returns an `Error` carrying the scrubbed text, the storage failure reaches the caller as the object
+  the store threw, and the span is ended and marked `unknown` while the operation's failure is rethrown unchanged.
+
+### Documentation
+
+- The README's Traces section states that the failure is rethrown unchanged, with the span status `unknown` for an
+  object whose class cannot be read.
+- The README's bundle budget row moves from `40.26 KB` to `40.22 KB`, the measured size of the server entry.
+
+#### Apply to a derived backend
+
+No declaration changes and no option changes. A host that never throws a proxy sees no difference.
+
 ## [1.4.20] - 2026-11-20
 
 ### Fixed
@@ -1663,7 +1684,8 @@ rejected at startup rather than failing on the first send.
 
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.4.20...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.4.21...HEAD
+[1.4.21]: https://github.com/bymaxone/nest-notification/compare/v1.4.20...v1.4.21
 [1.4.20]: https://github.com/bymaxone/nest-notification/compare/v1.4.19...v1.4.20
 [1.4.19]: https://github.com/bymaxone/nest-notification/compare/v1.4.18...v1.4.19
 [1.4.18]: https://github.com/bymaxone/nest-notification/compare/v1.4.17...v1.4.18

@@ -40,6 +40,19 @@ export type UncoveredStorageOperation = Exclude<
 >
 
 /**
+ * Whether the store's failure is already one of the library's own. The class check runs on a
+ * value the store supplied, and a hostile or revoked proxy throws from it, so a check that cannot
+ * run counts as no.
+ */
+function isLibraryError(error: unknown): boolean {
+  try {
+    return error instanceof NotificationException
+  } catch {
+    return false
+  }
+}
+
+/**
  * Turns a failure of the store into what the caller should see.
  *
  * @param storage - The store that failed.
@@ -47,7 +60,7 @@ export type UncoveredStorageOperation = Exclude<
  * @returns A `NotificationException` for an outage; the same `error` for anything else.
  */
 function translate(storage: IOtpStorage, error: unknown): unknown {
-  if (error instanceof NotificationException || !isUnavailableError(error)) {
+  if (isLibraryError(error) || !isUnavailableError(error)) {
     return error
   }
   return new NotificationException(
