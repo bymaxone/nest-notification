@@ -23,6 +23,7 @@ const MAX_TOKEN = 512
  * each one to its end; a quote that opens no such piece is an ordinary character. The apostrophe
  * is no delimiter (`o'brien@x.com` is an address), nor is the semicolon, which ends `&#64;`.
  */
+// Stryker disable next-line Regex: the mutants of this pattern include `\v` written as `\V`, which is no pattern under the `u` flag, so the instrumented module fails to load and no test can run against it; the pattern is held by the rows that cut a text at each delimiter and keep it whole across each other space
 const TOKEN = /(?:"(?:[^"\\]|\\.){0,300}"|[^ \t\n\r\f\v<>(),[\]])+/gu
 
 /**
