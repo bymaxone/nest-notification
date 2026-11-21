@@ -155,6 +155,45 @@ describe('an address whose spelling holds a delimiter', () => {
   })
 })
 
+describe('the at-sign and the delimiters', () => {
+  it.each([
+    'bob&commat;x.com',
+    'bob&COMMAT;x.com',
+    'bob&commatx.com',
+    'bob&#64x.com',
+    'bob&#x40x.com',
+    'bob&#X40;x.com',
+    'bob%2540x.com',
+    'bob%u0040x.com',
+    'bob\\x40x.com',
+    'bob\\u{40}x.com',
+    'bob\\u0040x.com'
+  ])('should mask an address whose at-sign is written %p', (address) => {
+    expect(maskAddressTokens(`got ${address} here`, () => '#')).toBe('got # here')
+  })
+
+  it.each(['\u00a0', '\u2028', '\ufeff', '\u200b', '\u3000'])(
+    'should keep an address whole when the text puts the space %p inside it',
+    (space) => {
+      expect(maskAddressTokens(`rejected bob${space}@x.com now`, () => '#')).toBe('rejected # now')
+    }
+  )
+
+  it('should still split tokens at ASCII white space', () => {
+    expect(maskAddressTokens('a@b.c\td@e.f\r\ng@h.i\fj@k.l\vm@n.o p@q.r', () => '#')).toBe(
+      '#\t#\r\n#\f#\v# #'
+    )
+  })
+
+  it('should hide a token whose mask throws, and answer the marker', () => {
+    expect(
+      maskAddressTokens('refused bob@x.com', () => {
+        throw new Error('mask of the host')
+      })
+    ).toBe('refused [masked]')
+  })
+})
+
 describe('maskExact', () => {
   it('should replace every occurrence of a value that is not an address', () => {
     expect(maskExact('failed for +5511999 and +5511999', '+5511999', () => '#')).toBe(

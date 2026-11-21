@@ -107,6 +107,53 @@ describe('NotificationAuditInterceptor', () => {
     expect(repo.entries[0]).toMatchObject({ verb: 'failed', errorMessage: 'downstream boom' })
   })
 
+  // The text of a handler's error can quote an address; the row is where `audit.maskRecipient` is promised.
+  it('masks every address-shaped token in the error text of a failed entry', async () => {
+    const repo = new CapturingRepo()
+    const interceptor = new NotificationAuditInterceptor(
+      buildOptions({
+        maskRecipient: (recipient: string): string => `masked(${String(recipient.length)})`
+      }),
+      repo
+    )
+    const error = new Error('550 <bob@x.com> unknown, copy to carol@y.org')
+
+    await expect(
+      firstValueFrom(
+        interceptor.intercept(buildContext([otpInput]), handlerOf(throwError(() => error)))
+      )
+    ).rejects.toBe(error)
+
+    expect(repo.entries[0]).toMatchObject({
+      verb: 'failed',
+      errorMessage: '550 <masked(9)> unknown, copy to masked(11)'
+    })
+  })
+
+  it('still records the failed entry, and rethrows the original error, when the mask throws', async () => {
+    const repo = new CapturingRepo()
+    const interceptor = new NotificationAuditInterceptor(
+      buildOptions({
+        maskRecipient: (recipient: string): string => {
+          if (recipient === 'bob@x.com') {
+            throw new Error('mask of the host')
+          }
+          return recipient
+        }
+      }),
+      repo
+    )
+    const error = new Error('refused bob@x.com')
+
+    await expect(
+      firstValueFrom(
+        interceptor.intercept(buildContext([otpInput]), handlerOf(throwError(() => error)))
+      )
+    ).rejects.toBe(error)
+
+    expect(repo.entries[0]).toMatchObject({ verb: 'failed', errorMessage: 'refused [masked]' })
+  })
+
   // A non-Error rejection is stringified for the audit message.
   it('stringifies a non-Error rejection', async () => {
     const repo = new CapturingRepo()

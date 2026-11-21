@@ -42,6 +42,7 @@ import type { NotificationRequest } from '../interfaces/notification-module-opti
 import type { DispatchInput } from '../services/notification.service'
 import { AuditWriteWarning } from '../utils/audit-write-warning'
 import { describeError } from '../utils/describe-error'
+import { maskAddressTokens } from '../utils/mask-in-text'
 import { assertIdentifies, purposeProblem } from '../utils/tenant-scope'
 
 /** Marker `providerName` distinguishing interceptor-level entries from service-level ones. */
@@ -96,9 +97,13 @@ export class NotificationAuditInterceptor implements NestInterceptor {
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     return next.handle().pipe(
       catchError((error: unknown) =>
-        from(this.recordMeta(context, 'failed', toErrorMessage(error))).pipe(
-          concatMap(() => throwError(() => error))
-        )
+        from(
+          this.recordMeta(
+            context,
+            'failed',
+            maskAddressTokens(toErrorMessage(error), this.options.audit.maskRecipient)
+          )
+        ).pipe(concatMap(() => throwError(() => error)))
       ),
       concatMap((value) => from(this.recordMeta(context, 'sent')).pipe(map(() => value)))
     )
