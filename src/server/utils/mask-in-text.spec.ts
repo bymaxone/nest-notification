@@ -115,8 +115,14 @@ describe('an address whose spelling holds a delimiter', () => {
     expect(maskAddressTokens('bad "a@b c" here', () => '#')).toBe('bad # here')
   })
 
-  it('should end a token at a quote that is never closed, and mask the part before it', () => {
-    expect(maskAddressTokens('a@b.c"unclosed text', () => '#')).toBe('#"unclosed text')
+  it('should keep a quote that never closes in its token, and mask the token', () => {
+    expect(maskAddressTokens('a@b.c"unclosed text', () => '#')).toBe('# text')
+  })
+
+  it('should mask a quoted local part too long to be one piece, whole', () => {
+    expect(maskAddressTokens(`got "${'a'.repeat(301)}"@example.com now`, () => '#')).toBe(
+      'got # now'
+    )
   })
 
   it.each(['bob%40x.com', 'bob&#64;x.com', 'bob&#x40;x.com', 'bob&#X040;x.com', 'bob\\u0040x.com'])(
