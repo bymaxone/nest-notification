@@ -21,7 +21,6 @@
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common'
 import type { OnModuleInit } from '@nestjs/common'
 
-import { NOTIFICATION_ERROR_CODES } from '../../shared/constants/error-codes'
 import {
   BYMAX_NOTIFICATION_AUDIT_SINK,
   BYMAX_NOTIFICATION_OBSERVER,
@@ -45,7 +44,6 @@ import { isCodeDigest } from '../utils/code-digest'
 import { generateOtpCode } from '../utils/code-generator'
 import { cooldownExpiresAt, toRetryAfterHeader } from '../utils/cooldown-helpers'
 import { readHostName, textOfHostName } from '../utils/host-name'
-import { isLibraryError } from '../utils/is-library-error'
 import { logEvent } from '../utils/log-event'
 import { loggableError } from '../utils/loggable-error'
 import { reportOtp, runInSpan } from '../utils/observe'
@@ -59,6 +57,7 @@ import {
   scrubValuesFromErrorChain
 } from '../utils/redact'
 import { withStorageFailures } from '../utils/storage-failures'
+import { causeOf, storageCauseOf } from '../utils/store-error-cause'
 import { assertIdentifies, assertPurpose, assertRegisteredPurpose } from '../utils/tenant-scope'
 import { safeCompare } from '../utils/timing-safe-compare'
 import { EmailService } from './email.service'
@@ -154,36 +153,6 @@ function otpEventOf(result: OtpVerifyResult): 'verified' | 'failed' | 'locked' {
     return 'verified'
   }
   return result.reason === 'max_attempts' ? 'locked' : 'failed'
-}
-
-/**
- * The cause of an error the store raised. The error can be the host's own, with an accessor that
- * throws, and a throw here would leave the failure path before the scrub and the audit.
- */
-function causeOf(error: unknown): unknown {
-  try {
-    return (error as { cause?: unknown }).cause
-  } catch {
-    return undefined
-  }
-}
-
-/**
- * The store's own failure when `outgoing` is the library's answer to one. The audit entry reads
- * its text, which the scrub has already cleaned, because the answer's own message names no cause.
- * An accessor of the error that throws leaves the audit entry with the error's own text.
- */
-function storageCauseOf(outgoing: unknown): unknown {
-  try {
-    return isLibraryError(outgoing) &&
-      (outgoing.code === NOTIFICATION_ERROR_CODES.OTP_STORAGE_FAILED ||
-        outgoing.code === NOTIFICATION_ERROR_CODES.OTP_STORAGE_UNAVAILABLE)
-      ? outgoing.cause
-      : undefined
-  } catch {
-    // The error can be the host's own, with an accessor that throws.
-    return undefined
-  }
 }
 
 /** OTP generation, verification, consumption, and status. */
