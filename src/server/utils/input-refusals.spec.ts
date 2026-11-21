@@ -113,7 +113,7 @@ describe('what a list accepts', () => {
     expect(boundedList('Owner', 'things', [], isString)).toEqual([])
   })
 
-  it('should accept a list of exactly zero entries from a proxy', () => {
+  it('should accept an array constructed with length zero', () => {
     expect(boundedList('Owner', 'things', new Array<string>(0), isString)).toEqual([])
   })
 })
