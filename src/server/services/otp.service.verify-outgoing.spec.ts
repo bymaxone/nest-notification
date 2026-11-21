@@ -65,4 +65,21 @@ describe('the failure of a verify', () => {
 
     expect(caught).toBeInstanceOf(Error)
   })
+
+  // A guess that is not a string removes nothing from the error's text, whatever the text holds.
+  it.each(['store down 123456', 'Stryker was here'])(
+    'should leave the text %p as it is when the guess is not a string',
+    async (text) => {
+      const service = new OtpService(makeOptions({}), throwing(new Error(text)), makeAudit())
+
+      const caught = await service
+        .verify({ ...ref, ...(JSON.parse('{"code":123456}') as { code: string }) })
+        .catch((error: unknown) => error)
+
+      expect(JSON.stringify((caught as NotificationException).getResponse())).not.toContain(
+        'redacted'
+      )
+      expect(((caught as Error).cause as Error).message).toBe(text)
+    }
+  )
 })

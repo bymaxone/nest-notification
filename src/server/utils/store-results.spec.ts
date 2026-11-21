@@ -115,6 +115,35 @@ describe('the answer of consumeAttempt', () => {
   })
 })
 
+describe('what a refusal and an accepted entry carry', () => {
+  it('should name the store in the details of a refusal', () => {
+    const caught = refusal(() => checkStoreResult('tryAcquireCooldown', 'x', 'the-store'))
+
+    expect((caught as NotificationException).getResponse()).toMatchObject({
+      error: { details: { providerName: 'the-store' } }
+    })
+  })
+
+  it('should accept an entry of zero attempts and zero maximum', () => {
+    const result = checkStoreResult(
+      'consumeAttempt',
+      { status: 'ok', entry: { ...ENTRY, attempts: 0, maxAttempts: 0 } },
+      's'
+    )
+
+    expect(result).toEqual({ status: 'ok', entry: { ...ENTRY, attempts: 0, maxAttempts: 0 } })
+  })
+
+  it('should leave metadata out of an entry that has none', () => {
+    const result = checkStoreResult('consumeAttempt', { status: 'ok', entry: ENTRY }, 's') as {
+      entry: object
+    }
+
+    expect('metadata' in result.entry).toBe(false)
+    expect('validated' in result.entry).toBe(false)
+  })
+})
+
 describe('an operation whose answer is not read', () => {
   it('should pass anything through, whatever the name inherits', () => {
     expect(checkStoreResult('get', 'x', 's')).toBe('x')

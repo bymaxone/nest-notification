@@ -25,6 +25,9 @@ describe('an OTP input of an unknown kind', () => {
 
       expect(caught).toBeInstanceOf(NotificationException)
       expect((caught as NotificationException).code).toBe('notification.invalid_scope_identifier')
+      expect((caught as NotificationException).getResponse()).toMatchObject({
+        error: { details: { boundary: 'OtpService', parameter: 'deliverVia' } }
+      })
       expect(await storage.get('acme', ref.recipient, ref.purpose)).toBeNull()
     }
   )
