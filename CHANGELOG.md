@@ -30,8 +30,8 @@ the entries that carry one, is the compatibility contract — read it, not the n
 - **A provider whose `isConfigured()` throws is refused with `EMAIL_PROVIDER_NOT_CONFIGURED`.** The host's error was
   raised from `send()` and from start-up; it is now the cause of the refusal, which still fails start-up, and the health
   indicator reports `down` and says nothing of it.
-- **The provider name is read once per failed send.** The audit entry and the `EMAIL_SEND_FAILED` details used two
-  reads, which a getter could answer differently.
+- **The provider name is read once per failed send,** so a getter cannot answer the audit entry and the
+  `EMAIL_SEND_FAILED` details differently.
 - **The audit repository's `name`, a log copy's `name` and the storage name in the `OTP_FAILURES_NOT_CARRIED` line are
   read once and under a guard.** A getter that throws no longer fails the module's build for the repository, and the
   line no longer depends on which object it was handed.
@@ -45,8 +45,7 @@ the entries that carry one, is the compatibility contract — read it, not the n
   the module is built, so a getter that throws there fails the build with the host's own error.
 - 1.4.21 said a storage failure reaches the caller as the object the store threw; from this release it is the cause of
   `OTP_STORAGE_FAILED`.
-- The README's bundle budget row moves from `40.27 KB` to `40.65 KB` for the server and from `2.66 KB` to `2.69 KB` for the observability entry, the
-  budgets.
+- The README's bundle budget row follows the new server and observability budgets.
 
 #### Apply to a derived backend
 
@@ -55,8 +54,8 @@ changes. A caller that catches what `generate()`, `verify()` or `consumeAttempt`
 its own store raised now receives a `NotificationException` with `code: 'notification.otp_storage_failed'`; read
 `error.cause` for what the store threw, and map the code to the response you want (the default is 500). A store whose
 failures are outages is unaffected, and so is one that throws the library's own errors. An email provider
-or store whose `isConfigured()` throws now ends a send, an accessor and start-up in `EMAIL_PROVIDER_NOT_CONFIGURED` or
-`OTP_STORAGE_NOT_CONFIGURED`, its error the cause, where it used to be the host's own error.
+or store whose `isConfigured()` throws now ends an accessor and start-up (and, for the provider, a send) in
+`EMAIL_PROVIDER_NOT_CONFIGURED` or `OTP_STORAGE_NOT_CONFIGURED`, its error the cause.
 
 ## [1.4.21] - 2026-11-20
 
