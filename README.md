@@ -664,7 +664,7 @@ This is about text **this library authors**. Text a provider authors has a docum
 - **A console or logger line**, or an `errorMessage`, which carries the message only, never a stack trace.
 - **A rethrown delivery error.** The renderer and the provider both receive the code, so on a failed delivery every literal occurrence of it is scrubbed to `[redacted]` across the outgoing error chain (message and stack at every link, cycle-safe) before the audit write and the rethrow. The email channel's own `failed` entry goes further: OTP delivery sets `publishProviderText: false`, so it records the fixed label `[provider text withheld]` plus the SMTP reply codes a fixed grammar can express, never the provider's words.
 
-Codes exist only inside the OTP store, under a TTL (as a keyed digest when `otp.codeSecret` is set), and in process memory for the duration of the request. `audit.maskRecipient` minimizes the recipient before it is persisted (`jane@acme.com` → `j***@acme.com`). A regression test asserts the invariant directly: `JSON.stringify(auditEntry).includes(code) === false`.
+Codes exist only inside the OTP store, under a TTL (as a keyed digest when `otp.codeSecret` is set), and in process memory for the duration of the request. `audit.maskRecipient` minimizes the recipient before it is persisted (`jane@acme.com` → `j***@acme.com`). The error text of a failed audit row is masked the same way: every token of it that holds an at-sign is replaced, whole, by what `audit.maskRecipient` answers for it. A regression test asserts the invariant directly: `JSON.stringify(auditEntry).includes(code) === false`.
 
 ### Stored codes are keyed digests when you set `otp.codeSecret`
 
@@ -762,7 +762,7 @@ A one-time password is a credential, so every behavior is pinned so that a regre
 | Coverage       | **100%** line/branch/function/statement per file (`pnpm test:cov:all`)                                             |
 | Mutation       | Stryker score **100%** (`break: 100`), no survivors                                                                |
 | Lint           | ESLint flat config + `eslint-plugin-security`, zero warnings                                                       |
-| Bundle budgets | server < 42.87 KB · shared < 4 KB · react < 8 KB · testing < 4.5 KB · observability < 2.70 KB brotli (`pnpm size`) |
+| Bundle budgets | server < 42.45 KB · shared < 4 KB · react < 8 KB · testing < 4.5 KB · observability < 2.70 KB brotli (`pnpm size`) |
 | Prisma-free    | `pnpm check:no-prisma` — the library never imports `@prisma/client`                                                |
 | Export map     | `pnpm check:exports` — `attw` against the packed tarball, ESM and CJS                                              |
 | Supply chain   | published with npm provenance (OIDC), CodeQL + OpenSSF Scorecard                                                   |

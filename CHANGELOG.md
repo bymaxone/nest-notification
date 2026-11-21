@@ -23,8 +23,13 @@ the entries that carry one, is the compatibility contract — read it, not the n
   (a truthy string was read as a lock taken or a code removed), `consumeAttempt` must resolve one of its three statuses
   with an entry of the declared kinds (an unknown status fell through as success, then raised a raw `TypeError`), and
   `isConfigured()` of a store or an email provider must return a boolean. Each is refused instead of read.
-- **`audit.maskRecipient` now covers the store's error text.** The failed audit row of a delivery carried the store's own
-  text, which can name the recipient; every occurrence is replaced by the masked form.
+- **`audit.maskRecipient` now covers the error text of a failed audit row.** The row of a failed delivery or send carried
+  the store's or the provider's own text, which can quote the address it refused. Every token of that text that holds an
+  at-sign (`@`, fullwidth `\uff20` or small `\ufe6b`) is replaced, whole, by what `audit.maskRecipient` answers for it,
+  whoever the address belongs to and however it is spelled (`550 <bob@x.com> unknown` keeps its brackets). A token is a
+  run of characters that are not white space and not one of `<>"'(),;[]`. Words that merely contain an at-sign are
+  masked too, since a missed address is the worse mistake; a recipient that is not an address (a phone number) is
+  replaced where the OTP path wrote it exactly.
 - **A failed `verify()` leaves the way a failed `generate()` does,** with the guess removed from the error's chain and a
   value that is not an error flattened.
 - **An OTP action or delivery channel the library does not know is refused.** An `action` such as `'verfy'` fell through
@@ -49,8 +54,6 @@ the entries that carry one, is the compatibility contract — read it, not the n
   `encoding`, `headers`, `path`) is refused with a refusal that names the attachments, where a copy would drop it
   without a word. `filename` and `contentType` must be strings. The byte budget measures a `Buffer` or a `Uint8Array`
   through the typed array's own getter, so an own `length` or `byteLength` property cannot make it look empty.
-- **The failed audit row of a send masks every address of `to`, `cc` and `bcc` that the provider's text quotes,** in
-  any letter case (`550 <Bob@X.com> unknown`), through `audit.maskRecipient`, as the OTP path does.
 - **A store that counted more attempts than the entry's ceiling is `max_attempts`,** where the remainder was negative.
 - **A failed delivery releases the cooldown and the entry, whichever step fails.** A `clearCooldown` that threw left the
   entry behind; both now run and the first failure is the one the caller sees.

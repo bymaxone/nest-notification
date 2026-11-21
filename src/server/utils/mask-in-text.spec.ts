@@ -1,165 +1,103 @@
 /**
- * @fileoverview Holds the masked recipients to replacing every occurrence of every raw address in a
- * text, in any letter case, with what the mask answers for that address.
+ * @fileoverview Holds the masking of an error's text to hiding every token that holds an at-sign,
+ * whoever it belongs to and however it is spelled, and to doing it in one linear pass.
  * @layer utils
  */
 
-import { maskRecipientsInText } from './mask-in-text'
+import { maskAddressTokens, maskExact } from './mask-in-text'
 
-const mask = (recipient: string): string => `<${recipient.length}>`
+const mask = (recipient: string): string => `<${String(recipient.length)}>`
 
-describe('maskRecipientsInText', () => {
-  it('should replace every occurrence of every address with its masked form', () => {
-    expect(maskRecipientsInText('a@b.c failed, a@b.c and d@e.f', ['a@b.c', 'd@e.f'], mask)).toBe(
-      '<5> failed, <5> and <5>'
+describe('maskAddressTokens', () => {
+  it('should mask the address inside the brackets of an SMTP reply and keep the brackets', () => {
+    expect(maskAddressTokens('550 5.1.1 <bob@x.com> unknown user', () => '#')).toBe(
+      '550 5.1.1 <#> unknown user'
     )
   })
 
-  it('should find an address in another letter case', () => {
-    expect(maskRecipientsInText('550 <Bob@X.com> unknown', ['bob@x.com'], mask)).toBe(
-      '550 <<9>> unknown'
+  it('should mask an address that is not the recipient of the message', () => {
+    expect(maskAddressTokens('forwarded to carol@y.org failed', () => '#')).toBe(
+      'forwarded to # failed'
     )
-  })
-
-  it('should read the characters of an address as text, never as a pattern', () => {
-    expect(maskRecipientsInText('a+b@x.com and aab@xcom', ['a+b@x.com'], mask)).toBe(
-      '<9> and aab@xcom'
-    )
-  })
-
-  it('should leave a text without the addresses as it is', () => {
-    expect(maskRecipientsInText('nothing here', ['a@b.c'], mask)).toBe('nothing here')
-  })
-
-  it('should leave the text as it is when there are no addresses', () => {
-    expect(maskRecipientsInText('abc', [], mask)).toBe('abc')
-  })
-
-  it('should skip an empty address, which would match everywhere', () => {
-    expect(maskRecipientsInText('abc', [''], mask)).toBe('abc')
-  })
-
-  it('should still mask when a character elsewhere changes length in lower case', () => {
-    expect(maskRecipientsInText('\u0130 Bob@X.com', ['bob@x.com'], mask)).toBe('\u0130 <9>')
-  })
-
-  it('should mask an address that is shorter than the leading characters it is filed under', () => {
-    expect(maskRecipientsInText('code 7 and 7', ['7'], () => '#')).toBe('code # and #')
-  })
-
-  it('should keep the text around an astral character intact', () => {
-    expect(maskRecipientsInText('\u{1F600} a@b.c \u{1F600}', ['A@B.C'], mask)).toBe(
-      '\u{1F600} <5> \u{1F600}'
-    )
-  })
-
-  it('should answer a long text with many addresses in time that follows the text', () => {
-    const addresses = Array.from({ length: 3_000 }, (_, i) => `user${String(i)}@example.com`)
-    const text = 'x'.repeat(100_000)
-    const started = Date.now()
-
-    const out = maskRecipientsInText(text + addresses[2999], addresses, mask)
-
-    expect(out.endsWith('<' + String(addresses[2999]?.length) + '>')).toBe(true)
-    expect(Date.now() - started).toBeLessThan(1_000)
-  })
-
-  it('should mask the first of two addresses that overlap, and move past it', () => {
-    expect(maskRecipientsInText('abcd', ['abc', 'bcd'], () => '#')).toBe('#d')
   })
 
   it.each([
-    ['\u0130@example.com', 'i\u0307@example.com'],
-    ['i\u0307@example.com', '\u0130@example.com']
-  ])(
-    'should find %p when the address is %p, whichever has the longer lower case',
-    (text, address) => {
-      expect(maskRecipientsInText(`550 ${text} unknown`, [address], () => '[masked]')).toBe(
-        '550 [masked] unknown'
-      )
-    }
-  )
-
-  it('should not mask part of a character whose lower case holds the address', () => {
-    expect(maskRecipientsInText('\u0130', ['i'], () => '#')).toBe('\u0130')
+    ['fullwidth', 'bob＠x.com'],
+    ['small', 'bob﹫x.com']
+  ])('should mask an address written with the %s at-sign', (_label, address) => {
+    expect(maskAddressTokens(`rejected ${address} now`, () => '#')).toBe('rejected # now')
   })
 
-  it('should find an address written with a final sigma, which lower-casing the whole text would give', () => {
+  it.each([
+    ['a final sigma', 'ος@example.com'],
+    ['marks in another order', 'à̕@x.com'],
+    ['marks across thirty', `a${'̕'.repeat(30)}̀@x.com`],
+    ['a trailing mark', 'bob@x.coḿ'],
+    ['a sharp s', 'STRAẞE@X.COM'],
+    ['astral letters', '\u{10400}@x.com'],
+    ['a dotted capital i', 'İ@example.com']
+  ])('should mask an address with %s, with no matching of spellings', (_label, address) => {
+    expect(maskAddressTokens(`quoted ${address} here`, () => '#')).toBe('quoted # here')
+  })
+
+  it('should split tokens at white space and at the delimiters', () => {
     expect(
-      maskRecipientsInText('\u03bf\u03c2@example.com', ['\u039f\u03a3@example.com'], mask)
-    ).toBe('<14>')
+      maskAddressTokens('a@b.c,d@e.f;"g@h.i"(j@k.l)[m@n.o]\'p@q.r\' s@t.u\tv@w.x', () => '#')
+    ).toBe('#,#;"#"(#)[#]\'#\' #\t#')
   })
 
-  it('should find an address of cased astral letters', () => {
-    expect(maskRecipientsInText('\u{10400}@x.com', ['\u{10428}@x.com'], () => '#')).toBe('#')
+  it('should leave a text without an at-sign as it is', () => {
+    expect(maskAddressTokens('connection refused by relay.example.com:25', mask)).toBe(
+      'connection refused by relay.example.com:25'
+    )
   })
 
-  it('should mask the longest address that begins at a position', () => {
-    expect(maskRecipientsInText('bob@x.com.br', ['bob@x.com', 'bob@x.com.br'], () => '#')).toBe('#')
-  })
-
-  it('should begin a match only at the start of a character', () => {
-    expect(maskRecipientsInText('\u0130', ['\u0307'], () => '#')).toBe('\u0130')
-  })
-
-  it('should answer a text that repeats the start of every address in time that follows the text', () => {
-    const addresses = Array.from({ length: 1_000 }, (_, i) => `user${String(i)}@example.com`)
-    const started = Date.now()
-
-    maskRecipientsInText('user'.repeat(100_000), addresses, mask)
-
-    expect(Date.now() - started).toBeLessThan(2_000)
-  })
-
-  it('should find an address written in another normalization form', () => {
-    expect(maskRecipientsInText('e\u0301@x.com', ['\u00e9@x.com'], mask)).toBe('<7>')
-    expect(maskRecipientsInText('\u00e9@x.com', ['e\u0301@x.com'], mask)).toBe('<8>')
-  })
-
-  it('should find an address written with a capital or a lower-case sharp s', () => {
-    expect(maskRecipientsInText('STRA\u1e9eE@X.COM', ['stra\u00dfe@x.com'], () => '#')).toBe('#')
-    expect(maskRecipientsInText('stra\u00dfe@x.com', ['STRASSE@x.com'], () => '#')).toBe('#')
-  })
-
-  it('should ask the mask only for the addresses the text quotes, and once for each', () => {
+  it('should ask the mask once for each distinct token', () => {
     const asked: string[] = []
 
-    maskRecipientsInText('a@b.c and a@b.c', ['a@b.c', 'never@x.com'], (address) => {
+    maskAddressTokens('a@b.c and a@b.c and d@e.f', (address) => {
       asked.push(address)
       return '#'
     })
 
-    expect(asked).toEqual(['a@b.c'])
+    expect(asked).toEqual(['a@b.c', 'd@e.f'])
   })
 
-  it.each([
-    ['a\u0315\u0300@x.com', 'a\u0300\u0315@x.com'],
-    ['a\u0301\u0323@x.com', '\u1ea1\u0301@x.com'],
-    ['\u1ea1\u0301@x.com', 'a\u0301\u0323@x.com']
-  ])('should find %p when the address is %p, the marks being in another order', (text, address) => {
-    expect(maskRecipientsInText(`550 ${text} unknown`, [address], () => '#')).toBe('550 # unknown')
+  it('should replace a token over the cap, asking the mask for its first characters', () => {
+    const long = `${'x'.repeat(600)}@y.com`
+    let answered = ''
+
+    const out = maskAddressTokens(`before ${long} after`, (address) => {
+      answered = address
+      return '#'
+    })
+
+    expect(out).toBe('before # after')
+    expect(answered).toBe(long.slice(0, 512))
   })
 
-  it('should read a run of marks with no letter before it as one character', () => {
-    expect(maskRecipientsInText('\u0301\u0323 a@b.c', ['a@b.c'], () => '#')).toBe('\u0301\u0323 #')
+  it('should read a long text, and a long run without a break, in time that follows its length', () => {
+    const started = Date.now()
+
+    maskAddressTokens(`${'word '.repeat(200_000)}${'a'.repeat(500_000)}@x.com`, mask)
+    maskAddressTokens('́'.repeat(500_000), mask)
+
+    expect(Date.now() - started).toBeLessThan(2_000)
   })
 
   it('should answer an empty text with the empty text', () => {
-    expect(maskRecipientsInText('', ['a@b.c'], mask)).toBe('')
+    expect(maskAddressTokens('', mask)).toBe('')
   })
+})
 
-  it('should read a long run of combining marks in time that follows its length', () => {
-    const text = `a${'\u0301\u0323'.repeat(40_000)}`
-    const started = Date.now()
-
-    maskRecipientsInText(text, ['a@b.c'], mask)
-
-    expect(Date.now() - started).toBeLessThan(1_000)
-  })
-
-  it('should still mask an address that follows a run of more than thirty marks', () => {
-    expect(maskRecipientsInText(`a${'\u0301'.repeat(100)} a@b.c`, ['a@b.c'], () => '#')).toBe(
-      `a${'\u0301'.repeat(100)} #`
+describe('maskExact', () => {
+  it('should replace every occurrence of a value that is not an address', () => {
+    expect(maskExact('failed for +5511999 and +5511999', '+5511999', () => '#')).toBe(
+      'failed for # and #'
     )
+  })
+
+  it('should leave the text as it is for an empty value', () => {
+    expect(maskExact('abc', '', mask)).toBe('abc')
   })
 })

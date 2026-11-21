@@ -44,9 +44,8 @@ import { assertBodyParts } from '../utils/email-body'
 import { attachmentBytes, readSendInput } from '../utils/email-send-input'
 import { readHostName } from '../utils/host-name'
 import { isLibraryError } from '../utils/is-library-error'
-import { maskRecipientsInText } from '../utils/mask-in-text'
+import { maskAddressTokens } from '../utils/mask-in-text'
 import { reportSend, runInSpan } from '../utils/observe'
-import { addressesOf } from '../utils/recipient-list'
 import { countRecipients } from '../utils/recipient-list'
 import {
   collectEchoedExcerpts,
@@ -451,7 +450,7 @@ export class EmailService {
       const providerName = providerNameOf(this.provider)
       await this.audit(
         this.auditEntry('failed', providerName, input.tenantId, recipient, input.userId, {
-          errorMessage: this.auditText(error, secretValues, input)
+          errorMessage: this.auditText(error, secretValues)
         })
       )
       throw new NotificationException(
@@ -465,15 +464,10 @@ export class EmailService {
     }
   }
 
-  /** The provider's text for the audit row: secrets removed, and every address of the message masked. */
-  private auditText(
-    error: unknown,
-    secretValues: readonly string[],
-    input: EmailSendInput
-  ): string {
-    return maskRecipientsInText(
+  /** The provider's text for the audit row: secrets removed, and every address-shaped token masked. */
+  private auditText(error: unknown, secretValues: readonly string[]): string {
+    return maskAddressTokens(
       readRedactedMessage(error, secretValues),
-      addressesOf(input),
       this.options.audit.maskRecipient
     )
   }

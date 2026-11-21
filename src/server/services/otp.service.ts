@@ -45,7 +45,7 @@ import { cooldownExpiresAt, toRetryAfterHeader } from '../utils/cooldown-helpers
 import { readHostName, textOfHostName } from '../utils/host-name'
 import { logEvent } from '../utils/log-event'
 import { loggableError } from '../utils/loggable-error'
-import { maskRecipientsInText } from '../utils/mask-in-text'
+import { maskAddressTokens, maskExact } from '../utils/mask-in-text'
 import { matchesStoredCode } from '../utils/matches-stored-code'
 import { reportOtp, runInSpan } from '../utils/observe'
 import { outgoingError } from '../utils/outgoing-error'
@@ -460,9 +460,12 @@ export class OtpService implements OnModuleInit {
       this.otpAuditEntry('failed', scope, {
         // `outgoing` is already fully redacted by the scrub above; this read
         // only needs the fail-closed guard, not a second redaction pass.
-        errorMessage: maskRecipientsInText(
-          readRedactedMessage(storageCauseOf(outgoing) ?? outgoing),
-          [scope.recipient],
+        errorMessage: maskExact(
+          maskAddressTokens(
+            readRedactedMessage(storageCauseOf(outgoing) ?? outgoing),
+            this.options.audit.maskRecipient
+          ),
+          scope.recipient,
           this.options.audit.maskRecipient
         )
       })
