@@ -142,4 +142,21 @@ describe('an OTP input of an unknown kind', () => {
 
     expect(Object.values(reads)).toEqual([1, 1, 1, 1, 1, 1, 1])
   })
+
+  it('should name the notification service as the boundary that refused an unknown action', async () => {
+    const otp = new OtpService(makeOptions({}), new InMemoryOtpStorage(), makeAudit())
+    const service = new NotificationService(undefined, otp)
+
+    const caught = (await service
+      .dispatch({
+        channel: 'otp',
+        tenantId: 'acme',
+        payload: { recipient: ref.recipient, purpose: ref.purpose, action: 'verfy' as 'verify' }
+      })
+      .catch((error: unknown) => error)) as NotificationException
+
+    expect(caught.getResponse()).toMatchObject({
+      error: { details: { boundary: 'NotificationService', parameter: 'action' } }
+    })
+  })
 })

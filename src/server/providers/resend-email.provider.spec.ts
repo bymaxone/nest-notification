@@ -95,7 +95,7 @@ describe('ResendEmailProvider', () => {
       ]
     })
 
-    expect(mockSend.mock.calls[0]?.[0].attachments).toEqual([
+    expect(mockSend.mock.calls[0]?.[0].attachments).toStrictEqual([
       {
         filename: 'logo.png',
         content: Buffer.from('png'),

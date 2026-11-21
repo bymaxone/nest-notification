@@ -89,6 +89,18 @@ describe('the message and the details of each refusal', () => {
       'an attachment has no readable content'
     ],
     [
+      'an attachment with a field the library does not carry',
+      () => readSend({ attachments: [{ filename: 'f', content: 'x', encoding: 'base64' }] }),
+      '[EmailService] attachments an attachment has a field the library does not carry',
+      'an attachment has a field the library does not carry'
+    ],
+    [
+      'an attachment with a field of an unexpected kind',
+      () => readSend({ attachments: [{ filename: 5, content: 'x' }] }),
+      '[EmailService] attachments an attachment has a field of an unexpected kind',
+      'an attachment has a field of an unexpected kind'
+    ],
+    [
       'an unknown action',
       () => readOtpAction('Owner', 'verfy'),
       '[Owner] action expected generate, verify or consume',

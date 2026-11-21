@@ -130,4 +130,25 @@ describe('a template send reads its input first', () => {
       'provider text'
     )
   })
+
+  describe('an input that cannot be read', () => {
+    it('should fail the send with the provider name in its details and the reader error as its cause', async () => {
+      const { provider, service: email } = service()
+      const input = {
+        ...baseInput,
+        get html(): string {
+          throw new TypeError('getter of the caller')
+        }
+      }
+
+      const caught = (await email
+        .send(input)
+        .catch((error: unknown) => error)) as NotificationException
+
+      expect(caught.code).toBe('notification.email_send_failed')
+      expect(caught.getResponse()).toMatchObject({ error: { details: { providerName: 'resend' } } })
+      expect((caught.cause as Error).message).toBe('getter of the caller')
+      expect(provider.send).not.toHaveBeenCalled()
+    })
+  })
 })

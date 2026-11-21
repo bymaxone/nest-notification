@@ -31,7 +31,7 @@ describe('outgoingError', () => {
     expect((out.cause as Error).message).not.toContain(VALUE)
   })
 
-  it('should scrub a value from a library error whose body cannot be read, keeping the rest', () => {
+  it('should scrub a value from a library error whose body cannot be read', () => {
     const error = new NotificationException('OTP_STORAGE_FAILED', undefined, {
       cause: new Error(`echo ${VALUE}`)
     })

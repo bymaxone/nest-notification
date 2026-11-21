@@ -319,4 +319,10 @@ describe('the send input reader', () => {
       ).toBeUndefined()
     }
   )
+
+  it('should accept an attachment that has no filename', () => {
+    expect(
+      refusal({ ...base, attachments: [{ content: 'x', contentType: 'text/plain' }] })
+    ).toBeUndefined()
+  })
 })
