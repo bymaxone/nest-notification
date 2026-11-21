@@ -83,4 +83,31 @@ describe('maskRecipientsInText', () => {
   it('should not mask part of a character whose lower case holds the address', () => {
     expect(maskRecipientsInText('\u0130', ['i'], () => '#')).toBe('\u0130')
   })
+
+  it('should find an address written with a final sigma, which lower-casing the whole text would give', () => {
+    expect(
+      maskRecipientsInText('\u03bf\u03c2@example.com', ['\u039f\u03a3@example.com'], mask)
+    ).toBe('<14>')
+  })
+
+  it('should find an address of cased astral letters', () => {
+    expect(maskRecipientsInText('\u{10400}@x.com', ['\u{10428}@x.com'], () => '#')).toBe('#')
+  })
+
+  it('should mask the longest address that begins at a position', () => {
+    expect(maskRecipientsInText('bob@x.com.br', ['bob@x.com', 'bob@x.com.br'], () => '#')).toBe('#')
+  })
+
+  it('should begin a match only at the start of a character', () => {
+    expect(maskRecipientsInText('\u0130', ['\u0307'], () => '#')).toBe('\u0130')
+  })
+
+  it('should answer a text that repeats the start of every address in time that follows the text', () => {
+    const addresses = Array.from({ length: 1_000 }, (_, i) => `user${String(i)}@example.com`)
+    const started = Date.now()
+
+    maskRecipientsInText('user'.repeat(100_000), addresses, mask)
+
+    expect(Date.now() - started).toBeLessThan(2_000)
+  })
 })
