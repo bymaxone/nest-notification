@@ -8,6 +8,7 @@ import type {
   NotificationLogEntry
 } from '../interfaces/notification-log-repository.interface'
 import { escapeAuditEntry } from '../utils/audit-escape'
+import { readHostName } from '../utils/host-name'
 
 /**
  * Wraps the host's {@link INotificationLogRepository} so that every entry written through it is
@@ -19,7 +20,7 @@ export class EscapingLogRepository implements INotificationLogRepository {
 
   /** @param inner - The host's repository that receives the escaped entries. */
   constructor(private readonly inner: INotificationLogRepository) {
-    this.name = inner.name
+    this.name = readHostName(() => inner.name)
   }
 
   /** Writes `entry` to the wrapped repository with its strings escaped. */

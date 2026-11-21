@@ -21,6 +21,7 @@
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common'
 import type { OnModuleInit } from '@nestjs/common'
 
+import { NOTIFICATION_ERROR_CODES } from '../../shared/constants/error-codes'
 import {
   BYMAX_NOTIFICATION_AUDIT_SINK,
   BYMAX_NOTIFICATION_OBSERVER,
@@ -152,6 +153,18 @@ function otpEventOf(result: OtpVerifyResult): 'verified' | 'failed' | 'locked' {
     return 'verified'
   }
   return result.reason === 'max_attempts' ? 'locked' : 'failed'
+}
+
+/**
+ * The store's own failure when `outgoing` is the library's answer to one. The audit entry reads
+ * its text, which the scrub has already cleaned, because the answer's own message names no cause.
+ */
+function storageCauseOf(outgoing: unknown): unknown {
+  return outgoing instanceof NotificationException &&
+    (outgoing.code === NOTIFICATION_ERROR_CODES.OTP_STORAGE_FAILED ||
+      outgoing.code === NOTIFICATION_ERROR_CODES.OTP_STORAGE_UNAVAILABLE)
+    ? outgoing.cause
+    : undefined
 }
 
 /** OTP generation, verification, consumption, and status. */
@@ -433,7 +446,11 @@ export class OtpService implements OnModuleInit {
     try {
       await this.releaseOtp(scope)
     } catch (cleanupError) {
-      attachCauseIfAbsent(cleanupError, error)
+      // A failed store method arrives as `OTP_STORAGE_FAILED` or `_UNAVAILABLE` already carrying the
+      // store's own error as its cause, so the delivery error goes onto that cause.
+      if (!attachCauseIfAbsent(cleanupError, error)) {
+        attachCauseIfAbsent((cleanupError as { cause?: unknown }).cause, error)
+      }
       failure = cleanupError
     }
     const outgoing: unknown = isSafeError(failure)
@@ -443,7 +460,7 @@ export class OtpService implements OnModuleInit {
       this.otpAuditEntry('failed', scope, {
         // `outgoing` is already fully redacted by the scrub above; this read
         // only needs the fail-closed guard, not a second redaction pass.
-        errorMessage: readRedactedMessage(outgoing)
+        errorMessage: readRedactedMessage(storageCauseOf(outgoing) ?? outgoing)
       })
     )
     return outgoing
@@ -474,7 +491,7 @@ export class OtpService implements OnModuleInit {
       this.logger,
       'warn',
       NOTIFICATION_LOG_EVENTS.OTP_FAILURES_NOT_CARRIED,
-      `[BYMAX_NOTIFICATION_OTP_FAILURES_NOT_CARRIED] The ${storage.name} OTP storage does not implement ` +
+      `[BYMAX_NOTIFICATION_OTP_FAILURES_NOT_CARRIED] The ${readHostName(() => storage.name)} OTP storage does not implement ` +
         'getFailures, recordFailure and clearFailures, so issuing a new code gives it a fresh attempt budget; ' +
         'NIST SP 800-63B-4 §3.1.3.2 says generating a new secret SHALL NOT reset the failed authentication count. ' +
         'Implement the three optional methods to carry the count across re-issues.'

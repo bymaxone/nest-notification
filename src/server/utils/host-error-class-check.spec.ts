@@ -53,7 +53,7 @@ describe('a class check on a host error', () => {
     await expect(sending).rejects.not.toThrow(TRAP)
   })
 
-  it('should pass a hostile storage failure on as the object the store threw', async () => {
+  it('should answer a hostile storage failure with OTP_STORAGE_FAILED, not with the trap error', async () => {
     const thrown = hostile()
     const storage = new InMemoryOtpStorage()
     storage.tryAcquireCooldown = async () => {
@@ -68,7 +68,12 @@ describe('a class check on a host error', () => {
       deliverVia: 'manual'
     })
 
-    await expect(generating).rejects.toBe(thrown)
+    const caught: unknown = await generating.catch((error: unknown) => error)
+
+    expect(caught).toBeInstanceOf(NotificationException)
+    expect(caught).toMatchObject({ code: 'notification.otp_storage_failed' })
+    expect((caught as NotificationException).cause).toBeInstanceOf(Error)
+    expect(((caught as NotificationException).cause as Error).message).not.toContain(TRAP)
   })
 
   it('should answer a hostile provider failure with a NotificationException', async () => {
@@ -95,7 +100,7 @@ describe('a class check on a host error', () => {
     await expect(sending).rejects.toBeInstanceOf(NotificationException)
   })
 
-  it('should treat a hostile outage-shaped storage failure as no library error, not as one', async () => {
+  it('should answer a hostile outage-shaped storage failure with OTP_STORAGE_UNAVAILABLE', async () => {
     const thrown = new Proxy(
       { code: 'ECONNREFUSED' },
       {
@@ -117,8 +122,10 @@ describe('a class check on a host error', () => {
       deliverVia: 'manual'
     })
 
-    await expect(generating).rejects.toMatchObject({
-      getResponse: expect.any(Function)
-    })
+    const caught: unknown = await generating.catch((error: unknown) => error)
+
+    expect(caught).toBeInstanceOf(NotificationException)
+    expect(caught).toMatchObject({ code: 'notification.otp_storage_unavailable' })
+    expect((caught as NotificationException).cause).toBeInstanceOf(Error)
   })
 })

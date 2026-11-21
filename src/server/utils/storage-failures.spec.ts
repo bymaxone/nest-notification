@@ -97,4 +97,76 @@ describe('withStorageFailures', () => {
     expect(caught.getResponse()).toMatchObject({ error: { details: { providerName: 'store-1' } } })
     expect(reads).toBe(1)
   })
+
+  // Every operation the wrapper covers answers every way a method can fail with the same code, and
+  // the host's text is in the cause and never in the message or the body.
+  const OPERATIONS = [
+    'set',
+    'get',
+    'consumeAttempt',
+    'update',
+    'delete',
+    'deleteIfCode',
+    'tryAcquireCooldown',
+    'getCooldown',
+    'clearCooldown',
+    'getFailures',
+    'recordFailure',
+    'clearFailures'
+  ] as const
+  const WAYS: ReadonlyArray<[string, (store: InMemoryOtpStorage, operation: string) => void]> = [
+    [
+      'rejects',
+      (store, operation) =>
+        Object.assign(store, { [operation]: () => Promise.reject(new Error('host text')) })
+    ],
+    [
+      'throws before it returns a promise',
+      (store, operation) =>
+        Object.assign(store, {
+          [operation]: () => {
+            throw new Error('host text')
+          }
+        })
+    ],
+    [
+      'cannot be read',
+      (store, operation) =>
+        Object.defineProperty(store, operation, {
+          configurable: true,
+          get: () => {
+            throw new Error('host text')
+          }
+        })
+    ]
+  ]
+  describe.each(OPERATIONS)('%s', (operation) => {
+    it.each(WAYS)('should answer OTP_STORAGE_FAILED when it %s', async (_way, break_) => {
+      const store = new InMemoryOtpStorage()
+      break_(store, operation)
+      const call = Reflect.get(withStorageFailures(store), operation) as (
+        ...args: unknown[]
+      ) => Promise<unknown>
+
+      const caught = (await call('t', 'r', 'p').catch((error: unknown) => error)) as {
+        message: string
+        cause: Error
+        getResponse(): unknown
+      }
+
+      expect(caught).toMatchObject({ code: 'notification.otp_storage_failed' })
+      expect(caught.cause.message).toBe('host text')
+      expect(caught.message).not.toContain('host text')
+      expect(JSON.stringify(caught.getResponse())).not.toContain('host text')
+    })
+  })
+
+  it('should treat a store that cannot say whether it is configured as not configured', () => {
+    const store = new InMemoryOtpStorage()
+    store.isConfigured = () => {
+      throw new Error('isConfigured of the host')
+    }
+
+    expect(withStorageFailures(store).isConfigured()).toBe(false)
+  })
 })

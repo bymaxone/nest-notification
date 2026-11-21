@@ -2,11 +2,13 @@
  * @fileoverview Answers a store outage with the code a caller can act on.
  * @layer utils
  *
- * `IOtpStorage` is implemented by the host or by a reference adapter over Redis, and when its
- * backing service cannot be reached it rejects with whatever that client rejects with. Left alone
- * that reaches the HTTP layer as an unclassified 500. {@link withStorageFailures} wraps every
- * operation of a store so an outage becomes `OTP_STORAGE_UNAVAILABLE` (503), with the original
- * error kept as the log-safe `cause`, and every other failure passes through as the same object.
+ * `IOtpStorage` is implemented by the host or by a reference adapter over Redis, and when it fails
+ * it rejects with whatever that client or that code rejects with. Left alone that reaches the HTTP
+ * layer as an unclassified 500 carrying the host's own object. {@link withStorageFailures} wraps
+ * every operation of a store so an outage becomes `OTP_STORAGE_UNAVAILABLE` (503) and any other
+ * failure of it, a rejection, a throw or a method that cannot be read, becomes `OTP_STORAGE_FAILED`
+ * (500), each with the original error kept as the log-safe `cause`. The library's own errors
+ * pass through as the same object.
  */
 
 import { NotificationException } from '../errors/notification-exception'
@@ -54,25 +56,42 @@ function isLibraryError(error: unknown): boolean {
 }
 
 /**
+ * Whether the store has the operation. One whose getter throws is counted as having it, so a
+ * call fails with `OTP_STORAGE_FAILED` each time it is made, where leaving it out would let a
+ * broken store look like one that does not carry the operation.
+ */
+function hasOperation(storage: IOtpStorage, operation: string): boolean {
+  try {
+    return typeof Reflect.get(storage, operation) === 'function'
+  } catch {
+    return true
+  }
+}
+
+/**
  * Turns a failure of the store into what the caller should see.
  *
  * @param name - The store's name as the wrapper read it when the store was wrapped.
  * @param error - What the operation rejected with.
- * @returns A `NotificationException` for an outage; the same `error` for anything else.
+ * @returns The same `error` when it is already the library's own; otherwise a `NotificationException`
+ *   that keeps it as the cause.
  */
 function translate(name: string, error: unknown): unknown {
-  if (isLibraryError(error) || !isUnavailableError(error)) {
+  if (isLibraryError(error)) {
     return error
   }
-  return new NotificationException(
-    'OTP_STORAGE_UNAVAILABLE',
-    { providerName: name },
-    { cause: error }
-  )
+  if (isUnavailableError(error)) {
+    return new NotificationException(
+      'OTP_STORAGE_UNAVAILABLE',
+      { providerName: name },
+      { cause: error }
+    )
+  }
+  return new NotificationException('OTP_STORAGE_FAILED', { providerName: name }, { cause: error })
 }
 
 /**
- * Wraps a store so an outage of its backing service is reported as `OTP_STORAGE_UNAVAILABLE`.
+ * Wraps a store so a failure of it is reported as `OTP_STORAGE_UNAVAILABLE` or `OTP_STORAGE_FAILED`.
  *
  * The wrapper has exactly the operations the store has: an optional operation the store does not
  * implement is absent from the wrapper too, so the checks that look for it still see the truth.
@@ -87,10 +106,17 @@ export function withStorageFailures(storage: IOtpStorage): IOtpStorage {
   const name = readHostName(() => storage.name)
   const wrapped: Record<string, unknown> = {
     name,
-    isConfigured: (): boolean => storage.isConfigured()
+    // A store that cannot say whether it is configured is not configured.
+    isConfigured: (): boolean => {
+      try {
+        return storage.isConfigured()
+      } catch {
+        return false
+      }
+    }
   }
   for (const operation of OPERATIONS) {
-    if (typeof Reflect.get(storage, operation) !== 'function') {
+    if (!hasOperation(storage, operation)) {
       continue
     }
     Object.defineProperty(wrapped, operation, {

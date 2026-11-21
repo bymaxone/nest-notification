@@ -90,6 +90,11 @@ const EXPECTED_CATALOG = {
     status: HttpStatus.SERVICE_UNAVAILABLE,
     message: 'OTP storage unavailable'
   },
+  OTP_STORAGE_FAILED: {
+    code: 'notification.otp_storage_failed',
+    status: HttpStatus.INTERNAL_SERVER_ERROR,
+    message: 'OTP storage failed'
+  },
   OTP_INVALID_CODE: {
     code: 'notification.otp_invalid_code',
     status: HttpStatus.UNAUTHORIZED,

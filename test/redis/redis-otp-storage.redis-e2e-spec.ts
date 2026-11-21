@@ -220,7 +220,7 @@ describe('RedisOtpStorage against a real Redis', () => {
       expect(caught).toMatchObject({ code: 'notification.otp_storage_unavailable' })
     })
 
-    it('should leave a defect of the store as it is', async () => {
+    it('should answer a defect of the store with OTP_STORAGE_FAILED, not as an outage', async () => {
       const client = new Redis(container.getMappedPort(REDIS_PORT), container.getHost())
       // A wrong-type value under the key the store reads makes the Lua script error: a reply that
       // names a fault, not an outage.
@@ -243,8 +243,7 @@ describe('RedisOtpStorage against a real Redis', () => {
         .catch((error: unknown) => error)
       client.disconnect()
 
-      expect(caught).toBeInstanceOf(Error)
-      expect(caught).not.toMatchObject({ code: 'notification.otp_storage_unavailable' })
+      expect(caught).toMatchObject({ code: 'notification.otp_storage_failed' })
     })
   })
 })

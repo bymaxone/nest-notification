@@ -255,7 +255,20 @@ function sendOutcomeOf(progress: SendProgress, error: unknown): 'sent' | 'failed
   if (progress.stage === 'failed') {
     return 'failed'
   }
-  return error instanceof NotificationException ? 'rejected' : 'failed'
+  return isLibraryError(error) ? 'rejected' : 'failed'
+}
+
+/**
+ * Whether what a send threw is one of the library's own errors. The class check runs on a value
+ * that can come from host code, and a revoked or trapped proxy throws from it, so a check that
+ * cannot run counts as no and must not cost the send its metric.
+ */
+function isLibraryError(error: unknown): boolean {
+  try {
+    return error instanceof NotificationException
+  } catch {
+    return false
+  }
 }
 
 /** Transactional email service. */
@@ -290,7 +303,7 @@ export class EmailService {
    * @returns `true` when both hold.
    */
   isConfigured(): boolean {
-    return Boolean(this.options.email) && this.provider.isConfigured()
+    return Boolean(this.options.email) && this.providerConfigured()
   }
 
   /**
@@ -354,7 +367,7 @@ export class EmailService {
     const recipient = this.maskRecipients(input.to)
     const result = await this.deliver(sendOptions, input, recipient, progress)
     await this.audit(
-      this.auditEntry('sent', input.tenantId, recipient, input.userId, {
+      this.auditEntry('sent', this.providerName(), input.tenantId, recipient, input.userId, {
         messageId: result.messageId
       })
     )
@@ -412,14 +425,16 @@ export class EmailService {
         input.auditRedactValues,
         sendOptions
       )
+      // Read once: the audit entry and the error then name the provider alike.
+      const providerName = this.providerName()
       await this.audit(
-        this.auditEntry('failed', input.tenantId, recipient, input.userId, {
+        this.auditEntry('failed', providerName, input.tenantId, recipient, input.userId, {
           errorMessage: readRedactedMessage(error, secretValues)
         })
       )
       throw new NotificationException(
         'EMAIL_SEND_FAILED',
-        { providerName: readHostName(() => this.provider.name) },
+        { providerName },
         {
           cause: secretValues.length > 0 ? scrubValuesFromErrorChain(error, secretValues) : error,
           ...status
@@ -468,9 +483,31 @@ export class EmailService {
     return this.sendUnobserved(templateSendInput(input, rendered, tags), progress)
   }
 
+  /**
+   * The provider's name as text that is safe to write: bounded, escaped, `[unreadable]` when it cannot be read.
+   *
+   * @internal
+   */
+  private providerName(): string {
+    return readHostName(() => this.provider.name)
+  }
+
+  /**
+   * Whether the provider says it is configured; one that cannot say is not configured.
+   *
+   * @internal
+   */
+  private providerConfigured(): boolean {
+    try {
+      return this.provider.isConfigured()
+    } catch {
+      return false
+    }
+  }
+
   /** Returns the resolved email options or throws when the channel is not configured. */
   private requireEmailOptions(): NonNullable<ResolvedNotificationOptions['email']> {
-    if (!this.options.email || !this.provider.isConfigured()) {
+    if (!this.options.email || !this.providerConfigured()) {
       throw new NotificationException('EMAIL_PROVIDER_NOT_CONFIGURED')
     }
     return this.options.email
@@ -611,6 +648,7 @@ export class EmailService {
   /** Builds an audit entry with the recipient already masked. */
   private auditEntry(
     verb: NotificationLogEntry['verb'],
+    providerName: string,
     tenantId: string,
     recipient: string,
     userId: string | undefined,
@@ -622,7 +660,7 @@ export class EmailService {
       channel: 'email',
       verb,
       recipient,
-      providerName: readHostName(() => this.provider.name),
+      providerName,
       ...(extra.messageId !== undefined ? { messageId: extra.messageId } : {}),
       ...(extra.errorMessage !== undefined ? { errorMessage: extra.errorMessage } : {}),
       ...(extra.status !== undefined ? { deliveryStatus: extra.status } : {}),
@@ -674,15 +712,16 @@ export class EmailService {
       readAttachedStatus(error) ?? extractDeliveryStatus(collectErrorChainMessages(error)),
       input.auditRedactValues
     )
+    const providerName = this.providerName()
     await this.audit(
-      this.auditEntry('failed', input.tenantId, recipient, input.userId, {
+      this.auditEntry('failed', providerName, input.tenantId, recipient, input.userId, {
         errorMessage: WITHHELD_PROVIDER_TEXT,
         ...status
       })
     )
     throw new NotificationException(
       'EMAIL_SEND_FAILED',
-      { providerName: readHostName(() => this.provider.name), ...status },
+      { providerName, ...status },
       unavailableStatus(error)
     )
   }

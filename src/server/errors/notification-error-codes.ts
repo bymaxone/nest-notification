@@ -104,6 +104,15 @@ export const NOTIFICATION_ERROR_DEFINITIONS = {
     status: HttpStatus.SERVICE_UNAVAILABLE,
     message: 'OTP storage unavailable'
   },
+  /**
+   * Raised when the OTP store fails in a way that is not an outage: a method of it threw, rejected
+   * or could not be read. The store's own error is the `cause`; its text is never in the message.
+   */
+  OTP_STORAGE_FAILED: {
+    code: NOTIFICATION_ERROR_CODES.OTP_STORAGE_FAILED,
+    status: HttpStatus.INTERNAL_SERVER_ERROR,
+    message: 'OTP storage failed'
+  },
   /** Reserved: `verify()` returns `{ valid: false, reason: 'invalid_code' }` instead of throwing. */
   OTP_INVALID_CODE: {
     code: NOTIFICATION_ERROR_CODES.OTP_INVALID_CODE,
