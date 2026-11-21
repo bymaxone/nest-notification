@@ -126,6 +126,20 @@ describe('an address whose spelling holds a delimiter', () => {
     }
   )
 
+  it('should mask a quoted local part that holds an escaped quote, whole', () => {
+    expect(maskAddressTokens('relay rejected "first\\"last"@example.com now', () => '#')).toBe(
+      'relay rejected # now'
+    )
+  })
+
+  it('should read a text of quotes that never close in time that follows its length', () => {
+    const started = Date.now()
+
+    maskAddressTokens('"\\"'.repeat(150_000), mask)
+
+    expect(Date.now() - started).toBeLessThan(2_000)
+  })
+
   it('should read many quotes in one pass', () => {
     const started = Date.now()
 

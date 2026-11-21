@@ -16,10 +16,10 @@ const MAX_TOKEN = 512
 /**
  * A token: a run of characters that are neither white space nor one of `<>"(),[]`, in which a
  * quoted string (a quoted local part such as `"first last"@x.com`) counts as one piece whatever it
- * holds. The apostrophe is not a delimiter, since `o'brien@x.com` is an address, and neither is the semicolon, which ends the escape `&#64;` and so cannot end a token (a list of addresses separated by semicolons is one token, and is masked whole). Each quote is
+ * holds, with a backslash escaping the character after it and at most 300 characters between the quotes, so that a text made of opening quotes cannot be read again from each one to its end. The apostrophe is not a delimiter, since `o'brien@x.com` is an address, and neither is the semicolon, which ends the escape `&#64;` and so cannot end a token (a list of addresses separated by semicolons is one token, and is masked whole). Each quote is
  * read at most up to the next quote, so the text is still read in one pass.
  */
-const TOKEN = /(?:"[^"]*"|[^\s<>"(),[\]])+/gu
+const TOKEN = /(?:"(?:[^"\\]|\\.){0,300}"|[^\s<>"(),[\]])+/gu
 
 /**
  * The at-sign, in the forms an address is written with: `@`, fullwidth `\uff20`, small `\ufe6b`, and
