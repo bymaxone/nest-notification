@@ -24,11 +24,12 @@ export function loggableError(error: unknown): Error {
     const source = error as { message?: unknown; name?: unknown; code?: unknown } | null | undefined
     const copy = new Error(escapeAuditString(describeError(error)))
     const name = source?.name
+    const code = source?.code
     if (typeof name === 'string') {
       copy.name = escapeAuditString(name)
     }
-    if (typeof source?.code === 'string') {
-      Object.assign(copy, { code: escapeAuditString(source.code) })
+    if (typeof code === 'string') {
+      Object.assign(copy, { code: escapeAuditString(code) })
     }
     return copy
   } catch {

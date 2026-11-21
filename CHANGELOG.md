@@ -41,6 +41,11 @@ the entries that carry one, is the compatibility contract — read it, not the n
   provider's text"). Each list is read into a copy before anything uses it. A `to: null` is now a refusal of the
   library (`rejected` for the observer), not a `TypeError` (`failed`).
 
+- **A failed delivery releases the cooldown and the entry, whichever step fails.** A `clearCooldown` that threw left the
+  entry behind; both now run and the first failure is the one the caller sees.
+- **The health indicator counts a `verify` it cannot read as present,** so the check runs and reports `down`, and the
+  log copy of an error reads its `code` once.
+
 ### Documentation
 
 - The README lists the answers the library requires of a store, the kinds of the boolean options and of the `send()`

@@ -53,6 +53,7 @@ import { outgoingError } from '../utils/outgoing-error'
 import { normalizeRecipient } from '../utils/recipient'
 import { assertSingleMailbox } from '../utils/recipient-list'
 import { attachCauseIfAbsent, readRedactedMessage } from '../utils/redact'
+import { releaseStored } from '../utils/release-stored'
 import { withStorageFailures } from '../utils/storage-failures'
 import { causeOf, storageCauseOf } from '../utils/store-error-cause'
 import { assertIdentifies, assertPurpose, assertRegisteredPurpose } from '../utils/tenant-scope'
@@ -619,8 +620,7 @@ export class OtpService implements OnModuleInit {
 
   /** Clears the cooldown and deletes the OTP — used to undo a failed delivery. */
   private async releaseOtp(ref: OtpRecipientRef): Promise<void> {
-    await this.storage.clearCooldown(ref.tenantId, ref.recipient, ref.purpose)
-    await this.storage.delete(ref.tenantId, ref.recipient, ref.purpose)
+    await releaseStored(this.storage, ref)
   }
 
   /** Builds the OTP email payload with the auto-injected `{ code, expiresInMinutes, purpose }`. */

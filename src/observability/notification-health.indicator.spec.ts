@@ -76,6 +76,21 @@ describe('NotificationHealthIndicator', () => {
     expect(relay.verify).not.toHaveBeenCalled()
   })
 
+  // A `verify` that cannot be read is counted as present, so the verification runs and the channel
+  // is down, and never up as though there were nothing to verify.
+  it('should be down when reading verify throws', async () => {
+    const relay = provider()
+    Object.defineProperty(relay, 'verify', {
+      get() {
+        throw new Error('verify getter of the host')
+      }
+    })
+
+    const result = await new NotificationHealthIndicator(relay, OPTIONS).check()
+
+    expect(result).toEqual({ status: 'down' })
+  })
+
   it.each(['false', 'yes', 1, {}, null])(
     'should be down, not up, when isConfigured answers %p',
     async (answer) => {

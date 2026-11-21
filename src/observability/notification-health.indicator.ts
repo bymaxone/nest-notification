@@ -39,9 +39,17 @@ interface VerifiableProvider extends IEmailProvider {
   verify(): Promise<void>
 }
 
-/** Whether a provider can verify its transport. */
+/**
+ * Whether a provider can verify its transport. One whose `verify` cannot be read is counted as able
+ * to, so the verification runs, fails, and the channel is `down`, where counting it out would make a
+ * broken provider look like one that has nothing to verify.
+ */
 function canVerify(provider: IEmailProvider): provider is VerifiableProvider {
-  return typeof (provider as Partial<VerifiableProvider>).verify === 'function'
+  try {
+    return typeof (provider as Partial<VerifiableProvider>).verify === 'function'
+  } catch {
+    return true
+  }
 }
 
 /** Whether the provider says it is configured; one that throws is down, and its text goes nowhere. */
