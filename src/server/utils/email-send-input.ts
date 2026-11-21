@@ -46,14 +46,21 @@ function recipients(label: string, value: unknown): string | string[] {
  * Returns the input with each list and flag read once into a copy of the kind the send uses.
  *
  * @param input - The send as the caller gave it.
+ * @param keys - Every field of the send, by name.
  * @returns The same fields, the lists being the copies.
  * @throws NotificationException `INVALID_SCOPE_IDENTIFIER` for a list that is too long or of
  *   another kind, an attachment of no readable content, or a `publishProviderText` that is not a
  *   boolean.
  */
-export function readSendInput<T extends object>(input: T): T {
-  // Each field is read once here, and the copy is what the send goes on with.
-  const read = { ...input } as Record<string, unknown>
+export function readSendInput<T extends object>(input: T, keys: readonly (keyof T & string)[]): T {
+  // Each named field is read once, by property access, and the copy is what the send goes on with.
+  const read: Record<string, unknown> = {}
+  for (const key of keys) {
+    const value: unknown = Reflect.get(input, key)
+    if (value !== undefined) {
+      Reflect.set(read, key, value)
+    }
+  }
   const publish = read.publishProviderText
   if (publish !== undefined && typeof publish !== 'boolean') {
     throw refuseInput(OWNER, 'publishProviderText', 'expected a boolean')

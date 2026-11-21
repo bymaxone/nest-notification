@@ -92,7 +92,7 @@ describe('EmailService observer', () => {
   })
 
   // The README says so: `rejected` is the library's own refusal, and a raw error that never
-  // reaches the provider is `failed`. A recipient of the wrong kind is now the library's refusal.
+  // reaches the provider is `failed`. A recipient of the wrong kind is the library's refusal.
   it('should report a malformed recipient as rejected, a refusal of the library', async () => {
     const observer = recorder()
     const provider = makeProvider()

@@ -6,7 +6,32 @@
 
 import { NotificationException } from '../errors/notification-exception'
 import { MAX_LIST_ENTRIES } from './bounded-list'
-import { readSendInput } from './email-send-input'
+import { readSendInput as readWithKeys } from './email-send-input'
+
+const KEYS = [
+  'tenantId',
+  'to',
+  'subject',
+  'html',
+  'text',
+  'cc',
+  'bcc',
+  'tags',
+  'attachments',
+  'auditRedactValues',
+  'publishProviderText'
+]
+
+/** What the reader hands back, typed loosely enough for the rows to look inside. */
+interface Read extends Record<string, unknown> {
+  attachments?: Array<{ content?: unknown }>
+  tags?: unknown[]
+  auditRedactValues?: unknown[]
+}
+
+function readSendInput(input: object): Read {
+  return readWithKeys<Read>(input as Read, KEYS)
+}
 
 const base = { to: 'a@b.com', subject: 's', html: '<p>x</p>' }
 
@@ -172,5 +197,25 @@ describe('the send input reader', () => {
     const caught = refusal({ ...base, cc: value }) as NotificationException
 
     expect(caught.getResponse()).toMatchObject({ error: { details: { reason, field: 'cc' } } })
+  })
+
+  // A send built from a class: its fields are prototype getters or non-enumerable, and none of them may be lost.
+  it('should keep fields that are inherited, getters or not enumerable', () => {
+    class FromClass {
+      get publishProviderText(): boolean {
+        return false
+      }
+      get auditRedactValues(): string[] {
+        return ['secret']
+      }
+    }
+    const input = Object.assign(new FromClass(), base)
+    Object.defineProperty(input, 'text', { value: 'plain', enumerable: false })
+
+    const read = readSendInput(input)
+
+    expect(read.publishProviderText).toBe(false)
+    expect(read.auditRedactValues).toEqual(['secret'])
+    expect(read.text).toBe('plain')
   })
 })

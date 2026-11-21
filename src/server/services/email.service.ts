@@ -116,6 +116,32 @@ export interface EmailSendInput {
   publishProviderText?: boolean
 }
 
+/**
+ * Every field of {@link EmailSendInput}, read by name: a send whose fields come from a class
+ * (getters, a prototype, non-enumerable properties) keeps every one of them, which a spread of own
+ * enumerable properties would drop. A field the type gains and this list misses fails to compile.
+ */
+const SEND_KEYS = [
+  'tenantId',
+  'to',
+  'subject',
+  'html',
+  'text',
+  'from',
+  'fromName',
+  'replyTo',
+  'cc',
+  'bcc',
+  'tags',
+  'attachments',
+  'userId',
+  'auditRedactValues',
+  'publishProviderText'
+] as const satisfies readonly (keyof EmailSendInput)[]
+
+/** The fields of {@link EmailSendInput} that {@link SEND_KEYS} leaves out; `never` while it lists them all. */
+export type UnlistedSendKey = Exclude<keyof EmailSendInput, (typeof SEND_KEYS)[number]>
+
 /** Input for {@link EmailService.sendTemplate} — the renderer produces the body. */
 export interface EmailSendTemplateInput {
   tenantId: string
@@ -532,11 +558,11 @@ export class EmailService {
   /**
    * Reads the caller's input once. The library's own refusal of a field of the wrong kind passes
    * as it is; an input that cannot be read at all (a getter that throws) is a failed send whose
-   * cause is the caller's error, as it was when the fields were read later.
+   * cause is the caller's error.
    */
   private readInput(raw: EmailSendInput, progress: SendProgress): EmailSendInput {
     try {
-      return readSendInput(raw)
+      return readSendInput(raw, SEND_KEYS)
     } catch (error) {
       if (isLibraryError(error)) {
         throw error
