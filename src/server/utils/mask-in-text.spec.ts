@@ -40,10 +40,14 @@ describe('maskAddressTokens', () => {
     expect(maskAddressTokens(`quoted ${address} here`, () => '#')).toBe('quoted # here')
   })
 
-  it('should split tokens at white space and at the delimiters', () => {
-    expect(
-      maskAddressTokens('a@b.c,d@e.f;"g@h.i"(j@k.l)[m@n.o]\'p@q.r\' s@t.u\tv@w.x', () => '#')
-    ).toBe('#,#;"#"(#)[#]\'#\' #\t#')
+  it('should split tokens at white space, brackets, commas and parentheses', () => {
+    expect(maskAddressTokens('a@b.c,d@e.f(j@k.l)[m@n.o] s@t.u\tv@w.x', () => '#')).toBe(
+      '#,#(#)[#] #\t#'
+    )
+  })
+
+  it('should mask a list of addresses separated by semicolons as one token', () => {
+    expect(maskAddressTokens('to a@b.c;d@e.f done', () => '#')).toBe('to # done')
   })
 
   it('should leave a text without an at-sign as it is', () => {
@@ -87,6 +91,47 @@ describe('maskAddressTokens', () => {
 
   it('should answer an empty text with the empty text', () => {
     expect(maskAddressTokens('', mask)).toBe('')
+  })
+})
+
+describe('an address whose spelling holds a delimiter', () => {
+  it('should mask an address with an apostrophe in its local part whole', () => {
+    const asked: string[] = []
+
+    const out = maskAddressTokens("rejected o'brien@x.com now", (address) => {
+      asked.push(address)
+      return '#'
+    })
+
+    expect(out).toBe('rejected # now')
+    expect(asked).toEqual(["o'brien@x.com"])
+  })
+
+  it('should mask a quoted local part with white space in it, brackets kept', () => {
+    expect(maskAddressTokens('550 <"first last"@x.com> unknown', () => '#')).toBe('550 <#> unknown')
+  })
+
+  it('should mask a quoted string that holds the at-sign itself', () => {
+    expect(maskAddressTokens('bad "a@b c" here', () => '#')).toBe('bad # here')
+  })
+
+  it('should end a token at a quote that is never closed, and mask the part before it', () => {
+    expect(maskAddressTokens('a@b.c"unclosed text', () => '#')).toBe('#"unclosed text')
+  })
+
+  it.each(['bob%40x.com', 'bob&#64;x.com', 'bob&#x40;x.com', 'bob&#X040;x.com', 'bob\\u0040x.com'])(
+    'should mask an address whose at-sign is written as the escape in %s',
+    (address) => {
+      expect(maskAddressTokens(`got ${address} here`, () => '#')).toBe('got # here')
+    }
+  )
+
+  it('should read many quotes in one pass', () => {
+    const started = Date.now()
+
+    maskAddressTokens('"x '.repeat(200_000), mask)
+
+    expect(Date.now() - started).toBeLessThan(2_000)
   })
 })
 

@@ -27,7 +27,8 @@ the entries that carry one, is the compatibility contract — read it, not the n
   the store's or the provider's own text, which can quote the address it refused. Every token of that text that holds an
   at-sign (`@`, fullwidth `\uff20` or small `\ufe6b`) is replaced, whole, by what `audit.maskRecipient` answers for it,
   whoever the address belongs to and however it is spelled (`550 <bob@x.com> unknown` keeps its brackets). A token is a
-  run of characters that are not white space and not one of `<>"'(),;[]`. Words that merely contain an at-sign are
+  run of characters that are not white space and not one of `<>"(),[]`, a quoted string counting as one piece
+  (`"first last"@x.com`), and the escapes `%40`, `&#64;`, `&#x40;` and `\u0040` count as the at-sign. Words that merely contain an at-sign are
   masked too, since a missed address is the worse mistake; a recipient that is not an address (a phone number) is
   replaced where the OTP path wrote it exactly.
 - **A failed `verify()` leaves the way a failed `generate()` does,** with the guess removed from the error's chain and a

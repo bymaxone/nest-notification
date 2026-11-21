@@ -10,23 +10,28 @@
  * belongs to. Over-masking a word of error text is the accepted price; a missed address is not.
  */
 
-/** The longest token handed to the mask whole; a longer one is still replaced, from its first characters. */
+/** The longest token handed to the mask whole; a longer one that holds an at-sign is still replaced, from its first characters. */
 const MAX_TOKEN = 512
 
 /**
- * A token: the longest run of characters that are neither white space nor one of `<>"'(),;[]`. The
- * pattern is one character class repeated, so it is read in one pass over the text.
+ * A token: a run of characters that are neither white space nor one of `<>"(),[]`, in which a
+ * quoted string (a quoted local part such as `"first last"@x.com`) counts as one piece whatever it
+ * holds. The apostrophe is not a delimiter, since `o'brien@x.com` is an address, and neither is the semicolon, which ends the escape `&#64;` and so cannot end a token (a list of addresses separated by semicolons is one token, and is masked whole). Each quote is
+ * read at most up to the next quote, so the text is still read in one pass.
  */
-const TOKEN = /[^\s<>"'(),;[\]]+/gu
+const TOKEN = /(?:"[^"]*"|[^\s<>"(),[\]])+/gu
 
-/** The at-sign, in the three forms an address is written with: `@`, fullwidth `＠`, small `﹫`. */
-const AT_SIGN = /[@＠﹫]/u
+/**
+ * The at-sign, in the forms an address is written with: `@`, fullwidth `\uff20`, small `\ufe6b`, and
+ * the escapes a provider's text may carry for it (`%40`, `&#64;`, `&#x40;`, `\u0040`).
+ */
+const AT_SIGN = /[@\uff20\ufe6b]|%40|&#0*64;|&#x0*40;|\\u0*40/iu
 
 /**
  * Replaces every token of `text` that holds an at-sign with what the mask answers for it. The whole
- * token goes (`<bob@x.com>` keeps its brackets and loses the address), and a token longer than
- * {@link MAX_TOKEN} is replaced too, the mask being asked for its first characters, so a long run
- * cannot be a way to keep an address in the row.
+ * token goes (`<bob@x.com>` keeps its brackets and loses the address), and a token that holds an
+ * at-sign and is longer than {@link MAX_TOKEN} is replaced too, the mask being asked for its first
+ * characters, so a long run cannot be a way to keep an address in the row.
  *
  * @param text - The text an audit entry would carry.
  * @param mask - `audit.maskRecipient`, asked once for each distinct token.
