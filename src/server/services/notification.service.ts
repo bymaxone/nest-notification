@@ -89,9 +89,9 @@ export class NotificationService implements OnModuleInit {
    * @throws NotificationException `CHANNEL_DISABLED` (channel not configured) or
    * `EMAIL_MISSING_BODY` (email payload has neither a template nor subject+html).
    */
-  async dispatch(request: DispatchInput): Promise<DispatchResult> {
+  async dispatch(input: DispatchInput): Promise<DispatchResult> {
     // The request is read once: the channel that routes is the channel whose payload is used.
-    const { channel, tenantId, payload } = request
+    const { channel, tenantId, payload } = input
     if (channel === 'email') {
       return { channel: 'email', messageId: await this.dispatchEmail(tenantId, payload) }
     }

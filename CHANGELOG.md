@@ -64,7 +64,7 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 #### Apply to a derived backend
 
-No declaration changes. A configuration that was accepted before now fails when the module is built: a boolean option
+The only declaration change is the name of the parameter of `generate()`, `consume()` and `getStatus()` (`raw`, where it was `input`); no type changes. A configuration that was accepted before now fails when the module is built: a boolean option
 given as a string, a `maskRecipient` that is not a function, a `perPurpose` of `null`. A custom `IOtpStorage` that
 answered `tryAcquireCooldown`, `deleteIfCode` or `isConfigured` with something other than a boolean, `recordFailure`
 with something other than an integer of at least `1`, or `consumeAttempt` with an unknown status or an entry of the
