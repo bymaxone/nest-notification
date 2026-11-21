@@ -224,3 +224,57 @@ describe('OtpService around the store it is given', () => {
     expect(calls).toEqual(expect.arrayContaining(['tryAcquireCooldown', 'set']))
   })
 })
+
+/** What the failed-generate audit entry says, for a store whose `set` rejects with `failure`. */
+async function auditedErrorMessage(failure: unknown): Promise<unknown> {
+  const audit = makeAudit()
+  const service = new OtpService(
+    makeOptions({}),
+    failing({ set: () => Promise.reject(failure) }),
+    audit
+  )
+
+  await catching(service.generate(base))
+
+  return audit.create.mock.calls.map((call) => call[0]).find((entry) => entry.verb === 'failed')
+    ?.metadata?.errorMessage
+}
+
+// The answer's own message is the generic one and names no cause, so the audit entry reads the
+// store's error, for an outage and for any other failure of it; for the library's own error it reads
+// the error itself and never a cause that error happens to carry.
+describe('OtpService audit entry of a failed generate', () => {
+  it('should carry the text of the store error when the store is unavailable', async () => {
+    expect(await auditedErrorMessage(CLOSED())).toBe('Connection is closed.')
+  })
+
+  it('should carry the text of the store error when the store fails for another reason', async () => {
+    expect(await auditedErrorMessage(new TypeError('defect of the store'))).toBe(
+      'defect of the store'
+    )
+  })
+
+  it('should carry the message of a library error of the store, not the cause it carries', async () => {
+    const own = new NotificationException(
+      'INVALID_SCOPE_IDENTIFIER',
+      { reason: 'x' },
+      { cause: new Error('cause of the library error') }
+    )
+
+    expect(await auditedErrorMessage(own)).toBe('Notification Exception')
+  })
+
+  it('should name the store in the details of OTP_STORAGE_FAILED as it does for an outage', async () => {
+    const service = new OtpService(
+      makeOptions({}),
+      failing({ set: () => Promise.reject(new TypeError('defect of the store')) }),
+      makeAudit()
+    )
+
+    const caught = (await catching(service.generate(base))) as NotificationException
+
+    expect(caught.getResponse()).toMatchObject({
+      error: { code: 'notification.otp_storage_failed', details: { providerName: 'memory' } }
+    })
+  })
+})
