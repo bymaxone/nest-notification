@@ -25,7 +25,7 @@ the entries that carry one, is the compatibility contract — read it, not the n
 ### Documentation
 
 - The README states how a configured name is written into a line, and its bundle budget row moves from `40.12 KB` to
-  `40.28 KB` for the helper.
+  `40.26 KB` for the helper.
 
 #### Apply to a derived backend
 
