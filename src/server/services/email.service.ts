@@ -271,6 +271,23 @@ function isLibraryError(error: unknown): boolean {
   }
 }
 
+/** The provider's name as text that is safe to write: bounded, escaped, `[unreadable]` when it cannot be read. */
+function providerNameOf(provider: IEmailProvider): string {
+  return readHostName(() => provider.name)
+}
+
+/**
+ * Whether the provider says it is configured. One that throws is answered with
+ * `EMAIL_PROVIDER_NOT_CONFIGURED`, its own error the cause, and never with a quieter path.
+ */
+function providerConfigured(provider: IEmailProvider): boolean {
+  try {
+    return provider.isConfigured()
+  } catch (error) {
+    throw new NotificationException('EMAIL_PROVIDER_NOT_CONFIGURED', undefined, { cause: error })
+  }
+}
+
 /** Transactional email service. */
 @Injectable()
 export class EmailService {
@@ -303,7 +320,7 @@ export class EmailService {
    * @returns `true` when both hold.
    */
   isConfigured(): boolean {
-    return Boolean(this.options.email) && this.providerConfigured()
+    return Boolean(this.options.email) && providerConfigured(this.provider)
   }
 
   /**
@@ -367,9 +384,16 @@ export class EmailService {
     const recipient = this.maskRecipients(input.to)
     const result = await this.deliver(sendOptions, input, recipient, progress)
     await this.audit(
-      this.auditEntry('sent', this.providerName(), input.tenantId, recipient, input.userId, {
-        messageId: result.messageId
-      })
+      this.auditEntry(
+        'sent',
+        providerNameOf(this.provider),
+        input.tenantId,
+        recipient,
+        input.userId,
+        {
+          messageId: result.messageId
+        }
+      )
     )
     return { messageId: result.messageId }
   }
@@ -426,7 +450,7 @@ export class EmailService {
         sendOptions
       )
       // Read once: the audit entry and the error then name the provider alike.
-      const providerName = this.providerName()
+      const providerName = providerNameOf(this.provider)
       await this.audit(
         this.auditEntry('failed', providerName, input.tenantId, recipient, input.userId, {
           errorMessage: readRedactedMessage(error, secretValues)
@@ -483,31 +507,9 @@ export class EmailService {
     return this.sendUnobserved(templateSendInput(input, rendered, tags), progress)
   }
 
-  /**
-   * The provider's name as text that is safe to write: bounded, escaped, `[unreadable]` when it cannot be read.
-   *
-   * @internal
-   */
-  private providerName(): string {
-    return readHostName(() => this.provider.name)
-  }
-
-  /**
-   * Whether the provider says it is configured; one that cannot say is not configured.
-   *
-   * @internal
-   */
-  private providerConfigured(): boolean {
-    try {
-      return this.provider.isConfigured()
-    } catch {
-      return false
-    }
-  }
-
   /** Returns the resolved email options or throws when the channel is not configured. */
   private requireEmailOptions(): NonNullable<ResolvedNotificationOptions['email']> {
-    if (!this.options.email || !this.providerConfigured()) {
+    if (!this.options.email || !providerConfigured(this.provider)) {
       throw new NotificationException('EMAIL_PROVIDER_NOT_CONFIGURED')
     }
     return this.options.email
@@ -712,7 +714,7 @@ export class EmailService {
       readAttachedStatus(error) ?? extractDeliveryStatus(collectErrorChainMessages(error)),
       input.auditRedactValues
     )
-    const providerName = this.providerName()
+    const providerName = providerNameOf(this.provider)
     await this.audit(
       this.auditEntry('failed', providerName, input.tenantId, recipient, input.userId, {
         errorMessage: WITHHELD_PROVIDER_TEXT,

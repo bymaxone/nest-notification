@@ -19,15 +19,17 @@ the entries that carry one, is the compatibility contract — read it, not the n
   rejects or cannot be read, and is not an outage, is answered with this code and no longer reaches the caller as the
   store's own object. An outage keeps `OTP_STORAGE_UNAVAILABLE` (503). The store's error is the `cause`, a log-safe
   copy, and its text is not in the message or the body. A method whose getter throws counts as present, so the call
-  fails with the code each time, and a store whose `isConfigured()` throws is not configured.
+  fails with the code each time, and a store whose `isConfigured()` throws is answered with `OTP_STORAGE_NOT_CONFIGURED`, its error the
+  cause.
 
 ### Fixed
 
 - **A send whose renderer rejected with a revoked or trapped proxy is reported.** The class check that sorts a send into
   `rejected` or `failed` ran unguarded, so the proxy's own error escaped and the send metric was not reported. The check
   now counts as "no" when it cannot run, and the send is reported as `failed`.
-- **An email provider whose `isConfigured()` throws is not configured.** It was the host's error, raised from
-  `send()`; the send is now refused with `EMAIL_PROVIDER_NOT_CONFIGURED`.
+- **A provider whose `isConfigured()` throws is refused with `EMAIL_PROVIDER_NOT_CONFIGURED`.** The host's error was
+  raised from `send()` and from start-up; it is now the cause of the refusal, which still fails start-up, and the health
+  indicator reports `down` and says nothing of it.
 - **The provider name is read once per failed send.** The audit entry and the `EMAIL_SEND_FAILED` details used two
   reads, which a getter could answer differently.
 - **The audit repository's `name`, a log copy's `name` and the storage name in the `OTP_FAILURES_NOT_CARRIED` line are
@@ -43,7 +45,8 @@ the entries that carry one, is the compatibility contract — read it, not the n
   the module is built, so a getter that throws there fails the build with the host's own error.
 - 1.4.21 said a storage failure reaches the caller as the object the store threw; from this release it is the cause of
   `OTP_STORAGE_FAILED`.
-- The README's bundle budget row moves from `40.27 KB` to `40.61 KB`, the server budget.
+- The README's bundle budget row moves from `40.27 KB` to `40.65 KB` for the server and from `2.66 KB` to `2.69 KB` for the observability entry, the
+  budgets.
 
 #### Apply to a derived backend
 
@@ -51,8 +54,9 @@ the entries that carry one, is the compatibility contract — read it, not the n
 changes. A caller that catches what `generate()`, `verify()` or `consumeAttempt` throws and compared it with the error
 its own store raised now receives a `NotificationException` with `code: 'notification.otp_storage_failed'`; read
 `error.cause` for what the store threw, and map the code to the response you want (the default is 500). A store whose
-failures are outages is unaffected, and so is one that throws the library's own errors. An email provider whose
-`isConfigured()` throws now ends a send in `EMAIL_PROVIDER_NOT_CONFIGURED`.
+failures are outages is unaffected, and so is one that throws the library's own errors. An email provider
+or store whose `isConfigured()` throws now ends a send, an accessor and start-up in `EMAIL_PROVIDER_NOT_CONFIGURED` or
+`OTP_STORAGE_NOT_CONFIGURED`, its error the cause, where it used to be the host's own error.
 
 ## [1.4.21] - 2026-11-20
 

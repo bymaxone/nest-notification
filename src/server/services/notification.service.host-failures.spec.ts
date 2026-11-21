@@ -44,26 +44,30 @@ function withThrowingStore(): { facade: NotificationService; set: jest.SpyInstan
 }
 
 describe('NotificationService with a channel that cannot say whether it is configured', () => {
-  it('should not enable an email channel whose provider throws, and refuse it', async () => {
+  it('should refuse an email channel whose provider throws, with the code and the cause', async () => {
     const { facade, send } = withThrowingProvider()
+    const refusal = expect.objectContaining({
+      code: 'notification.email_provider_not_configured',
+      cause: expect.objectContaining({ message: 'isConfigured of the host' })
+    })
 
-    expect(facade.getEnabledChannels()).toEqual([])
-    expect(() => facade.getEmail()).toThrow(
-      expect.objectContaining({ code: 'notification.channel_disabled' })
-    )
+    expect(() => facade.getEnabledChannels()).toThrow(refusal)
+    expect(() => facade.getEmail()).toThrow(refusal)
     await expect(
       facade.dispatch({ channel: 'email', tenantId: 'acme', payload: baseInput })
-    ).rejects.toMatchObject({ code: 'notification.channel_disabled' })
+    ).rejects.toEqual(refusal)
     expect(send).not.toHaveBeenCalled()
   })
 
-  it('should not enable an OTP channel whose store throws, and refuse it', async () => {
+  it('should refuse an OTP channel whose store throws, with the code and the cause', async () => {
     const { facade, set } = withThrowingStore()
+    const refusal = expect.objectContaining({
+      code: 'notification.otp_storage_not_configured',
+      cause: expect.objectContaining({ message: 'isConfigured of the host' })
+    })
 
-    expect(facade.getEnabledChannels()).toEqual([])
-    expect(() => facade.getOtp()).toThrow(
-      expect.objectContaining({ code: 'notification.channel_disabled' })
-    )
+    expect(() => facade.getEnabledChannels()).toThrow(refusal)
+    expect(() => facade.getOtp()).toThrow(refusal)
     await expect(
       facade.dispatch({
         channel: 'otp',
@@ -75,7 +79,18 @@ describe('NotificationService with a channel that cannot say whether it is confi
           deliverVia: 'manual'
         }
       })
-    ).rejects.toMatchObject({ code: 'notification.channel_disabled' })
+    ).rejects.toEqual(refusal)
     expect(set).not.toHaveBeenCalled()
+  })
+
+  // Start-up stays fail-closed: the boot hook refuses, it does not warn and carry on with the
+  // channel disabled.
+  it.each([
+    ['an email provider', withThrowingProvider, 'notification.email_provider_not_configured'],
+    ['an OTP store', withThrowingStore, 'notification.otp_storage_not_configured']
+  ])('should fail start-up when isConfigured of %s throws', (_label, build, code) => {
+    const { facade } = build()
+
+    expect(() => facade.onModuleInit()).toThrow(expect.objectContaining({ code }))
   })
 })

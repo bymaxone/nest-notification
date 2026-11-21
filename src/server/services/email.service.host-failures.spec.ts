@@ -5,6 +5,7 @@
  * @layer application
  */
 
+import { NotificationException } from '../errors/notification-exception'
 import type { NotificationLogEntry } from '../interfaces/notification-log-repository.interface'
 
 import {
@@ -68,17 +69,28 @@ describe('EmailService with a provider that cannot be read', () => {
     expect(reads).toBe(1)
   })
 
-  it('should refuse a send, not fail it with the host error, when isConfigured throws', async () => {
+  // A provider that cannot say whether it is configured is a host fault: the answer is the refusal
+  // with the host's error as the cause, so neither the send nor the start-up gets a quieter path.
+  it('should refuse with EMAIL_PROVIDER_NOT_CONFIGURED and the cause when isConfigured throws', async () => {
     const provider = makeProvider()
     provider.isConfigured.mockImplementation(() => {
       throw new Error('isConfigured of the host')
     })
     const service = new EmailService(makeOptions(), provider, makeRenderer(), makeAudit())
 
-    await expect(service.send(baseInput)).rejects.toMatchObject({
-      code: 'notification.email_provider_not_configured'
-    })
-    expect(service.isConfigured()).toBe(false)
+    const sending = (await service.send(baseInput).catch((error: unknown) => error)) as {
+      code: string
+      cause: Error
+      message: string
+    }
+
+    expect(sending).toBeInstanceOf(NotificationException)
+    expect(sending.code).toBe('notification.email_provider_not_configured')
+    expect(sending.cause.message).toBe('isConfigured of the host')
+    expect(sending.message).not.toContain('host')
+    expect(() => service.isConfigured()).toThrow(
+      expect.objectContaining({ code: 'notification.email_provider_not_configured' })
+    )
     expect(provider.send).not.toHaveBeenCalled()
   })
 })

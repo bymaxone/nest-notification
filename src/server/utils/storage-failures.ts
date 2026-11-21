@@ -106,12 +106,13 @@ export function withStorageFailures(storage: IOtpStorage): IOtpStorage {
   const name = readHostName(() => storage.name)
   const wrapped: Record<string, unknown> = {
     name,
-    // A store that cannot say whether it is configured is not configured.
+    // A store that cannot say whether it is configured is answered with the refusal, its own error
+    // the cause, and never with a quieter path.
     isConfigured: (): boolean => {
       try {
         return storage.isConfigured()
-      } catch {
-        return false
+      } catch (error) {
+        throw new NotificationException('OTP_STORAGE_NOT_CONFIGURED', undefined, { cause: error })
       }
     }
   }

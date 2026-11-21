@@ -161,12 +161,21 @@ describe('withStorageFailures', () => {
     })
   })
 
-  it('should treat a store that cannot say whether it is configured as not configured', () => {
+  it('should refuse with OTP_STORAGE_NOT_CONFIGURED and the cause when isConfigured throws', () => {
     const store = new InMemoryOtpStorage()
     store.isConfigured = () => {
       throw new Error('isConfigured of the host')
     }
 
-    expect(withStorageFailures(store).isConfigured()).toBe(false)
+    let caught: unknown
+    try {
+      withStorageFailures(store).isConfigured()
+    } catch (error) {
+      caught = error
+    }
+
+    expect(caught).toMatchObject({ code: 'notification.otp_storage_not_configured' })
+    expect((caught as { cause: Error }).cause.message).toBe('isConfigured of the host')
+    expect((caught as Error).message).not.toContain('host')
   })
 })
