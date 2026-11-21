@@ -43,6 +43,7 @@ import { AuditWriteWarning } from '../utils/audit-write-warning'
 import { isCodeDigest } from '../utils/code-digest'
 import { generateOtpCode } from '../utils/code-generator'
 import { cooldownExpiresAt, toRetryAfterHeader } from '../utils/cooldown-helpers'
+import { assertFailureCount } from '../utils/failure-count'
 import { readHostName, textOfHostName } from '../utils/host-name'
 import { logEvent } from '../utils/log-event'
 import { loggableError } from '../utils/loggable-error'
@@ -551,7 +552,10 @@ export class OtpService implements OnModuleInit {
     if (live === null) {
       return null
     }
-    return storage.recordFailure(scope.tenantId, scope.recipient, scope.purpose, ttlSeconds)
+    return assertFailureCount(
+      await storage.recordFailure(scope.tenantId, scope.recipient, scope.purpose, ttlSeconds),
+      readHostName(() => storage.name)
+    )
   }
 
   /** How a generated code reaches the recipient: by email when asked or when an email channel exists. */
