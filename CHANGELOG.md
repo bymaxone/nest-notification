@@ -11,6 +11,28 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 ## [Unreleased]
 
+## [1.4.20] - 2026-11-20
+
+### Fixed
+
+- **A name from the host no longer reaches a log line or an error unbounded and unescaped.** The storage's `name`
+  (in the `consumeOnVerify` refusal and in the `OTP_FAILURES_NOT_CARRIED` line), `global.defaultLocale` (in the
+  `OTP_TEMPLATE_NOT_RESOLVED` line) and the class name `forRootAsync` refuses to construct are cut at 200
+  characters, marked with `…`, and have every control, format, line-separator and paragraph-separator
+  character, and each lone surrogate, written as a visible `\uXXXX` sequence (`\u{XXXXX}` past U+FFFF). A name with a line feed could start a
+  second log record; one with a bidi override could reorder the text.
+
+### Documentation
+
+- The README states how a configured name is written into a line, and its bundle budget row moves from `40.12 KB` to
+  `40.26 KB` for the helper.
+
+#### Apply to a derived backend
+
+No declaration changes and no option changes. A host whose storage `name` or `global.defaultLocale` is an ordinary
+short word sees no change in any line or error. A name longer than 200 characters or with an invisible character
+is now written cut or escaped.
+
 ## [1.4.19] - 2026-11-20
 
 ### Fixed
@@ -1641,7 +1663,8 @@ rejected at startup rather than failing on the first send.
 
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.4.19...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.4.20...HEAD
+[1.4.20]: https://github.com/bymaxone/nest-notification/compare/v1.4.19...v1.4.20
 [1.4.19]: https://github.com/bymaxone/nest-notification/compare/v1.4.18...v1.4.19
 [1.4.18]: https://github.com/bymaxone/nest-notification/compare/v1.4.17...v1.4.18
 [1.4.17]: https://github.com/bymaxone/nest-notification/compare/v1.4.16...v1.4.17

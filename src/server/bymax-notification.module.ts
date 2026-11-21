@@ -50,6 +50,7 @@ import { NoOpNotificationLogRepository } from './providers/no-op-notification-lo
 import { EmailService } from './services/email.service'
 import { NotificationService } from './services/notification.service'
 import { OtpService } from './services/otp.service'
+import { textOfHostName } from './utils/host-name'
 import { logEvent } from './utils/log-event'
 
 /** A DI provider that carries a `provide` token (excludes bare-class providers). */
@@ -423,7 +424,7 @@ function instantiate<T>(valueOrClass: T | (new (...args: never[]) => T)): T {
   const ctor = valueOrClass as new (...args: never[]) => T
   if (ctor.length > 0) {
     throw new Error(
-      `[BymaxNotificationModule] forRootAsync cannot construct '${ctor.name}': its constructor ` +
+      `[BymaxNotificationModule] forRootAsync cannot construct '${textOfHostName(ctor.name)}': its constructor ` +
         'declares required parameters and would need NestJS DI. Pass a ready instance instead of ' +
         'a DI-dependent class in async mode.'
     )
