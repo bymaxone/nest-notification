@@ -17,12 +17,8 @@ const isString = (entry: unknown): entry is string => typeof entry === 'string'
 const isObject = (entry: unknown): entry is object => typeof entry === 'object' && entry !== null
 
 /** An attachment's content is text or bytes; anything else has no length the budget can read. */
-function isAttachment(entry: unknown): entry is { content: string | Uint8Array } {
-  if (!isObject(entry)) {
-    return false
-  }
-  const content: unknown = Reflect.get(entry, 'content')
-  return typeof content === 'string' || content instanceof Uint8Array
+function hasReadableContent(entry: { content?: unknown }): boolean {
+  return typeof entry.content === 'string' || entry.content instanceof Uint8Array
 }
 
 /** A recipient field: one string or a bounded list of them, read into a copy. */
@@ -37,7 +33,9 @@ function recipients(label: string, value: unknown): string | string[] {
         isString,
         (reason) =>
           new NotificationException('EMAIL_INVALID_RECIPIENT', {
-            reason: 'too_many_recipients',
+            reason: reason.startsWith('expected at most')
+              ? 'too_many_recipients'
+              : 'not_a_list_of_strings',
             field: label,
             detail: reason
           })
@@ -66,20 +64,25 @@ export function readSendInput<T extends object>(input: T): T {
       Reflect.set(read, label, recipients(label, value))
     }
   }
-  const lists: ReadonlyArray<readonly [string, (entry: unknown) => boolean]> = [
-    ['attachments', isAttachment],
-    ['tags', isObject],
-    ['auditRedactValues', isString]
-  ]
-  for (const [label, isEntry] of lists) {
-    const value: unknown = Reflect.get(read, label)
-    if (value !== undefined) {
-      Reflect.set(
-        read,
-        label,
-        boundedList(OWNER, label, value, isEntry as (e: unknown) => e is unknown)
-      )
-    }
+  const values: unknown = read.auditRedactValues
+  if (values !== undefined) {
+    read.auditRedactValues = boundedList(OWNER, 'auditRedactValues', values, isString)
+  }
+  // An entry is copied, each of its fields read once: a getter that answers a small `content` to the
+  // check and the byte budget and a large one to the provider is read once, here, and never again.
+  const tags: unknown = read.tags
+  if (tags !== undefined) {
+    read.tags = boundedList(OWNER, 'tags', tags, isObject).map((tag) => ({ ...tag }))
+  }
+  const attachments: unknown = read.attachments
+  if (attachments !== undefined) {
+    read.attachments = boundedList(OWNER, 'attachments', attachments, isObject).map((entry) => {
+      const copy: { content?: unknown } = { ...entry }
+      if (!hasReadableContent(copy)) {
+        throw refuseInput(OWNER, 'attachments', 'an attachment has no readable content')
+      }
+      return copy
+    })
   }
   return read as T
 }

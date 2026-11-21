@@ -128,4 +128,49 @@ describe('the send input reader', () => {
   it('should leave a field that is absent absent', () => {
     expect(Object.keys(readSendInput(base))).toEqual(['to', 'subject', 'html'])
   })
+
+  it('should read the content of an attachment once, so the budget and the provider see one value', () => {
+    let reads = 0
+    const attachment: { filename: string; content?: string } = { filename: 'f' }
+    Object.defineProperty(attachment, 'content', {
+      enumerable: true,
+      get() {
+        reads += 1
+        return reads === 1 ? 'small' : 'x'.repeat(10_000)
+      }
+    })
+
+    const read = readSendInput({ ...base, attachments: [attachment] })
+
+    expect(reads).toBe(1)
+    expect(read.attachments?.[0]?.content).toBe('small')
+    expect(read.attachments?.[0]).not.toBe(attachment)
+  })
+
+  it('should read each field of a tag once and hand on a copy', () => {
+    let reads = 0
+    const tag = { name: 'n' }
+    Object.defineProperty(tag, 'value', {
+      enumerable: true,
+      get() {
+        reads += 1
+        return `v${String(reads)}`
+      }
+    })
+
+    const read = readSendInput({ ...base, tags: [tag] })
+
+    expect(reads).toBe(1)
+    expect(read.tags?.[0]).toEqual({ name: 'n', value: 'v1' })
+  })
+
+  it.each([
+    [5, 'not_a_list_of_strings'],
+    [['a@b.com', 7], 'not_a_list_of_strings'],
+    [Array.from({ length: MAX_LIST_ENTRIES + 1 }, () => 'a@b.com'), 'too_many_recipients']
+  ])('should give the recipient refusal the reason it has', (value, reason) => {
+    const caught = refusal({ ...base, cc: value }) as NotificationException
+
+    expect(caught.getResponse()).toMatchObject({ error: { details: { reason, field: 'cc' } } })
+  })
 })
