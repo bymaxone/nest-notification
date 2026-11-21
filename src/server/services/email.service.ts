@@ -369,10 +369,13 @@ export class EmailService {
    */
   private async sendUnobserved(
     raw: EmailSendInput,
-    progress: SendProgress
+    progress: SendProgress,
+    isRead = false
   ): Promise<{ messageId: string }> {
     const email = this.requireEmailOptions()
-    const input = this.readInput(raw, progress, SEND_KEYS)
+    // A template send has read its input already, and adds a tag of its own to the list; the bound
+    // is the caller's, so the list is not read again with that tag in it.
+    const input = isRead ? raw : this.readInput(raw, progress, SEND_KEYS)
     assertIdentifies('EmailService', 'tenantId', input.tenantId)
     assertBodyParts(input.html, input.text)
     this.guardAttachmentSize(input.attachments, email.maxAttachmentBytes)
@@ -511,7 +514,7 @@ export class EmailService {
       input.auditRedactValues
     )
     const tags: EmailTag[] = [...(input.tags ?? []), { name: 'template', value: input.template }]
-    return this.sendUnobserved(templateSendInput(input, rendered, tags), progress)
+    return this.sendUnobserved(templateSendInput(input, rendered, tags), progress, true)
   }
 
   /** Returns the resolved email options or throws when the channel is not configured. */

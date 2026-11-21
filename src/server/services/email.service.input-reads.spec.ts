@@ -152,3 +152,24 @@ describe('a template send reads its input first', () => {
     })
   })
 })
+
+describe('a template send with the most tags the caller may pass', () => {
+  it('should send 1000 tags of the caller and the tag of the template, 1001 in all', async () => {
+    const { provider, service: email } = service()
+    const tags = Array.from({ length: 1000 }, (_, i) => ({ name: `t${String(i)}`, value: 'v' }))
+
+    await email.sendTemplate({ ...template, tags })
+
+    expect(provider.send.mock.calls[0]?.[0].tags).toHaveLength(1001)
+  })
+
+  it('should still refuse 1001 tags of the caller', async () => {
+    const { renderer, service: email } = service()
+    const tags = Array.from({ length: 1001 }, (_, i) => ({ name: `t${String(i)}`, value: 'v' }))
+
+    const caught: unknown = await email.sendTemplate({ ...template, tags }).catch((e: unknown) => e)
+
+    expect(caught).toBeInstanceOf(NotificationException)
+    expect(renderer.render).not.toHaveBeenCalled()
+  })
+})
