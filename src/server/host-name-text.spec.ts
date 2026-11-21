@@ -34,6 +34,11 @@ function namedStorage(name: string, withDelete: boolean): IOtpStorage {
   return named
 }
 
+/** A class standing where the options expect a storage class, which only the refusal reads. */
+function storageClass(placeholder: unknown): IOtpStorage {
+  return placeholder as IOtpStorage
+}
+
 describe('host names in library text', () => {
   afterEach(() => {
     jest.restoreAllMocks()
@@ -100,7 +105,7 @@ describe('host names in library text', () => {
     const compiling = Test.createTestingModule({
       imports: [
         BymaxNotificationModule.forRootAsync({
-          useFactory: () => ({ otp: { storage: Placeholder as unknown as IOtpStorage } })
+          useFactory: () => ({ otp: { storage: storageClass(Placeholder) } })
         })
       ]
     }).compile()
@@ -154,7 +159,7 @@ describe('host names in library text', () => {
       const compiling = Test.createTestingModule({
         imports: [
           BymaxNotificationModule.forRootAsync({
-            useFactory: () => ({ otp: { storage: Placeholder as unknown as IOtpStorage } })
+            useFactory: () => ({ otp: { storage: storageClass(Placeholder) } })
           })
         ]
       }).compile()
