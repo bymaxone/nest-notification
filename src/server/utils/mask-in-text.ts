@@ -3,6 +3,9 @@
  * @layer utils
  */
 
+/** A character and the combining marks that follow it, or a run of marks with nothing before it. */
+const CLUSTER = /\p{M}+|\P{M}\p{M}*/gu
+
 /** A node of the tree of addresses: the code points that may follow, and the mask where one ends. */
 interface Node {
   next: Map<string, Node>
@@ -22,9 +25,10 @@ interface Folded {
 }
 
 /**
- * Folds a text one character at a time, keeping the code points of each result and where its
- * character began. A character is decomposed (an accented letter and the letter followed by its
- * accent are one), taken to upper case and back, and the sharp s is written `ss`: the result is the
+ * Folds a text one character with its combining marks at a time, keeping the code points of each
+ * result and where its character began. A cluster is decomposed, which also puts its marks in the
+ * canonical order (an accented letter and the letter followed by its accents are one, whatever the
+ * order the accents were written in), taken to upper case and back, and the sharp s is written `ss`: the result is the
  * same for every case and every form a letter is written in and does not depend on the letters
  * around it, where a lower case alone does not (a capital sigma lowers to `\u03c3` and a final
  * sigma is `\u03c2`, and both come back as `\u03c3`). A character whose folded form is longer than itself (`İ` is `i` and a
@@ -36,7 +40,7 @@ function fold(text: string): Folded {
   const origin: number[] = []
   const starts: boolean[] = []
   let index = 0
-  for (const character of text) {
+  for (const character of text.match(CLUSTER) ?? []) {
     Array.from(
       character.normalize('NFD').toUpperCase().toLowerCase().replaceAll('\u00df', 'ss')
     ).forEach((point, offset) => {

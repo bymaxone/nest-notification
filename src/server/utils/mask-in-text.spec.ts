@@ -131,4 +131,20 @@ describe('maskRecipientsInText', () => {
 
     expect(asked).toEqual(['a@b.c'])
   })
+
+  it.each([
+    ['a\u0315\u0300@x.com', 'a\u0300\u0315@x.com'],
+    ['a\u0301\u0323@x.com', '\u1ea1\u0301@x.com'],
+    ['\u1ea1\u0301@x.com', 'a\u0301\u0323@x.com']
+  ])('should find %p when the address is %p, the marks being in another order', (text, address) => {
+    expect(maskRecipientsInText(`550 ${text} unknown`, [address], () => '#')).toBe('550 # unknown')
+  })
+
+  it('should read a run of marks with no letter before it as one character', () => {
+    expect(maskRecipientsInText('\u0301\u0323 a@b.c', ['a@b.c'], () => '#')).toBe('\u0301\u0323 #')
+  })
+
+  it('should answer an empty text with the empty text', () => {
+    expect(maskRecipientsInText('', ['a@b.c'], mask)).toBe('')
+  })
 })
