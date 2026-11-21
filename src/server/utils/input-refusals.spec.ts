@@ -119,7 +119,7 @@ describe('what a list accepts', () => {
 })
 
 describe('assertFunction', () => {
-  it('should accept a function and an absent value, and refuse the rest by kind', () => {
+  it('should accept a function and an absent value, and refuse a string', () => {
     expect(() => assertFunction('audit.maskRecipient', () => 'x')).not.toThrow()
     expect(() => assertFunction('audit.maskRecipient', undefined)).not.toThrow()
     expect(() => assertFunction('audit.maskRecipient', 'x')).toThrow('must be a function')
