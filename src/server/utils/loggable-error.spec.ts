@@ -104,6 +104,21 @@ describe('loggableError', () => {
 
     // The name comes from code that is not ours: a getter can answer differently the second time,
     // so the copy must be made from the one value that was tested.
+    it('should read the code once', () => {
+      let reads = 0
+      const source = new Error('x')
+      Object.defineProperty(source, 'code', {
+        get() {
+          reads += 1
+          return 'E_ONE'
+        }
+      })
+
+      loggableError(source)
+
+      expect(reads).toBe(1)
+    })
+
     it('should read the name once', () => {
       let reads = 0
       const source = {

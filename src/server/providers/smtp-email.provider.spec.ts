@@ -433,13 +433,46 @@ describe('SmtpEmailProvider', () => {
           filename: 'a.pdf',
           content: 'YmFzZTY0',
           contentType: 'application/pdf',
-          encoding: 'base64'
+          encoding: 'base64',
+          cid: undefined,
+          contentDisposition: undefined
         },
         {
           filename: 'b.bin',
           content: Buffer.from('raw'),
           contentType: undefined,
-          encoding: undefined
+          encoding: undefined,
+          cid: undefined,
+          contentDisposition: undefined
+        }
+      ])
+    })
+
+    // An inline image: nodemailer writes `cid` as the Content-ID and `contentDisposition` as the
+    // Content-Disposition, which is what an `<img src="cid:...">` in the body resolves against.
+    it('should hand an inline image to the transport with its content id and disposition', async () => {
+      await new SmtpEmailProvider({ host: 'h' }).send({
+        ...baseOptions,
+        html: '<img src="cid:logo-image">',
+        attachments: [
+          {
+            filename: 'logo.png',
+            content: Buffer.from('png'),
+            contentType: 'image/png',
+            cid: 'logo-image',
+            contentDisposition: 'inline'
+          }
+        ]
+      })
+
+      expect(lastSendPayload()['attachments']).toEqual([
+        {
+          filename: 'logo.png',
+          content: Buffer.from('png'),
+          contentType: 'image/png',
+          encoding: undefined,
+          cid: 'logo-image',
+          contentDisposition: 'inline'
         }
       ])
     })

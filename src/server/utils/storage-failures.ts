@@ -16,6 +16,7 @@ import type { IOtpStorage } from '../interfaces/otp-storage.interface'
 import { isUnavailableError } from './availability'
 import { readHostName } from './host-name'
 import { isLibraryError } from './is-library-error'
+import { checkConfigured, checkStoreResult } from './store-results'
 
 /** The operations of an `IOtpStorage` that return a promise, required and optional alike. */
 const OPERATIONS = [
@@ -98,7 +99,7 @@ export function withStorageFailures(storage: IOtpStorage): IOtpStorage {
     // the cause, and never with a quieter path.
     isConfigured: (): boolean => {
       try {
-        return storage.isConfigured()
+        return checkConfigured(storage.isConfigured())
       } catch (error) {
         throw new NotificationException('OTP_STORAGE_NOT_CONFIGURED', undefined, { cause: error })
       }
@@ -112,9 +113,14 @@ export function withStorageFailures(storage: IOtpStorage): IOtpStorage {
       enumerable: true,
       value: async (...args: unknown[]): Promise<unknown> => {
         try {
-          return await (
-            Reflect.get(storage, operation) as (...a: unknown[]) => Promise<unknown>
-          ).apply(storage, args)
+          return checkStoreResult(
+            operation,
+            await (Reflect.get(storage, operation) as (...a: unknown[]) => Promise<unknown>).apply(
+              storage,
+              args
+            ),
+            name
+          )
         } catch (error) {
           throw translate(name, error)
         }

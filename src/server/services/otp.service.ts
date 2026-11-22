@@ -40,28 +40,25 @@ import type { OtpPurposeConfig } from '../interfaces/notification-module-options
 import type { INotificationObserver } from '../interfaces/notification-observer.interface'
 import type { IOtpStorage, OtpEntry, OtpVerifyResult } from '../interfaces/otp-storage.interface'
 import { AuditWriteWarning } from '../utils/audit-write-warning'
-import { isCodeDigest } from '../utils/code-digest'
 import { generateOtpCode } from '../utils/code-generator'
 import { cooldownExpiresAt, toRetryAfterHeader } from '../utils/cooldown-helpers'
 import { readHostName, textOfHostName } from '../utils/host-name'
 import { logEvent } from '../utils/log-event'
 import { loggableError } from '../utils/loggable-error'
+import { maskAddressTokens, maskExact } from '../utils/mask-in-text'
+import { matchesStoredCode } from '../utils/matches-stored-code'
 import { reportOtp, runInSpan } from '../utils/observe'
+import { outgoingError } from '../utils/outgoing-error'
 import { normalizeRecipient } from '../utils/recipient'
 import { assertSingleMailbox } from '../utils/recipient-list'
-import {
-  attachCauseIfAbsent,
-  coerceRedacted,
-  isSafeError,
-  readRedactedMessage,
-  scrubValuesFromErrorChain
-} from '../utils/redact'
+import { attachCauseIfAbsent, readRedactedMessage } from '../utils/redact'
+import { releaseStored } from '../utils/release-stored'
 import { withStorageFailures } from '../utils/storage-failures'
 import { causeOf, storageCauseOf } from '../utils/store-error-cause'
 import { assertIdentifies, assertPurpose, assertRegisteredPurpose } from '../utils/tenant-scope'
-import { safeCompare } from '../utils/timing-safe-compare'
 import { EmailService } from './email.service'
 import type { EmailSendTemplateInput } from './email.service'
+import { readGenerateInput, readRefInput, readVerifyInput } from './otp-generate-input'
 
 /** Milliseconds in one second. */
 const MS_PER_SECOND = 1000
@@ -217,7 +214,8 @@ export class OtpService implements OnModuleInit {
    * `OTP_EMAIL_DELIVERY_NOT_CONFIGURED`, or rethrows a persistence/delivery error after
    * releasing the cooldown lock.
    */
-  async generate(input: OtpGenerateInput): Promise<OtpGenerateResult> {
+  async generate(raw: OtpGenerateInput): Promise<OtpGenerateResult> {
+    const input = readGenerateInput(raw)
     const otp = this.requireOtpOptions()
     this.assertScope(input)
     const scope = this.keyed(input)
@@ -265,7 +263,18 @@ export class OtpService implements OnModuleInit {
    * @param input - The recipient, purpose and the code to check.
    * @returns Whether the code is valid, and why not when it is not.
    */
-  private async verifyUnobserved(input: OtpVerifyInput): Promise<OtpVerifyResult> {
+  private async verifyUnobserved(raw: OtpVerifyInput): Promise<OtpVerifyResult> {
+    const input = readVerifyInput(raw)
+    try {
+      return await this.verifyChecked(input)
+    } catch (error) {
+      // Whatever the store raised leaves the way a failed generate's does, with the guess removed.
+      throw outgoingError(error, typeof input.code === 'string' ? [input.code] : [], true)
+    }
+  }
+
+  /** The verification, whose failures {@link OtpService.verifyUnobserved} cleans. */
+  private async verifyChecked(input: OtpVerifyInput): Promise<OtpVerifyResult> {
     const otp = this.requireOtpOptions()
     this.assertScope(input)
     const scope = this.keyed(input)
@@ -279,7 +288,7 @@ export class OtpService implements OnModuleInit {
     if (attempt === null) {
       return this.rejectNotFound(scope)
     }
-    if (attempt !== undefined && attempt > cfg.maxAttempts) {
+    if (attempt !== undefined && !(attempt <= cfg.maxAttempts)) {
       return this.rejectMaxAttempts(scope)
     }
     const result = await this.storage.consumeAttempt(scope.tenantId, scope.recipient, scope.purpose)
@@ -290,7 +299,10 @@ export class OtpService implements OnModuleInit {
       return this.rejectMaxAttempts(scope)
     }
     const { entry } = result
-    if (!this.matchesStoredCode(entry.code, scope.code, otp.digestCode)) {
+    if (!(entry.attempts <= entry.maxAttempts)) {
+      return this.rejectMaxAttempts(scope)
+    }
+    if (!matchesStoredCode(entry.code, scope.code, otp.digestCode)) {
       await this.audit(this.otpAuditEntry('failed', scope, { reason: 'invalid_code' }))
       const ofCode = entry.maxAttempts - entry.attempts
       return {
@@ -315,7 +327,8 @@ export class OtpService implements OnModuleInit {
    * @param input - The recipient and purpose.
    * @throws NotificationException `OTP_STORAGE_NOT_CONFIGURED` when the channel is absent.
    */
-  async consume(input: OtpConsumeInput): Promise<void> {
+  async consume(raw: OtpConsumeInput): Promise<void> {
+    const input = readRefInput(raw)
     this.requireOtpOptions()
     this.assertScope(input)
     const scope = this.keyed(input)
@@ -340,7 +353,8 @@ export class OtpService implements OnModuleInit {
    * @param input - The recipient and purpose.
    * @returns Existence, expiry, attempt counters, validation flag, and cooldown.
    */
-  async getStatus(input: OtpStatusInput): Promise<OtpStatusResult> {
+  async getStatus(raw: OtpStatusInput): Promise<OtpStatusResult> {
+    const input = readRefInput(raw)
     this.assertScope(input)
     const scope = this.keyed(input)
     const [entry, cooldownSeconds] = await Promise.all([
@@ -441,14 +455,19 @@ export class OtpService implements OnModuleInit {
       }
       failure = cleanupError
     }
-    const outgoing: unknown = isSafeError(failure)
-      ? scrubValuesFromErrorChain(failure, [code])
-      : coerceRedacted(failure, [code])
+    const outgoing = outgoingError(failure, [code])
     await this.audit(
       this.otpAuditEntry('failed', scope, {
         // `outgoing` is already fully redacted by the scrub above; this read
         // only needs the fail-closed guard, not a second redaction pass.
-        errorMessage: readRedactedMessage(storageCauseOf(outgoing) ?? outgoing)
+        errorMessage: maskExact(
+          maskAddressTokens(
+            readRedactedMessage(storageCauseOf(outgoing) ?? outgoing),
+            this.options.audit.maskRecipient
+          ),
+          scope.recipient,
+          this.options.audit.maskRecipient
+        )
       })
     )
     return outgoing
@@ -609,8 +628,7 @@ export class OtpService implements OnModuleInit {
 
   /** Clears the cooldown and deletes the OTP — used to undo a failed delivery. */
   private async releaseOtp(ref: OtpRecipientRef): Promise<void> {
-    await this.storage.clearCooldown(ref.tenantId, ref.recipient, ref.purpose)
-    await this.storage.delete(ref.tenantId, ref.recipient, ref.purpose)
+    await releaseStored(this.storage, ref)
   }
 
   /** Builds the OTP email payload with the auto-injected `{ code, expiresInMinutes, purpose }`. */
@@ -722,25 +740,6 @@ export class OtpService implements OnModuleInit {
    */
   private keyed<T extends OtpRecipientRef>(input: T): T {
     return { ...input, recipient: normalizeRecipient(input.recipient) }
-  }
-
-  /**
-   * Compares a guessed code with the stored value in constant time.
-   *
-   * A stored digest is recomputed from the guess. A digest that cannot be recomputed (no
-   * secret configured, or a different one) never matches, and the digest string itself is
-   * not accepted as a code. A stored value that is not a digest is a plaintext code written
-   * while no secret was set; it is compared directly and ages out with its TTL.
-   */
-  private matchesStoredCode(
-    stored: string,
-    guess: string,
-    digestCode: ((code: string) => string) | undefined
-  ): boolean {
-    if (!isCodeDigest(stored)) {
-      return safeCompare(stored, guess)
-    }
-    return digestCode !== undefined && safeCompare(stored, digestCode(guess))
   }
 
   /** Returns the resolved OTP options or throws `OTP_STORAGE_NOT_CONFIGURED`. */

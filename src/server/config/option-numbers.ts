@@ -117,3 +117,28 @@ export function assertObject(path: string, value: unknown): void {
     throw new Error(`${named(path)} must be an object, got ${received(value)}`)
   }
 }
+
+/**
+ * Throws unless `value` is absent or exactly `true` or `false`. A string such as `'false'` is
+ * truthy and would be read as `true`, so no other kind is accepted.
+ *
+ * @param path - The option, relative to `options`.
+ * @param value - The option as the host gave it.
+ */
+export function assertBoolean(path: string, value: unknown): void {
+  if (value !== undefined && typeof value !== 'boolean') {
+    throw new Error(`${named(path)} must be a boolean, got ${received(value)}`)
+  }
+}
+
+/**
+ * Throws unless `value` is absent or a function.
+ *
+ * @param path - The option, relative to `options`.
+ * @param value - The option as the host gave it.
+ */
+export function assertFunction(path: string, value: unknown): void {
+  if (value !== undefined && typeof value !== 'function') {
+    throw new Error(`${named(path)} must be a function, got ${received(value)}`)
+  }
+}

@@ -22,6 +22,8 @@ import {
   assertFiniteAbove,
   assertFiniteAtLeast,
   assertIntegerAtLeast,
+  assertBoolean,
+  assertFunction,
   assertObject,
   received
 } from './option-numbers'
@@ -91,12 +93,8 @@ function validateAuditOptions(audit: AuditOptions): void {
       "[BymaxNotificationModule] options.audit.repository is required when 'audit' is configured"
     )
   }
-  if ((audit.swallowErrors as unknown) === null) {
-    throw new Error('[BymaxNotificationModule] options.audit.swallowErrors must be a boolean')
-  }
-  if ((audit.maskRecipient as unknown) === null) {
-    throw new Error('[BymaxNotificationModule] options.audit.maskRecipient must be a function')
-  }
+  assertBoolean('audit.swallowErrors', audit.swallowErrors)
+  assertFunction('audit.maskRecipient', audit.maskRecipient)
 }
 
 /** Validates the email channel section. */
@@ -224,10 +222,6 @@ function validateOtpOptions(otp: OtpChannelOptions): void {
   }
   assertCodeType('otp.defaultCodeType', otp.defaultCodeType)
   validatePerPurpose(otp.perPurpose)
-  if ((otp.consumeOnVerify as unknown) === null) {
-    throw new Error('[BymaxNotificationModule] options.otp.consumeOnVerify must be a boolean')
-  }
-  if (otp.strictPurposes !== undefined && typeof otp.strictPurposes !== 'boolean') {
-    throw new Error('[BymaxNotificationModule] options.otp.strictPurposes must be a boolean')
-  }
+  assertBoolean('otp.consumeOnVerify', otp.consumeOnVerify)
+  assertBoolean('otp.strictPurposes', otp.strictPurposes)
 }

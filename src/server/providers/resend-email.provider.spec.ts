@@ -78,6 +78,194 @@ describe('ResendEmailProvider', () => {
     )
   })
 
+  // The SDK takes the content id of an inline image as `contentId`; the disposition has no field of
+  // its own at Resend, so it is not sent.
+  it('should send the content id of an inline attachment as contentId, and no disposition', async () => {
+    await new ResendEmailProvider({ apiKey: 'k' }).send({
+      ...baseOptions,
+      attachments: [
+        {
+          filename: 'logo.png',
+          content: Buffer.from('png'),
+          contentType: 'image/png',
+          cid: 'logo-image',
+          contentDisposition: 'inline'
+        },
+        { filename: 'plain.txt', content: 'eA==' }
+      ]
+    })
+
+    expect(mockSend.mock.calls[0]?.[0].attachments).toStrictEqual([
+      {
+        filename: 'logo.png',
+        content: Buffer.from('png'),
+        contentType: 'image/png',
+        contentId: 'logo-image'
+      },
+      { filename: 'plain.txt', content: 'eA==' }
+    ])
+  })
+
+  it.each([
+    ['inline with no cid', { filename: 'a.txt', content: 'eA==', contentDisposition: 'inline' }],
+    [
+      'attachment with a cid',
+      { filename: 'a.txt', content: 'eA==', cid: 'logo', contentDisposition: 'attachment' }
+    ]
+  ] as const)(
+    'should refuse a %s before anything is sent, since Resend would drop the disposition',
+    async (_label, attachment) => {
+      const sending = new ResendEmailProvider({ apiKey: 'k' }).send({
+        ...baseOptions,
+        attachments: [attachment]
+      })
+
+      await expect(sending).rejects.toBeInstanceOf(NotificationException)
+      const refusal = await sending.catch((error: unknown) => error)
+      expect(JSON.stringify((refusal as NotificationException).getResponse())).toContain(
+        '[ResendEmailProvider] attachments Resend inlines an attachment by its cid only'
+      )
+      expect(mockSend).not.toHaveBeenCalled()
+    }
+  )
+
+  it('should send an attachment whose disposition agrees with its cid, and one with no disposition', async () => {
+    await new ResendEmailProvider({ apiKey: 'k' }).send({
+      ...baseOptions,
+      attachments: [
+        { filename: 'a.txt', content: 'eA==', contentDisposition: 'attachment' },
+        { filename: 'b.txt', content: 'eA==', cid: 'logo' }
+      ]
+    })
+
+    expect(mockSend).toHaveBeenCalledTimes(1)
+  })
+
+  it('should read the cid and the disposition of an attachment once, judging what it sends', async () => {
+    const reads: string[] = []
+    const attachment = {
+      filename: 'a.txt',
+      content: 'eA==',
+      get cid(): string {
+        reads.push('cid')
+        return 'logo'
+      },
+      get contentDisposition(): 'inline' {
+        reads.push('contentDisposition')
+        return 'inline'
+      }
+    }
+
+    await new ResendEmailProvider({ apiKey: 'k' }).send({
+      ...baseOptions,
+      attachments: [attachment]
+    })
+
+    expect(reads).toStrictEqual(['cid', 'contentDisposition'])
+  })
+
+  it('should keep the availability code on a failure whose provider text is withheld', async () => {
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    mockSend.mockResolvedValue({ data: null, error: { message: 'down', statusCode: 503 } })
+
+    const caught = (await new ResendEmailProvider({ apiKey: 'k' })
+      .send({ ...baseOptions, publishProviderText: false })
+      .catch((error: unknown) => error)) as Error & { code?: string }
+
+    expect(caught.message).toBe('Resend send failed')
+    expect(caught.code).toBe('EUNAVAILABLE')
+  })
+
+  it.each([[undefined], [false]])(
+    'should drop a provider code that holds a declared secret (publishProviderText %s)',
+    async (publishProviderText) => {
+      const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+      mockSend.mockRejectedValue(Object.assign(new Error('refused'), { code: 'ECONNREFUSED' }))
+      const secret = 'ECONN'
+
+      const caught = (await new ResendEmailProvider({ apiKey: 'k' })
+        .send({
+          ...baseOptions,
+          redactValues: [secret],
+          ...(publishProviderText === undefined ? {} : { publishProviderText })
+        })
+        .catch((error: unknown) => error)) as Error
+
+      expect('code' in caught).toBe(false)
+      expect(loggedAll(warnSpy.mock.calls[0])).not.toContain('ECONNREFUSED')
+      warnSpy.mockRestore()
+    }
+  )
+
+  it('should give a withheld failure no code of its own when the provider sent none', async () => {
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    mockSend.mockResolvedValue({ data: null, error: { message: 'bad request', statusCode: 422 } })
+
+    const caught = (await new ResendEmailProvider({ apiKey: 'k' })
+      .send({ ...baseOptions, publishProviderText: false })
+      .catch((error: unknown) => error)) as Error
+
+    expect('code' in caught).toBe(false)
+  })
+
+  it('should log and throw a failure with the address the provider quoted masked', async () => {
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    mockSend.mockResolvedValue({
+      data: null,
+      error: { message: 'The to address bob@x.com is invalid' }
+    })
+
+    const caught: unknown = await new ResendEmailProvider({ apiKey: 'k' })
+      .send(baseOptions)
+      .catch((error: unknown) => error)
+
+    const everything = `${loggedAll(warnSpy.mock.calls[0])}\n${String((caught as Error).message)}`
+    expect(everything).toContain('The to address [address] is invalid')
+    expect(everything).not.toContain('bob@x.com')
+    warnSpy.mockRestore()
+  })
+
+  it('should send an attachment that has no filename and no content type as its content alone', async () => {
+    await new ResendEmailProvider({ apiKey: 'k' }).send({
+      ...baseOptions,
+      attachments: [{ content: 'eA==' } as never]
+    })
+
+    expect(mockSend.mock.calls[0]?.[0].attachments).toStrictEqual([{ content: 'eA==' }])
+  })
+
+  // An attachment can be an instance of a class whose fields are getters; they are sent like any other.
+  it('should send the fields of an attachment that come from prototype getters', async () => {
+    class FromClass {
+      get filename(): string {
+        return 'logo.png'
+      }
+      get content(): Buffer {
+        return Buffer.from('png')
+      }
+      get contentType(): string {
+        return 'image/png'
+      }
+      get cid(): string {
+        return 'logo-image'
+      }
+    }
+
+    await new ResendEmailProvider({ apiKey: 'k' }).send({
+      ...baseOptions,
+      attachments: [new FromClass()]
+    })
+
+    expect(mockSend.mock.calls[0]?.[0].attachments).toStrictEqual([
+      {
+        filename: 'logo.png',
+        content: Buffer.from('png'),
+        contentType: 'image/png',
+        contentId: 'logo-image'
+      }
+    ])
+  })
+
   // Identity + configured-state derive purely from the presence of an API key.
   it('should report name "resend" and reflect apiKey presence in isConfigured', () => {
     expect(new ResendEmailProvider({ apiKey: 'k' }).name).toBe('resend')

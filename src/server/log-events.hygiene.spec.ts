@@ -70,6 +70,8 @@ interface Row {
   readonly provoke: () => Promise<void> | void
   /** Whether the sentinel travels in the `err` copy, as the rule says an error does. */
   readonly errCarriesSentinel: boolean
+  /** The entry has an `err` field, and the address the provider quoted is masked in it. */
+  readonly errMasked?: boolean
 }
 
 const ROWS: Record<NotificationLogEvent, Row> = {
@@ -161,14 +163,16 @@ const ROWS: Record<NotificationLogEvent, Row> = {
       })
       await new ResendEmailProvider({ apiKey: 're_key' }).send(SEND_OPTIONS).catch(() => undefined)
     },
-    errCarriesSentinel: true
+    errCarriesSentinel: false,
+    errMasked: true
   },
   NOTIFICATION_SMTP_SEND_FAILED: {
     provoke: async () => {
       mockSendMail.mockRejectedValue(new Error(`550 ${SENTINEL} unknown`))
       await new SmtpEmailProvider({ host: 'h' }).send(SEND_OPTIONS).catch(() => undefined)
     },
-    errCarriesSentinel: true
+    errCarriesSentinel: false,
+    errMasked: true
   },
   NOTIFICATION_SMTP_CLOSE_FAILED: {
     provoke: async () => {
@@ -216,7 +220,7 @@ describe('log event messages', () => {
     })
 
     it(
-      row.errCarriesSentinel
+      row.errCarriesSentinel || row.errMasked === true
         ? 'should carry the error in the err field and in no other field'
         : 'should carry no error at all: its entry has only an event and a message',
       async () => {
@@ -226,7 +230,9 @@ describe('log event messages', () => {
         for (const entry of mine) {
           // Every key of the entry is read, so a field added to it cannot hold error text unseen.
           expect(Object.keys(entry.call[0] as object)).toEqual(
-            row.errCarriesSentinel ? ['err', 'event', 'message'] : ['event', 'message']
+            row.errCarriesSentinel || row.errMasked === true
+              ? ['err', 'event', 'message']
+              : ['event', 'message']
           )
           expect(loggedAll(entry.call).includes(SENTINEL)).toBe(row.errCarriesSentinel)
         }

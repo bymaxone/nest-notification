@@ -22,10 +22,12 @@ import type {
   IEmailProvider
 } from '../interfaces/email-provider.interface'
 import { errorCodeOf } from '../utils/availability'
+import { refuseInput } from '../utils/bounded-list'
 import { assertBodyParts } from '../utils/email-body'
 import { loadOptionalPeer } from '../utils/load-optional-peer'
 import { logEvent } from '../utils/log-event'
-import { loggableError } from '../utils/loggable-error'
+import { codeWithoutSecrets } from '../utils/masked-failure'
+import { publishedFailure } from '../utils/provider-failure'
 import { assertOptionsObject, readOptionKeys } from '../utils/read-options'
 import {
   REDACTED_VALUE,
@@ -144,11 +146,15 @@ interface ResendSendPayload {
   bcc: string | string[] | undefined
   tags: ReadonlyArray<{ name: string; value: string }> | undefined
   headers: Record<string, string> | undefined
-  attachments: EmailSendOptions['attachments']
+  attachments: ReadonlyArray<Record<string, unknown>> | undefined
 }
 
 /** The payload the SDK is given: the envelope and the body, and nothing else of the input. */
-function toPayload(options: EmailSendOptions, from: string): ResendSendPayload {
+function toPayload(
+  options: EmailSendOptions,
+  from: string,
+  attachments: ResendSendPayload['attachments']
+): ResendSendPayload {
   return {
     from,
     to: options.to,
@@ -160,8 +166,39 @@ function toPayload(options: EmailSendOptions, from: string): ResendSendPayload {
     bcc: options.bcc,
     tags: options.tags,
     headers: options.headers,
-    attachments: options.attachments
+    attachments
   }
+}
+
+/**
+ * The attachments as the SDK takes them, each field read once by name, so one that comes from a
+ * getter or the prototype of a class is sent like any other and the check and the payload judge
+ * the same value. An attachment whose `contentDisposition` Resend cannot carry is refused: Resend
+ * has no disposition field, an attachment with a content id is inline and one without is an
+ * attachment, so a disposition that says otherwise would be dropped without a word.
+ */
+function toPayloadAttachments(
+  attachments: EmailSendOptions['attachments']
+): ResendSendPayload['attachments'] {
+  return attachments?.map((attachment) => {
+    const { filename, content, contentType, cid, contentDisposition } = attachment
+    if (
+      contentDisposition !== undefined &&
+      (contentDisposition === 'inline') !== (cid !== undefined)
+    ) {
+      throw refuseInput(
+        'ResendEmailProvider',
+        'attachments',
+        'Resend inlines an attachment by its cid only, so contentDisposition must agree with cid'
+      )
+    }
+    return {
+      ...(filename !== undefined ? { filename } : {}),
+      content,
+      ...(contentType !== undefined ? { contentType } : {}),
+      ...(cid !== undefined ? { contentId: cid } : {})
+    }
+  })
 }
 
 /** The request options of the SDK this adapter uses: the signal that aborts the call. */
@@ -251,13 +288,17 @@ export class ResendEmailProvider implements IEmailProvider {
    */
   async send(options: EmailSendOptions): Promise<EmailSendResult> {
     assertBodyParts(options.html, options.text)
+    const attachments = toPayloadAttachments(options.attachments)
     const client = await this.getClient()
     const from = this.formatFrom(options.from, options.fromName)
     const timeoutMs = this.#options.timeoutMs ?? DEFAULT_TIMEOUT_MS
     const signal = AbortSignal.timeout(timeoutMs)
     let result: ResendSendOutcome
     try {
-      result = await settleOrAbort(client.emails.send(toPayload(options, from), { signal }), signal)
+      result = await settleOrAbort(
+        client.emails.send(toPayload(options, from, attachments), { signal }),
+        signal
+      )
     } catch (error) {
       // The SDK can REJECT instead of resolving `{ error }` — a transport or
       // fetch failure whose message quotes the request body carries the same
@@ -292,7 +333,8 @@ export class ResendEmailProvider implements IEmailProvider {
    * @param options - The send input whose body and declared values to scrub.
    * @returns The `Error` for the caller to throw.
    */
-  private sendFailure(rawMessage: string, options: EmailSendOptions, code?: string): Error {
+  private sendFailure(rawMessage: string, options: EmailSendOptions, rawCode?: string): Error {
+    const code = codeWithoutSecrets(rawCode, options.redactValues)
     if (options.publishProviderText === false) {
       // The body carries a credential, so nothing the API wrote may reach a
       // log line or the thrown message. Unlike SMTP there is no reply code to
@@ -306,16 +348,14 @@ export class ResendEmailProvider implements IEmailProvider {
       return withCode(new Error('Resend send failed'), code)
     }
     // Surface only the provider's message — never the email body.
-    const reason = this.scrubSendError(rawMessage, options)
-    const failure = withCode(new Error(`Resend send failed: ${reason}`), code)
-    logEvent(
+    return publishedFailure(
       this.logger,
-      'warn',
       NOTIFICATION_LOG_EVENTS.RESEND_SEND_FAILED,
       '[RESEND_SEND_FAILED] The send failed; the provider error is in the err field.',
-      loggableError(failure)
+      'Resend',
+      this.scrubSendError(rawMessage, options),
+      code
     )
-    return failure
   }
 
   /**

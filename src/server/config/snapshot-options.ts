@@ -81,7 +81,8 @@ const OTP_KEYS = [
 const WEAKER_WHEN_UNSET = [
   'codeSecret',
   'strictPurposes',
-  'consumeOnVerify'
+  'consumeOnVerify',
+  'perPurpose'
 ] as const satisfies readonly (keyof OtpChannelOptions)[]
 
 /** The same for the global section: no tenant resolver means the payload's tenant is trusted. */
