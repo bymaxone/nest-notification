@@ -137,7 +137,11 @@ describe('SmtpEmailProvider', () => {
         tls: {},
         connectionTimeout: 10_000,
         greetingTimeout: 10_000,
-        socketTimeout: 20_000
+        socketTimeout: 20_000,
+        // The adapter opens the connection and Nodemailer opens no file and no URL.
+        getSocket: expect.any(Function),
+        disableFileAccess: true,
+        disableUrlAccess: true
       })
     })
 
@@ -294,7 +298,10 @@ describe('SmtpEmailProvider', () => {
         cc: 'cc@acme.com',
         bcc: ['bcc@acme.com'],
         headers: { 'X-Entity-Ref-ID': 'abc' },
-        attachments: undefined
+        attachments: undefined,
+        // Nodemailer is told it may open no file and no URL: the adapter sends `content` only.
+        disableFileAccess: true,
+        disableUrlAccess: true
       })
     })
 

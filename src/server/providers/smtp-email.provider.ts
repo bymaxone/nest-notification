@@ -37,6 +37,7 @@ import { logEvent } from '../utils/log-event'
 import { codeWithoutSecrets } from '../utils/masked-failure'
 import { assertPort } from '../utils/port-option'
 import { publishedFailure } from '../utils/provider-failure'
+import { rethrowRefusal } from '../utils/provider-refusal'
 import { readSendOptions } from '../utils/provider-send-options'
 import { nullProto, readName, withOwnKeys } from '../utils/read-options'
 import { assertStandardRealmRoot } from '../utils/realm-root'
@@ -47,7 +48,7 @@ import {
   redactValues
 } from '../utils/redact'
 import { assertTimerMs } from '../utils/timer-option'
-import { AUTH_KEYS, MESSAGE_KEYS, ownTlsKeys, TRANSPORT_KEYS } from './nodemailer-keys'
+import { AUTH_KEYS, MESSAGE_KEYS } from './nodemailer-keys'
 import { mapSmtpAttachments } from './smtp-attachments'
 import type {
   NodemailerLike,
@@ -61,6 +62,7 @@ import type {
 } from './smtp-email.types'
 import { readPool, readSmtpOptions } from './smtp-options'
 import { relayRefused } from './smtp-relay-refused'
+import { buildSmtpTransportConfig } from './smtp-transport-config'
 export type {
   SmtpCredentials,
   SmtpEmailProviderOptions,
@@ -69,21 +71,6 @@ export type {
   SmtpTlsOptions,
   SmtpTlsPfxEntry
 } from './smtp-email.types'
-
-/** Submission port, used when no `port` is supplied. */
-const DEFAULT_PORT = 587
-
-/** Port that implies implicit TLS ("SMTPS"), used to derive `secure` by default. */
-const IMPLICIT_TLS_PORT = 465
-
-/** Default TCP connection timeout, in milliseconds. */
-const DEFAULT_CONNECTION_TIMEOUT_MS = 10_000
-
-/** Default timeout for the server greeting, in milliseconds. */
-const DEFAULT_GREETING_TIMEOUT_MS = 10_000
-
-/** Default idle-socket timeout during the SMTP conversation, in milliseconds. */
-const DEFAULT_SOCKET_TIMEOUT_MS = 20_000
 
 /** Default bound on one whole send, in milliseconds. */
 const DEFAULT_SEND_TIMEOUT_MS = 60_000
@@ -111,33 +98,6 @@ function settleOrTimeout<T>(call: Promise<T>, timeoutMs: number): Promise<T> {
       clearTimeout(timer)
     })
   })
-}
-
-/**
- * Hosts that cannot be reached across a network, and for which an unencrypted
- * session is therefore not exposed to a STARTTLS-stripping attacker. Used to decide
- * the `requireTls` default.
- */
-const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]'])
-
-/**
- * The transport settings a pool turns on: none without the option, so an unpooled transport gets
- * the configuration it always did.
- *
- * @param pool - The validated option.
- * @returns The keys to add to the transport configuration.
- */
-function poolConfig(
-  pool: SmtpPoolOptions | undefined
-): Pick<SmtpTransportConfig, 'pool' | 'maxConnections' | 'maxMessages'> {
-  if (pool === undefined) {
-    return {}
-  }
-  return {
-    pool: true,
-    ...(pool.maxConnections === undefined ? {} : { maxConnections: pool.maxConnections }),
-    ...(pool.maxMessages === undefined ? {} : { maxMessages: pool.maxMessages })
-  }
 }
 
 /**
@@ -299,7 +259,9 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
           cc: options.cc,
           bcc: options.bcc,
           headers: options.headers,
-          attachments: mapSmtpAttachments(options.attachments)
+          attachments: mapSmtpAttachments(options.attachments),
+          disableFileAccess: true,
+          disableUrlAccess: true
         },
         MESSAGE_KEYS
       ),
@@ -400,6 +362,7 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
         this.#options.sendTimeoutMs ?? DEFAULT_SEND_TIMEOUT_MS
       )
     } catch (error) {
+      rethrowRefusal(error)
       throw this.failure(error, payload, redactValuesList, publishProviderText)
     }
   }
@@ -725,35 +688,13 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
   }
 
   /**
-   * Resolves the transport configuration, applying defaults and validating that the
-   * relay is fully described.
+   * Resolves the transport configuration; see {@link buildSmtpTransportConfig}.
    *
    * @returns The resolved configuration.
    * @throws Error When `host` is missing, or `credentials` were supplied incomplete.
    */
   private buildTransportConfig(): SmtpTransportConfig {
-    const options = this.#options
-    const host = options.host
-    if (!host) {
-      throw new Error('SmtpEmailProvider: missing host — pass { host } to the constructor')
-    }
-    const port = options.port ?? DEFAULT_PORT
-    const secure = options.secure ?? port === IMPLICIT_TLS_PORT
-    return withOwnKeys(
-      {
-        host,
-        port,
-        secure,
-        requireTLS: options.requireTls ?? (!secure && !LOOPBACK_HOSTS.has(host.toLowerCase())),
-        auth: this.resolveCredentials(),
-        tls: ownTlsKeys(options.tls),
-        connectionTimeout: options.connectionTimeout ?? DEFAULT_CONNECTION_TIMEOUT_MS,
-        greetingTimeout: options.greetingTimeout ?? DEFAULT_GREETING_TIMEOUT_MS,
-        socketTimeout: options.socketTimeout ?? DEFAULT_SOCKET_TIMEOUT_MS,
-        ...poolConfig(this.#pool)
-      },
-      TRANSPORT_KEYS
-    )
+    return buildSmtpTransportConfig(this.#options, this.#pool, () => this.resolveCredentials())
   }
 
   /**

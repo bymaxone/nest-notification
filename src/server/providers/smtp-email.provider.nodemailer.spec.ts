@@ -311,7 +311,10 @@ describe('the transport options the SMTP adapter gives Nodemailer', () => {
       requireTLS: false,
       connectionTimeout: 10_000,
       greetingTimeout: 10_000,
-      socketTimeout: 20_000
+      socketTimeout: 20_000,
+      // What the adapter adds on purpose: Nodemailer opens no file and no URL.
+      disableFileAccess: true,
+      disableUrlAccess: true
     })
 
     await new SmtpEmailProvider({ host: '127.0.0.1', port: 1 }).send(MESSAGE).catch(() => undefined)

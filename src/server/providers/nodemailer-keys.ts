@@ -61,8 +61,10 @@ const TLS_DEFAULTS = { checkServerIdentity, minDHSize: 1024 }
 export function ownTlsKeys<T>(tls: T): T {
   const isOptions =
     tls === undefined || (typeof tls === 'object' && tls !== null && !Array.isArray(tls))
+  // A value that reads as `undefined` is not set: it must not replace a default Node validates.
+  const set = Object.entries(tls ?? {}).filter(([, value]) => value !== undefined)
   return (
-    isOptions ? withOwnKeys({ ...TLS_DEFAULTS, ...((tls ?? {}) as object) }, TLS_KEYS) : tls
+    isOptions ? withOwnKeys({ ...TLS_DEFAULTS, ...Object.fromEntries(set) }, TLS_KEYS) : tls
   ) as T
 }
 

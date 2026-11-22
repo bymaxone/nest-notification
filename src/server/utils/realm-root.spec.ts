@@ -166,3 +166,120 @@ describe('a standard key that was overwritten, redefined or removed', () => {
     expect(() => assertStandardRealmRoot('Owner')).not.toThrow()
   })
 })
+
+describe('a realm that was polluted before the library loaded', () => {
+  /** Loads a fresh copy of the module while `change` has altered the root, and returns what a use does. */
+  function useAfterLoadingWith(name: string, value: unknown): unknown {
+    const original = Object.getOwnPropertyDescriptor(Object.prototype, name) as PropertyDescriptor
+    let caught: unknown
+    jest.isolateModules(() => {
+      Object.defineProperty(Object.prototype, name, { ...original, value })
+      try {
+        const loaded = require('./realm-root') as typeof import('./realm-root')
+        loaded.assertStandardRealmRoot('Owner')
+      } catch (error) {
+        caught = error
+      } finally {
+        Object.defineProperty(Object.prototype, name, original)
+      }
+    })
+    return caught
+  }
+
+  it.each([
+    [
+      'hasOwnProperty',
+      function evil(this: object, key: string) {
+        return Object.hasOwn(this, key)
+      }
+    ],
+    ['toString', 'x'],
+    ['constructor', function Evil() {}],
+    ['valueOf', () => 1]
+  ])('should refuse on every use when %s was not what it must be at load', (name, value) => {
+    expect(useAfterLoadingWith(name, value)).toMatchObject({
+      code: 'notification.invalid_scope_identifier'
+    })
+  })
+
+  it('should refuse when __proto__ was not an accessor at load', () => {
+    const caught = ((): unknown => {
+      const original = Object.getOwnPropertyDescriptor(
+        Object.prototype,
+        '__proto__'
+      ) as PropertyDescriptor
+      let result: unknown
+      jest.isolateModules(() => {
+        Object.defineProperty(Object.prototype, '__proto__', {
+          value: 1,
+          configurable: true,
+          writable: true
+        })
+        try {
+          ;(require('./realm-root') as typeof import('./realm-root')).assertStandardRealmRoot(
+            'Owner'
+          )
+        } catch (error) {
+          result = error
+        } finally {
+          Object.defineProperty(Object.prototype, '__proto__', original)
+        }
+      })
+      return result
+    })()
+
+    expect(caught).toMatchObject({ code: 'notification.invalid_scope_identifier' })
+  })
+
+  it('should refuse when a standard key was missing at load', () => {
+    const original = Object.getOwnPropertyDescriptor(
+      Object.prototype,
+      '__lookupGetter__'
+    ) as PropertyDescriptor
+    let caught: unknown
+    jest.isolateModules(() => {
+      Reflect.deleteProperty(Object.prototype, '__lookupGetter__')
+      try {
+        ;(require('./realm-root') as typeof import('./realm-root')).assertStandardRealmRoot('Owner')
+      } catch (error) {
+        caught = error
+      } finally {
+        Object.defineProperty(Object.prototype, '__lookupGetter__', original)
+      }
+    })
+
+    expect(caught).toMatchObject({ code: 'notification.invalid_scope_identifier' })
+  })
+
+  it('should load without throwing, and answer clean once the realm is clean', () => {
+    let loaded: typeof import('./realm-root') | undefined
+    jest.isolateModules(() => {
+      loaded = require('./realm-root') as typeof import('./realm-root')
+    })
+
+    expect(() => loaded?.assertStandardRealmRoot('Owner')).not.toThrow()
+  })
+})
+
+describe('descriptors read while the root holds an accessor named like a descriptor field', () => {
+  it.each(['get', 'set', 'value', 'writable', 'enumerable', 'configurable'])(
+    'should not run a planted %s while it compares the standard keys',
+    (name) => {
+      const ran = jest.fn(() => {
+        throw new Error('planted accessor ran')
+      })
+      Object.defineProperty(Object.prototype, name, { get: ran, configurable: true })
+      let caught: unknown
+      try {
+        assertStandardRealmRoot('Owner')
+      } catch (error) {
+        caught = error
+      } finally {
+        Reflect.deleteProperty(Object.prototype, name)
+      }
+
+      expect(ran).not.toHaveBeenCalled()
+      expect(caught).toMatchObject({ code: 'notification.invalid_scope_identifier' })
+    }
+  )
+})
