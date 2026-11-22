@@ -32,7 +32,7 @@ const PACKAGE = openPackage(ROOT)
 // headroom: server ~15.5/30 kB, shared ~0.8/4 kB, react ~1.7/8 kB. The budgets
 // sit roughly 2x over the real artifact so a peer dep leaking into the bundle
 // trips the gate well before it ships; revisit when the SMS/Push channels land.
-// Server budget: 45 074 B, 43 B above the 45 031 B measured. It is a byte count that follows the
+// Server budget: 45 074 B, 80 B above the 44 994 B measured. It is a byte count that follows the
 // measured artifact rather than a margin set ahead of it; the other budgets keep the margin the
 // calibration above describes.
 // The .mjs ships unminified with JSDoc, so every line of runtime code and every contract case

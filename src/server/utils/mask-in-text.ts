@@ -61,11 +61,18 @@ function fromPercent(run: string): string {
 }
 
 /**
- * An RFC 2047 encoded word's payload: `B` is base64, and `Q` is quoted-printable, whose `=xx` bytes the next
+ * An RFC 2047 encoded word's payload: `B` is base64, whose bytes are read as UTF-8 like any other run, and `Q` is quoted-printable, whose `=xx` bytes the next
  * pass reads as UTF-8 like any other run, so its text is returned as it is.
  */
 function fromWord(type: string, payload: string): string {
-  return type.toLowerCase() === 'b' ? Buffer.from(payload, 'base64').toString('utf8') : payload
+  // The bytes of a `B` word go through the same decode as every other run of bytes.
+  return type.toLowerCase() === 'b'
+    ? fromPercent(
+        Buffer.from(payload, 'base64')
+          .toString('hex')
+          .replace(/[0-9a-f]{2}/gu, '%$&')
+      )
+    : payload
 }
 
 /** One spelling decoded; a code point out of range stays as it was written. */

@@ -68,6 +68,14 @@ describe('maskAddressTokens', () => {
     ['an RFC 2047 Q word with a fullwidth at-sign', '=?utf-8?Q?bob=EF=BC=A0x.com?='],
     ['an RFC 2047 Q word with an overlong at-sign', '=?utf-8?Q?bob=C1=80x.com?='],
     ['bytes of both spellings in one run', 'bob%EF=BC%A0x.com'],
+    ['an RFC 2047 B word with a fullwidth at-sign', '=?utf-8?B?Ym9i77ygeC5jb20=?='],
+    ['an RFC 2047 B word with a two-byte overlong at-sign', '=?utf-8?B?Ym9iwYB4LmNvbQ==?='],
+    ['an RFC 2047 B word with a three-byte overlong at-sign', '=?utf-8?B?Ym9i4IGAeC5jb20=?='],
+    ['an RFC 2047 B word with a four-byte overlong at-sign', '=?utf-8?B?Ym9i8ICBgHguY29t?='],
+    [
+      'an RFC 2047 B word with bytes that are not UTF-8 before an at-sign',
+      '=?utf-8?B?Ym9i/0B4LmNvbQ==?='
+    ],
     ['an octal escape', 'bob\\100x.com'],
     ['a wide unicode escape', 'bob\\U00000040x.com'],
     ['a braced hex escape', 'bob\\x{40}x.com'],
