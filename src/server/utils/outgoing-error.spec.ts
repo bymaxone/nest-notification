@@ -6,6 +6,7 @@
 
 import { NotificationException } from '../errors/notification-exception'
 import { outgoingError } from './outgoing-error'
+import { collectErrorChainText } from './redact'
 
 // A value that no code or message of the library contains, so it can only be scrubbed or kept by the rule.
 const VALUE = 'Stryker was here!'
@@ -52,7 +53,7 @@ describe('outgoingError', () => {
     expect(out.code).toBe('notification.otp_storage_failed')
   })
 
-  it('should scrub a guess that appears only in the details a store put in its library error', () => {
+  it('should scrub a guess that appears in the details and the cause a store put in its library error', () => {
     const error = new NotificationException(
       'OTP_STORAGE_FAILED',
       { providerName: 'store-123456' },
@@ -65,7 +66,7 @@ describe('outgoingError', () => {
     expect((out.cause as Error).message).not.toContain('123456')
   })
 
-  it('should scrub a guess that appears only in a message a store put in its library error', () => {
+  it('should scrub a guess that appears in the message and the cause a store put in its library error', () => {
     const error = new NotificationException('OTP_STORAGE_FAILED', undefined, {
       message: 'store rejected 123456',
       cause: new Error('backend quoted 123456')
@@ -80,12 +81,50 @@ describe('outgoingError', () => {
   it("should keep a guess that is a stretch of the catalog's own message", () => {
     const error = new NotificationException('OTP_STORAGE_FAILED')
 
-    const out = outgoingError(error, ['store'], true) as NotificationException
+    const out = outgoingError(error, ['storage'], true) as NotificationException
 
     expect(out.getResponse()).toStrictEqual(
       new NotificationException('OTP_STORAGE_FAILED').getResponse()
     )
   })
+
+  it.each([
+    ['the details', () => new NotificationException('OTP_STORAGE_FAILED', { echoed: 'stor' })],
+    [
+      'the cause',
+      () =>
+        new NotificationException('OTP_STORAGE_FAILED', undefined, {
+          cause: new Error('backend said stor')
+        })
+    ],
+    [
+      'a message of the store',
+      () => new NotificationException('OTP_STORAGE_FAILED', undefined, { message: 'stor failed' })
+    ]
+  ])(
+    'should scrub a stretch of the catalog text everywhere when %s echoes it too',
+    (_label, build) => {
+      const out = outgoingError(build(), ['stor'], true) as NotificationException
+
+      const everything = `${JSON.stringify(out.getResponse())} ${collectErrorChainText(out)}`
+      expect(everything).not.toContain('stor')
+    }
+  )
+
+  // The details of an error without any are `null`, which stringifies to "null": the guess 'n' is in
+  // both that word and the catalog text, and 'e' is a letter a placeholder text would hold.
+  it.each(['n', 'e'])(
+    'should keep the guess %s, a stretch of the catalog text, when the error has no details',
+    (guess) => {
+      const error = new NotificationException('OTP_STORAGE_FAILED')
+
+      const out = outgoingError(error, [guess], true) as NotificationException
+
+      expect(out.getResponse()).toStrictEqual(
+        new NotificationException('OTP_STORAGE_FAILED').getResponse()
+      )
+    }
+  )
 
   it('should keep no message for a library error whose code is not in the catalog', () => {
     const error = new NotificationException('OTP_STORAGE_FAILED', undefined, {
