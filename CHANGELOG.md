@@ -14,11 +14,10 @@ the entries that carry one, is the compatibility contract — read it, not the n
 ### Fixed
 
 - **The `Object.prototype` check could be blinded by a built-in replaced after the library was imported.** The check
-  that makes the SMTP and Resend adapters refuse while the realm root holds a key that is not standard called
-  `Array.prototype.filter`, `Set.prototype.has`, `some`, `for...of` and others when it ran, so code that replaced one of
-  them after the import, with a version that says the root is clean, made the check say so. It now calls only references
-  taken when the library loaded, and walks with index loops. A row replaces each built-in it could once have called, and
-  expects the check to refuse. There is nothing to apply.
+  that makes the SMTP and Resend adapters refuse while the realm root holds a key that is not standard looked its
+  built-ins up when it ran, so code that replaced one of them after the import, with a version that says the root is
+  clean, made the check say so. It now calls only references taken when the library loaded, and walks with index loops.
+  There is nothing to apply.
 
 ## [1.4.23] - 2026-11-22
 
