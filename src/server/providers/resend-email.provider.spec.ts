@@ -50,6 +50,12 @@ const baseOptions: EmailSendOptions = {
   text: 'Secret 123456'
 }
 
+/** The attachments of the payload the SDK got, as plain objects: the payload has no prototype by design. */
+function sentAttachments(): unknown {
+  const attachments = mockSend.mock.calls[0]?.[0].attachments as object[]
+  return attachments.map((attachment) => ({ ...attachment }))
+}
+
 describe('ResendEmailProvider', () => {
   beforeEach(() => {
     mockResendFailure = null
@@ -95,7 +101,7 @@ describe('ResendEmailProvider', () => {
       ]
     })
 
-    expect(mockSend.mock.calls[0]?.[0].attachments).toStrictEqual([
+    expect(sentAttachments()).toStrictEqual([
       {
         filename: 'logo.png',
         content: Buffer.from('png'),
@@ -231,7 +237,7 @@ describe('ResendEmailProvider', () => {
       attachments: [{ content: 'eA==' } as never]
     })
 
-    expect(mockSend.mock.calls[0]?.[0].attachments).toStrictEqual([{ content: 'eA==' }])
+    expect(sentAttachments()).toStrictEqual([{ content: 'eA==' }])
   })
 
   // An attachment can be an instance of a class whose fields are getters; they are sent like any other.
@@ -256,7 +262,7 @@ describe('ResendEmailProvider', () => {
       attachments: [new FromClass()]
     })
 
-    expect(mockSend.mock.calls[0]?.[0].attachments).toStrictEqual([
+    expect(sentAttachments()).toStrictEqual([
       {
         filename: 'logo.png',
         content: Buffer.from('png'),

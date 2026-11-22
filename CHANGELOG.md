@@ -51,13 +51,22 @@ unknown` keeps its brackets). The at-sign is `@`, fullwidth `\uff20`, small `\uf
   value. A value found only on the realm-root prototype is now absent; an own property, a property of a class of yours
   and a getter on its prototype still count. The options and the message
   handed to a provider have no prototype, so a key that is not set is absent for a custom provider too.
+  The same holds for what the library hands to a mail transport, an SDK, a renderer or a store: the SMTP message and
+  transport configuration (nodemailer reads `envelope`, `raw`, `list`, `alternatives`, `service`, `proxy`, `dkim` and an
+  attachment's `path`, none of which this library sets), the Resend payload, the default template renderer (its options,
+  each template's `text`, and what it renders), the store wrapper (an operation the store does not have stays absent),
+  the dispatch request and its OTP payload, and the error codes and credentials the adapters read. The reference
+  adapters also read the message they are given by name, so a direct caller's plain object is covered. A `Proxy` around
+  your options or input answers for itself (documented in the README), as does the topmost prototype of a chain built by
+  hand.
 - **A guess that is not a string is refused before anything uses it.** `verify({ code: 271620 })` reached the
   digest, whose `TypeError` quotes the value it was given, and a `String` object compared as the code. A `code` that is
   not a string is now `INVALID_SCOPE_IDENTIFIER`, naming the field and never the value.
 - **A provider's refusal of a message reaches the caller as a refusal.** Resend refuses a `contentDisposition` that
   disagrees with the `cid` before anything is sent; `send()` answered that as a 502 `EMAIL_SEND_FAILED` and a failed
   delivery. A provider's `INVALID_SCOPE_IDENTIFIER` now passes on as the library's own refusal, with the library's words
-  (a provider can be yours, and its text is its own), and no failed audit row.
+  (a provider can be yours, and its text is its own). No audit row is written for it: nothing was sent, as with any other
+  refusal of the input.
 - **A failed `verify()` leaves the way a failed `generate()` does,** with the guess removed from the error's chain and a
   value that is not an error flattened.
 - **An OTP action or delivery channel the library does not know is refused.** An `action` such as `'verfy'` fell through

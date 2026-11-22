@@ -28,7 +28,8 @@ import { loadOptionalPeer } from '../utils/load-optional-peer'
 import { logEvent } from '../utils/log-event'
 import { codeWithoutSecrets } from '../utils/masked-failure'
 import { publishedFailure } from '../utils/provider-failure'
-import { assertOptionsObject, readOptionKeys } from '../utils/read-options'
+import { readSendOptions } from '../utils/provider-send-options'
+import { assertOptionsObject, nullProto, readOptionKeys } from '../utils/read-options'
 import {
   REDACTED_VALUE,
   collectEchoedExcerpts,
@@ -155,7 +156,9 @@ function toPayload(
   from: string,
   attachments: ResendSendPayload['attachments']
 ): ResendSendPayload {
-  return {
+  // No prototype: the SDK reads fields this adapter never sets (`scheduledAt`...), and a key planted
+  // on the realm root must not answer for them.
+  return nullProto({
     from,
     to: options.to,
     subject: options.subject,
@@ -167,7 +170,7 @@ function toPayload(
     tags: options.tags,
     headers: options.headers,
     attachments
-  }
+  })
 }
 
 /**
@@ -192,12 +195,12 @@ function toPayloadAttachments(
         'Resend inlines an attachment by its cid only, so contentDisposition must agree with cid'
       )
     }
-    return {
+    return nullProto({
       ...(filename !== undefined ? { filename } : {}),
       content,
       ...(contentType !== undefined ? { contentType } : {}),
       ...(cid !== undefined ? { contentId: cid } : {})
-    }
+    })
   })
 }
 
@@ -287,6 +290,11 @@ export class ResendEmailProvider implements IEmailProvider {
    * maps any thrown `Error` to `EMAIL_SEND_FAILED`.
    */
   async send(options: EmailSendOptions): Promise<EmailSendResult> {
+    return this.sendRead(readSendOptions(options))
+  }
+
+  /** Sends a message already read by name, whose fields no key planted on the realm root can answer for. */
+  private async sendRead(options: EmailSendOptions): Promise<EmailSendResult> {
     assertBodyParts(options.html, options.text)
     const attachments = toPayloadAttachments(options.attachments)
     const client = await this.getClient()

@@ -24,7 +24,6 @@ import type { OnModuleDestroy } from '@nestjs/common'
 
 import { NOTIFICATION_LOG_EVENTS } from '../constants/log-events.constants'
 import type {
-  EmailAttachment,
   EmailSendOptions,
   EmailSendResult,
   IEmailProvider
@@ -38,7 +37,8 @@ import { logEvent } from '../utils/log-event'
 import { codeWithoutSecrets } from '../utils/masked-failure'
 import { assertPort } from '../utils/port-option'
 import { publishedFailure } from '../utils/provider-failure'
-import { readName } from '../utils/read-options'
+import { readSendOptions } from '../utils/provider-send-options'
+import { nullProto, readName } from '../utils/read-options'
 import {
   collectEchoedExcerpts,
   isSafeError,
@@ -46,9 +46,9 @@ import {
   redactValues
 } from '../utils/redact'
 import { assertTimerMs } from '../utils/timer-option'
+import { mapSmtpAttachments } from './smtp-attachments'
 import type {
   NodemailerLike,
-  SmtpAttachment,
   SmtpCredentials,
   SmtpEmailProviderOptions,
   SmtpPoolOptions,
@@ -270,13 +270,20 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
    * comes back. `EmailService` maps any thrown `Error` to `EMAIL_SEND_FAILED`.
    */
   async send(options: EmailSendOptions): Promise<EmailSendResult> {
+    return this.sendRead(readSendOptions(options))
+  }
+
+  /** Sends a message already read by name, whose fields no key planted on the realm root can answer for. */
+  private async sendRead(options: EmailSendOptions): Promise<EmailSendResult> {
     assertBodyParts(options.html, options.text)
     this.guardHeaderInjection(options)
     const from = this.buildSender(options.from, options.fromName)
     const transport = await this.getTransport()
     const info = await this.dispatch(
       transport,
-      {
+      // No prototype: nodemailer reads keys this adapter never sets (`envelope`, `raw`, `list`,
+      // `alternatives`...), and a key planted on the realm root must not answer for them.
+      nullProto({
         from,
         to: options.to,
         subject: options.subject,
@@ -286,8 +293,8 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
         cc: options.cc,
         bcc: options.bcc,
         headers: options.headers,
-        attachments: this.mapAttachments(options.attachments)
-      },
+        attachments: mapSmtpAttachments(options.attachments)
+      }),
       options.redactValues,
       options.publishProviderText
     )
@@ -509,7 +516,9 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
    * them.
    */
   private credentialValues(): string[] {
-    const { user, pass } = this.#options.credentials ?? {}
+    const credentials = this.#options.credentials
+    const user = credentials === undefined ? undefined : readName(credentials, 'user')
+    const pass = credentials === undefined ? undefined : readName(credentials, 'pass')
     const secrets = [user, pass].filter((secret): secret is string => Boolean(secret))
     const plainToken = `\u0000${secrets.join('\u0000')}`
     const encoded = (secrets.length === 2 ? [...secrets, plainToken] : secrets).map((value) =>
@@ -609,33 +618,6 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
       )
     }
     return { name: fromName ?? '', address: from }
-  }
-
-  /**
-   * Maps the library's attachments onto Nodemailer's shape.
-   *
-   * `EmailAttachment.content` is documented as a `Buffer` **or a base64 string**, so
-   * a string is tagged `encoding: 'base64'` — left untagged, Nodemailer would treat
-   * the base64 text as the literal body and deliver a corrupt file.
-   *
-   * @param attachments - The attachments to map, if any.
-   * @returns The mapped attachments, or `undefined` when there are none.
-   */
-  private mapAttachments(
-    attachments: ReadonlyArray<EmailAttachment> | undefined
-  ): SmtpAttachment[] | undefined {
-    return attachments?.map((attachment) => {
-      // Each field is read once: the encoding and the content must describe the same value.
-      const { filename, content, contentType, cid, contentDisposition } = attachment
-      return {
-        filename,
-        content,
-        contentType,
-        encoding: typeof content === 'string' ? 'base64' : undefined,
-        cid,
-        contentDisposition
-      }
-    })
   }
 
   /**
@@ -742,7 +724,7 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
     }
     const port = options.port ?? DEFAULT_PORT
     const secure = options.secure ?? port === IMPLICIT_TLS_PORT
-    return {
+    return nullProto({
       host,
       port,
       secure,
@@ -753,7 +735,7 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
       greetingTimeout: options.greetingTimeout ?? DEFAULT_GREETING_TIMEOUT_MS,
       socketTimeout: options.socketTimeout ?? DEFAULT_SOCKET_TIMEOUT_MS,
       ...poolConfig(this.#pool)
-    }
+    })
   }
 
   /**
@@ -774,7 +756,7 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
         'SmtpEmailProvider: incomplete credentials — `credentials` needs both `user` and `pass`'
       )
     }
-    return { user: credentials.user, pass: credentials.pass }
+    return nullProto({ user: credentials.user, pass: credentials.pass })
   }
 
   /**

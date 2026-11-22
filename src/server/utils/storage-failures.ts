@@ -16,6 +16,7 @@ import type { IOtpStorage } from '../interfaces/otp-storage.interface'
 import { isUnavailableError } from './availability'
 import { readHostName } from './host-name'
 import { isLibraryError } from './is-library-error'
+import { nullProto, readName } from './read-options'
 import { checkConfigured, checkStoreResult } from './store-results'
 
 /** The operations of an `IOtpStorage` that return a promise, required and optional alike. */
@@ -51,7 +52,7 @@ export type UncoveredStorageOperation = Exclude<
  */
 function hasOperation(storage: IOtpStorage, operation: string): boolean {
   try {
-    return typeof Reflect.get(storage, operation) === 'function'
+    return typeof readName(storage, operation) === 'function'
   } catch {
     return true
   }
@@ -93,7 +94,8 @@ export function withStorageFailures(storage: IOtpStorage): IOtpStorage {
   // The name is read once, here, so every line, error and audit entry that names the store carries
   // the same bounded, escaped text and never the host's getter.
   const name = readHostName(() => storage.name)
-  const wrapped: Record<string, unknown> = {
+  // No prototype: an operation the store does not have must stay absent, whatever the realm root holds.
+  const wrapped = nullProto<Record<string, unknown>>({
     name,
     // A store that cannot say whether it is configured is answered with the refusal, its own error
     // the cause, and never with a quieter path.
@@ -104,7 +106,7 @@ export function withStorageFailures(storage: IOtpStorage): IOtpStorage {
         throw new NotificationException('OTP_STORAGE_NOT_CONFIGURED', undefined, { cause: error })
       }
     }
-  }
+  })
   for (const operation of OPERATIONS) {
     if (!hasOperation(storage, operation)) {
       continue
@@ -115,7 +117,7 @@ export function withStorageFailures(storage: IOtpStorage): IOtpStorage {
         try {
           return checkStoreResult(
             operation,
-            await (Reflect.get(storage, operation) as (...a: unknown[]) => Promise<unknown>).apply(
+            await (readName(storage, operation) as (...a: unknown[]) => Promise<unknown>).apply(
               storage,
               args
             ),
