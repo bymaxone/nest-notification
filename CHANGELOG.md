@@ -30,15 +30,16 @@ the entries that carry one, is the compatibility contract — read it, not the n
 unknown` keeps its brackets). The at-sign is `@`, fullwidth `\uff20`, small `\ufe6b`, or any escape of one of them: each token is decoded
   (percent bytes, `%u0040`, numeric and named entities, `\x40`, `\u0040`, `\u{40}`) again and again until it stops
   changing, so `%2540`, `&amp;#64;`, `%25%34%30` and `%EF%BC%A0` are all found, and a token that never stops changing
-  is masked. A mask that hands the address back (the default one) is replaced by `[address]`. A token is
+  is masked. An answer of `audit.maskRecipient` that still holds an at-sign (the default mask hands the address back, and a mask that keeps the domain does too) is replaced by `[address]`. A token is
   a run of characters that are not ASCII white space and not one of `<>(),[]`, a quoted string counting as one piece
   (`"first last"@x.com`, escapes and all); every other space (no-break, zero-width) stays inside the token, so it cannot
   cut an address in two. Words that merely contain an at-sign are masked too, since a missed address is the worse
   mistake; a mask of yours that throws is answered with `[masked]`, and the failure it was called from is still
   reported. A recipient that is not an address (a phone number) is replaced where the OTP path wrote it exactly.
-- **A failed send no longer carries the provider's error as its `cause`.** The `cause` of `EMAIL_SEND_FAILED` is a fresh
-  `Error` that holds the provider's message with secrets removed and address tokens masked, and the provider's `code`;
-  the provider's own error and its nested chain are not kept. The Resend adapter's log line and thrown message mask
+- **A failed send no longer carries the provider's error as its `cause`.** When the provider's text is published (the
+  default), the `cause` of `EMAIL_SEND_FAILED` is a fresh `Error` that holds the provider's message with secrets removed and address tokens masked, and the provider's `code`;
+  the provider's own error and its nested chain are not kept. A send with `publishProviderText: false`, or one whose error
+  chain is too large to examine, still carries no `cause` at all. The Resend adapter's log line and thrown message mask
   address tokens the same way (`[address]`).
 - **A failed `verify()` leaves the way a failed `generate()` does,** with the guess removed from the error's chain and a
   value that is not an error flattened.

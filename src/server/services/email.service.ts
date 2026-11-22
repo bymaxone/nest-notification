@@ -773,7 +773,7 @@ export class EmailService {
    * body (and any secret inside it) into the error without the caller having
    * declared anything. Echo detection starts from the collected excerpts so
    * that with nothing declared and nothing echoed the list is verifiably
-   * empty and the raw error passes through untouched.
+   * empty and the text is only masked.
    */
   private gatherRedactionValues(
     parts: readonly string[],
