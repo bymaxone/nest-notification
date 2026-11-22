@@ -190,6 +190,18 @@ describe('maskAddressTokens', () => {
     expect(out).not.toMatch(/Alice/u)
   })
 
+  it('should leave out the front of an address whose longest quoted piece that still breaks the token closes one past what was read', () => {
+    // The quote opens at 8,317, then a space, then 299 escaped astral characters and the closing
+    // quote: 900 code units, so the closing quote is at 9,216, one past what was read. The quoted
+    // piece cannot close, the token is cut at the space after the quote and ends at 8,318, which is
+    // 898 before the end of what was read: it is inside the zone that is left out, by one.
+    const text = `${' '.repeat(8100)}${'x'.repeat(217)}" ${'\\😀'.repeat(299)}"@example.com`
+
+    const out = maskAddressTokens(text, () => '#')
+
+    expect(out).not.toContain('xxx')
+  })
+
   it('should read a quoted piece of the most units, each an escaped astral character, as one token', () => {
     const piece = `"${'\\😀'.repeat(QUOTED_UNITS)}"@example.com`
 
