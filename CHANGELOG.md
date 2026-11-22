@@ -11,7 +11,7 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 ## [Unreleased]
 
-## [1.4.23] - 2026-11-21
+## [1.4.23] - 2026-11-22
 
 ### Fixed
 
@@ -37,7 +37,8 @@ unknown` keeps its brackets). The at-sign is `@`, fullwidth `\uff20`, small `\uf
   mistake; a mask of yours that throws is answered with `[masked]`, and the failure it was called from is still
   reported. A recipient that is not an address (a phone number) is replaced where the OTP path wrote it exactly.
 - **A failed send no longer carries the provider's error as its `cause`.** When the provider's text is published (the
-  default), the `cause` of `EMAIL_SEND_FAILED` is a fresh `Error` that holds the provider's message with secrets removed and address tokens masked, and the provider's `code`;
+  default), the `cause` of `EMAIL_SEND_FAILED` is a fresh `Error` that holds the provider's message with secrets removed and address tokens masked, and the provider's `code`, which is dropped when it holds a value declared secret (`auditRedactValues`, or
+  `redactValues` on a provider's own send) and is dropped the same way from the adapters' thrown error and log line;
   the provider's own error and its nested chain are not kept. A send with `publishProviderText: false`, or one whose error
   chain is too large to examine, still carries no `cause` at all. The Resend and SMTP adapters' failure log line and thrown message mask
   address tokens the same way (`[address]`).
