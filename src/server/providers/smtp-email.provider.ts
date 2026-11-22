@@ -46,7 +46,13 @@ import {
   redactValues
 } from '../utils/redact'
 import { assertTimerMs } from '../utils/timer-option'
-import { AUTH_KEYS, MESSAGE_KEYS, ownTlsKeys, TRANSPORT_KEYS } from './nodemailer-keys'
+import {
+  assertRootIsClean,
+  AUTH_KEYS,
+  MESSAGE_KEYS,
+  ownTlsKeys,
+  TRANSPORT_KEYS
+} from './nodemailer-keys'
 import { mapSmtpAttachments } from './smtp-attachments'
 import type {
   NodemailerLike,
@@ -277,6 +283,8 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
   /** Sends a message already read by name, whose fields no key planted on the realm root can answer for. */
   private async sendRead(options: EmailSendOptions): Promise<EmailSendResult> {
     assertBodyParts(options.html, options.text)
+    // Before anything is created or sent: a name Nodemailer reads from its own objects cannot be shadowed.
+    assertRootIsClean()
     this.guardHeaderInjection(options)
     const from = this.buildSender(options.from, options.fromName)
     const transport = await this.getTransport()

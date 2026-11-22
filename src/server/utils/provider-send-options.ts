@@ -45,7 +45,7 @@ export function readSendOptions(options: EmailSendOptions): EmailSendOptions {
   const copy = copyByName(options, SEND_OPTION_KEYS) as unknown as EmailSendOptions
   // The entries are the caller's objects too: each is copied by name, so a field it leaves out
   // (`cid`, `contentDisposition`, a tag's `value`) is absent and not a key planted on the realm root.
-  // A `null` list is none, as it was for the adapters before the copy.
+  // A `null` list means no entries.
   const entries = (
     list: readonly object[] | null,
     keys: readonly string[]

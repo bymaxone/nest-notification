@@ -19,6 +19,7 @@ import {
 import { BymaxNotificationModule } from './bymax-notification.module'
 import type { IEmailProvider, IOtpStorage } from './interfaces'
 import { InMemoryOtpStorage } from './providers/in-memory-otp.storage'
+import { INTERNAL_KEYS } from './providers/nodemailer-keys'
 import { ResendEmailProvider } from './providers/resend-email.provider'
 import { SmtpEmailProvider } from './providers/smtp-email.provider'
 import { EmailService } from './services/email.service'
@@ -300,7 +301,9 @@ describe('a key planted on the realm-root prototype', () => {
     }
   )
 
-  it.each([...PLANTED_PROVIDER])(
+  // A key Nodemailer reads from objects it builds itself is refused by the adapter, before a transport is
+  // built (see the nodemailer spec), so it has no configuration to compare.
+  it.each(PLANTED_PROVIDER.filter(([key]) => !INTERNAL_KEYS.includes(key)))(
     'should build the SMTP transport the same when %s is planted',
     async (key, value) => {
       plant(key, value)

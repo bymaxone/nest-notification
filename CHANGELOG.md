@@ -117,7 +117,7 @@ wrong kinds, now ends the call in `OTP_STORAGE_FAILED` (or `OTP_STORAGE_NOT_CONF
 bundled stores answer correctly. A caller of `send()` that passed a list over 1000 entries, an attachment with a
 non-text, non-binary `content` or with a field other than `filename`, `content`, `contentType`, `cid` and `contentDisposition`, or a string for a boolean now gets a refusal (`EMAIL_INVALID_RECIPIENT` for the
 recipient fields, `INVALID_SCOPE_IDENTIFIER` for the rest). A dispatch with an unknown `action` or `deliverVia` now
-raises `INVALID_SCOPE_IDENTIFIER` instead of sending or storing a code, and so does a `verify()` whose `code` is not a string. A
+raises `INVALID_SCOPE_IDENTIFIER` instead of sending or storing a code, and so does a `verify()` whose `code` is not a string, and an SMTP send in a process whose `Object.prototype` holds a name Nodemailer reads from its own objects. A
 provider of your own that read a key from the options object it is given, or an option from `Object.prototype`, finds
 the object has no prototype: read the keys by name, as before, and do not call methods of `Object.prototype` on it.
 
@@ -352,9 +352,7 @@ before it reads names this library never sets, so the SMTP adapter gives it an o
 headers still named yours), and the Resend payload the same for the fields its SDK reads after spreading it. The lists
 for a message, the transport options and the credentials come from the sources of the Nodemailer the
 tests install, and a spec reads those sources and fails when a name is missing; the TLS list names what `tls.connect` reads.
-Nodemailer's own internals still read `raw`, `headers`, `encoding`, `newline` and the fields of an attachment from
-objects they create themselves: that is outside this library, and the README says to freeze `Object.prototype` at
-startup. An `IEmailProvider` of your own needs no change.
+Nodemailer's own internals read `raw`, `headers`, `encoding`, `newline` and the fields of an attachment from objects they create themselves, which no key this library hands over can shadow, so the SMTP adapter refuses to send while `Object.prototype` holds any of those names (`INVALID_SCOPE_IDENTIFIER`, before a transport is created or anything is sent, naming the fields found): a planted `raw` would replace the whole message. A spec reads the Nodemailer sources and fails when a field of an attachment is missing from that list. An `IEmailProvider` of your own needs no change.
 A log line is now an object where it was a string: with `@bymax-one/nest-logger` 1.4.23 or later `event` and
 `message` are fields of the entry, so match on `event`; with the default Nest logger the line prints as the
 object, and a custom logger that read the first argument as a string must read `message`. A match on the

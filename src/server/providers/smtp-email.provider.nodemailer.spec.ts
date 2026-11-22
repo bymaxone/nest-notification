@@ -13,7 +13,7 @@ import { join } from 'node:path'
 import { Logger } from '@nestjs/common'
 import * as nodemailer from 'nodemailer'
 
-import { AUTH_KEYS, MESSAGE_KEYS, TLS_KEYS, TRANSPORT_KEYS } from './nodemailer-keys'
+import { AUTH_KEYS, INTERNAL_KEYS, MESSAGE_KEYS, TLS_KEYS, TRANSPORT_KEYS } from './nodemailer-keys'
 import { SmtpEmailProvider } from './smtp-email.provider'
 
 const MESSAGE = {
@@ -154,19 +154,42 @@ describe('the message the SMTP adapter gives Nodemailer', () => {
     const sent = await stream.info()
     expect(normalise(sent.message)).toBe(normalise((await sentOf(Promise.resolve(direct))).message))
   })
+})
 
-  it('should say plainly that Nodemailer reads these names from objects it builds itself', async () => {
-    // A limit of the Nodemailer this adapter hands the message to, not of the adapter: `raw`,
-    // `headers`, `encoding` and `newline`, and the fields of an attachment, are read from ordinary
-    // objects Nodemailer creates after it has copied the message, so no key the adapter sets can
-    // shadow them. The README tells a host to run with a frozen `Object.prototype`.
+describe('a realm root that holds a name Nodemailer reads from objects it builds itself', () => {
+  it.each(INTERNAL_KEYS)(
+    'should refuse the send, with nothing created or sent, when %s is planted',
+    async (key) => {
+      const created = jest.spyOn(nodemailer, 'createTransport')
+      plantKeys({ [key]: 'planted' })
+
+      const sending = new SmtpEmailProvider({ host: '127.0.0.1' }).send(MESSAGE)
+
+      await expect(sending).rejects.toMatchObject({ code: 'notification.invalid_scope_identifier' })
+      expect(created).not.toHaveBeenCalled()
+    }
+  )
+
+  it('should name the fields it found and nothing else', async () => {
+    plantKeys({ raw: 'From: evil@evil.test', path: '/etc/hosts' })
+
+    const refusal = (await new SmtpEmailProvider({ host: '127.0.0.1' })
+      .send(MESSAGE)
+      .catch((error: unknown) => error)) as { getResponse(): unknown }
+
+    expect(refusal.getResponse()).toMatchObject({
+      error: { details: { boundary: 'SmtpEmailProvider', parameter: 'Object.prototype' } }
+    })
+    expect(JSON.stringify(refusal.getResponse())).toContain('holds path, raw')
+    expect(JSON.stringify(refusal.getResponse())).not.toContain('evil')
+  })
+
+  it('should send as before when nothing of the kind is planted', async () => {
     const stream = streamTransport()
-    plantKeys({ raw: 'From: evil@evil.test\r\n\r\nplanted' })
 
     await new SmtpEmailProvider({ host: '127.0.0.1' }).send(MESSAGE)
 
-    const sent = await stream.info()
-    expect(sent.message.toString('utf8')).toContain('planted')
+    expect((await stream.info()).envelope.to).toStrictEqual(['real@acme.com'])
   })
 })
 
@@ -231,7 +254,7 @@ describe('the transport options the SMTP adapter gives Nodemailer', () => {
         seen.push(options)
         throw new Error('stop before connecting')
       }) as never)
-    plantKeys({ rejectUnauthorized: false, path: '/tmp/planted.sock', minVersion: 'TLSv1' })
+    plantKeys({ rejectUnauthorized: false, servername: 'planted.test', minVersion: 'TLSv1' })
 
     await new SmtpEmailProvider({ host: '127.0.0.1', port: 465 })
       .send(MESSAGE)
@@ -241,7 +264,7 @@ describe('the transport options the SMTP adapter gives Nodemailer', () => {
     const options = seen[0] ?? {}
     expect(seen.length).toBeGreaterThan(0)
     expect(Reflect.get(options, 'rejectUnauthorized')).toBeUndefined()
-    expect(Reflect.get(options, 'path')).toBeUndefined()
+    expect(Reflect.get(options, 'servername')).toBeUndefined()
     expect(Reflect.get(options, 'minVersion')).toBeUndefined()
   })
 })
@@ -361,6 +384,14 @@ describe('the lists of names Nodemailer reads', () => {
     )
 
     expect(missing(found, MESSAGE_KEYS)).toStrictEqual([])
+  })
+
+  it('should name every field Nodemailer reads from an attachment among the names the realm root may not hold', () => {
+    const found = namesRead(/\b(?:attachment|alternative|element|icalEvent)\.([A-Za-z_]\w*)/gu, [
+      'mail-composer'
+    ])
+
+    expect(missing(found, INTERNAL_KEYS)).toStrictEqual([])
   })
 
   it('should name every key Nodemailer reads from the options of a transport', () => {

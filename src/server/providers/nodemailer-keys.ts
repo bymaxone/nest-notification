@@ -13,7 +13,12 @@
  * message, the transport options or the credentials is missing here.
  */
 
+import { refuseInput } from '../utils/bounded-list'
 import { withOwnKeys } from '../utils/read-options'
+
+// Captured when the module loads: this realm's root prototype, and the test that asks what it holds.
+const ROOT = Object.prototype
+const hasOwn = Object.hasOwn
 
 /** What Nodemailer reads from a message. */
 export const MESSAGE_KEYS =
@@ -52,4 +57,32 @@ export function ownTlsKeys<T>(tls: T): T {
   const isOptions =
     tls === undefined || (typeof tls === 'object' && tls !== null && !Array.isArray(tls))
   return (isOptions ? withOwnKeys((tls ?? {}) as object, TLS_KEYS) : tls) as T
+}
+
+/**
+ * What Nodemailer reads from ordinary objects it builds itself after it has copied the message: the
+ * fields of the message, of an attachment and of an alternative that it looks up again. No object
+ * this adapter hands over can shadow them, so a key planted on the realm root under one of these
+ * names would decide what is sent (`raw` replaces the whole message).
+ */
+export const INTERNAL_KEYS =
+  'cid content contentDisposition contentTransferEncoding contentType encoding filename headers href httpHeaders newline path raw tls'.split(
+    ' '
+  )
+
+/**
+ * Refuses the send when the realm root holds a name Nodemailer reads from objects it builds itself.
+ * It fails closed and before anything is created or sent, so no network I/O has happened.
+ *
+ * @throws NotificationException `INVALID_SCOPE_IDENTIFIER`, naming the fields and nothing else.
+ */
+export function assertRootIsClean(): void {
+  const held = INTERNAL_KEYS.filter((name) => hasOwn(ROOT, name))
+  if (held.length > 0) {
+    throw refuseInput(
+      'SmtpEmailProvider',
+      'Object.prototype',
+      `holds ${held.join(', ')}, which Nodemailer reads from objects it builds itself`
+    )
+  }
 }
