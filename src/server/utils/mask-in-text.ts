@@ -41,16 +41,9 @@ const ESCAPE =
 /** The most times a token is decoded; one that still changes after that is treated as an address. */
 const MAX_DECODES = 8
 
-/** A run of `%xx` bytes as text; when it is not UTF-8, the bytes that are ASCII. */
+/** A run of `%xx` bytes as UTF-8 text; a byte that is not valid UTF-8 becomes U+FFFD, the ASCII around it stays. */
 function fromPercent(run: string): string {
-  try {
-    return decodeURIComponent(run)
-  } catch {
-    // Stryker disable next-line Regex: equivalent — a byte pair outside 0-7 left in place, or decoded to a letter, is never an at-sign, and an at-sign pair beside it is decoded on the next pass; a token that needs more passes than MAX_DECODES is masked either way.
-    return run.replace(/%[0-7][0-9a-f]/giu, (pair) =>
-      String.fromCharCode(parseInt(pair.slice(1), 16))
-    )
-  }
+  return Buffer.from(run.replaceAll('%', ''), 'hex').toString('utf8')
 }
 
 /** One spelling decoded; a code point out of range stays as it was written. */
@@ -72,9 +65,12 @@ function decodeOne(
   if (digits === undefined) {
     return fromPercent(spelling)
   }
-  const point = parseInt(digits, decimal === undefined ? 16 : 10)
-  // Stryker disable next-line EqualityOperator: equivalent — U+10FFFF is no at-sign, so keeping its spelling or decoding it leaves the answer of holdsAtSign the same.
-  return point <= 0x10ffff ? String.fromCodePoint(point) : spelling
+  try {
+    return String.fromCodePoint(parseInt(digits, decimal === undefined ? 16 : 10))
+  } catch {
+    // A number past U+10FFFF, or too long to be one, is no character: the spelling stays.
+    return spelling
+  }
 }
 
 /**

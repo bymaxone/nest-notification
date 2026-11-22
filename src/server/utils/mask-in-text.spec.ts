@@ -73,6 +73,27 @@ describe('maskAddressTokens', () => {
     expect(maskAddressTokens('AT&amp;T said &AMP; no', () => '#')).toBe('AT&amp;T said &AMP; no')
   })
 
+  it.each([
+    ['a code point past the last one', 'a &#x110000; b'],
+    ['a number too long to be a code point', `a &#x${'f'.repeat(400)}; b`],
+    ['bytes of a code point past the last one', 'a %F4%90%80%80 b'],
+    ['bytes that are not UTF-8', 'a %FF%FE%80 b']
+  ])('should leave %s as it was written, without throwing', (_label, text) => {
+    expect(maskAddressTokens(text, () => '#')).toBe(text)
+  })
+
+  it('should find an at-sign beside bytes that are not UTF-8, in any position', () => {
+    expect(maskAddressTokens('a %80%40x.com b %40%FF c', () => '#')).toBe('a # b # c')
+  })
+
+  it('should not read a code point past the BMP as the character its low sixteen bits spell', () => {
+    expect(maskAddressTokens('AT&#x10040;T', () => '#')).toBe('AT&#x10040;T')
+  })
+
+  it('should keep an out-of-range number as written, so what is around it cannot join into an at-sign', () => {
+    expect(maskAddressTokens('a&#x&#x110000;40;b', () => '#')).toBe('a&#x&#x110000;40;b')
+  })
+
   it('should decode the largest code point without treating it as out of range', () => {
     expect(maskAddressTokens('a &#x10ffff;&#64; b', () => '#')).toBe('a # b')
   })
