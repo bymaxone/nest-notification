@@ -29,8 +29,8 @@ the entries that carry one, is the compatibility contract — read it, not the n
   `audit.maskRecipient` answers for it, whoever the address belongs to and however it is spelled (`550 <bob@x.com>
 unknown` keeps its brackets). The at-sign is `@`, fullwidth `\uff20`, small `\ufe6b`, or any escape of one of them: each token is decoded
   (percent bytes, `%u0040`, numeric and named entities, `\x40`, `\u0040`, `\u{40}`) again and again until it stops
-  changing, so `%2540`, `&amp;#64;`, `%25%34%30` and `%EF%BC%A0` are all found, and a token still changing after eight
-  passes is masked. A mask that hands the address back (the default one) is replaced by `[address]`. A token is
+  changing, so `%2540`, `&amp;#64;`, `%25%34%30` and `%EF%BC%A0` are all found, and a token that never stops changing
+  is masked. A mask that hands the address back (the default one) is replaced by `[address]`. A token is
   a run of characters that are not ASCII white space and not one of `<>(),[]`, a quoted string counting as one piece
   (`"first last"@x.com`, escapes and all); every other space (no-break, zero-width) stays inside the token, so it cannot
   cut an address in two. Words that merely contain an at-sign are masked too, since a missed address is the worse
@@ -65,7 +65,7 @@ unknown` keeps its brackets). The at-sign is `@`, fullwidth `\uff20`, small `\uf
   `contentDisposition: 'inline'`; SMTP writes them as the `Content-ID` and the `Content-Disposition`, and Resend takes the
   `cid` as its content id and has no disposition field, so it refuses a `contentDisposition` that disagrees with the
   `cid` (inline without one, attachment with one) instead of dropping it. Any other field, enumerable or not, string or symbol (`encoding`, `headers`,
-  `path`), on an attachment or a tag is refused with a refusal that names the attachments, where a copy would drop it without a word. The kinds of
+  `path`), on an attachment or a tag is refused, where a copy would drop it without a word. The kinds of
   `filename`, `contentType`, `cid` and `contentDisposition` are checked. The byte budget measures a `Buffer` or a
   `Uint8Array` through the typed array's own getter, so an own `length` or `byteLength` property cannot make it look
   empty.
