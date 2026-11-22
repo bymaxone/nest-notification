@@ -167,6 +167,40 @@ describe('the transport options the SMTP adapter gives Nodemailer', () => {
     expect(options?.localAddress).toBeUndefined()
   })
 
+  it('should build the transport Nodemailer builds for the same plain configuration', async () => {
+    const options: Record<string, unknown>[] = []
+    const real = nodemailer.createTransport.bind(nodemailer)
+    jest.spyOn(nodemailer, 'createTransport').mockImplementation(((config: object) => {
+      const transport = real(config) as unknown as { transporter: { options: object } }
+      options.push({ ...transport.transporter.options })
+      return transport
+    }) as never)
+    const plain = nodemailer.createTransport({
+      host: '127.0.0.1',
+      port: 1,
+      secure: false,
+      requireTLS: false,
+      connectionTimeout: 10_000,
+      greetingTimeout: 10_000,
+      socketTimeout: 20_000
+    })
+
+    await new SmtpEmailProvider({ host: '127.0.0.1', port: 1 }).send(MESSAGE).catch(() => undefined)
+
+    const mine = options.at(-1) ?? {}
+    const direct = (plain as unknown as { transporter: { options: Record<string, unknown> } })
+      .transporter.options
+    const defined = (value: Record<string, unknown>): string =>
+      JSON.stringify(
+        Object.fromEntries(
+          Object.entries(value)
+            .filter(([, v]) => v !== undefined)
+            .sort(([a], [b]) => a.localeCompare(b))
+        )
+      )
+    expect(defined(mine)).toBe(defined({ ...direct, tls: {} }))
+  })
+
   it('should connect with the certificate check on and to the host asked, whatever tls keys are planted', async () => {
     const seen: Record<string, unknown>[] = []
     jest
