@@ -18,11 +18,14 @@ const mockResendSend = jest.fn()
 jest.mock('nodemailer', () => ({ __esModule: true, createTransport: mockCreateTransport }), {
   virtual: true
 })
+const mockResendClient = jest.fn()
 jest.mock(
   'resend',
   () => ({
     __esModule: true,
-    Resend: jest.fn().mockImplementation(() => ({ emails: { send: mockResendSend } }))
+    Resend: function Resend() {
+      return mockResendClient()
+    }
   }),
   { virtual: true }
 )
@@ -50,6 +53,7 @@ beforeEach(() => {
     .mockImplementation(() => ({ sendMail: mockSendMail, verify: mockVerify }))
   mockSendMail.mockReset().mockResolvedValue({ messageId: 'x' })
   mockResendSend.mockReset().mockResolvedValue({ data: { id: 'r1' }, error: null })
+  mockResendClient.mockReset().mockImplementation(() => ({ emails: { send: mockResendSend } }))
 })
 
 afterEach(() => {
@@ -89,6 +93,7 @@ describe.each(NAMES)('a %s planted after the adapter was built', (name) => {
     await expect(provider.send(MESSAGE)).rejects.toMatchObject({
       code: 'notification.invalid_scope_identifier'
     })
+    expect(mockResendClient).not.toHaveBeenCalled()
     expect(mockResendSend).not.toHaveBeenCalled()
   })
 
@@ -129,17 +134,16 @@ describe('a name planted between the first check and the call that does I/O', ()
     expect(mockVerify).not.toHaveBeenCalled()
   })
 
-  it('should refuse the Resend payload at the SDK call', async () => {
-    const provider = new ResendEmailProvider({ apiKey: 'k' })
-    await provider.send(MESSAGE)
-    mockResendSend.mockImplementation(() => {
-      throw new Error('must not run')
+  it('should refuse the Resend payload at the SDK call when the SDK client was loaded after the first check', async () => {
+    mockResendClient.mockImplementation(() => {
+      plant('getSocket')
+      return { emails: { send: mockResendSend } }
     })
-    plant('getSocket')
 
-    await expect(provider.send(MESSAGE)).rejects.toMatchObject({
+    await expect(new ResendEmailProvider({ apiKey: 'k' }).send(MESSAGE)).rejects.toMatchObject({
       code: 'notification.invalid_scope_identifier'
     })
+    expect(mockResendSend).not.toHaveBeenCalled()
   })
 })
 
