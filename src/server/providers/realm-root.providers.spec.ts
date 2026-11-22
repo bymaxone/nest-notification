@@ -122,15 +122,15 @@ describe('a name planted between the first check and the call that does I/O', ()
     expect(mockSendMail).not.toHaveBeenCalled()
   })
 
-  it('should not run the readiness check against a root planted after the transport was created', async () => {
+  it('should refuse the readiness check, not run it, against a root planted after the transport was created', async () => {
     mockCreateTransport.mockImplementation(() => {
       plant('getSocket')
       return { sendMail: mockSendMail, verify: mockVerify }
     })
 
-    await expect(new SmtpEmailProvider({ host: 'h' }).verify()).rejects.toThrow(
-      'the relay did not accept the connection'
-    )
+    await expect(new SmtpEmailProvider({ host: 'h' }).verify()).rejects.toMatchObject({
+      code: 'notification.invalid_scope_identifier'
+    })
     expect(mockVerify).not.toHaveBeenCalled()
   })
 

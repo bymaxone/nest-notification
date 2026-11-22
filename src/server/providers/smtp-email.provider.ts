@@ -60,6 +60,7 @@ import type {
   SmtpTransportLike
 } from './smtp-email.types'
 import { readPool, readSmtpOptions } from './smtp-options'
+import { relayRefused } from './smtp-relay-refused'
 export type {
   SmtpCredentials,
   SmtpEmailProviderOptions,
@@ -320,19 +321,17 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
    * what it reports is the same words every time.
    *
    * @throws NotificationException `INVALID_SCOPE_IDENTIFIER` when `Object.prototype` holds a non-standard
-   *   key when the check starts.
+   *   key, before the transport is built and again before it connects.
    * @throws Error `SmtpEmailProvider: the relay did not accept the connection`, whatever the cause.
    */
   async verify(): Promise<void> {
     assertStandardRealmRoot('SmtpEmailProvider')
-    try {
-      const transport = await this.getTransport()
-      // Again before the connection, and inside the try: the answer stays the same words every time.
-      assertStandardRealmRoot('SmtpEmailProvider')
-      await transport.verify?.()
-    } catch {
-      throw new Error('SmtpEmailProvider: the relay did not accept the connection')
-    }
+    const transport = await this.getTransport().catch(relayRefused)
+    // Again before the connection; outside the wrap, so it is the refusal and not the relay's answer.
+    assertStandardRealmRoot('SmtpEmailProvider')
+    await Promise.resolve()
+      .then(() => transport.verify?.())
+      .catch(relayRefused)
   }
 
   /**
