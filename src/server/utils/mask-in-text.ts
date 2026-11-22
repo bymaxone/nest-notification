@@ -18,13 +18,6 @@ const MAX_TEXT = 8192
  */
 const LOOKAHEAD = 1024
 
-/**
- * How near the end of what was read a token may end before its end is in doubt: a quoted piece is at
- * most 300 characters between its quotes, so a quote that opens this close to the end may close
- * beyond it, and the token that precedes it would be published without the at-sign that follows.
- */
-const EDGE = 302
-
 /** What stands for a token whose mask threw. */
 const MASK_FAILED = '[masked]'
 
@@ -35,14 +28,29 @@ const ADDRESS_MASK = '[address]'
 const MAX_TOKEN = 512
 
 /**
+ * How many units a quoted piece may hold between its quotes: a unit is one character, or a backslash
+ * and the character it escapes, so the piece spans up to twice this between its quotes. The pattern below spells the number out, and
+ * a spec holds the two to each other.
+ */
+export const QUOTED_UNITS = 300
+
+/**
  * A token: a run of characters that are neither ASCII white space nor one of `<>(),[]` (any other
  * space stays inside it, so it cannot cut an address in two), where a quoted string
  * (`"first last"@x.com`) is one piece. Inside the quotes a backslash escapes the next character and
- * at most 300 characters may stand between them, so a text of opening quotes is not read again from
+ * at most {@link QUOTED_UNITS} units may stand between them, so a text of opening quotes is not read again from
  * each one to its end; a quote that opens no such piece is an ordinary character. The apostrophe
  * is no delimiter (`o'brien@x.com` is an address), nor is the semicolon, which ends `&#64;`.
  */
 const TOKEN = /(?:"(?:[^"\\]|\\.){0,300}"|[^\t-\r ()<>[\],])+/gu
+
+/**
+ * How near the end of what was read a token may end before its end is in doubt: a quoted piece is at
+ * most twice {@link QUOTED_UNITS} characters between its quotes, and the quotes, so a quote that opens
+ * this close to the end may close beyond it, and the token that precedes it would be published
+ * without the at-sign that follows.
+ */
+const EDGE = 2 * QUOTED_UNITS + 2
 
 /** The at-sign itself: `@`, fullwidth `\uff20` or small `\ufe6b`. */
 const AT_SIGN = /[@\uff20\ufe6b]/u

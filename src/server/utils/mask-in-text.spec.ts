@@ -4,7 +4,7 @@
  * @layer utils
  */
 
-import { maskAddressTokens, maskExact } from './mask-in-text'
+import { maskAddressTokens, QUOTED_UNITS, maskExact } from './mask-in-text'
 
 const mask = (recipient: string): string => `<${String(recipient.length)}>`
 
@@ -135,6 +135,24 @@ describe('maskAddressTokens', () => {
     const out = maskAddressTokens(text, () => '#')
 
     expect(out).not.toMatch(/alice|zzz{10}"/u)
+  })
+
+  it('should read a quoted piece of as many escaped pairs as the constant allows as one token, and no more', () => {
+    const piece = (units: number): string => `"${'\\ '.repeat(units)}"@example.com`
+
+    expect(maskAddressTokens(piece(QUOTED_UNITS), () => '#')).toBe('#')
+    expect(maskAddressTokens(piece(QUOTED_UNITS + 1), () => '#')).not.toBe('#')
+  })
+
+  it('should leave out the front of an address whose quoted piece is made of escaped pairs and closes beyond what was read', () => {
+    // The quote opens 501 characters before the end of what was read (9,216) and its body, 300 escaped
+    // spaces, closes past it: the token is cut at the first space, far from the end by a count of one
+    // character per unit, and near it by a count of two.
+    const text = `${' '.repeat(8100)}${'z'.repeat(615)}"alice ${'\\ '.repeat(300)}"@example.com`
+
+    const out = maskAddressTokens(text, () => '#')
+
+    expect(out).not.toMatch(/alice/u)
   })
 
   it('should leave out a token that runs to the end of what was read', () => {
