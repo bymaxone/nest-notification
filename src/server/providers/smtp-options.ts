@@ -190,8 +190,8 @@ function copyTlsEntries(tls: object, name: 'key' | 'pfx', field: 'pem' | 'buf'):
       }
       const passphrase: unknown = readName(item, 'passphrase')
       return passphrase === undefined
-        ? { [field]: readName(item, field) }
-        : { [field]: readName(item, field), passphrase }
+        ? nullProto({ [field]: readName(item, field) })
+        : nullProto({ [field]: readName(item, field), passphrase })
     })
   )
 }

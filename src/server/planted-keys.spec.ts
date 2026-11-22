@@ -386,8 +386,8 @@ describe('a key planted on the realm-root prototype', () => {
       })
 
       const options = mockCreateTransport.mock.calls[0]?.[0] as Record<string, unknown>
-      expect(Object.keys(options)).not.toContain('maxConnections')
-      expect(JSON.stringify(options)).not.toContain('99')
+      expect(Reflect.get(options, 'maxConnections')).toBeUndefined()
+      expect(Reflect.get(options, 'maxMessages')).toBeUndefined()
     })
 
     it('should not take a plain pool for a sequence because of a planted length', async () => {

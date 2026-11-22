@@ -29,7 +29,7 @@ import { logEvent } from '../utils/log-event'
 import { codeWithoutSecrets } from '../utils/masked-failure'
 import { publishedFailure } from '../utils/provider-failure'
 import { readSendOptions } from '../utils/provider-send-options'
-import { assertOptionsObject, nullProto, readOptionKeys } from '../utils/read-options'
+import { assertOptionsObject, nullProto, readOptionKeys, withOwnKeys } from '../utils/read-options'
 import {
   REDACTED_VALUE,
   collectEchoedExcerpts,
@@ -150,6 +150,16 @@ interface ResendSendPayload {
   attachments: ReadonlyArray<Record<string, unknown>> | undefined
 }
 
+/**
+ * What the SDK reads from the payload, which it spreads into an ordinary object first: the fields it
+ * sends and the ones this adapter never sets (`react`, `scheduledAt`, `template`, `topicId`), which
+ * would otherwise answer with a key planted on the realm root.
+ */
+const RESEND_PAYLOAD_KEYS =
+  'attachments bcc cc from headers html react replyTo scheduledAt subject tags template text to topicId'.split(
+    ' '
+  )
+
 /** The payload the SDK is given: the envelope and the body, and nothing else of the input. */
 function toPayload(
   options: EmailSendOptions,
@@ -158,19 +168,22 @@ function toPayload(
 ): ResendSendPayload {
   // No prototype: the SDK reads fields this adapter never sets (`scheduledAt`...), and a key planted
   // on the realm root must not answer for them.
-  return nullProto({
-    from,
-    to: options.to,
-    subject: options.subject,
-    html: options.html,
-    text: options.text,
-    replyTo: options.replyTo,
-    cc: options.cc,
-    bcc: options.bcc,
-    tags: options.tags,
-    headers: options.headers,
-    attachments
-  })
+  return withOwnKeys(
+    {
+      from,
+      to: options.to,
+      subject: options.subject,
+      html: options.html,
+      text: options.text,
+      replyTo: options.replyTo,
+      cc: options.cc,
+      bcc: options.bcc,
+      tags: options.tags,
+      headers: options.headers,
+      attachments
+    },
+    RESEND_PAYLOAD_KEYS
+  )
 }
 
 /**

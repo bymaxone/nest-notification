@@ -67,6 +67,22 @@ export function nullProto<T extends object>(source: T): T {
 }
 
 /**
+ * Copies `value` into an object with no prototype that has an own key for each of `names`, `undefined`
+ * where `value` has none: for a reader that copies what it is given into an ordinary object and
+ * then reads names the host never set, so the own key shadows what the realm root holds.
+ *
+ * @param value - What the adapter sets.
+ * @param names - Every name the reader looks for.
+ * @returns The object to hand over.
+ */
+export function withOwnKeys<T extends object>(value: T, names: readonly string[]): T {
+  return Object.assign(
+    nullProto(Object.fromEntries(names.map((name) => [name, undefined]))),
+    value
+  ) as T
+}
+
+/**
  * Reads `keys` from `source` once each, into a new plain object. A value that is `undefined` or
  * `null` is left out: an option that reads as either is not set and takes its default, the same as
  * a key that is absent, and the checks run on what is left. `source` is returned as it is when it

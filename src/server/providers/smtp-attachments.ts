@@ -4,7 +4,8 @@
  */
 
 import type { EmailAttachment } from '../interfaces/email-provider.interface'
-import { nullProto } from '../utils/read-options'
+import { withOwnKeys } from '../utils/read-options'
+import { ATTACHMENT_KEYS } from './nodemailer-keys'
 import type { SmtpAttachment } from './smtp-email.types'
 
 /**
@@ -25,13 +26,16 @@ export function mapSmtpAttachments(
   return attachments?.map((attachment) => {
     // Each field is read once: the encoding and the content must describe the same value.
     const { filename, content, contentType, cid, contentDisposition } = attachment
-    return nullProto({
-      filename,
-      content,
-      contentType,
-      encoding: typeof content === 'string' ? 'base64' : undefined,
-      cid,
-      contentDisposition
-    })
+    return withOwnKeys(
+      {
+        filename,
+        content,
+        contentType,
+        encoding: typeof content === 'string' ? 'base64' : undefined,
+        cid,
+        contentDisposition
+      },
+      ATTACHMENT_KEYS
+    )
   })
 }

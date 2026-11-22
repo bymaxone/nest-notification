@@ -345,7 +345,16 @@ The declarations gain `INotificationObserver`, its event types (`NotificationSen
 `NotificationOtpEvent`, `NotificationSpanAttributes` and the name unions), `BYMAX_NOTIFICATION_OBSERVER`
 and `SmtpEmailProvider.verify()`, and the package gains the `./observability` subpath with its own
 declarations; the constructors of `EmailService` and `OtpService` take an optional last parameter, the
-observer, which only matters if you build them by hand. An `IEmailProvider` of your own needs no change.
+observer, which only matters if you build them by hand.
+Nodemailer copies a message, its transport options, the credentials and the TLS options into ordinary objects
+before it reads names this library never sets, so the SMTP adapter gives it an own key, set to your value or to
+`undefined`, for every name it reads (a planted `envelope` sent the one-time code to another recipient while the
+headers still named yours), and the Resend payload the same for the fields its SDK reads after spreading it. The lists
+come from the sources of the pinned Nodemailer, a spec reads those sources and fails when a name is missing, and
+other rows run the real Nodemailer (a stream transport, the real transport options, a recorded `tls.connect`).
+Nodemailer's own internals still read `raw`, `headers`, `encoding`, `newline` and the fields of an attachment from
+objects they create themselves: that is outside this library, and the README says to freeze `Object.prototype` at
+startup. An `IEmailProvider` of your own needs no change.
 A log line is now an object where it was a string: with `@bymax-one/nest-logger` 1.4.23 or later `event` and
 `message` are fields of the entry, so match on `event`; with the default Nest logger the line prints as the
 object, and a custom logger that read the first argument as a string must read `message`. A match on the

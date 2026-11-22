@@ -133,7 +133,14 @@ describe('the SMTP message and transport', () => {
 
 describe('the Resend payload', () => {
   it('should hand the SDK a payload and attachments with no planted key', async () => {
-    plantKeys({ scheduledAt: 'in the past', path: '/etc/passwd', headers: { 'X-Planted': '1' } })
+    plantKeys({
+      scheduledAt: 'in the past',
+      react: {},
+      template: { id: 'planted' },
+      topicId: 'planted',
+      path: '/etc/passwd',
+      headers: { 'X-Planted': '1' }
+    })
 
     await new ResendEmailProvider({ apiKey: 'k' }).send({
       ...MESSAGE,
@@ -143,6 +150,12 @@ describe('the Resend payload', () => {
     const payload = mockResendSend.mock.calls[0]?.[0] as { attachments: object[] }
     expect(Reflect.get(payload, 'scheduledAt')).toBeUndefined()
     expect(Reflect.get(payload, 'headers')).toBeUndefined()
+    // The SDK spreads the payload into an ordinary object before it reads `react`, `scheduledAt`,
+    // `template` and `topicId`, so the payload has an own key for each: the spread keeps it.
+    const spread: Record<string, unknown> = { ...payload }
+    for (const key of ['react', 'scheduledAt', 'template', 'topicId']) {
+      expect(Reflect.get(spread, key)).toBeUndefined()
+    }
     expect(Reflect.get(payload.attachments[0] ?? {}, 'path')).toBeUndefined()
   })
 })

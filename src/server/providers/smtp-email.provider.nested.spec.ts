@@ -6,7 +6,7 @@
  * @layer infrastructure
  */
 
-import { baseOptions } from './__tests__/smtp-email-provider.fixtures'
+import { baseOptions, definedOnly } from './__tests__/smtp-email-provider.fixtures'
 import { SmtpEmailProvider } from './smtp-email.provider'
 import type {
   SmtpCredentials,
@@ -24,7 +24,7 @@ jest.mock('nodemailer', () => ({ __esModule: true, createTransport: mockCreateTr
 
 /** The transport config handed to `createTransport` on the most recent init. */
 function lastTransportConfig(): Record<string, unknown> {
-  return mockCreateTransport.mock.calls.at(-1)?.[0] as Record<string, unknown>
+  return definedOnly(mockCreateTransport.mock.calls.at(-1)?.[0])
 }
 
 /** Sends once so the transport is built from the options the provider kept. */
@@ -489,14 +489,14 @@ describe('SmtpEmailProvider: the TLS version bounds and the passphrases it redac
     }
   )
 
-  // A null `tls` is an unset one: the transport gets none, and nothing reads entries from null.
+  // A null `tls` is an unset one: the transport gets no value of the host's, and nothing reads entries from null.
   it('should build the provider with a null tls and give the transport none', async () => {
     const config = await transportOf({
       host: 'relay.example',
       tls: null
     } as unknown as SmtpEmailProviderOptions)
 
-    expect(config.tls).toBeUndefined()
+    expect(config.tls).toStrictEqual({})
   })
 
   // The passphrases are read through the private method that feeds the redaction, so the exact list

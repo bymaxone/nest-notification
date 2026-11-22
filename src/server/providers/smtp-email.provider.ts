@@ -38,7 +38,7 @@ import { codeWithoutSecrets } from '../utils/masked-failure'
 import { assertPort } from '../utils/port-option'
 import { publishedFailure } from '../utils/provider-failure'
 import { readSendOptions } from '../utils/provider-send-options'
-import { nullProto, readName } from '../utils/read-options'
+import { nullProto, readName, withOwnKeys } from '../utils/read-options'
 import {
   collectEchoedExcerpts,
   isSafeError,
@@ -46,6 +46,7 @@ import {
   redactValues
 } from '../utils/redact'
 import { assertTimerMs } from '../utils/timer-option'
+import { AUTH_KEYS, MESSAGE_KEYS, ownTlsKeys, TRANSPORT_KEYS } from './nodemailer-keys'
 import { mapSmtpAttachments } from './smtp-attachments'
 import type {
   NodemailerLike,
@@ -283,18 +284,21 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
       transport,
       // No prototype: nodemailer reads keys this adapter never sets (`envelope`, `raw`, `list`,
       // `alternatives`...), and a key planted on the realm root must not answer for them.
-      nullProto({
-        from,
-        to: options.to,
-        subject: options.subject,
-        html: options.html,
-        text: options.text,
-        replyTo: options.replyTo,
-        cc: options.cc,
-        bcc: options.bcc,
-        headers: options.headers,
-        attachments: mapSmtpAttachments(options.attachments)
-      }),
+      withOwnKeys(
+        {
+          from,
+          to: options.to,
+          subject: options.subject,
+          html: options.html,
+          text: options.text,
+          replyTo: options.replyTo,
+          cc: options.cc,
+          bcc: options.bcc,
+          headers: options.headers,
+          attachments: mapSmtpAttachments(options.attachments)
+        },
+        MESSAGE_KEYS
+      ),
       options.redactValues,
       options.publishProviderText
     )
@@ -617,7 +621,7 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
         'SmtpEmailProvider: no sender address — set `email.defaultFrom` or pass `from`'
       )
     }
-    return { name: fromName ?? '', address: from }
+    return nullProto({ name: fromName ?? '', address: from })
   }
 
   /**
@@ -724,18 +728,21 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
     }
     const port = options.port ?? DEFAULT_PORT
     const secure = options.secure ?? port === IMPLICIT_TLS_PORT
-    return nullProto({
-      host,
-      port,
-      secure,
-      requireTLS: options.requireTls ?? (!secure && !LOOPBACK_HOSTS.has(host.toLowerCase())),
-      auth: this.resolveCredentials(),
-      tls: options.tls,
-      connectionTimeout: options.connectionTimeout ?? DEFAULT_CONNECTION_TIMEOUT_MS,
-      greetingTimeout: options.greetingTimeout ?? DEFAULT_GREETING_TIMEOUT_MS,
-      socketTimeout: options.socketTimeout ?? DEFAULT_SOCKET_TIMEOUT_MS,
-      ...poolConfig(this.#pool)
-    })
+    return withOwnKeys(
+      {
+        host,
+        port,
+        secure,
+        requireTLS: options.requireTls ?? (!secure && !LOOPBACK_HOSTS.has(host.toLowerCase())),
+        auth: this.resolveCredentials(),
+        tls: ownTlsKeys(options.tls),
+        connectionTimeout: options.connectionTimeout ?? DEFAULT_CONNECTION_TIMEOUT_MS,
+        greetingTimeout: options.greetingTimeout ?? DEFAULT_GREETING_TIMEOUT_MS,
+        socketTimeout: options.socketTimeout ?? DEFAULT_SOCKET_TIMEOUT_MS,
+        ...poolConfig(this.#pool)
+      },
+      TRANSPORT_KEYS
+    )
   }
 
   /**
@@ -756,7 +763,7 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
         'SmtpEmailProvider: incomplete credentials — `credentials` needs both `user` and `pass`'
       )
     }
-    return nullProto({ user: credentials.user, pass: credentials.pass })
+    return withOwnKeys({ user: credentials.user, pass: credentials.pass }, AUTH_KEYS)
   }
 
   /**
