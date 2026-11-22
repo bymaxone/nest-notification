@@ -17,6 +17,7 @@ import * as nodemailer from 'nodemailer'
 
 import {
   AUTH_KEYS,
+  GUARDED_KEYS,
   INTERNAL_KEYS,
   MESSAGE_KEYS,
   ownTlsKeys,
@@ -231,6 +232,48 @@ describe('the TLS options the SMTP adapter gives Nodemailer, with the real tls m
   })
 })
 
+describe('names the real Nodemailer and Node read from their own instances and options', () => {
+  const closed = async (): Promise<number> => {
+    const server = net.createServer()
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const { port } = server.address() as net.AddressInfo
+    await new Promise((resolve) => server.close(resolve))
+    return port
+  }
+  const sendDirect = async (): Promise<string> => {
+    const transport = nodemailer.createTransport({ host: '127.0.0.1', port: await closed() })
+    return transport.sendMail({ from: MESSAGE.from, to: MESSAGE.to, subject: 's', html: 'x' }).then(
+      () => 'sent',
+      (error: Error) => error.message
+    )
+  }
+
+  it('should run a planted getSocket, which can hand Nodemailer another connection', async () => {
+    const called = jest.fn()
+    plantKeys({
+      getSocket: (_options: unknown, callback: (error: Error) => void) => {
+        called()
+        callback(new Error('planted socket'))
+      }
+    })
+
+    const outcome = await sendDirect()
+
+    expect(called).toHaveBeenCalled()
+    expect(outcome).toContain('planted socket')
+  })
+
+  it.each([
+    ['localAddress', 'PLANTED', /Invalid IP address/u],
+    ['localPort', 'PLANTED', /localPort/u],
+    ['autoSelectFamily', 'PLANTED', /autoSelectFamily/u]
+  ])('should bind or configure the connection from a planted %s', async (key, value, expected) => {
+    plantKeys({ [key]: value })
+
+    expect(await sendDirect()).toMatch(expected)
+  })
+})
+
 describe('a realm root that holds a name Nodemailer reads from objects it builds itself', () => {
   it.each(INTERNAL_KEYS)(
     'should refuse the send, with nothing created or sent, when %s is planted',
@@ -244,6 +287,20 @@ describe('a realm root that holds a name Nodemailer reads from objects it builds
       expect(created).not.toHaveBeenCalled()
     }
   )
+
+  it('should check again where the message is handed to the transport, after it was created', async () => {
+    const real = nodemailer.createTransport({ streamTransport: true, buffer: true })
+    const sendMail = jest.spyOn(real, 'sendMail')
+    jest.spyOn(nodemailer, 'createTransport').mockImplementation((() => {
+      plantKeys({ raw: 'From: evil@evil.test\r\n\r\nplanted' })
+      return real
+    }) as never)
+
+    const sending = new SmtpEmailProvider({ host: '127.0.0.1' }).send(MESSAGE)
+
+    await expect(sending).rejects.toMatchObject({ code: 'notification.invalid_scope_identifier' })
+    expect(sendMail).not.toHaveBeenCalled()
+  })
 
   it('should name the fields it found and nothing else', async () => {
     plantKeys({ raw: 'From: evil@evil.test', path: '/etc/hosts' })
@@ -276,7 +333,7 @@ describe('the transport options the SMTP adapter gives Nodemailer', () => {
       transporter = real(config) as never
       return transporter
     }) as never)
-    plantKeys({ service: 'gmail', proxy: 'http://evil.test:3128', localAddress: '10.9.9.9' })
+    plantKeys({ service: 'gmail', proxy: 'http://evil.test:3128' })
 
     await new SmtpEmailProvider({ host: '127.0.0.1', port: 1 }).send(MESSAGE).catch(() => undefined)
 
@@ -285,7 +342,6 @@ describe('the transport options the SMTP adapter gives Nodemailer', () => {
     expect(options?.port).toBe(1)
     expect(options?.service).toBeUndefined()
     expect(options?.proxy).toBeUndefined()
-    expect(options?.localAddress).toBeUndefined()
   })
 
   it('should build the transport Nodemailer builds for the same plain configuration', async () => {

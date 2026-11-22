@@ -82,8 +82,7 @@ const NODEMAILER_KEYS = {
   alternatives: [{ content: 'planted' }],
   service: 'planted-service',
   proxy: 'http://evil.test',
-  dkim: { privateKey: 'planted' },
-  localAddress: '10.0.0.66'
+  dkim: { privateKey: 'planted' }
 }
 
 describe('the SMTP message and transport', () => {

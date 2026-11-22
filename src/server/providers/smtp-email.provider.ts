@@ -391,6 +391,9 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
     redactValuesList?: readonly string[],
     publishProviderText?: boolean
   ): Promise<{ messageId?: string }> {
+    // Checked again where the message is handed over: the transport was created, and the attachments
+    // may have been read, after the first check.
+    assertRootIsClean()
     try {
       return await settleOrTimeout(
         transport.sendMail(payload),

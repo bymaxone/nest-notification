@@ -19,7 +19,7 @@ import {
 import { BymaxNotificationModule } from './bymax-notification.module'
 import type { IEmailProvider, IOtpStorage } from './interfaces'
 import { InMemoryOtpStorage } from './providers/in-memory-otp.storage'
-import { INTERNAL_KEYS } from './providers/nodemailer-keys'
+import { GUARDED_KEYS } from './providers/nodemailer-keys'
 import { ResendEmailProvider } from './providers/resend-email.provider'
 import { SmtpEmailProvider } from './providers/smtp-email.provider'
 import { EmailService } from './services/email.service'
@@ -105,7 +105,11 @@ const PLANTED_PROVIDER: ReadonlyArray<readonly [string, unknown]> = [
   ['socketTimeout', 1]
 ]
 
+/** Every key a row planted, so none outlives it. */
+const everPlanted = new Set<string>()
+
 function plant(key: string, value: unknown): void {
+  everPlanted.add(key)
   Object.defineProperty(Object.prototype, key, {
     value,
     configurable: true,
@@ -115,9 +119,14 @@ function plant(key: string, value: unknown): void {
 }
 
 function unplant(): void {
-  for (const [key] of [...PLANTED, ...PLANTED_PROVIDER]) {
+  for (const key of [
+    ...PLANTED.map(([name]) => name),
+    ...PLANTED_PROVIDER.map(([name]) => name),
+    ...everPlanted
+  ]) {
     Reflect.deleteProperty(Object.prototype, key)
   }
+  everPlanted.clear()
   // `constructor` is not deleted but put back, as the realm has it.
   Object.defineProperty(Object.prototype, 'constructor', {
     value: Object,
@@ -303,7 +312,7 @@ describe('a key planted on the realm-root prototype', () => {
 
   // A key Nodemailer reads from objects it builds itself is refused by the adapter, before a transport is
   // built (see the nodemailer spec), so it has no configuration to compare.
-  it.each(PLANTED_PROVIDER.filter(([key]) => !INTERNAL_KEYS.includes(key)))(
+  it.each(PLANTED_PROVIDER.filter(([key]) => !GUARDED_KEYS.includes(key)))(
     'should build the SMTP transport the same when %s is planted',
     async (key, value) => {
       plant(key, value)
@@ -377,7 +386,6 @@ describe('a key planted on the realm-root prototype', () => {
     })
 
     it('should not give a pool the host left unset a planted limit', async () => {
-      plant('maxConnections', 99)
       plant('maxMessages', 99)
       mockCreateTransport.mockReset()
       mockCreateTransport.mockImplementation(() => ({ sendMail: async () => ({ messageId: 'x' }) }))
@@ -390,7 +398,6 @@ describe('a key planted on the realm-root prototype', () => {
       })
 
       const options = mockCreateTransport.mock.calls[0]?.[0] as Record<string, unknown>
-      expect(Reflect.get(options, 'maxConnections')).toBeUndefined()
       expect(Reflect.get(options, 'maxMessages')).toBeUndefined()
     })
 
