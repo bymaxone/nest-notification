@@ -4,6 +4,10 @@ on:
   pull_request:
     types: [opened, edited, synchronize, reopened]
 
+# Nothing is granted to the workflow as a whole; the job asks for what it reads.
+permissions:
+  contents: read
+
 jobs:
   attribution:
     permissions:
