@@ -45,12 +45,17 @@ export function readSendOptions(options: EmailSendOptions): EmailSendOptions {
   const copy = copyByName(options, SEND_OPTION_KEYS) as unknown as EmailSendOptions
   // The entries are the caller's objects too: each is copied by name, so a field it leaves out
   // (`cid`, `contentDisposition`, a tag's `value`) is absent and not a key planted on the realm root.
-  const entries = (list: readonly object[], keys: readonly string[]): unknown[] =>
-    list.map((entry) => copyByName(entry, keys))
+  // A `null` list is none, as it was for the adapters before the copy.
+  const entries = (
+    list: readonly object[] | null,
+    keys: readonly string[]
+  ): unknown[] | undefined => list?.map((entry) => copyByName(entry, keys))
   return Object.assign(copy, {
     ...(copy.attachments === undefined
       ? {}
-      : { attachments: entries(copy.attachments as readonly object[], ATTACHMENT_KEYS) }),
-    ...(copy.tags === undefined ? {} : { tags: entries(copy.tags as readonly object[], TAG_KEYS) })
+      : { attachments: entries(copy.attachments as readonly object[] | null, ATTACHMENT_KEYS) }),
+    ...(copy.tags === undefined
+      ? {}
+      : { tags: entries(copy.tags as readonly object[] | null, TAG_KEYS) })
   })
 }

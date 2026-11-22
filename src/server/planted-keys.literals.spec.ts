@@ -160,13 +160,36 @@ describe('the attachments and tags of a direct call to an adapter', () => {
     expect(Object.keys(sent ?? {})).toStrictEqual(['filename', 'content'])
   })
 
-  it('should send the SMTP attachment and tags a direct caller gave without planted fields', async () => {
+  it('should send a Resend tag without the value a planted key would add', async () => {
+    plantKeys({ value: 'planted', name: 'planted' })
+
+    await new ResendEmailProvider({ apiKey: 'k' }).send({
+      ...MESSAGE,
+      tags: [{ name: 'n' } as never]
+    })
+
+    const tag = (mockResendSend.mock.calls[0]?.[0] as { tags: object[] }).tags[0]
+    expect(Object.keys(tag ?? {})).toStrictEqual(['name'])
+  })
+
+  it.each([
+    ['Resend', () => new ResendEmailProvider({ apiKey: 'k' })],
+    ['SMTP', () => new SmtpEmailProvider({ host: 'h' })]
+  ])(
+    'should treat a null list of attachments or tags as none on the %s adapter',
+    async (_n, make) => {
+      await expect(
+        make().send({ ...MESSAGE, attachments: null, tags: null } as never)
+      ).resolves.toBeDefined()
+    }
+  )
+
+  it('should send the SMTP attachment a direct caller gave without planted fields', async () => {
     plantKeys({ cid: 'planted-cid', contentDisposition: 'inline', value: 'planted' })
 
     await new SmtpEmailProvider({ host: 'h' }).send({
       ...MESSAGE,
-      attachments: [{ filename: 'a.txt', content: 'eA==' }],
-      tags: [{ name: 'n' } as never]
+      attachments: [{ filename: 'a.txt', content: 'eA==' }]
     })
 
     const message = mockSendMail.mock.calls[0]?.[0] as { attachments: object[] }
