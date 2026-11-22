@@ -4,9 +4,7 @@
  *
  * A provider's error can carry a code (`ECONNREFUSED`, an SDK's token). The adapters copy it to the
  * error they throw and read it for the status of the failure, so it must not hold a value the caller
- * declared secret. The `cause` of a failed send is built from the masked text alone: a library error
- * keeps its cause as a log-safe copy, which drops every property but the text, so no code would
- * survive on it.
+ * declared secret.
  */
 
 /**
