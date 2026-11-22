@@ -11,6 +11,10 @@
 
 import { timingSafeEqual } from 'node:crypto'
 
+// Read from the module once, when it loads: a replaced `crypto.timingSafeEqual` that says `true` must
+// not accept any code.
+const constantTimeEqual = timingSafeEqual
+
 /**
  * Compares two strings in constant time (after a length guard).
  *
@@ -25,5 +29,5 @@ export function safeCompare(expected: string, actual: string): boolean {
   if (expectedBytes.length !== actualBytes.length) {
     return false
   }
-  return timingSafeEqual(expectedBytes, actualBytes)
+  return constantTimeEqual(expectedBytes, actualBytes)
 }

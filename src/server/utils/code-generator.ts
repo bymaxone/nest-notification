@@ -14,6 +14,10 @@ import { randomInt } from 'node:crypto'
 
 import { NotificationException } from '../errors/notification-exception'
 
+// Read from the module once, when it loads: a host that replaces `crypto.randomInt` later (a test, a
+// patch, a hostile dependency) must not make every code predictable.
+const drawInt = randomInt
+
 /** Digits only. */
 const NUMERIC = '0123456789'
 /** Uppercase letters excluding the visually ambiguous `I` and `O`. */
@@ -58,7 +62,7 @@ export function generateOtpCode(
   const charset = charsetFor(type)
   let code = ''
   for (let i = 0; i < length; i++) {
-    code += charset.charAt(randomInt(0, charset.length))
+    code += charset.charAt(drawInt(0, charset.length))
   }
   return code
 }

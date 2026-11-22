@@ -15,6 +15,10 @@
 
 import { createHmac } from 'node:crypto'
 
+// Read from the module once, when it loads: a replaced `crypto.createHmac` must not change what a
+// stored code is compared with.
+const keyedHash = createHmac
+
 /** Prefix of a stored digest. A plaintext code is digits or letters and cannot start with it. */
 export const CODE_DIGEST_PREFIX = 'hmac-sha256:v1:'
 
@@ -33,7 +37,7 @@ const CONTEXT = 'bymax-notification:otp-code:v1\0'
 export function createCodeDigester(secret: string): (code: string) => string {
   const key = Buffer.from(secret, 'utf8')
   return (code: string): string =>
-    `${CODE_DIGEST_PREFIX}${createHmac('sha256', key).update(CONTEXT).update(code).digest('hex')}`
+    `${CODE_DIGEST_PREFIX}${keyedHash('sha256', key).update(CONTEXT).update(code).digest('hex')}`
 }
 
 /**
