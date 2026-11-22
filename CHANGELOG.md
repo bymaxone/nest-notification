@@ -28,7 +28,7 @@ the entries that carry one, is the compatibility contract — read it, not the n
   which can quote the address it refused. Every token of that text that holds an at-sign is replaced, whole, by what
   `audit.maskRecipient` answers for it, whoever the address belongs to and however it is spelled (`550 <bob@x.com>
 unknown` keeps its brackets). The at-sign is `@`, fullwidth `\uff20`, small `\ufe6b`, or any escape of one of them: each token is decoded again and
-  again until it stops changing, so `%2540`, `&amp;#64;`, `%25%34%30` and `%EF%BC%A0` are all found, and a token that never stops changing
+  again until it stops changing, so `%2540`, `&amp;#64;`, `%25%34%30` and `%EF%BC%A0` are all found, and a token that still changes after the decoder's bound
   is masked. An answer of `audit.maskRecipient` that still holds an at-sign (the default mask hands the address back, and a mask that keeps the domain does too) is replaced by `[address]`. A token is
   a run of characters that are not ASCII white space and not one of `<>(),[]`, a quoted string counting as one piece
   (`"first last"@x.com`, escapes and all); every other space (no-break, zero-width) stays inside the token, so it cannot
@@ -38,7 +38,7 @@ unknown` keeps its brackets). The at-sign is `@`, fullwidth `\uff20`, small `\uf
 - **A failed send no longer carries the provider's error as its `cause`.** When the provider's text is published (the
   default), the `cause` of `EMAIL_SEND_FAILED` is a fresh `Error` that holds the provider's message with secrets removed and address tokens masked, and nothing else (no `code`: the provider's code is read for the status of the failure);
   the provider's own error and its nested chain are not kept. A send with `publishProviderText: false`, or one whose error
-  chain is too large to examine, still carries no `cause` at all. The Resend and SMTP adapters copy the provider's `code` to the error they throw and to the log line, and drop it when it holds a value declared secret (`auditRedactValues`, or `redactValues` on a provider's own send). Their failure log line and thrown message mask
+  chain is too large to examine, still carries no `cause` at all. The Resend and SMTP adapters copy the provider's `code` to the error they throw (and to the log line when the provider's text is published), and drop it when it holds a value declared secret (`auditRedactValues`, or `redactValues` on a provider's own send). Where the provider's text is published, their failure log line and thrown message mask
   address tokens the same way (`[address]`). Out of scope, with the reason: the at-sign spelled as a word or
   with spaces (`bob [at] x.com`, `bob (at) x.com`, `bob @ x.com`), which no mail system or SDK writes into an error and
   which cannot be told from prose without reading its meaning. The text is bounded before it is read, since its length
@@ -49,7 +49,7 @@ unknown` keeps its brackets). The at-sign is `@`, fullwidth `\uff20`, small `\uf
   message), `maxAttempts`, `resendCooldownSeconds` or `codeSecret` (the limits and the key of the codes), `maskRecipient`,
   `host` or `apiKey` (a provider that is configured and points elsewhere), and any option the host left unset took the
   value. A value found only on the realm-root prototype is now absent; an own property, a property of a class of yours
-  and a getter on its prototype still count, and so does an object of another realm. The options and the message
+  and a getter on its prototype still count. The options and the message
   handed to a provider have no prototype, so a key that is not set is absent for a custom provider too.
 - **A guess that is not a string is refused before anything uses it.** `verify({ code: 271620 })` reached the
   digest, whose `TypeError` quotes the value it was given, and a `String` object compared as the code. A `code` that is
