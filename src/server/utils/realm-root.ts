@@ -11,7 +11,9 @@
  * payload that sets `constructor`), which no allowlist by name sees, so each standard key's
  * descriptor is kept at load and a descriptor that differs counts like a planted key. A standard key
  * that was not what it must be at load (the realm was polluted before the library loaded) counts on
- * every use; loading itself never throws. The refusal
+ * every use; loading itself never throws. The built-ins the options and the send paths call are
+ * compared with the ones that were there at load, by identity, so a replacement made after the import
+ * refuses too. The refusal
  * reports a count and never a key or a value, because a key can carry a secret and a value can be
  * the text an attacker wants logged.
  */
@@ -132,6 +134,167 @@ function wrongAtLoad(index: number): boolean {
 /** How many standard keys were not what they must be at load; counted on every use, never thrown. */
 const POLLUTED_AT_LOAD = KEYS.filter((_name, index) => wrongAtLoad(index)).length
 
+/** The members of the intrinsics that hold the next-methods of the iterators of arrays, strings, sets and maps. */
+const ARRAY_ITERATOR = Object.getPrototypeOf([][Symbol.iterator]()) as object
+const STRING_ITERATOR = Object.getPrototypeOf(''[Symbol.iterator]()) as object
+const SET_ITERATOR = Object.getPrototypeOf(new Set()[Symbol.iterator]()) as object
+const MAP_ITERATOR = Object.getPrototypeOf(new Map()[Symbol.iterator]()) as object
+
+/**
+ * The built-ins the options and the send paths call, by the object that holds them and their names.
+ * A host that replaced one of them after this module was imported leaves the library calling the
+ * replacement, whatever the library captured: the check refuses while one is not the one that was
+ * there at load. The global bindings are held too (`Object`, `Reflect`, `Array`, `Math`, `JSON`...).
+ */
+const BASELINE: ReadonlyArray<readonly [object, readonly PropertyKey[]]> = [
+  [
+    globalThis,
+    [
+      'Object',
+      'Reflect',
+      'Array',
+      'Math',
+      'JSON',
+      'Number',
+      'String',
+      'RegExp',
+      'Set',
+      'Map',
+      'Symbol'
+    ]
+  ],
+  [
+    Object,
+    [
+      'assign',
+      'create',
+      'defineProperty',
+      'entries',
+      'freeze',
+      'fromEntries',
+      'getOwnPropertyDescriptor',
+      'getOwnPropertyDescriptors',
+      'getOwnPropertyNames',
+      'getPrototypeOf',
+      'hasOwn',
+      'is',
+      'keys',
+      'setPrototypeOf',
+      'values'
+    ]
+  ],
+  [
+    Reflect,
+    ['apply', 'defineProperty', 'deleteProperty', 'get', 'getPrototypeOf', 'has', 'ownKeys', 'set']
+  ],
+  [Array, ['from', 'isArray']],
+  [Math, ['ceil', 'floor', 'max', 'min']],
+  [JSON, ['parse', 'stringify']],
+  [Number, ['isFinite', 'isInteger', 'isSafeInteger', 'parseInt']],
+  [String, ['fromCodePoint']],
+  [
+    Array.prototype,
+    [
+      'at',
+      'concat',
+      'entries',
+      'every',
+      'filter',
+      'find',
+      'findIndex',
+      'flat',
+      'forEach',
+      'includes',
+      'indexOf',
+      'join',
+      'keys',
+      'map',
+      'push',
+      'reduce',
+      'slice',
+      'some',
+      'sort',
+      'splice',
+      'values',
+      Symbol.iterator
+    ]
+  ],
+  [ARRAY_ITERATOR, ['next']],
+  [STRING_ITERATOR, ['next']],
+  [SET_ITERATOR, ['next']],
+  [MAP_ITERATOR, ['next']],
+  [
+    String.prototype,
+    [
+      'at',
+      'charAt',
+      'charCodeAt',
+      'codePointAt',
+      'endsWith',
+      'includes',
+      'indexOf',
+      'localeCompare',
+      'match',
+      'matchAll',
+      'normalize',
+      'padStart',
+      'repeat',
+      'replace',
+      'replaceAll',
+      'slice',
+      'split',
+      'startsWith',
+      'substring',
+      'toLowerCase',
+      'toUpperCase',
+      'trim',
+      'trimEnd',
+      'trimStart',
+      Symbol.iterator
+    ]
+  ],
+  [RegExp.prototype, ['exec', 'test', Symbol.match, Symbol.matchAll, Symbol.replace, Symbol.split]],
+  [Set.prototype, ['add', 'delete', 'forEach', 'has', 'values', Symbol.iterator]],
+  [Map.prototype, ['delete', 'entries', 'forEach', 'get', 'has', 'set']],
+  [Function.prototype, ['apply', 'bind', 'call', 'toString']]
+]
+
+/** Each member of {@link BASELINE} that was there at load, as its holder, its name and its value. */
+export const BASELINE_MEMBERS: ReadonlyArray<readonly [object, PropertyKey]> = BASELINE.flatMap(
+  ([holder, names]) =>
+    names
+      .filter((name) => descriptorOf(holder, name)?.value !== undefined)
+      .map((name) => [holder, name] as const)
+)
+
+const MEMBER_HOLDERS: readonly object[] = BASELINE_MEMBERS.map(([holder]) => holder)
+const MEMBER_NAMES: readonly PropertyKey[] = BASELINE_MEMBERS.map(([, name]) => name)
+const MEMBER_VALUES: readonly unknown[] = BASELINE_MEMBERS.map(
+  ([holder, name]) => descriptorOf(holder, name)?.value as unknown
+)
+const MEMBER_COUNT = MEMBER_HOLDERS.length
+
+/**
+ * How many members of {@link BASELINE} are not the ones that were there at load. It walks by index and
+ * reads the holder's own data property, so a getter planted in place of a member does not run.
+ *
+ * @returns The number of replaced members.
+ */
+function replacedBuiltins(): number {
+  let replaced = 0
+  for (let index = 0; index < MEMBER_COUNT; index += 1) {
+    const descriptor = descriptorOf(
+      nth(MEMBER_HOLDERS, index) as object,
+      nth(MEMBER_NAMES, index) as PropertyKey
+    )
+    const now = descriptor === undefined ? undefined : readField(descriptor, 'value')
+    if (!same(now, nth(MEMBER_VALUES, index))) {
+      replaced += 1
+    }
+  }
+  return replaced
+}
+
 /**
  * Whether a standard key is what it was at load: present with the same value or accessors and the
  * same flags, or absent as it was. It walks by index and reads only what was captured at load.
@@ -163,7 +326,7 @@ function changed(index: number): boolean {
  */
 export function assertStandardRealmRoot(owner: string): void {
   const names = namesOf(ROOT)
-  let count = POLLUTED_AT_LOAD
+  let count = POLLUTED_AT_LOAD + replacedBuiltins()
   for (let at = 0; at < names.length; at += 1) {
     if (!setHas(STANDARD_ROOT_KEYS, nth(names, at) as string)) {
       count += 1
@@ -178,7 +341,7 @@ export function assertStandardRealmRoot(owner: string): void {
     throw refuseInput(
       owner,
       'Object.prototype',
-      `holds ${count} key(s) outside the runtime's standard set, so nothing is sent`
+      `holds ${count} key(s) or built-in(s) that are not the standard ones, so nothing is sent`
     )
   }
 }

@@ -5,7 +5,7 @@
  * @layer infrastructure
  */
 
-import { assertStandardRealmRoot, STANDARD_ROOT_KEYS } from './realm-root'
+import { assertStandardRealmRoot, BASELINE_MEMBERS, STANDARD_ROOT_KEYS } from './realm-root'
 
 let planted: string[] = []
 
@@ -553,6 +553,58 @@ describe('a built-in replaced after the module was imported', () => {
       Reflect.deleteProperty(Object.prototype, 'plantedAfterImport')
     }
 
-    expect(JSON.stringify(response)).toContain('holds 1 key(s)')
+    // The planted key and the replaced global String are two, and the number is written as digits.
+    expect(JSON.stringify(response)).toContain('holds 2 key(s)')
+  })
+})
+
+describe('the built-ins the options and the send paths call', () => {
+  // References taken before any member is replaced, so the restore below cannot be undone by the row.
+  const define = Object.defineProperty
+  const describeMember = Object.getOwnPropertyDescriptor
+
+  const label = (key: PropertyKey): string => (typeof key === 'symbol' ? key.toString() : `${key}`)
+
+  it('should be ones the check holds, and not none', () => {
+    expect(BASELINE_MEMBERS.length).toBeGreaterThan(100)
+  })
+
+  it.each(
+    BASELINE_MEMBERS.map(([holder, key], index) => [`${index} ${label(key)}`, holder, key] as const)
+  )(
+    'should refuse when member %s is replaced after the import, with nothing else wrong',
+    (_name, holder, key) => {
+      const original = describeMember(holder, key) as PropertyDescriptor
+      define(holder, key, { ...original, value: () => undefined })
+      let outcome = 'did not refuse'
+      try {
+        assertStandardRealmRoot('Owner')
+      } catch {
+        outcome = 'refused'
+      } finally {
+        define(holder, key, original)
+      }
+
+      expect(outcome).toBe('refused')
+    }
+  )
+
+  it('should refuse when a member is deleted after the import', () => {
+    const original = describeMember(Math, 'ceil') as PropertyDescriptor
+    Reflect.deleteProperty(Math, 'ceil')
+    let outcome = 'did not refuse'
+    try {
+      assertStandardRealmRoot('Owner')
+    } catch {
+      outcome = 'refused'
+    } finally {
+      define(Math, 'ceil', original)
+    }
+
+    expect(outcome).toBe('refused')
+  })
+
+  it('should not refuse a realm in which nothing was replaced', () => {
+    expect(() => assertStandardRealmRoot('Owner')).not.toThrow()
   })
 })
