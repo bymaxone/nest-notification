@@ -149,24 +149,12 @@ const MAP_ITERATOR = Object.getPrototypeOf(new Map()[Symbol.iterator]()) as obje
  * The built-ins the options and the send paths call, by the object that holds them and their names.
  * A host that replaced one of them after this module was imported leaves the library calling the
  * replacement, whatever the library captured: the check refuses while one is not the one that was
- * there at load. The global bindings are held too (`Object`, `Reflect`, `Array`, `Math`, `JSON`...).
+ * there at load. The global bindings are held too (`Object`, `Reflect`, `Array`, `Math`...).
  */
 const BASELINE: ReadonlyArray<readonly [object, readonly PropertyKey[]]> = [
   [
     globalThis,
-    [
-      'Object',
-      'Reflect',
-      'Array',
-      'Math',
-      'JSON',
-      'Number',
-      'String',
-      'RegExp',
-      'Set',
-      'Map',
-      'Symbol'
-    ]
+    ['Object', 'Reflect', 'Array', 'Math', 'Number', 'String', 'RegExp', 'Set', 'Map', 'Symbol']
   ],
   [
     Object,
@@ -194,7 +182,6 @@ const BASELINE: ReadonlyArray<readonly [object, readonly PropertyKey[]]> = [
   ],
   [Array, ['from', 'isArray']],
   [Math, ['ceil', 'floor', 'max', 'min']],
-  [JSON, ['parse', 'stringify']],
   [Number, ['isFinite', 'isInteger', 'isSafeInteger', 'parseInt']],
   [String, ['fromCodePoint']],
   [
@@ -208,14 +195,18 @@ const BASELINE: ReadonlyArray<readonly [object, readonly PropertyKey[]]> = [
       'find',
       'findIndex',
       'flat',
+      'flatMap',
       'forEach',
       'includes',
       'indexOf',
       'join',
       'keys',
+      'lastIndexOf',
       'map',
+      'pop',
       'push',
       'reduce',
+      'reverse',
       'slice',
       'some',
       'sort',
@@ -238,6 +229,7 @@ const BASELINE: ReadonlyArray<readonly [object, readonly PropertyKey[]]> = [
       'endsWith',
       'includes',
       'indexOf',
+      'lastIndexOf',
       'localeCompare',
       'match',
       'matchAll',
@@ -259,8 +251,9 @@ const BASELINE: ReadonlyArray<readonly [object, readonly PropertyKey[]]> = [
     ]
   ],
   [RegExp.prototype, ['exec', 'test', Symbol.match, Symbol.matchAll, Symbol.replace, Symbol.split]],
-  [Set.prototype, ['add', 'delete', 'forEach', 'has', 'values', Symbol.iterator]],
-  [Map.prototype, ['delete', 'entries', 'forEach', 'get', 'has', 'set']],
+  [Set.prototype, ['add', 'clear', 'delete', 'forEach', 'has', 'values', Symbol.iterator]],
+  [Map.prototype, ['clear', 'delete', 'entries', 'forEach', 'get', 'has', 'set']],
+  [Buffer, ['byteLength', 'from']],
   [Function.prototype, ['apply', 'bind', 'call', 'toString']]
 ]
 

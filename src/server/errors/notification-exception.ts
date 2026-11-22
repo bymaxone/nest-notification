@@ -12,6 +12,7 @@ import { HttpException, HttpStatus } from '@nestjs/common'
 
 import type { NotificationErrorResponse } from '../../shared/types/notification-error.types'
 import { describeError } from '../utils/describe-error'
+import { nullProto, readName } from '../utils/read-options'
 import {
   NOTIFICATION_ERROR_DEFINITION_MAP,
   type NotificationErrorDefinition,
@@ -139,15 +140,23 @@ export class NotificationException extends HttpException {
     const definition = NOTIFICATION_ERROR_DEFINITION_MAP.get(key) ?? FALLBACK_DEFINITION
     const options: NotificationExceptionOptions =
       typeof optionsOrStatus === 'number' ? { status: optionsOrStatus } : (optionsOrStatus ?? {})
-    const body: NotificationErrorResponse = {
-      error: {
+    // Every field is read by name and every object handed on has no prototype: a `status`, a
+    // `message` or a `cause` planted on the realm root answers for none of them.
+    const message = readName(options, 'message') as string | undefined
+    const status = readName(options, 'status') as HttpStatus | undefined
+    const body: NotificationErrorResponse = nullProto({
+      error: nullProto({
         code: definition.code,
-        message: options.message ?? overrideMessage ?? definition.message,
+        message: message ?? overrideMessage ?? definition.message,
         details: details ?? null
-      }
-    }
+      })
+    })
     // `HttpException` only installs a truthy cause, so forwarding `undefined` is a no-op.
-    super(body, options.status ?? definition.status, { cause: toLogSafeCause(options.cause) })
+    super(
+      body,
+      status ?? definition.status,
+      nullProto({ cause: toLogSafeCause(readName(options, 'cause')) })
+    )
     this.code = definition.code
     // `HttpException` keeps its raw `options` argument as an enumerable own
     // property, so a spread or JSON serializer prints `options.cause` beside

@@ -426,3 +426,79 @@ describe('a key planted after the checks of a send began and before its first by
     expect(relay.messages).toHaveLength(1)
   })
 })
+
+describe('a name planted once the STARTTLS session is up', () => {
+  // The backstop guards the sockets the adapter opens; the STARTTLS socket is Nodemailer's. What holds
+  // here is that no object the adapter hands to Nodemailer answers for a name from the realm root.
+  // Not here, and measured: `address` (smtp-connection reads `.address` off the envelope strings it
+  // builds, so MAIL FROM and RCPT TO answer for it), `content` and `filename` (the multipart nodes
+  // Nodemailer makes read them off their own options) change what a STARTTLS session sends, and no
+  // object the adapter hands over can shadow them; `encoding` fails the send before any byte.
+  const NAMES = [
+    'name',
+    'group',
+    'raw',
+    'headers',
+    'cid',
+    'contentType',
+    'contentDisposition',
+    'contentTransferEncoding',
+    'charset',
+    'textEncoding'
+  ]
+  const WITH_ATTACHMENT = {
+    ...MESSAGE,
+    cc: 'copy@acme.com',
+    bcc: ['hidden@acme.com'],
+    replyTo: 'reply@acme.com',
+    text: 'plain text'
+  }
+
+  /** What the relay saw, with what changes from one send to the next taken out. */
+  const wire = (seen: Relay): string =>
+    JSON.stringify([
+      seen.commands,
+      seen.envelope,
+      seen.messages.map((message) =>
+        message
+          .replace(/Message-ID: <[^>]*>/gu, '')
+          .replace(/Date: .*\r\n/gu, '')
+          .replace(/_NmP-[\w-]+/gu, 'B')
+          .replace(/--[\w-]+/gu, '--B')
+      )
+    ])
+
+  async function send(name: string | undefined): Promise<string> {
+    mockGuard.enabled = false
+    const certificate = makeCertificate()
+    const seen = await startRelay({
+      certificate,
+      onStarttls: () => {
+        if (name !== undefined) {
+          plant(name, 'PLANTED')
+        }
+      }
+    })
+    try {
+      await new SmtpEmailProvider({
+        host: '127.0.0.1',
+        port: seen.port,
+        requireTls: true,
+        tls: { ca: certificate.cert }
+      })
+        .send(WITH_ATTACHMENT)
+        .catch(() => undefined)
+    } finally {
+      await seen.close()
+    }
+    return wire(seen)
+  }
+
+  it.each(NAMES)('should send the same envelope and body when %s is planted', async (name) => {
+    const clean = await send(undefined)
+
+    const sent = await send(name)
+
+    expect(sent).toBe(clean)
+  })
+})

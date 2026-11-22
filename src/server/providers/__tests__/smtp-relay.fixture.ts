@@ -23,6 +23,8 @@ export interface RelayLog {
   readonly messages: string[]
   /** The names clients sent as SNI, when the relay serves TLS from the first byte. */
   readonly servernames: string[]
+  /** The MAIL FROM and RCPT TO lines, as the client sent them. */
+  readonly envelope: string[]
 }
 
 /** A running relay. */
@@ -84,7 +86,8 @@ function sealed<T extends net.Socket>(socket: T): T {
 function converse(
   socket: net.Socket,
   log: RelayLog,
-  certificate: TestCertificate | undefined
+  certificate: TestCertificate | undefined,
+  onStarttls?: () => void
 ): void {
   let body: string | undefined
   let pending = ''
@@ -109,10 +112,14 @@ function converse(
       const line = pending.slice(0, end)
       pending = pending.slice(end + 2)
       log.commands.push(line.split(' ')[0]?.toUpperCase() ?? '')
+      if (/^(MAIL|RCPT)/iu.test(line)) {
+        log.envelope.push(line)
+      }
       if (/^EHLO/iu.test(line)) {
         socket.write(certificate ? '250-relay\r\n250 STARTTLS\r\n' : '250 relay\r\n')
       } else if (/^STARTTLS/iu.test(line) && certificate) {
         socket.write('220 go ahead\r\n')
+        onStarttls?.()
         socket.removeAllListeners('data')
         converse(
           sealed(new tls.TLSSocket(socket, { isServer: true, ...certificate })),
@@ -145,13 +152,20 @@ export async function startRelay(
     implicitTls?: boolean
     /** Runs when a client has connected, just before the relay greets it. */
     onConnect?: () => void
+    /** Runs when the relay has agreed to a STARTTLS upgrade, before the handshake. */
+    onStarttls?: () => void
   } = {}
 ): Promise<Relay> {
-  const log: RelayLog = { commands: [], messages: [], servernames: [] }
+  const log: RelayLog = { commands: [], messages: [], servernames: [], envelope: [] }
   const onSocket = (socket: net.Socket): void => {
     options.onConnect?.()
     socket.write('220 relay ready\r\n')
-    converse(sealed(socket), log, options.implicitTls ? undefined : options.certificate)
+    converse(
+      sealed(socket),
+      log,
+      options.implicitTls ? undefined : options.certificate,
+      options.onStarttls
+    )
   }
   const server =
     options.implicitTls && options.certificate

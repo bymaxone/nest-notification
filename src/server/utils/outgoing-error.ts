@@ -16,6 +16,9 @@ import {
   scrubValuesFromErrorChain
 } from './redact'
 
+// Read from the global once, when the module loads: this serialises details for a comparison.
+const stringify = JSON.stringify
+
 /**
  * Cleans a failure of any kind of the secret values before it leaves the library.
  *
@@ -70,7 +73,7 @@ function libraryText(
     const body = (error.getResponse() as { error: { message: string; details?: unknown } }).error
     return {
       catalog: `${code} ${own}`,
-      authored: `${body.message === own ? '' : body.message} ${JSON.stringify(body.details ?? '')} ${collectErrorChainText(error.cause)}`
+      authored: `${body.message === own ? '' : body.message} ${stringify(body.details ?? '')} ${collectErrorChainText(error.cause)}`
     }
   } catch {
     return undefined

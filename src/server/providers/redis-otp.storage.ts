@@ -30,6 +30,11 @@ import type {
 import { hashTenantRecipient } from '../utils/hash'
 import { assertPurpose } from '../utils/tenant-scope'
 
+// Read from the global once, when the module loads: this serialises and parses; it decides nothing,
+// so a host that spies on or replaces `JSON` later does not make the send refuse.
+const stringify = JSON.stringify
+const parse = JSON.parse
+
 /** The slim Redis surface {@link RedisOtpStorage} relies on (ioredis is structurally compatible). */
 export interface RedisLike {
   get(key: string): Promise<string | null>
@@ -158,11 +163,7 @@ export class RedisOtpStorage implements IOtpStorage {
    */
   async set(tenantId: string, recipient: string, purpose: string, entry: OtpEntry): Promise<void> {
     const ttlSeconds = Math.max(1, Math.ceil((entry.expiresAt - Date.now()) / MS_PER_SECOND))
-    await this.#redis.setex(
-      this.otpKey(tenantId, recipient, purpose),
-      ttlSeconds,
-      JSON.stringify(entry)
-    )
+    await this.#redis.setex(this.otpKey(tenantId, recipient, purpose), ttlSeconds, stringify(entry))
   }
 
   /**
@@ -179,7 +180,7 @@ export class RedisOtpStorage implements IOtpStorage {
       return null
     }
     try {
-      return JSON.parse(raw) as OtpEntry
+      return parse(raw) as OtpEntry
     } catch {
       await this.delete(tenantId, recipient, purpose)
       return null
@@ -205,7 +206,7 @@ export class RedisOtpStorage implements IOtpStorage {
       this.otpKey(tenantId, recipient, purpose),
       Date.now().toString()
     )) as string
-    return JSON.parse(raw) as ConsumeAttemptResult
+    return parse(raw) as ConsumeAttemptResult
   }
 
   /**
@@ -225,7 +226,7 @@ export class RedisOtpStorage implements IOtpStorage {
   ): Promise<void> {
     await this.#redis.set(
       this.otpKey(tenantId, recipient, purpose),
-      JSON.stringify(entry),
+      stringify(entry),
       'KEEPTTL',
       'XX'
     )

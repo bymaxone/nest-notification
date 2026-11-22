@@ -60,6 +60,7 @@ import type {
   SmtpTransportConfig,
   SmtpTransportLike
 } from './smtp-email.types'
+import { ownBody, ownRecipients } from './smtp-message-parts'
 import { readPool, readSmtpOptions } from './smtp-options'
 import { relayRefused } from './smtp-relay-refused'
 import { buildSmtpTransportConfig } from './smtp-transport-config'
@@ -251,13 +252,13 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
       withOwnKeys(
         {
           from,
-          to: options.to,
+          to: ownRecipients(options.to),
           subject: options.subject,
-          html: options.html,
-          text: options.text,
-          replyTo: options.replyTo,
-          cc: options.cc,
-          bcc: options.bcc,
+          html: ownBody(options.html as string | undefined),
+          text: ownBody(options.text),
+          replyTo: ownRecipients(options.replyTo),
+          cc: ownRecipients(options.cc),
+          bcc: ownRecipients(options.bcc),
           headers: options.headers,
           attachments: mapSmtpAttachments(options.attachments),
           disableFileAccess: true,
@@ -457,8 +458,8 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
     payload: SmtpSendPayload,
     declaredValues: readonly string[] | undefined
   ): string {
-    const values = collectEchoedExcerpts(message, payload.html)
-    values.push(...collectEchoedExcerpts(message, payload.text))
+    const values = collectEchoedExcerpts(message, payload.html?.content)
+    values.push(...collectEchoedExcerpts(message, payload.text?.content))
     if (declaredValues) {
       values.push(...declaredValues)
     }

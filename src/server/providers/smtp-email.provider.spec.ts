@@ -290,13 +290,15 @@ describe('SmtpEmailProvider', () => {
 
       expect(lastSendPayload()).toEqual({
         from: { name: '', address: 'noreply@acme.com' },
-        to: 'jane@acme.com',
+        // Each mailbox and each body part is an object with its own keys, so a name planted on the
+        // realm root is not read for it; the values are those the caller gave.
+        to: { name: '', address: 'jane@acme.com' },
         subject: 'Your code',
-        html: '<p>Secret 123456</p>',
-        text: 'Secret 123456',
-        replyTo: 'support@acme.com',
-        cc: 'cc@acme.com',
-        bcc: ['bcc@acme.com'],
+        html: { content: '<p>Secret 123456</p>' },
+        text: { content: 'Secret 123456' },
+        replyTo: { name: '', address: 'support@acme.com' },
+        cc: { name: '', address: 'cc@acme.com' },
+        bcc: [{ name: '', address: 'bcc@acme.com' }],
         headers: { 'X-Entity-Ref-ID': 'abc' },
         attachments: undefined,
         // Nodemailer is told it may open no file and no URL: the adapter sends `content` only.

@@ -28,6 +28,9 @@ import {
   received
 } from './option-numbers'
 
+// Read from the global once, when the module loads: this serialises a name for a message.
+const stringify = JSON.stringify
+
 /**
  * Validates module options, throwing on the first problem found.
  *
@@ -196,7 +199,7 @@ function validatePerPurpose(perPurpose: OtpChannelOptions['perPurpose']): void {
     const problem = purposeProblem(key)
     if (problem !== undefined) {
       throw new Error(
-        `[BymaxNotificationModule] options.otp.perPurpose has the key ${JSON.stringify(key)}, which is not a valid purpose: ${problem}`
+        `[BymaxNotificationModule] options.otp.perPurpose has the key ${stringify(key)}, which is not a valid purpose: ${problem}`
       )
     }
     const path = `otp.perPurpose.${key}`
