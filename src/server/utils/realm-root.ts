@@ -16,6 +16,8 @@
  * the text an attacker wants logged.
  */
 
+import { types } from 'node:util'
+
 import { refuseInput } from './bounded-list'
 
 // Captured when the module loads, so a host that replaces these later cannot change the answer.
@@ -24,6 +26,7 @@ const namesOf = Object.getOwnPropertyNames
 const descriptorOf = Object.getOwnPropertyDescriptor
 const same = Object.is
 const hasOwn = Object.hasOwn
+const isProxy = types.isProxy
 const sourceOf = Function.prototype.call.bind(Function.prototype.toString) as (
   fn: unknown
 ) => string
@@ -76,13 +79,16 @@ const EXPECTED_NAME: ReadonlyMap<string, string> = new Map(
 
 /**
  * Whether a value is a function the engine implements, by its source: a replacement written in
- * JavaScript that carries the same name does not read `[native code]`.
+ * JavaScript that carries the same name does not read `[native code]`, and a Proxy, which does,
+ * is refused as a Proxy.
  *
  * @param value - What a standard key held.
  * @returns `true` for a native function.
  */
 function isNative(value: unknown): boolean {
-  return typeof value === 'function' && sourceOf(value).endsWith('{ [native code] }')
+  return (
+    typeof value === 'function' && !isProxy(value) && sourceOf(value).endsWith('{ [native code] }')
+  )
 }
 
 /**

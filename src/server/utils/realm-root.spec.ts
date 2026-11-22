@@ -219,6 +219,33 @@ describe('a realm that was polluted before the library loaded', () => {
     }
   )
 
+  it.each(['toString', 'valueOf', 'hasOwnProperty'])(
+    'should refuse when %s was replaced at load by a Proxy that reads native',
+    (name) => {
+      const original = Object.getOwnPropertyDescriptor(Object.prototype, name)?.value as (
+        ...args: unknown[]
+      ) => unknown
+      // A Proxy of a native answers as the native does, so this is the form that looks the same.
+      const ofNative = new Proxy(original, {})
+      // A Proxy of a JavaScript function with the same name reads `[native code]` too.
+      const ofScript = new Proxy(
+        {
+          [name]: function (this: object, key: string) {
+            return Object.hasOwn(this, key)
+          }
+        }[name] as (...args: unknown[]) => unknown,
+        {}
+      )
+
+      expect(useAfterLoadingWith(name, ofNative)).toMatchObject({
+        code: 'notification.invalid_scope_identifier'
+      })
+      expect(useAfterLoadingWith(name, ofScript)).toMatchObject({
+        code: 'notification.invalid_scope_identifier'
+      })
+    }
+  )
+
   it('should refuse when the __proto__ accessor was replaced at load by functions of JavaScript', () => {
     const original = Object.getOwnPropertyDescriptor(
       Object.prototype,
@@ -233,6 +260,30 @@ describe('a realm that was polluted before the library loaded', () => {
         set: function (_value: unknown): void {
           // ignored
         },
+        configurable: true
+      })
+      try {
+        ;(require('./realm-root') as typeof import('./realm-root')).assertStandardRealmRoot('Owner')
+      } catch (error) {
+        caught = error
+      } finally {
+        Object.defineProperty(Object.prototype, '__proto__', original)
+      }
+    })
+
+    expect(caught).toMatchObject({ code: 'notification.invalid_scope_identifier' })
+  })
+
+  it('should refuse when the __proto__ accessor was replaced at load by Proxies of its native functions', () => {
+    const original = Object.getOwnPropertyDescriptor(
+      Object.prototype,
+      '__proto__'
+    ) as PropertyDescriptor
+    let caught: unknown
+    jest.isolateModules(() => {
+      Object.defineProperty(Object.prototype, '__proto__', {
+        get: new Proxy(original.get as () => unknown, {}),
+        set: new Proxy(original.set as (value: unknown) => void, {}),
         configurable: true
       })
       try {
