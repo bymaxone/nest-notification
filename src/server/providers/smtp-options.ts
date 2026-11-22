@@ -34,7 +34,7 @@ function isArrayLike(value: object): boolean {
   return (
     ArrayBuffer.isView(value) ||
     value instanceof ArrayBuffer ||
-    typeof (value as { length?: unknown }).length === 'number'
+    typeof readName(value, 'length') === 'number'
   )
 }
 

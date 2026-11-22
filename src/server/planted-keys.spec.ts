@@ -115,6 +115,7 @@ function unplant(): void {
   for (const [key] of [...PLANTED, ...PLANTED_PROVIDER]) {
     Reflect.deleteProperty(Object.prototype, key)
   }
+  Reflect.deleteProperty(Object.prototype, 'length')
 }
 
 async function rejection(promise: Promise<unknown>): Promise<unknown> {
@@ -124,7 +125,6 @@ async function rejection(promise: Promise<unknown>): Promise<unknown> {
   })
 }
 
-/** What the library does with a plain configuration and plain inputs, as data. */
 /** A provider that records the message it receives and fails when the subject says so. */
 function recordingProvider(sent: unknown[]): IEmailProvider {
   return {
@@ -379,6 +379,19 @@ describe('a key planted on the realm-root prototype', () => {
       const options = mockCreateTransport.mock.calls[0]?.[0] as Record<string, unknown>
       expect(Object.keys(options)).not.toContain('maxConnections')
       expect(JSON.stringify(options)).not.toContain('99')
+    })
+
+    it('should not take a plain pool for a sequence because of a planted length', async () => {
+      plant('length', 3)
+
+      const sending = new SmtpEmailProvider({ host: 'h', pool: { maxConnections: 2 } }).send({
+        to: 'a@x.com',
+        from: 'f@x.com',
+        subject: 's',
+        html: '<p>x</p>'
+      })
+
+      await expect(sending).resolves.toStrictEqual({ messageId: 'x' })
     })
 
     it('should not complete the login of the SMTP transport with a planted password', async () => {
