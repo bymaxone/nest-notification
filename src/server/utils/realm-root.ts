@@ -56,6 +56,10 @@ export const STANDARD_ROOT_KEYS: ReadonlySet<string> = new Set(
 /** The fields of a property descriptor, in the order they are kept. */
 const DESCRIPTOR_FIELDS = ['value', 'get', 'set', 'writable', 'enumerable', 'configurable'] as const
 
+/** The positions of the flags that freezing the root turns off, in {@link DESCRIPTOR_FIELDS}. */
+const WRITABLE = 3
+const CONFIGURABLE = 5
+
 /** The standard keys as a list, so the check walks them by index. */
 const KEYS: readonly string[] = [...STANDARD_ROOT_KEYS]
 
@@ -122,7 +126,8 @@ function wrongAtLoad(index: number): boolean {
   const name = nth(KEYS, index) as string
   const loaded = nth(LOADED, index)
   if (loaded === undefined) {
-    return true
+    // `node --disable-proto=delete` removes `__proto__`: a runtime without it is a standard one.
+    return name !== '__proto__'
   }
   const [value, getter, setter] = loaded
   if (name === '__proto__') {
@@ -309,7 +314,12 @@ function changed(index: number): boolean {
     return (before === undefined) !== (now === undefined)
   }
   for (let field = 0; field < DESCRIPTOR_FIELDS.length; field += 1) {
-    if (!same(nth(before, field), readField(now, nth(DESCRIPTOR_FIELDS, field) as string))) {
+    const was = nth(before, field)
+    const is = readField(now, nth(DESCRIPTOR_FIELDS, field) as string)
+    // A key that only became non-writable or non-configurable, with the same value or accessors, is a
+    // root that was hardened (`Object.freeze(Object.prototype)`), and not one that was polluted.
+    const hardened = (field === WRITABLE || field === CONFIGURABLE) && was === true && is === false
+    if (!same(was, is) && !hardened) {
       return true
     }
   }
