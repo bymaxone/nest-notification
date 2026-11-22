@@ -19,9 +19,7 @@ the entries that carry one, is the compatibility contract — read it, not the n
   that makes the SMTP and Resend adapters refuse while the realm root holds a key that is not standard looked its
   built-ins up when it ran, so code that replaced one of them after the import, with a version that says the root is
   clean, made the check say so. It now calls only references taken when the library loaded, and walks with index loops.
-  It also compares, by identity, the built-ins the options and the send paths call (the array, string, regular
-  expression, set and map methods, the iterators' `next`, the members of `Object`, `Reflect`, `Array`, `Math`,
-  `JSON` and `Number`, and the global bindings themselves) with the ones that were there when the library loaded,
+  It also compares, by identity, the built-ins the library calls with the ones that were there when it loaded,
   and refuses while one has been replaced, so a polyfill or a patch that replaces one after the import stops the
   send with the same count-only refusal. There is nothing to apply.
 
