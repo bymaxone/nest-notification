@@ -30,6 +30,7 @@ import { codeWithoutSecrets } from '../utils/masked-failure'
 import { publishedFailure } from '../utils/provider-failure'
 import { readSendOptions } from '../utils/provider-send-options'
 import { assertOptionsObject, nullProto, readOptionKeys, withOwnKeys } from '../utils/read-options'
+import { assertStandardRealmRoot } from '../utils/realm-root'
 import {
   REDACTED_VALUE,
   collectEchoedExcerpts,
@@ -278,6 +279,7 @@ export class ResendEmailProvider implements IEmailProvider {
 
   constructor(options: ResendEmailProviderOptions = {}) {
     // A copy first, so the check reads the value that is kept, once.
+    assertStandardRealmRoot('ResendEmailProvider')
     assertOptionsObject('ResendEmailProvider', options)
     const own = readOptionKeys(options, RESEND_OPTION_KEYS)
     assertTimerMs('ResendEmailProvider', 'timeoutMs', own.timeoutMs)
@@ -309,11 +311,14 @@ export class ResendEmailProvider implements IEmailProvider {
   /** Sends a message already read by name, whose fields no key planted on the realm root can answer for. */
   private async sendRead(options: EmailSendOptions): Promise<EmailSendResult> {
     assertBodyParts(options.html, options.text)
+    assertStandardRealmRoot('ResendEmailProvider')
     const attachments = toPayloadAttachments(options.attachments)
     const client = await this.getClient()
     const from = this.formatFrom(options.from, options.fromName)
     const timeoutMs = this.#options.timeoutMs ?? DEFAULT_TIMEOUT_MS
     const signal = AbortSignal.timeout(timeoutMs)
+    // Checked again where the SDK is called, after the client was loaded.
+    assertStandardRealmRoot('ResendEmailProvider')
     let result: ResendSendOutcome
     try {
       result = await settleOrAbort(

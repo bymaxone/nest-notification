@@ -15,12 +15,7 @@
 
 import { checkServerIdentity } from 'node:tls'
 
-import { refuseInput } from '../utils/bounded-list'
 import { withOwnKeys } from '../utils/read-options'
-
-// Captured when the module loads: this realm's root prototype, and the test that asks what it holds.
-const ROOT = Object.prototype
-const hasOwn = Object.hasOwn
 
 /** What Nodemailer reads from a message. */
 export const MESSAGE_KEYS =
@@ -75,43 +70,11 @@ export function ownTlsKeys<T>(tls: T): T {
  * What Nodemailer reads from ordinary objects it builds itself after it has copied the message: the
  * fields of the message, of an attachment and of an alternative that it looks up again. No object
  * this adapter hands over can shadow them, so a key planted on the realm root under one of these
- * names would decide what is sent (`raw` replaces the whole message).
+ * names would decide what is sent (`raw` replaces the whole message). The adapter refuses to send
+ * while the root holds any non-standard key (`assertStandardRealmRoot`); this list is what a spec
+ * compares with the names Nodemailer reads, to show the refusal covers them.
  */
 export const INTERNAL_KEYS =
   'cid content contentDisposition contentTransferEncoding contentType encoding filename headers href httpHeaders newline path raw tls'.split(
     ' '
   )
-
-/**
- * Names found by running the pinned Nodemailer, with the adapter, against a local relay and planting
- * each name Nodemailer's sources mention with a string, a function, an array, an object, a number and
- * a boolean: each one changed what happened (a socket taken from a planted `getSocket`, a source
- * address from `localAddress`, a crash from `timeout`, a changed recipient from `address`). They are
- * read from instances of its own (`this.getSocket`) or by Node from the options it builds, which no
- * object this adapter hands over can shadow. `scripts/probe-nodemailer-internals.mjs` repeats the
- * run for another version of Nodemailer.
- */
-export const PROBED_KEYS =
-  '_connectCalled _onTimeout _resolve _resolvedValue aborted address auth autoSelectFamily autoSelectFamilyAttemptTimeout blockList buffer connect connection get getSocket localAddress localPort mailError maxConnections parentNode pause prepared removeListener requireTLSExtensionEnabled resume rootNode set signal timeout unpipe'.split(
-    ' '
-  )
-
-/** Every name the realm root may not hold while the adapter sends. */
-export const GUARDED_KEYS = [...INTERNAL_KEYS, ...PROBED_KEYS]
-
-/**
- * Refuses the send when the realm root holds a name Nodemailer reads from objects it builds itself.
- * It fails closed and before anything is created or sent, so no network I/O has happened.
- *
- * @throws NotificationException `INVALID_SCOPE_IDENTIFIER`, naming the fields and nothing else.
- */
-export function assertRootIsClean(): void {
-  const held = GUARDED_KEYS.filter((name) => hasOwn(ROOT, name))
-  if (held.length > 0) {
-    throw refuseInput(
-      'SmtpEmailProvider',
-      'Object.prototype',
-      `holds ${held.join(', ')}, which Nodemailer reads from objects it builds itself`
-    )
-  }
-}

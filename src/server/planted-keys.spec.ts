@@ -19,11 +19,14 @@ import {
 import { BymaxNotificationModule } from './bymax-notification.module'
 import type { IEmailProvider, IOtpStorage } from './interfaces'
 import { InMemoryOtpStorage } from './providers/in-memory-otp.storage'
-import { GUARDED_KEYS } from './providers/nodemailer-keys'
 import { ResendEmailProvider } from './providers/resend-email.provider'
 import { SmtpEmailProvider } from './providers/smtp-email.provider'
 import { EmailService } from './services/email.service'
 import { OtpService } from './services/otp.service'
+
+// The own-key shadows are the second layer; they are tested with the realm-root check off. The check
+// has its own spec (`realm-root.spec.ts`).
+jest.mock('./utils/realm-root', () => ({ assertStandardRealmRoot: jest.fn() }))
 
 // `mock`-prefixed names are allowed inside the hoisted jest.mock factory.
 const mockCreateTransport = jest.fn()
@@ -310,9 +313,7 @@ describe('a key planted on the realm-root prototype', () => {
     }
   )
 
-  // A key Nodemailer reads from objects it builds itself is refused by the adapter, before a transport is
-  // built (see the nodemailer spec), so it has no configuration to compare.
-  it.each(PLANTED_PROVIDER.filter(([key]) => !GUARDED_KEYS.includes(key)))(
+  it.each(PLANTED_PROVIDER)(
     'should build the SMTP transport the same when %s is planted',
     async (key, value) => {
       plant(key, value)

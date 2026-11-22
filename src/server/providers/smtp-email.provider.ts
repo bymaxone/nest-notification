@@ -39,6 +39,7 @@ import { assertPort } from '../utils/port-option'
 import { publishedFailure } from '../utils/provider-failure'
 import { readSendOptions } from '../utils/provider-send-options'
 import { nullProto, readName, withOwnKeys } from '../utils/read-options'
+import { assertStandardRealmRoot } from '../utils/realm-root'
 import {
   collectEchoedExcerpts,
   isSafeError,
@@ -46,13 +47,7 @@ import {
   redactValues
 } from '../utils/redact'
 import { assertTimerMs } from '../utils/timer-option'
-import {
-  assertRootIsClean,
-  AUTH_KEYS,
-  MESSAGE_KEYS,
-  ownTlsKeys,
-  TRANSPORT_KEYS
-} from './nodemailer-keys'
+import { AUTH_KEYS, MESSAGE_KEYS, ownTlsKeys, TRANSPORT_KEYS } from './nodemailer-keys'
 import { mapSmtpAttachments } from './smtp-attachments'
 import type {
   NodemailerLike,
@@ -227,6 +222,7 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
    */
   constructor(options: SmtpEmailProviderOptions = {}) {
     // A copy first, so every check below reads the values that are kept, once.
+    assertStandardRealmRoot('SmtpEmailProvider')
     const own = readSmtpOptions(options)
     assertPort('SmtpEmailProvider', own.port)
     for (const [name, value] of [
@@ -283,8 +279,7 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
   /** Sends a message already read by name, whose fields no key planted on the realm root can answer for. */
   private async sendRead(options: EmailSendOptions): Promise<EmailSendResult> {
     assertBodyParts(options.html, options.text)
-    // Before anything is created or sent: a name Nodemailer reads from its own objects cannot be shadowed.
-    assertRootIsClean()
+    assertStandardRealmRoot('SmtpEmailProvider')
     this.guardHeaderInjection(options)
     const from = this.buildSender(options.from, options.fromName)
     const transport = await this.getTransport()
@@ -391,9 +386,8 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
     redactValuesList?: readonly string[],
     publishProviderText?: boolean
   ): Promise<{ messageId?: string }> {
-    // Checked again where the message is handed over: the transport was created, and the attachments
-    // may have been read, after the first check.
-    assertRootIsClean()
+    // Checked again where the message is handed over, after the transport was created.
+    assertStandardRealmRoot('SmtpEmailProvider')
     try {
       return await settleOrTimeout(
         transport.sendMail(payload),

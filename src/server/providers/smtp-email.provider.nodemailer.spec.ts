@@ -17,7 +17,6 @@ import * as nodemailer from 'nodemailer'
 
 import {
   AUTH_KEYS,
-  GUARDED_KEYS,
   INTERNAL_KEYS,
   MESSAGE_KEYS,
   ownTlsKeys,
@@ -25,6 +24,10 @@ import {
   TRANSPORT_KEYS
 } from './nodemailer-keys'
 import { SmtpEmailProvider } from './smtp-email.provider'
+
+// The own-key shadows are the second layer; they are tested with the realm-root check off. The check
+// has its own spec (`realm-root.spec.ts`).
+jest.mock('../utils/realm-root', () => ({ assertStandardRealmRoot: jest.fn() }))
 
 const MESSAGE = {
   to: 'real@acme.com',
@@ -271,57 +274,6 @@ describe('names the real Nodemailer and Node read from their own instances and o
     plantKeys({ [key]: value })
 
     expect(await sendDirect()).toMatch(expected)
-  })
-})
-
-describe('a realm root that holds a name Nodemailer reads from objects it builds itself', () => {
-  it.each(INTERNAL_KEYS)(
-    'should refuse the send, with nothing created or sent, when %s is planted',
-    async (key) => {
-      const created = jest.spyOn(nodemailer, 'createTransport')
-      plantKeys({ [key]: 'planted' })
-
-      const sending = new SmtpEmailProvider({ host: '127.0.0.1' }).send(MESSAGE)
-
-      await expect(sending).rejects.toMatchObject({ code: 'notification.invalid_scope_identifier' })
-      expect(created).not.toHaveBeenCalled()
-    }
-  )
-
-  it('should check again where the message is handed to the transport, after it was created', async () => {
-    const real = nodemailer.createTransport({ streamTransport: true, buffer: true })
-    const sendMail = jest.spyOn(real, 'sendMail')
-    jest.spyOn(nodemailer, 'createTransport').mockImplementation((() => {
-      plantKeys({ raw: 'From: evil@evil.test\r\n\r\nplanted' })
-      return real
-    }) as never)
-
-    const sending = new SmtpEmailProvider({ host: '127.0.0.1' }).send(MESSAGE)
-
-    await expect(sending).rejects.toMatchObject({ code: 'notification.invalid_scope_identifier' })
-    expect(sendMail).not.toHaveBeenCalled()
-  })
-
-  it('should name the fields it found and nothing else', async () => {
-    plantKeys({ raw: 'From: evil@evil.test', path: '/etc/hosts' })
-
-    const refusal = (await new SmtpEmailProvider({ host: '127.0.0.1' })
-      .send(MESSAGE)
-      .catch((error: unknown) => error)) as { getResponse(): unknown }
-
-    expect(refusal.getResponse()).toMatchObject({
-      error: { details: { boundary: 'SmtpEmailProvider', parameter: 'Object.prototype' } }
-    })
-    expect(JSON.stringify(refusal.getResponse())).toContain('holds path, raw')
-    expect(JSON.stringify(refusal.getResponse())).not.toContain('evil')
-  })
-
-  it('should send as before when nothing of the kind is planted', async () => {
-    const stream = streamTransport()
-
-    await new SmtpEmailProvider({ host: '127.0.0.1' }).send(MESSAGE)
-
-    expect((await stream.info()).envelope.to).toStrictEqual(['real@acme.com'])
   })
 })
 

@@ -21,6 +21,10 @@ import { SmtpEmailProvider } from './providers/smtp-email.provider'
 import { isUnavailableError } from './utils/availability'
 import { withStorageFailures } from './utils/storage-failures'
 
+// The own-key shadows are the second layer; they are tested with the realm-root check off. The check
+// has its own spec (`realm-root.spec.ts`).
+jest.mock('./utils/realm-root', () => ({ assertStandardRealmRoot: jest.fn() }))
+
 // `mock`-prefixed names are allowed inside the hoisted jest.mock factories.
 const mockCreateTransport = jest.fn()
 const mockSendMail = jest.fn()
