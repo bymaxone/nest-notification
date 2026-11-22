@@ -12,6 +12,12 @@
 /** The longest text that is read; what follows is dropped. */
 const MAX_TEXT = 8192
 
+/**
+ * How far past {@link MAX_TEXT} a token that starts before it is followed, so a token that straddles the
+ * bound is read whole and masked whole, and not published as the front half of an address.
+ */
+const LOOKAHEAD = 1024
+
 /** What stands for a token whose mask threw. */
 const MASK_FAILED = '[masked]'
 
@@ -135,9 +141,19 @@ function holdsAtSign(token: string): boolean {
 export function maskAddressTokens(text: string, mask: (recipient: string) => string): string {
   const answers = new Map<string, string>()
   // The text is bounded before it is read: the cost of the rule grows with its length, and the text is
-  // a provider's, so its length is the provider's to choose.
-  const bounded = text.length > MAX_TEXT ? `${text.slice(0, MAX_TEXT)}…` : text
-  return bounded.replace(TOKEN, (token) => {
+  // a provider's, so its length is the provider's to choose. A token that starts inside the bound is
+  // read to its end, so it is masked whole; one that starts past it is left out, and so is one that
+  // runs to the end of what was read, whose end is not known.
+  const clipped = text.length > MAX_TEXT
+  const window = clipped ? text.slice(0, MAX_TEXT + LOOKAHEAD) : text
+  const unfinished = window.length < text.length
+  const masked = window.replace(TOKEN, (token, offset: number) => {
+    if (
+      clipped &&
+      (offset >= MAX_TEXT || (unfinished && offset + token.length === window.length))
+    ) {
+      return ''
+    }
     if (!holdsAtSign(token)) {
       return token
     }
@@ -146,6 +162,7 @@ export function maskAddressTokens(text: string, mask: (recipient: string) => str
     answers.set(head, answer)
     return answer
   })
+  return clipped ? `${masked.trimEnd()}…` : masked
 }
 
 /** Masks every address-shaped token of `text` with the fixed `[address]`, for text no host mask is asked about. */

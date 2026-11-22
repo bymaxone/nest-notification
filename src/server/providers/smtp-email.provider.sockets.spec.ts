@@ -191,11 +191,11 @@ describe('the connection the adapter opens itself', () => {
     expect(relay.servernames).toStrictEqual(['localhost'])
   })
 
-  it('should send the name the caller set, not the host, as the SNI name', async () => {
+  it('should send the name the caller set, not the host, as the SNI name, though the host is an address', async () => {
     relay = await startRelay({ certificate, implicitTls: true })
 
     await new SmtpEmailProvider({
-      host: 'localhost',
+      host: '127.0.0.1',
       port: relay.port,
       secure: true,
       tls: { ca: certificate.cert, servername: 'localhost' }

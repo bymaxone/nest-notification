@@ -101,6 +101,37 @@ describe('maskAddressTokens', () => {
     expect(asked).toStrictEqual([])
   })
 
+  it.each([
+    ['a quoted local part that ends at the bound', ' '.repeat(8179) + '"Alice Smith"@example.com'],
+    [
+      'a plain address that starts a few characters before the bound',
+      ' '.repeat(8190) + 'alice@example.com'
+    ],
+    [
+      'a quoted local part that the bound cuts in two',
+      ' '.repeat(8170) + '"Alice Smith"@example.com'
+    ]
+  ])('should publish no front half of an address that %s', (_name, text) => {
+    const out = maskAddressTokens(text, () => '#')
+
+    expect(out).not.toMatch(/Alice|alice|al\b/u)
+    expect(out.endsWith('…')).toBe(true)
+  })
+
+  it('should mask whole an address that starts inside the bound and ends past it', () => {
+    const text = `${' '.repeat(8185)}bob@example.com and more`
+
+    const out = maskAddressTokens(text, () => '#')
+
+    expect(out).toBe(`${' '.repeat(8185)}#…`)
+  })
+
+  it('should leave out a token that runs to the end of what was read', () => {
+    const out = maskAddressTokens('x'.repeat(20_000), () => '#')
+
+    expect(out).toBe('…')
+  })
+
   it('should return a text of exactly the bound as it is, with nothing added', () => {
     const text = 'x'.repeat(8192)
 
