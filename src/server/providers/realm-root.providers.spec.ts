@@ -13,6 +13,7 @@ import { SmtpEmailProvider } from './smtp-email.provider'
 // `mock`-prefixed names are allowed inside the hoisted jest.mock factories.
 const mockCreateTransport = jest.fn()
 const mockSendMail = jest.fn()
+const mockVerify = jest.fn()
 const mockResendSend = jest.fn()
 jest.mock('nodemailer', () => ({ __esModule: true, createTransport: mockCreateTransport }), {
   virtual: true
@@ -43,7 +44,10 @@ function plant(name: string): void {
 
 beforeEach(() => {
   jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
-  mockCreateTransport.mockReset().mockImplementation(() => ({ sendMail: mockSendMail }))
+  mockVerify.mockReset().mockResolvedValue(true)
+  mockCreateTransport
+    .mockReset()
+    .mockImplementation(() => ({ sendMail: mockSendMail, verify: mockVerify }))
   mockSendMail.mockReset().mockResolvedValue({ messageId: 'x' })
   mockResendSend.mockReset().mockResolvedValue({ data: { id: 'r1' }, error: null })
 })
@@ -65,6 +69,17 @@ describe.each(NAMES)('a %s planted after the adapter was built', (name) => {
     })
     expect(mockCreateTransport).not.toHaveBeenCalled()
     expect(mockSendMail).not.toHaveBeenCalled()
+  })
+
+  it('should refuse the SMTP readiness check before any transport is created or used', async () => {
+    const provider = new SmtpEmailProvider({ host: 'h' })
+    plant(name)
+
+    await expect(provider.verify()).rejects.toMatchObject({
+      code: 'notification.invalid_scope_identifier'
+    })
+    expect(mockCreateTransport).not.toHaveBeenCalled()
+    expect(mockVerify).not.toHaveBeenCalled()
   })
 
   it('should refuse the Resend send before the SDK is called', async () => {
@@ -102,6 +117,18 @@ describe('a name planted between the first check and the call that does I/O', ()
     expect(mockSendMail).not.toHaveBeenCalled()
   })
 
+  it('should not run the readiness check against a root planted after the transport was created', async () => {
+    mockCreateTransport.mockImplementation(() => {
+      plant('getSocket')
+      return { sendMail: mockSendMail, verify: mockVerify }
+    })
+
+    await expect(new SmtpEmailProvider({ host: 'h' }).verify()).rejects.toThrow(
+      'the relay did not accept the connection'
+    )
+    expect(mockVerify).not.toHaveBeenCalled()
+  })
+
   it('should refuse the Resend payload at the SDK call', async () => {
     const provider = new ResendEmailProvider({ apiKey: 'k' })
     await provider.send(MESSAGE)
@@ -121,6 +148,7 @@ describe('a clean realm root', () => {
     await expect(new SmtpEmailProvider({ host: 'h' }).send(MESSAGE)).resolves.toStrictEqual({
       messageId: 'x'
     })
+    await expect(new SmtpEmailProvider({ host: 'h' }).verify()).resolves.toBeUndefined()
     await expect(new ResendEmailProvider({ apiKey: 'k' }).send(MESSAGE)).resolves.toStrictEqual({
       messageId: 'r1'
     })

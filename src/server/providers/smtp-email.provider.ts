@@ -319,11 +319,16 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
    * The failure carries no text of the relay's or of Nodemailer's, which can quote the options, so
    * what it reports is the same words every time.
    *
+   * @throws NotificationException `INVALID_SCOPE_IDENTIFIER` when `Object.prototype` holds a non-standard
+   *   key when the check starts.
    * @throws Error `SmtpEmailProvider: the relay did not accept the connection`, whatever the cause.
    */
   async verify(): Promise<void> {
+    assertStandardRealmRoot('SmtpEmailProvider')
     try {
       const transport = await this.getTransport()
+      // Again before the connection, and inside the try: the answer stays the same words every time.
+      assertStandardRealmRoot('SmtpEmailProvider')
       await transport.verify?.()
     } catch {
       throw new Error('SmtpEmailProvider: the relay did not accept the connection')
