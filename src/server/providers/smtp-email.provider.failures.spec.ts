@@ -87,6 +87,26 @@ describe('SmtpEmailProvider failure handling', () => {
     })
   })
 
+  it.each([[undefined], [false]])(
+    'should drop a relay code that holds a declared secret (publishProviderText %s)',
+    async (publishProviderText) => {
+      mockSendMail.mockRejectedValue(Object.assign(new Error('550 refused'), { code: 'ABC123' }))
+      const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+      const caught = (await new SmtpEmailProvider({ host: 'h' })
+        .send({
+          ...baseOptions,
+          redactValues: ['ABC123'],
+          ...(publishProviderText === undefined ? {} : { publishProviderText })
+        })
+        .catch((error: unknown) => error)) as Error
+
+      expect('code' in caught).toBe(false)
+      expect(loggedAll(warnSpy.mock.calls[0])).not.toContain('ABC123')
+      warnSpy.mockRestore()
+    }
+  )
+
   // The passphrase of a client key is secret material like a password: a transport error that
   // quotes the connection options must not put it in the thrown message or the warn line.
   it('should scrub the tls passphrase out of a transport error', async () => {

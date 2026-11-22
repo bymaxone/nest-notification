@@ -176,6 +176,27 @@ describe('ResendEmailProvider', () => {
     expect(caught.code).toBe('EUNAVAILABLE')
   })
 
+  it.each([[undefined], [false]])(
+    'should drop a provider code that holds a declared secret (publishProviderText %s)',
+    async (publishProviderText) => {
+      const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+      mockSend.mockRejectedValue(Object.assign(new Error('refused'), { code: 'ECONNREFUSED' }))
+      const secret = 'ECONN'
+
+      const caught = (await new ResendEmailProvider({ apiKey: 'k' })
+        .send({
+          ...baseOptions,
+          redactValues: [secret],
+          ...(publishProviderText === undefined ? {} : { publishProviderText })
+        })
+        .catch((error: unknown) => error)) as Error
+
+      expect('code' in caught).toBe(false)
+      expect(loggedAll(warnSpy.mock.calls[0])).not.toContain('ECONNREFUSED')
+      warnSpy.mockRestore()
+    }
+  )
+
   it('should give a withheld failure no code of its own when the provider sent none', async () => {
     jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
     mockSend.mockResolvedValue({ data: null, error: { message: 'bad request', statusCode: 422 } })

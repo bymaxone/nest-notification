@@ -26,6 +26,7 @@ import { refuseInput } from '../utils/bounded-list'
 import { assertBodyParts } from '../utils/email-body'
 import { loadOptionalPeer } from '../utils/load-optional-peer'
 import { logEvent } from '../utils/log-event'
+import { codeWithoutSecrets } from '../utils/masked-failure'
 import { publishedFailure } from '../utils/provider-failure'
 import { assertOptionsObject, readOptionKeys } from '../utils/read-options'
 import {
@@ -332,7 +333,8 @@ export class ResendEmailProvider implements IEmailProvider {
    * @param options - The send input whose body and declared values to scrub.
    * @returns The `Error` for the caller to throw.
    */
-  private sendFailure(rawMessage: string, options: EmailSendOptions, code?: string): Error {
+  private sendFailure(rawMessage: string, options: EmailSendOptions, rawCode?: string): Error {
+    const code = codeWithoutSecrets(rawCode, options.redactValues)
     if (options.publishProviderText === false) {
       // The body carries a credential, so nothing the API wrote may reach a
       // log line or the thrown message. Unlike SMTP there is no reply code to

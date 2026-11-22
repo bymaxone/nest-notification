@@ -469,7 +469,7 @@ export class EmailService {
       'EMAIL_SEND_FAILED',
       { providerName },
       {
-        cause: maskedFailure(text, error),
+        cause: maskedFailure(text, error, secretValues),
         ...status
       }
     )

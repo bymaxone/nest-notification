@@ -35,6 +35,7 @@ import { describeError, UNPRINTABLE_ERROR } from '../utils/describe-error'
 import { assertBodyParts } from '../utils/email-body'
 import { loadOptionalPeer } from '../utils/load-optional-peer'
 import { logEvent } from '../utils/log-event'
+import { codeWithoutSecrets } from '../utils/masked-failure'
 import { assertPort } from '../utils/port-option'
 import { publishedFailure } from '../utils/provider-failure'
 import {
@@ -398,7 +399,7 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
     const raw = readRedactedMessage(error)
     // The client's own error code (a refused connection, a timeout) crosses to the error this
     // adapter throws: it is a token, and the status of the failure is read from it.
-    const code = errorCodeOf(error)
+    const code = codeWithoutSecrets(errorCodeOf(error), redactValuesList)
     if (publishProviderText === false) {
       return this.withheldFailure(raw, code, redactValuesList)
     }
