@@ -39,7 +39,7 @@ unknown` keeps its brackets). The at-sign is `@`, fullwidth `\uff20`, small `\uf
 - **A failed send no longer carries the provider's error as its `cause`.** When the provider's text is published (the
   default), the `cause` of `EMAIL_SEND_FAILED` is a fresh `Error` that holds the provider's message with secrets removed and address tokens masked, and the provider's `code`;
   the provider's own error and its nested chain are not kept. A send with `publishProviderText: false`, or one whose error
-  chain is too large to examine, still carries no `cause` at all. The Resend and SMTP adapters build their failure in one shared helper, and its log line and thrown message mask
+  chain is too large to examine, still carries no `cause` at all. The Resend and SMTP adapters' failure log line and thrown message mask
   address tokens the same way (`[address]`).
 - **A failed `verify()` leaves the way a failed `generate()` does,** with the guess removed from the error's chain and a
   value that is not an error flattened.
