@@ -71,6 +71,23 @@ describe('assertStandardRealmRoot', () => {
     }
   )
 
+  it('should name the root and the owner in the refusal', () => {
+    plant('extra', 1)
+
+    const response = (() => {
+      try {
+        assertStandardRealmRoot('Owner')
+      } catch (error) {
+        return (error as { getResponse(): unknown }).getResponse()
+      }
+      return undefined
+    })()
+
+    expect(response).toMatchObject({
+      error: { details: { boundary: 'Owner', parameter: 'Object.prototype' } }
+    })
+  })
+
   it('should report a count and never a key or a value', () => {
     plant('secretKeyName', 'secretValue')
     plant('another', 'secretValue2')
@@ -327,6 +344,56 @@ describe('a realm that was polluted before the library loaded', () => {
     expect(caught).toMatchObject({ code: 'notification.invalid_scope_identifier' })
   })
 
+  it.each([
+    ['the setter', true],
+    ['the getter', false]
+  ])(
+    'should refuse when only %s of __proto__ was written in JavaScript at load',
+    (_name, setterIsScript) => {
+      const original = Object.getOwnPropertyDescriptor(
+        Object.prototype,
+        '__proto__'
+      ) as PropertyDescriptor
+      let caught: unknown
+      jest.isolateModules(() => {
+        Object.defineProperty(Object.prototype, '__proto__', {
+          get: setterIsScript
+            ? (original.get as () => unknown)
+            : function (this: unknown) {
+                return Object.getPrototypeOf(this)
+              },
+          set: setterIsScript
+            ? function (_value: unknown): void {
+                // ignored
+              }
+            : (original.set as (value: unknown) => void),
+          configurable: true
+        })
+        try {
+          ;(require('./realm-root') as typeof import('./realm-root')).assertStandardRealmRoot(
+            'Owner'
+          )
+        } catch (error) {
+          caught = error
+        } finally {
+          Object.defineProperty(Object.prototype, '__proto__', original)
+        }
+      })
+
+      expect(caught).toMatchObject({ code: 'notification.invalid_scope_identifier' })
+    }
+  )
+
+  it.each([
+    ['toString', Array.prototype.join],
+    ['valueOf', Array.prototype.slice],
+    ['constructor', Array]
+  ])('should refuse when %s was a native function of another name at load', (name, native) => {
+    expect(useAfterLoadingWith(name, native)).toMatchObject({
+      code: 'notification.invalid_scope_identifier'
+    })
+  })
+
   it('should refuse when a standard key was missing at load', () => {
     const original = Object.getOwnPropertyDescriptor(
       Object.prototype,
@@ -345,6 +412,10 @@ describe('a realm that was polluted before the library loaded', () => {
     })
 
     expect(caught).toMatchObject({ code: 'notification.invalid_scope_identifier' })
+    // One key is missing, and it counts once: not as missing at load and again as changed since.
+    expect(JSON.stringify((caught as { getResponse(): unknown }).getResponse())).toContain(
+      'holds 1 key(s)'
+    )
   })
 
   it('should load without throwing, and answer clean once the realm is clean', () => {

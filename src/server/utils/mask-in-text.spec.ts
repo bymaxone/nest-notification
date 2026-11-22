@@ -155,6 +155,30 @@ describe('maskAddressTokens', () => {
     expect(out).not.toMatch(/alice/u)
   })
 
+  it.each([
+    ['ends one past the edge', 515, false],
+    ['ends exactly at the edge', 514, true]
+  ])('should %s of what was read: kept is %s', (_name, length, kept) => {
+    // What is read is 9,216 characters; the edge is 602 before its end, 8,614. The run starts at 8,100.
+    const text = `${' '.repeat(8100)}${'z'.repeat(length)} ${'y'.repeat(1200)}`
+
+    const out = maskAddressTokens(text, () => '#')
+
+    expect(out.includes('z'.repeat(length))).toBe(kept)
+  })
+
+  it('should leave out a token that starts exactly at the bound', () => {
+    const text = `${' '.repeat(8192)}qqqqq ${'y'.repeat(1200)}`
+
+    expect(maskAddressTokens(text, () => '#')).not.toContain('q')
+  })
+
+  it('should keep a token that runs to the end of a text that fits in what is read', () => {
+    const text = 'z'.repeat(8500)
+
+    expect(maskAddressTokens(text, () => '#')).toBe(`${text}…`)
+  })
+
   it('should leave out a token that runs to the end of what was read', () => {
     const out = maskAddressTokens('x'.repeat(20_000), () => '#')
 

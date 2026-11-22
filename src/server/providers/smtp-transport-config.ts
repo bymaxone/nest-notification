@@ -48,11 +48,8 @@ function poolConfig(
   if (pool === undefined) {
     return {}
   }
-  return {
-    pool: true,
-    ...(pool.maxConnections === undefined ? {} : { maxConnections: pool.maxConnections }),
-    ...(pool.maxMessages === undefined ? {} : { maxMessages: pool.maxMessages })
-  }
+  // A limit that is not set is an own key that is `undefined`, as every name Nodemailer reads is.
+  return { pool: true, maxConnections: pool.maxConnections, maxMessages: pool.maxMessages }
 }
 
 /**

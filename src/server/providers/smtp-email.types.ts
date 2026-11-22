@@ -173,8 +173,8 @@ export interface SmtpTransportConfig {
   disableUrlAccess: true
   /** Present, as `true`, only when the pool option is set. */
   pool?: true
-  maxConnections?: number
-  maxMessages?: number
+  maxConnections?: number | undefined
+  maxMessages?: number | undefined
 }
 
 /** An attachment in the shape Nodemailer expects. */

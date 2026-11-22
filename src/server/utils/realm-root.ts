@@ -98,8 +98,11 @@ function isNative(value: unknown): boolean {
  * @returns `true` when it did not.
  */
 function wrongAtLoad(name: string): boolean {
-  // A key that is absent has no fields, so it is not a function and counts as wrong.
-  const [value, getter, setter]: readonly unknown[] = LOADED.get(name) ?? []
+  const loaded = LOADED.get(name)
+  if (loaded === undefined) {
+    return true
+  }
+  const [value, getter, setter] = loaded
   if (name === '__proto__') {
     return !isNative(getter) || !isNative(setter)
   }

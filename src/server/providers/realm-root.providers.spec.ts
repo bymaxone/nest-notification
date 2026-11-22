@@ -212,3 +212,58 @@ describe.each(['hasOwnProperty', 'toString', 'constructor'])(
     })
   }
 )
+
+describe('the refusal names the adapter that refused, at every point that checks', () => {
+  /** The `boundary` of the refusal a call raised, or `undefined` when it raised none. */
+  async function boundaryOf(call: () => unknown): Promise<unknown> {
+    try {
+      await call()
+    } catch (error) {
+      const response = (error as { getResponse?: () => unknown }).getResponse?.()
+      return (response as { error?: { details?: { boundary?: unknown } } } | undefined)?.error
+        ?.details?.boundary
+    }
+    return undefined
+  }
+
+  it('should name SmtpEmailProvider when it is built, when a send starts and when verify starts', async () => {
+    const provider = new SmtpEmailProvider({ host: 'h' })
+    plant('anything')
+
+    expect(await boundaryOf(() => new SmtpEmailProvider({ host: 'h' }))).toBe('SmtpEmailProvider')
+    expect(await boundaryOf(() => provider.send(MESSAGE))).toBe('SmtpEmailProvider')
+    expect(await boundaryOf(() => provider.verify())).toBe('SmtpEmailProvider')
+  })
+
+  it('should name SmtpEmailProvider at the hand-over to the transport and before transport.verify', async () => {
+    mockCreateTransport.mockImplementation(() => {
+      plant('anything')
+      return { sendMail: mockSendMail, verify: mockVerify }
+    })
+
+    expect(await boundaryOf(() => new SmtpEmailProvider({ host: 'h' }).send(MESSAGE))).toBe(
+      'SmtpEmailProvider'
+    )
+    expect(await boundaryOf(() => new SmtpEmailProvider({ host: 'h' }).verify())).toBe(
+      'SmtpEmailProvider'
+    )
+  })
+
+  it('should name ResendEmailProvider when it is built, when a send starts and at the SDK call', async () => {
+    const provider = new ResendEmailProvider({ apiKey: 'k' })
+    plant('anything')
+
+    expect(await boundaryOf(() => new ResendEmailProvider({ apiKey: 'k' }))).toBe(
+      'ResendEmailProvider'
+    )
+    expect(await boundaryOf(() => provider.send(MESSAGE))).toBe('ResendEmailProvider')
+    Reflect.deleteProperty(Object.prototype, 'anything')
+    mockResendClient.mockImplementation(() => {
+      plant('anything')
+      return { emails: { send: mockResendSend } }
+    })
+    expect(await boundaryOf(() => new ResendEmailProvider({ apiKey: 'k' }).send(MESSAGE))).toBe(
+      'ResendEmailProvider'
+    )
+  })
+})
