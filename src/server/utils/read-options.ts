@@ -24,8 +24,8 @@ const hasOwn = Object.hasOwn
  * another realm) is absent. Code that runs before this library can plant a key there, and an option
  * or an input the host did not set would take the planted value: a `bcc` on every message, a ceiling
  * of a million attempts, a key of its own for the codes. An own property, a property of a class the
- * host wrote and a getter on its prototype all still count, and so does a key of an object whose
- * prototype chain ends elsewhere. A `Proxy` is read through its own traps, as the host built it.
+ * host wrote and a getter on its prototype all still count. A `Proxy` is read through its own traps,
+ * as the host built it.
  *
  * The root is found by its shape, never by a property read off it: it is the prototype that has no
  * prototype. A test that read its `constructor` could be bypassed by overwriting that property, and

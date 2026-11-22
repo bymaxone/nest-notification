@@ -359,7 +359,7 @@ describe('a key planted on the realm-root prototype', () => {
       expect(observed.renderer).toBe('DefaultTemplateRenderer')
     })
 
-    it('should not weaken the TLS or the login of the SMTP transport with planted keys', async () => {
+    it('should not weaken the TLS of the SMTP transport with planted keys', async () => {
       plant('rejectUnauthorized', false)
       plant('minVersion', 'TLSv1')
 
