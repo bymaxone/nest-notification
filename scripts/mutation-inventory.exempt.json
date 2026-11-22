@@ -38,5 +38,9 @@
   {
     "file": "src/readme-exports.spec.ts",
     "reason": "Reads the README as text and compiles the entry points as files to compare their exports with it; it imports nothing from src at run time, so it covers no published code and judges no mutant. Stryker's Jest config also leaves it out."
+  },
+  {
+    "file": "src/server/services/email.service.send-keys.spec.ts",
+    "reason": "Holds the lists of fields the send reader copies to the fields of the types they name by assigning `true` to a type-level test, so the file fails to compile when a field is unlisted. It imports only types from src/, so no code of src runs under it, no mutant is covered by it, and it judges no mutant; the lists themselves are exercised by the specs of the send reader, which the mutation run does execute."
   }
 ]
