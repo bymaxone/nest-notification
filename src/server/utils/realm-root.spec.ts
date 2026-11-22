@@ -450,3 +450,87 @@ describe('descriptors read while the root holds an accessor named like a descrip
     }
   )
 })
+
+describe('a built-in replaced after the module was imported', () => {
+  /** What lies in favour of a clean root, for the built-ins the check could once have called. */
+  const LIARS: ReadonlyArray<readonly [string, object, PropertyKey, unknown]> = [
+    ['Object.getOwnPropertyNames', Object, 'getOwnPropertyNames', () => []],
+    ['Object.hasOwn', Object, 'hasOwn', () => false],
+    ['Object.is', Object, 'is', () => true],
+    ['Reflect.get', Reflect, 'get', () => undefined],
+    ['Set.prototype.has', Set.prototype, 'has', () => true],
+    ['Set.prototype[Symbol.iterator]', Set.prototype, Symbol.iterator, function* () {}],
+    ['Map.prototype.get', Map.prototype, 'get', () => undefined],
+    ['Array.prototype.filter', Array.prototype, 'filter', () => []],
+    ['Array.prototype.map', Array.prototype, 'map', () => []],
+    ['Array.prototype.some', Array.prototype, 'some', () => false],
+    ['Array.prototype.at', Array.prototype, 'at', () => undefined],
+    ['Array.prototype[Symbol.iterator]', Array.prototype, Symbol.iterator, function* () {}],
+    ['String.prototype.endsWith', String.prototype, 'endsWith', () => true],
+    ['Function.prototype.call', Function.prototype, 'call', () => true],
+    ['Function.prototype.bind', Function.prototype, 'bind', () => () => true],
+    [
+      'Function.prototype.toString',
+      Function.prototype,
+      'toString',
+      () => 'function () { [native code] }'
+    ]
+  ]
+
+  /**
+   * Runs the check once with `replacement` in place of `target[key]` and the root made unclean: by a
+   * key it does not hold (`plant`), or by a standard key overwritten (`overwrite`). It returns what
+   * the check did.
+   */
+  function checkWith(
+    target: object,
+    key: PropertyKey,
+    replacement: unknown,
+    how: 'plant' | 'overwrite'
+  ): unknown {
+    const original = Object.getOwnPropertyDescriptor(target, key) as PropertyDescriptor
+    const standard = Object.getOwnPropertyDescriptor(
+      Object.prototype,
+      'toString'
+    ) as PropertyDescriptor
+    if (how === 'plant') {
+      Object.defineProperty(Object.prototype, 'plantedAfterImport', {
+        value: 1,
+        configurable: true,
+        enumerable: true
+      })
+    } else {
+      Object.defineProperty(Object.prototype, 'toString', {
+        ...standard,
+        value: () => 'overwritten'
+      })
+    }
+    Object.defineProperty(target, key, { ...original, value: replacement })
+    let caught: unknown = 'did not refuse'
+    try {
+      assertStandardRealmRoot('Owner')
+    } catch (error) {
+      caught = error
+    } finally {
+      Object.defineProperty(target, key, original)
+      Reflect.deleteProperty(Object.prototype, 'plantedAfterImport')
+      Object.defineProperty(Object.prototype, 'toString', standard)
+    }
+    return caught
+  }
+
+  const CASES = LIARS.flatMap(([label, target, key, replacement]) =>
+    (['plant', 'overwrite'] as const).map((how) => [label, target, key, replacement, how] as const)
+  )
+
+  it.each(CASES)(
+    'should still refuse when %s answers that the root is clean: %s',
+    (_label, target, key, replacement, how) => {
+      const caught = checkWith(target, key, replacement, how)
+
+      // It refuses: the send stops. What the refusal is built from is not the check's, and a built-in
+      // the exception uses may change its words, so what is held here is that nothing is let through.
+      expect(caught).not.toBe('did not refuse')
+    }
+  )
+})
