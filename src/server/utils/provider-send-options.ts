@@ -9,6 +9,7 @@
 
 import type { EmailSendOptions } from '../interfaces/email-provider.interface'
 import { copyByName } from './bounded-list'
+import { ATTACHMENT_KEYS, TAG_KEYS } from './email-send-input'
 
 /** Every field of {@link EmailSendOptions}, by name. */
 const SEND_OPTION_KEYS = [
@@ -41,5 +42,15 @@ export type UnlistedSendOptionKey = Exclude<
  * @returns A copy with no prototype, each field read once.
  */
 export function readSendOptions(options: EmailSendOptions): EmailSendOptions {
-  return copyByName(options, SEND_OPTION_KEYS) as unknown as EmailSendOptions
+  const copy = copyByName(options, SEND_OPTION_KEYS) as unknown as EmailSendOptions
+  // The entries are the caller's objects too: each is copied by name, so a field it leaves out
+  // (`cid`, `contentDisposition`, a tag's `value`) is absent and not a key planted on the realm root.
+  const entries = (list: readonly object[], keys: readonly string[]): unknown[] =>
+    list.map((entry) => copyByName(entry, keys))
+  return Object.assign(copy, {
+    ...(copy.attachments === undefined
+      ? {}
+      : { attachments: entries(copy.attachments as readonly object[], ATTACHMENT_KEYS) }),
+    ...(copy.tags === undefined ? {} : { tags: entries(copy.tags as readonly object[], TAG_KEYS) })
+  })
 }

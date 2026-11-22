@@ -147,6 +147,33 @@ describe('the Resend payload', () => {
   })
 })
 
+describe('the attachments and tags of a direct call to an adapter', () => {
+  it('should not give a plain attachment a planted cid or disposition when a provider is called directly', async () => {
+    plantKeys({ cid: 'planted-cid', contentDisposition: 'inline', contentType: 'text/evil' })
+
+    await new ResendEmailProvider({ apiKey: 'k' }).send({
+      ...MESSAGE,
+      attachments: [{ filename: 'a.txt', content: 'eA==' }]
+    })
+
+    const sent = (mockResendSend.mock.calls[0]?.[0] as { attachments: object[] }).attachments[0]
+    expect(Object.keys(sent ?? {})).toStrictEqual(['filename', 'content'])
+  })
+
+  it('should send the SMTP attachment and tags a direct caller gave without planted fields', async () => {
+    plantKeys({ cid: 'planted-cid', contentDisposition: 'inline', value: 'planted' })
+
+    await new SmtpEmailProvider({ host: 'h' }).send({
+      ...MESSAGE,
+      attachments: [{ filename: 'a.txt', content: 'eA==' }],
+      tags: [{ name: 'n' } as never]
+    })
+
+    const message = mockSendMail.mock.calls[0]?.[0] as { attachments: object[] }
+    expect(JSON.stringify(message.attachments[0])).not.toContain('planted')
+  })
+})
+
 describe('the default template renderer', () => {
   const template = { subject: 'Hi {{name}}', html: '<p>{{name}} {{a.b}}</p>' }
 
