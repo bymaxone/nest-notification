@@ -38,10 +38,10 @@ const AT_SIGN = /[@\uff20\ufe6b]/u
  * One spelling of a character that stands for another, in the order its groups are read: `%u0040`,
  * a numeric entity (hex or decimal, semicolon optional), `&commat;` or `&amp;`, `\x{40}`, `\x40`,
  * `\u{40}`, `\u0040`, an octal escape (`\100`), an RFC 2047 encoded word (`=?utf-8?Q?..?=` or
- * `?B?`), a quoted-printable byte (`=40`), and a run of `%xx` bytes.
+ * `?B?`), and a run of `%xx` or quoted-printable `=xx` bytes.
  */
 const ESCAPE =
-  /%u([0-9a-f]{4})|&#x([0-9a-f]+);?|&#(\d+);?|&(commat|amp);?|\\x\{([0-9a-f]+)\}|\\x([0-9a-f]{2})|\\u\{([0-9a-f]+)\}|\\u([0-9a-f]{4})|\\([0-7]{1,3})|=\?[^?\s]{1,40}\?([qb])\?([^?\s]{0,1000})\?=|=([0-9a-f]{2})|(?:%[0-9a-f]{2})+/giu
+  /%u([0-9a-f]{4})|&#x([0-9a-f]+);?|&#(\d+);?|&(commat|amp);?|\\x\{([0-9a-f]+)\}|\\x([0-9a-f]{2})|\\u\{([0-9a-f]+)\}|\\u([0-9a-f]{4})|\\([0-7]{1,3})|=\?[^?\s]{1,40}\?([qb])\?([^?\s]{0,1000})\?=|(?:[%=][0-9a-f]{2})+/giu
 
 /** `\U0000hhhh`, whose capital U the case-blind pattern above cannot tell from `\u`. */
 const WIDE_ESCAPE = /\\U([0-9A-Fa-f]{8})/gu
@@ -52,14 +52,17 @@ const OVERLONG_AT = /%c1%80|%e0%81%80|%f0%80%81%80/giu
 /** The most times a token is decoded; one that still changes after that is treated as an address. */
 const MAX_DECODES = 8
 
-/** A run of `%xx` bytes as UTF-8 text; a byte that is not valid UTF-8 becomes U+FFFD, the ASCII around it stays. */
+/** A run of `%xx` or `=xx` bytes as UTF-8 text; a byte that is not valid UTF-8 becomes U+FFFD, the ASCII around it stays. */
 function fromPercent(run: string): string {
-  return Buffer.from(run.replace(OVERLONG_AT, '%40').replaceAll('%', ''), 'hex').toString('utf8')
+  return Buffer.from(
+    run.replaceAll('=', '%').replace(OVERLONG_AT, '%40').replaceAll('%', ''),
+    'hex'
+  ).toString('utf8')
 }
 
 /**
- * An RFC 2047 encoded word's payload: `B` is base64, and `Q` is quoted-printable, whose `=40` is read
- * by the next pass like any other, so its text is returned as it is.
+ * An RFC 2047 encoded word's payload: `B` is base64, and `Q` is quoted-printable, whose `=xx` bytes the next
+ * pass reads as UTF-8 like any other run, so its text is returned as it is.
  */
 function fromWord(type: string, payload: string): string {
   return type.toLowerCase() === 'b' ? Buffer.from(payload, 'base64').toString('utf8') : payload
@@ -67,8 +70,7 @@ function fromWord(type: string, payload: string): string {
 
 /** One spelling decoded; a code point out of range stays as it was written. */
 function decodeOne(spelling: string, ...groups: Array<string | undefined>): string {
-  const [percentU, hexEntity, decimal, named, braceX, x2, braceU, u4, octal, type, word, quoted] =
-    groups
+  const [percentU, hexEntity, decimal, named, braceX, x2, braceU, u4, octal, type, word] = groups
   if (named !== undefined) {
     // `amp` is the three-letter name, `commat` the six-letter one.
     return named.length === 3 ? '&' : '@'
@@ -76,7 +78,7 @@ function decodeOne(spelling: string, ...groups: Array<string | undefined>): stri
   if (type !== undefined) {
     return fromWord(type, String(word))
   }
-  const hex = percentU ?? hexEntity ?? braceX ?? x2 ?? braceU ?? u4 ?? quoted
+  const hex = percentU ?? hexEntity ?? braceX ?? x2 ?? braceU ?? u4
   const number = hex ?? decimal ?? octal
   if (number === undefined) {
     return fromPercent(spelling)
