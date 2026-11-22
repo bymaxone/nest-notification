@@ -10,6 +10,7 @@
 
 import { Logger } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
+import type { TestingModule } from '@nestjs/testing'
 
 import {
   BYMAX_NOTIFICATION_OPTIONS,
@@ -124,10 +125,9 @@ async function rejection(promise: Promise<unknown>): Promise<unknown> {
 }
 
 /** What the library does with a plain configuration and plain inputs, as data. */
-async function observe(): Promise<Record<string, unknown>> {
-  const rows: Array<Record<string, unknown>> = []
-  const sent: unknown[] = []
-  const provider: IEmailProvider = {
+/** A provider that records the message it receives and fails when the subject says so. */
+function recordingProvider(sent: unknown[]): IEmailProvider {
+  return {
     name: 'p',
     isConfigured: () => true,
     send: async (options) => {
@@ -149,14 +149,18 @@ async function observe(): Promise<Record<string, unknown>> {
       return { messageId: 'm1' }
     }
   }
-  const storage = new InMemoryOtpStorage()
-  const moduleRef = await Test.createTestingModule({
+}
+
+/** The module with the options a host would give: only what is required, so the rest is unset. */
+async function plainModule(
+  provider: IEmailProvider,
+  storage: IOtpStorage,
+  rows: Array<Record<string, unknown>>
+): Promise<TestingModule> {
+  return Test.createTestingModule({
     imports: [
       BymaxNotificationModule.forRoot({
-        email: {
-          provider,
-          defaultFrom: 'no-reply@acme.com'
-        },
+        email: { provider, defaultFrom: 'no-reply@acme.com' },
         otp: { storage },
         audit: {
           repository: {
@@ -169,37 +173,48 @@ async function observe(): Promise<Record<string, unknown>> {
       })
     ]
   }).compile()
-  const email = moduleRef.get(EmailService)
-  const otp = moduleRef.get(OtpService)
-  const out: Record<string, unknown> = {}
-  const base = { tenantId: 't', html: '<p>hi</p>' }
-  out.fail = await rejection(email.send({ ...base, to: 'bob@x.com', subject: 'fail' }))
-  out.ok = await rejection(email.send({ ...base, to: 'alice@x.com', subject: 'ok' }))
-  out.many = await rejection(email.send({ ...base, to: ['a@x.com', 'b@x.com'], subject: 'ok' }))
-  const generated = await rejection(
-    otp.generate({ tenantId: 't', recipient: 'bob@x.com', purpose: 'login', deliverVia: 'manual' })
-  )
-  out.generated = JSON.stringify(generated).replace(/"expiresAt":\d+/u, '"expiresAt":T')
-  out.wrong = await rejection(
-    otp.verify({ tenantId: 't', recipient: 'bob@x.com', purpose: 'login', code: 'zzzzzz' })
-  )
-  out.strict = JSON.stringify(
-    await rejection(
-      otp.generate({ tenantId: 't', recipient: 'c@x.com', purpose: 'zzz', deliverVia: 'manual' })
-    )
-  ).replace(/"expiresAt":\d+/u, '"expiresAt":T')
-  const stored = await (storage as IOtpStorage).get('t', 'bob@x.com', 'login')
-  out.stored = stored === null ? null : { shape: /^\d{6}$/u.test(stored.code) ? 'plain' : 'other' }
-  out.sent = sent
-  out.rows = rows
+}
+
+/** The effects of the options that are read once, when the module is built. */
+function observeOptions(moduleRef: TestingModule): Record<string, unknown> {
   const resolved = moduleRef.get<{ global: { tenantIdResolver?: unknown } }>(
     BYMAX_NOTIFICATION_OPTIONS
   )
-  out.tenantIdResolver = typeof resolved.global.tenantIdResolver
-  out.renderer = (
-    moduleRef.get<object>(BYMAX_NOTIFICATION_TEMPLATE_RENDERER).constructor as { name: string }
-  ).name
-  return out
+  return {
+    tenantIdResolver: typeof resolved.global.tenantIdResolver,
+    renderer: (
+      moduleRef.get<object>(BYMAX_NOTIFICATION_TEMPLATE_RENDERER).constructor as { name: string }
+    ).name
+  }
+}
+
+/** What the library does with a plain configuration and plain inputs, as data. */
+async function observe(): Promise<Record<string, unknown>> {
+  const rows: Array<Record<string, unknown>> = []
+  const sent: unknown[] = []
+  const storage = new InMemoryOtpStorage()
+  const moduleRef = await plainModule(recordingProvider(sent), storage, rows)
+  const email = moduleRef.get(EmailService)
+  const otp = moduleRef.get(OtpService)
+  const base = { tenantId: 't', html: '<p>hi</p>' }
+  const otpRef = { tenantId: 't', recipient: 'bob@x.com', purpose: 'login' }
+  const dropTime = (value: unknown): string =>
+    JSON.stringify(value).replace(/"expiresAt":\d+/u, '"expiresAt":T')
+  const out: Record<string, unknown> = {
+    fail: await rejection(email.send({ ...base, to: 'bob@x.com', subject: 'fail' })),
+    ok: await rejection(email.send({ ...base, to: 'alice@x.com', subject: 'ok' })),
+    many: await rejection(email.send({ ...base, to: ['a@x.com', 'b@x.com'], subject: 'ok' })),
+    generated: dropTime(await rejection(otp.generate({ ...otpRef, deliverVia: 'manual' }))),
+    wrong: await rejection(otp.verify({ ...otpRef, code: 'zzzzzz' })),
+    strict: dropTime(
+      await rejection(
+        otp.generate({ ...otpRef, recipient: 'c@x.com', purpose: 'zzz', deliverVia: 'manual' })
+      )
+    )
+  }
+  const stored = await storage.get('t', 'bob@x.com', 'login')
+  out.stored = stored === null ? null : { shape: /^\d{6}$/u.test(stored.code) ? 'plain' : 'other' }
+  return { ...out, sent, rows, ...observeOptions(moduleRef) }
 }
 
 /** What the SMTP and Resend providers do with empty options, and the options the transport gets. */
@@ -346,6 +361,24 @@ describe('a key planted on the realm-root prototype', () => {
 
       // Own keys: a parsed object would answer for a planted key through its own prototype.
       expect(Object.keys(options.tls ?? {})).toStrictEqual(['servername'])
+    })
+
+    it('should not give a pool the host left unset a planted limit', async () => {
+      plant('maxConnections', 99)
+      plant('maxMessages', 99)
+      mockCreateTransport.mockReset()
+      mockCreateTransport.mockImplementation(() => ({ sendMail: async () => ({ messageId: 'x' }) }))
+
+      await new SmtpEmailProvider({ host: 'h', pool: {} }).send({
+        to: 'a@x.com',
+        from: 'f@x.com',
+        subject: 's',
+        html: '<p>x</p>'
+      })
+
+      const options = mockCreateTransport.mock.calls[0]?.[0] as Record<string, unknown>
+      expect(Object.keys(options)).not.toContain('maxConnections')
+      expect(JSON.stringify(options)).not.toContain('99')
     })
 
     it('should not complete the login of the SMTP transport with a planted password', async () => {

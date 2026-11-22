@@ -8,7 +8,13 @@
  * not set. The options whose default is the weaker transport or login posture refuse a `null`.
  */
 
-import { assertOptionsObject, namesOf, readName, readOptionKeys } from '../utils/read-options'
+import {
+  assertOptionsObject,
+  namesOf,
+  nullProto,
+  readName,
+  readOptionKeys
+} from '../utils/read-options'
 import {
   SMTP_CREDENTIAL_KEYS,
   SMTP_OPTION_KEYS,
@@ -47,7 +53,10 @@ function readLimits(
     if (typeof pool !== 'object' || isArrayLike(pool)) {
       return undefined
     }
-    return [pool.maxConnections, pool.maxMessages]
+    return [
+      readName(pool, 'maxConnections') as number | undefined,
+      readName(pool, 'maxMessages') as number | undefined
+    ]
   } catch {
     return undefined
   }
@@ -82,10 +91,11 @@ export function readPool(pool: SmtpPoolOptions | undefined): SmtpPoolOptions | u
       )
     }
   }
-  return {
+  // No prototype: a limit that is not set is absent when the transport is built, whatever the root holds.
+  return nullProto({
     ...(maxConnections === undefined ? {} : { maxConnections }),
     ...(maxMessages === undefined ? {} : { maxMessages })
-  }
+  })
 }
 /**
  * Refuses a key of `tls` that the provider does not forward. Dropping it would leave the session
