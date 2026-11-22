@@ -327,11 +327,13 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
   async verify(): Promise<void> {
     assertStandardRealmRoot('SmtpEmailProvider')
     const transport = await this.getTransport().catch(relayRefused)
-    // Again before the connection; outside the wrap, so it is the refusal and not the relay's answer.
+    // Again before the connection, with nothing between it and the call, and outside the wrap.
     assertStandardRealmRoot('SmtpEmailProvider')
-    await Promise.resolve()
-      .then(() => transport.verify?.())
-      .catch(relayRefused)
+    try {
+      await transport.verify?.()
+    } catch {
+      relayRefused()
+    }
   }
 
   /**

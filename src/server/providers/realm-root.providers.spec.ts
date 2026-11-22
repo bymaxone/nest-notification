@@ -147,6 +147,23 @@ describe('a name planted between the first check and the call that does I/O', ()
   })
 })
 
+describe('the readiness check', () => {
+  it('should call the transport in the run of the check, with no promise reaction between them', async () => {
+    const resolve = jest.spyOn(Promise, 'resolve')
+    const provider = new SmtpEmailProvider({ host: 'h' })
+    await provider.verify()
+    resolve.mockClear()
+
+    await provider.verify()
+
+    // The mock transport answers with `Promise.resolve(value)`; a hop of the adapter's own has no argument.
+    expect(resolve.mock.calls.filter((call: readonly unknown[]) => call.length === 0)).toHaveLength(
+      0
+    )
+    expect(mockVerify).toHaveBeenCalledTimes(2)
+  })
+})
+
 describe('a clean realm root', () => {
   it('should send as before through both adapters', async () => {
     await expect(new SmtpEmailProvider({ host: 'h' }).send(MESSAGE)).resolves.toStrictEqual({
@@ -158,3 +175,40 @@ describe('a clean realm root', () => {
     })
   })
 })
+
+describe.each(['hasOwnProperty', 'toString', 'constructor'])(
+  'an overwritten standard key %s after the adapter was built',
+  (name) => {
+    function overwritten<T>(act: () => Promise<T>): Promise<unknown> {
+      const original = Object.getOwnPropertyDescriptor(Object.prototype, name) as PropertyDescriptor
+      Object.defineProperty(Object.prototype, name, { ...original, value: 1 })
+      return act()
+        .then(
+          () => undefined,
+          (error: unknown) => error
+        )
+        .finally(() => Object.defineProperty(Object.prototype, name, original))
+    }
+
+    it('should refuse the SMTP send and the readiness check before any I/O', async () => {
+      const provider = new SmtpEmailProvider({ host: 'h' })
+
+      const sent = await overwritten(() => provider.send(MESSAGE))
+      const verified = await overwritten(() => provider.verify())
+
+      expect(sent).toMatchObject({ code: 'notification.invalid_scope_identifier' })
+      expect(verified).toMatchObject({ code: 'notification.invalid_scope_identifier' })
+      expect(mockSendMail).not.toHaveBeenCalled()
+      expect(mockVerify).not.toHaveBeenCalled()
+    })
+
+    it('should refuse the Resend send before the SDK is called', async () => {
+      const provider = new ResendEmailProvider({ apiKey: 'k' })
+
+      const sent = await overwritten(() => provider.send(MESSAGE))
+
+      expect(sent).toMatchObject({ code: 'notification.invalid_scope_identifier' })
+      expect(mockResendSend).not.toHaveBeenCalled()
+    })
+  }
+)
