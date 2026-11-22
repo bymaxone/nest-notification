@@ -24,6 +24,9 @@ const namesOf = Object.getOwnPropertyNames
 const descriptorOf = Object.getOwnPropertyDescriptor
 const same = Object.is
 const hasOwn = Object.hasOwn
+const sourceOf = Function.prototype.call.bind(Function.prototype.toString) as (
+  fn: unknown
+) => string
 
 /**
  * The string keys `Object.prototype` has in every runtime this library supports. A spec compares
@@ -63,13 +66,24 @@ function fieldsOf(name: string): Fields {
 const LOADED = new Map([...STANDARD_ROOT_KEYS].map((name) => [name, fieldsOf(name)] as const))
 
 /**
- * What each standard key must be for the snapshot to mean anything: a function with this name (the
- * `constructor` is `Object`), and `__proto__` an accessor. A key that is not, at load, means the
+ * What each standard key must be for the snapshot to mean anything: a native function with this name
+ * (the `constructor` is `Object`), and `__proto__` an accessor of native functions. A key that is not, at load, means the
  * realm was polluted before the library was loaded, so no later comparison can tell.
  */
 const EXPECTED_NAME: ReadonlyMap<string, string> = new Map(
   [...STANDARD_ROOT_KEYS].map((name) => [name, name === 'constructor' ? 'Object' : name] as const)
 )
+
+/**
+ * Whether a value is a function the engine implements, by its source: a replacement written in
+ * JavaScript that carries the same name does not read `[native code]`.
+ *
+ * @param value - What a standard key held.
+ * @returns `true` for a native function.
+ */
+function isNative(value: unknown): boolean {
+  return typeof value === 'function' && sourceOf(value).endsWith('{ [native code] }')
+}
 
 /**
  * Whether a standard key held the expected kind of value when the module loaded.
@@ -81,9 +95,9 @@ function wrongAtLoad(name: string): boolean {
   // A key that is absent has no fields, so it is not a function and counts as wrong.
   const [value, getter, setter]: readonly unknown[] = LOADED.get(name) ?? []
   if (name === '__proto__') {
-    return typeof getter !== 'function' || typeof setter !== 'function'
+    return !isNative(getter) || !isNative(setter)
   }
-  return typeof value !== 'function' || value.name !== EXPECTED_NAME.get(name)
+  return !isNative(value) || (value as { name: string }).name !== EXPECTED_NAME.get(name)
 }
 
 /** How many standard keys were not what they must be at load; counted on every use, never thrown. */

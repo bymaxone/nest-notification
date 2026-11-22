@@ -202,6 +202,51 @@ describe('a realm that was polluted before the library loaded', () => {
     })
   })
 
+  it.each(['toString', 'hasOwnProperty', 'valueOf', 'isPrototypeOf'])(
+    'should refuse when %s was replaced at load by a function that carries the same name',
+    (name) => {
+      // hasOwnProperty must still answer truthfully, or the module loader in this test breaks.
+      const spoof =
+        name === 'hasOwnProperty'
+          ? function hasOwnProperty(this: object, key: string): boolean {
+              return Object.hasOwn(this, key)
+            }
+          : ({ [name]: () => 'spoofed' }[name] as unknown)
+
+      expect(useAfterLoadingWith(name, spoof)).toMatchObject({
+        code: 'notification.invalid_scope_identifier'
+      })
+    }
+  )
+
+  it('should refuse when the __proto__ accessor was replaced at load by functions of JavaScript', () => {
+    const original = Object.getOwnPropertyDescriptor(
+      Object.prototype,
+      '__proto__'
+    ) as PropertyDescriptor
+    let caught: unknown
+    jest.isolateModules(() => {
+      Object.defineProperty(Object.prototype, '__proto__', {
+        get: function () {
+          return null
+        },
+        set: function (_value: unknown): void {
+          // ignored
+        },
+        configurable: true
+      })
+      try {
+        ;(require('./realm-root') as typeof import('./realm-root')).assertStandardRealmRoot('Owner')
+      } catch (error) {
+        caught = error
+      } finally {
+        Object.defineProperty(Object.prototype, '__proto__', original)
+      }
+    })
+
+    expect(caught).toMatchObject({ code: 'notification.invalid_scope_identifier' })
+  })
+
   it('should refuse when __proto__ was not an accessor at load', () => {
     const caught = ((): unknown => {
       const original = Object.getOwnPropertyDescriptor(
