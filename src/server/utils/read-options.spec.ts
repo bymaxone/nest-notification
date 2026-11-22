@@ -7,7 +7,12 @@
 
 import { runInNewContext } from 'node:vm'
 
-import { assertOptionsObject, isPlainOrClassInstance, readOptionKeys } from './read-options'
+import {
+  assertOptionsObject,
+  isPlainOrClassInstance,
+  readName,
+  readOptionKeys
+} from './read-options'
 
 interface Shape {
   a?: number
@@ -150,4 +155,102 @@ describe('assertOptionsObject', () => {
       expect(() => assertOptionsObject('Owner', value)).toThrow('Owner: options must be an object')
     }
   )
+})
+
+describe('readName', () => {
+  afterEach(() => {
+    Reflect.deleteProperty(Object.prototype, 'planted')
+    Reflect.deleteProperty(Object.prototype, 'constructor')
+    Object.defineProperty(Object.prototype, 'constructor', {
+      value: Object,
+      configurable: true,
+      writable: true,
+      enumerable: false
+    })
+  })
+
+  function plantConstructor(value: unknown): void {
+    Object.defineProperty(Object.prototype, 'constructor', {
+      value,
+      configurable: true,
+      writable: true,
+      enumerable: false
+    })
+  }
+
+  it('should read an own property, a class getter and a key a class prototype holds', () => {
+    class Options {
+      get fromGetter(): string {
+        return 'getter'
+      }
+      inherited = 'field'
+    }
+    Object.defineProperty(Options.prototype, 'onPrototype', { value: 'proto' })
+
+    const options = new Options()
+
+    expect([
+      readName({ own: 1 }, 'own'),
+      readName(options, 'fromGetter'),
+      readName(options, 'onPrototype'),
+      readName(options, 'inherited')
+    ]).toStrictEqual([1, 'getter', 'proto', 'field'])
+  })
+
+  it('should read an own property of an object with no prototype and of an array index', () => {
+    const bare = Object.assign(Object.create(null) as object, { own: 2 })
+
+    expect([readName(bare, 'own'), readName(['x'], 0), readName(['x'], 1)]).toStrictEqual([
+      2,
+      'x',
+      undefined
+    ])
+  })
+
+  it('should ignore a key found only on the realm-root prototype', () => {
+    Object.defineProperty(Object.prototype, 'planted', { value: 'evil', configurable: true })
+
+    expect(readName({}, 'planted')).toBeUndefined()
+    expect(readName(new (class Plain {})(), 'planted')).toBeUndefined()
+  })
+
+  it.each([
+    ['a function', function planted() {}],
+    ['a native constructor', Map],
+    ['a class', class Planted {}],
+    ['a plain object', { name: 'planted' }]
+  ])(
+    'should ignore a key on the root, whatever %s the root constructor is overwritten with',
+    (_label, value) => {
+      Object.defineProperty(Object.prototype, 'planted', { value: 'evil', configurable: true })
+      plantConstructor(value)
+
+      expect(readName({ own: 1 }, 'own')).toBe(1)
+      expect(readName({}, 'planted')).toBeUndefined()
+      expect(isPlainOrClassInstance({})).toBe(true)
+    }
+  )
+
+  it('should ignore a key on the root of another realm, with its constructor overwritten there', () => {
+    const foreign = runInNewContext(
+      "Object.prototype.planted = 'evil'; Object.prototype.constructor = Map; ({ own: 3 })"
+    ) as object
+
+    expect(readName(foreign, 'own')).toBe(3)
+    expect(readName(foreign, 'planted')).toBeUndefined()
+    expect(isPlainOrClassInstance(foreign)).toBe(true)
+  })
+
+  it('should read nothing from the topmost prototype of a chain, which it cannot tell from the root', () => {
+    const top = Object.create(null) as object
+    Object.defineProperty(top, 'held', { value: 'on top' })
+
+    expect(readName(Object.create(top) as object, 'held')).toBeUndefined()
+  })
+
+  it('should read a Proxy through its own traps', () => {
+    const proxy = new Proxy({}, { get: (_target, key) => (key === 'answer' ? 42 : undefined) })
+
+    expect(readName(proxy, 'answer')).toBe(42)
+  })
 })

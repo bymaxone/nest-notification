@@ -406,9 +406,15 @@ describe('EmailService.send', () => {
       .catch((error: unknown) => error)) as NotificationException
 
     expect(caught.code).toBe('notification.invalid_scope_identifier')
-    expect(JSON.stringify(caught.getResponse())).toContain(
-      'the provider refused the message as given'
-    )
+    expect(caught.getResponse()).toMatchObject({
+      error: {
+        details: {
+          boundary: 'EmailService',
+          parameter: 'message',
+          reason: 'the provider refused the message as given'
+        }
+      }
+    })
     expect(JSON.stringify([caught.getResponse(), caught.cause])).not.toContain('bob@x.com')
     expect(audit.create).not.toHaveBeenCalled()
   })

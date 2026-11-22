@@ -57,14 +57,12 @@ function fromPercent(run: string): string {
   return Buffer.from(run.replace(OVERLONG_AT, '%40').replaceAll('%', ''), 'hex').toString('utf8')
 }
 
-/** An RFC 2047 encoded word's payload: `Q` is quoted-printable with `_` for a space, `B` is base64. */
+/**
+ * An RFC 2047 encoded word's payload: `B` is base64, and `Q` is quoted-printable, whose `=40` is read
+ * by the next pass like any other, so its text is returned as it is.
+ */
 function fromWord(type: string, payload: string): string {
-  return type.toLowerCase() === 'b'
-    ? Buffer.from(payload, 'base64').toString('utf8')
-    : payload
-        .replaceAll('_', ' ')
-        .replace(/=([0-9a-f]{2})/giu, '%$1')
-        .replace(/(?:%[0-9a-f]{2})+/giu, fromPercent)
+  return type.toLowerCase() === 'b' ? Buffer.from(payload, 'base64').toString('utf8') : payload
 }
 
 /** One spelling decoded; a code point out of range stays as it was written. */
@@ -105,7 +103,7 @@ function holdsAtSign(token: string): boolean {
       return true
     }
     const next = text
-      .replace(WIDE_ESCAPE, (_all, hex: string) => decodeOne('', hex))
+      .replace(WIDE_ESCAPE, (spelling, hex: string) => decodeOne(spelling, hex))
       .replace(ESCAPE, decodeOne)
     if (next === text) {
       return false

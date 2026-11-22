@@ -255,10 +255,9 @@ export function readSmtpOptions(options: SmtpEmailProviderOptions): SmtpEmailPro
   if (own.tls !== undefined) {
     refuseUnknownTlsKeys(own.tls)
     own.tls = readOptionKeys(own.tls, SMTP_TLS_KEYS)
-    if (typeof own.tls === 'object' && !Array.isArray(own.tls)) {
-      copyTlsEntries(own.tls, 'key', 'pem')
-      copyTlsEntries(own.tls, 'pfx', 'buf')
-    }
+    // Read by name, so a `tls` that is not an object has no `key` or `pfx` and nothing is copied.
+    copyTlsEntries(own.tls as object, 'key', 'pem')
+    copyTlsEntries(own.tls as object, 'pfx', 'buf')
     assertTlsValues(own.tls)
   }
   return own

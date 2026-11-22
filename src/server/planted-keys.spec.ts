@@ -74,7 +74,9 @@ const PLANTED: ReadonlyArray<readonly [string, unknown]> = [
   ['swallowErrors', false],
   ['tenantIdResolver', () => 'evil-tenant'],
   ['redisNamespace', 'planted'],
-  ['defaultLocale', 'xx']
+  ['defaultLocale', 'xx'],
+  // The property the realm root is usually recognised by: overwritten, it must change nothing.
+  ['constructor', class Planted {}]
 ]
 
 /** The options of the providers and of the SMTP transport. */
@@ -115,6 +117,13 @@ function unplant(): void {
   for (const [key] of [...PLANTED, ...PLANTED_PROVIDER]) {
     Reflect.deleteProperty(Object.prototype, key)
   }
+  // `constructor` is not deleted but put back, as the realm has it.
+  Object.defineProperty(Object.prototype, 'constructor', {
+    value: Object,
+    configurable: true,
+    writable: true,
+    enumerable: false
+  })
   Reflect.deleteProperty(Object.prototype, 'length')
 }
 

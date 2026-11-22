@@ -87,6 +87,20 @@ describe('maskAddressTokens', () => {
     expect(asked).toStrictEqual([])
   })
 
+  it('should return a text of exactly the bound as it is, with nothing added', () => {
+    const text = 'x'.repeat(8192)
+
+    expect(maskAddressTokens(text, () => '#')).toBe(text)
+  })
+
+  it('should keep a wide escape that is not a code point in place, so it cannot join its neighbours', () => {
+    expect(maskAddressTokens('%4\\U001100000', () => '#')).toBe('%4\\U001100000')
+  })
+
+  it('should leave a wide escape that is not a code point as it was written', () => {
+    expect(maskAddressTokens('bob\\U00110000x.com', () => '#')).toBe('bob\\U00110000x.com')
+  })
+
   it('should keep the whole of a text that is exactly at the bound', () => {
     const text = 'x'.repeat(8191) + '@'
 

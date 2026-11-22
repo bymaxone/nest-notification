@@ -27,6 +27,13 @@ const hasOwn = Object.hasOwn
  * host wrote and a getter on its prototype all still count, and so does a key of an object whose
  * prototype chain ends elsewhere. A `Proxy` is read through its own traps, as the host built it.
  *
+ * The root is found by its shape, never by a property read off it: it is the prototype that has no
+ * prototype. A test that read its `constructor` could be bypassed by overwriting that property, and
+ * nothing is read from the root at all. The trade-off is that the topmost prototype of a chain the
+ * host built by hand (`Object.create(Object.create(null))`) cannot be told from the realm root, so a
+ * key held only there is absent too: put an option on the object, or on a class prototype, which
+ * always has `Object.prototype` above it.
+ *
  * @param source - The object the host gave.
  * @param key - The property name or index.
  * @returns The value, or `undefined` when there is none below the root.

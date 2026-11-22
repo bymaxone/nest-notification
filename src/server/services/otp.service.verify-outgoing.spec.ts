@@ -92,6 +92,11 @@ describe('the failure of a verify', () => {
 
       expect(caught).toBeInstanceOf(NotificationException)
       expect(caught.code).toBe('notification.invalid_scope_identifier')
+      expect(caught.getResponse()).toMatchObject({
+        error: {
+          details: { boundary: 'OtpService', parameter: 'code', reason: 'expected a string' }
+        }
+      })
       expect(JSON.stringify([caught.getResponse(), caught.message, caught.stack])).not.toContain(
         '271620'
       )
