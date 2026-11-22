@@ -178,6 +178,45 @@ describe('the connection the adapter opens itself', () => {
     expect(relay.messages).toHaveLength(1)
   })
 
+  it('should send the hostname as the SNI name over implicit TLS when the caller sets none', async () => {
+    relay = await startRelay({ certificate, implicitTls: true })
+
+    await new SmtpEmailProvider({
+      host: 'localhost',
+      port: relay.port,
+      secure: true,
+      tls: { ca: certificate.cert }
+    }).send(MESSAGE)
+
+    expect(relay.servernames).toStrictEqual(['localhost'])
+  })
+
+  it('should send the name the caller set, not the host, as the SNI name', async () => {
+    relay = await startRelay({ certificate, implicitTls: true })
+
+    await new SmtpEmailProvider({
+      host: 'localhost',
+      port: relay.port,
+      secure: true,
+      tls: { ca: certificate.cert, servername: 'localhost' }
+    }).send(MESSAGE)
+
+    expect(relay.servernames).toStrictEqual(['localhost'])
+  })
+
+  it('should send no SNI name when the host is an address', async () => {
+    relay = await startRelay({ certificate, implicitTls: true })
+
+    await new SmtpEmailProvider({
+      host: '127.0.0.1',
+      port: relay.port,
+      secure: true,
+      tls: { ca: certificate.cert }
+    }).send(MESSAGE)
+
+    expect(relay.servernames).toStrictEqual([])
+  })
+
   it('should refuse a certificate it does not trust over implicit TLS', async () => {
     relay = await startRelay({ certificate, implicitTls: true })
 

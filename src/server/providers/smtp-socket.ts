@@ -36,7 +36,8 @@ type SocketAnswer = (
 ) => void
 
 /**
- * The options of a TLS connection: the host and port, then each option of the host that is set. A
+ * The options of a TLS connection: the host and port, the host's name as the SNI name when it is a
+ * name, then each option of the host that is set. A
  * value that reads as `undefined` is not set, so it cannot replace the default Node applies.
  *
  * @param plan - The resolved plan.
@@ -44,7 +45,10 @@ type SocketAnswer = (
  */
 function tlsOptions(plan: SmtpSocketPlan): tls.ConnectionOptions {
   const set = Object.entries(plan.tls ?? {}).filter(([, value]) => value !== undefined)
-  return nullProto({ host: plan.host, port: plan.port, ...Object.fromEntries(set) })
+  // Node sends no SNI on its own: a relay that picks its certificate by name needs the host's, unless
+  // the host is an address, which SNI cannot carry, or the caller set one.
+  const servername = net.isIP(plan.host) === 0 ? { servername: plan.host } : {}
+  return nullProto({ host: plan.host, port: plan.port, ...servername, ...Object.fromEntries(set) })
 }
 
 /**

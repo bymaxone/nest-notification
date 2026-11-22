@@ -21,6 +21,8 @@ export interface TestCertificate {
 export interface RelayLog {
   readonly commands: string[]
   readonly messages: string[]
+  /** The names clients sent as SNI, when the relay serves TLS from the first byte. */
+  readonly servernames: string[]
 }
 
 /** A running relay. */
@@ -127,14 +129,24 @@ function converse(
 export async function startRelay(
   options: { certificate?: TestCertificate; implicitTls?: boolean } = {}
 ): Promise<Relay> {
-  const log: RelayLog = { commands: [], messages: [] }
+  const log: RelayLog = { commands: [], messages: [], servernames: [] }
   const onSocket = (socket: net.Socket): void => {
     socket.write('220 relay ready\r\n')
     converse(socket, log, options.implicitTls ? undefined : options.certificate)
   }
   const server =
     options.implicitTls && options.certificate
-      ? tls.createServer(options.certificate, onSocket)
+      ? tls.createServer(
+          {
+            ...options.certificate,
+            // Picks the certificate by name, as a relay that hosts several does, and records the name.
+            SNICallback: (name, done) => {
+              log.servernames.push(name)
+              done(null, tls.createSecureContext(options.certificate))
+            }
+          },
+          onSocket
+        )
       : net.createServer(onSocket)
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
   return {

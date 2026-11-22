@@ -194,10 +194,15 @@ describe('the attachments and tags of a direct call to an adapter', () => {
     ['SMTP', () => new SmtpEmailProvider({ host: 'h' })]
   ])(
     'should treat a null list of attachments or tags as none on the %s adapter',
-    async (_n, make) => {
+    async (name, make) => {
       await expect(
         make().send({ ...MESSAGE, attachments: null, tags: null } as never)
       ).resolves.toBeDefined()
+
+      // What went out holds neither list: the transport or the SDK was given none, and not a `null`.
+      const sent = (name === 'Resend' ? mockResendSend : mockSendMail).mock.calls[0]?.[0] as object
+      expect(Reflect.get(sent, 'attachments')).toBeUndefined()
+      expect(Reflect.get(sent, 'tags')).toBeUndefined()
     }
   )
 })
