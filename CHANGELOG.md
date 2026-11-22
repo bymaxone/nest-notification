@@ -52,13 +52,13 @@ unknown` keeps its brackets). The at-sign is `@`, fullwidth `\uff20`, small `\uf
   and a getter on its prototype still count. The options and the message
   handed to a provider have no prototype, so a key that is not set is absent for a custom provider too.
   The same holds for what the library hands to a mail transport, an SDK, a renderer or a store: the SMTP message and
-  transport configuration (nodemailer reads `envelope`, `raw`, `list`, `alternatives`, `service`, `proxy`, `dkim` and an
-  attachment's `path`, none of which this library sets), the Resend payload, the default template renderer (its options,
+  transport configuration (nodemailer reads keys this library never sets, and a planted key must not answer for them),
+  the Resend payload, the default template renderer (its options,
   each template's `text`, and what it renders), the store wrapper (an operation the store does not have stays absent),
   the dispatch request and its OTP payload, and the error codes and credentials the adapters read. The reference
   adapters also read the message they are given by name, so a direct caller's plain object is covered. A `Proxy` around
-  your options or input answers for itself (documented in the README), as does the topmost prototype of a chain built by
-  hand.
+  your options or input answers for itself, and the topmost prototype of a chain built by hand cannot be told from the
+  realm root, so it is read as absent.
 - **A guess that is not a string is refused before anything uses it.** `verify({ code: 271620 })` reached the
   digest, whose `TypeError` quotes the value it was given, and a `String` object compared as the code. A `code` that is
   not a string is now `INVALID_SCOPE_IDENTIFIER`, naming the field and never the value.
