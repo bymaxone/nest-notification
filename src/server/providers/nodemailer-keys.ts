@@ -10,7 +10,7 @@
  * enough, because the copy has one. An own key that is `undefined` is copied too, and it shadows the
  * root: every name below is an own key of what Nodemailer receives, set to our value or to
  * `undefined`. A spec reads the sources of the Nodemailer the tests install and fails when a name it reads from a
- * message, an attachment, the transport options or the credentials is missing here.
+ * message, the transport options or the credentials is missing here.
  */
 
 import { withOwnKeys } from '../utils/read-options'
@@ -18,12 +18,6 @@ import { withOwnKeys } from '../utils/read-options'
 /** What Nodemailer reads from a message. */
 export const MESSAGE_KEYS =
   'alternatives amp attachDataUrls attachments auth baseBoundary bcc boundaryPrefix cc date disableFileAccess disableUrlAccess dkim dsn encoding envelope from headers html icalEvent inReplyTo list maxRecipients messageId newline normalizeHeaderKey otp priority raw references replyTo requireTLSExtensionEnabled sender ses signal subject text textEncoding to watchHtml xMailer'.split(
-    ' '
-  )
-
-/** What Nodemailer reads from an attachment. */
-export const ATTACHMENT_KEYS =
-  'cid content contentDisposition contentTransferEncoding contentType encoding filename headers href httpHeaders path raw tls'.split(
     ' '
   )
 

@@ -13,13 +13,7 @@ import { join } from 'node:path'
 import { Logger } from '@nestjs/common'
 import * as nodemailer from 'nodemailer'
 
-import {
-  ATTACHMENT_KEYS,
-  AUTH_KEYS,
-  MESSAGE_KEYS,
-  TLS_KEYS,
-  TRANSPORT_KEYS
-} from './nodemailer-keys'
+import { AUTH_KEYS, MESSAGE_KEYS, TLS_KEYS, TRANSPORT_KEYS } from './nodemailer-keys'
 import { SmtpEmailProvider } from './smtp-email.provider'
 
 const MESSAGE = {
@@ -104,6 +98,38 @@ describe('the message the SMTP adapter gives Nodemailer', () => {
     expect(sent.envelope.to).toStrictEqual(['real@acme.com'])
     expect(text).toContain('real@acme.com')
     expect(text).not.toMatch(/evil|planted|attacker/u)
+  })
+
+  it('should produce the message Nodemailer produces for the same plain input, attachments included', async () => {
+    const attachments = [
+      { filename: 'a.txt', content: 'eA==' },
+      { filename: 'm.eml', content: 'Subject: x\r\n\r\nbody', contentType: 'message/rfc822' }
+    ]
+    const normalise = (message: Buffer): string =>
+      message
+        .toString('utf8')
+        .replace(/^(Date|Message-ID):.*$/gmu, '')
+        .replace(/_NmP-[0-9a-f]+/gu, '_NmP-X')
+    const direct = await nodemailer
+      .createTransport({ streamTransport: true, buffer: true })
+      .sendMail({
+        from: MESSAGE.from,
+        to: MESSAGE.to,
+        subject: MESSAGE.subject,
+        html: MESSAGE.html,
+        attachments: attachments.map((a) => ({
+          ...a,
+          encoding: typeof a.content === 'string' ? 'base64' : undefined
+        }))
+      })
+    const stream = streamTransport()
+
+    await new SmtpEmailProvider({ host: '127.0.0.1' }).send({ ...MESSAGE, attachments })
+
+    const sent = (await stream.info()) as unknown as { message: Buffer }
+    expect(normalise(sent.message)).toBe(
+      normalise((direct as unknown as { message: Buffer }).message)
+    )
   })
 
   it('should say plainly that Nodemailer reads these names from objects it builds itself', async () => {
@@ -278,15 +304,7 @@ describe('the lists of names Nodemailer reads', () => {
       MESSAGE_SOURCES
     )
 
-    expect(missing(found, MESSAGE_KEYS, ATTACHMENT_KEYS)).toStrictEqual([])
-  })
-
-  it('should name every key Nodemailer reads from an attachment', () => {
-    const found = namesRead(/\b(?:attachment|alternative|element|icalEvent)\.([A-Za-z_]\w*)/gu, [
-      'mail-composer'
-    ])
-
-    expect(missing(found, ATTACHMENT_KEYS)).toStrictEqual([])
+    expect(missing(found, MESSAGE_KEYS)).toStrictEqual([])
   })
 
   it('should name every key Nodemailer reads from the options of a transport', () => {
