@@ -140,10 +140,16 @@ function converse(
  * @returns The relay, with what it saw.
  */
 export async function startRelay(
-  options: { certificate?: TestCertificate; implicitTls?: boolean } = {}
+  options: {
+    certificate?: TestCertificate
+    implicitTls?: boolean
+    /** Runs when a client has connected, just before the relay greets it. */
+    onConnect?: () => void
+  } = {}
 ): Promise<Relay> {
   const log: RelayLog = { commands: [], messages: [], servernames: [] }
   const onSocket = (socket: net.Socket): void => {
+    options.onConnect?.()
     socket.write('220 relay ready\r\n')
     converse(sealed(socket), log, options.implicitTls ? undefined : options.certificate)
   }

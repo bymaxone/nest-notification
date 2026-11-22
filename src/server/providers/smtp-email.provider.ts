@@ -362,6 +362,9 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
         this.#options.sendTimeoutMs ?? DEFAULT_SEND_TIMEOUT_MS
       )
     } catch (error) {
+      // A send that failed while the realm root is polluted failed because of it (the socket destroys
+      // the connection on a write then), and is told so: the refusal, not the relay's error.
+      assertStandardRealmRoot('SmtpEmailProvider')
       rethrowRefusal(error)
       throw this.failure(error, payload, redactValuesList, publishProviderText)
     }

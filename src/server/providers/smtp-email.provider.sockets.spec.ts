@@ -376,3 +376,53 @@ describe('an event Node emits on the socket, with a string planted under its nam
     }
   )
 })
+
+describe('a key planted after the checks of a send began and before its first byte', () => {
+  it.each([
+    ['address', 'evil@attacker.test'],
+    ['raw', 'From: evil@attacker.test\r\n\r\nplanted'],
+    ['boundary', 'planted-boundary'],
+    ['filename', 'planted.txt'],
+    ['content', 'planted content']
+  ])(
+    'should destroy the plain connection and refuse the send when %s is planted',
+    async (name, value) => {
+      relay = await startRelay({ onConnect: () => plant(name, value) })
+
+      await expect(
+        new SmtpEmailProvider({ host: '127.0.0.1', port: relay.port }).send(MESSAGE)
+      ).rejects.toMatchObject({ code: 'notification.invalid_scope_identifier' })
+
+      expect(relay.commands).toStrictEqual([])
+      expect(relay.messages).toHaveLength(0)
+    }
+  )
+
+  it('should destroy an implicit-TLS connection and refuse the send when a key is planted', async () => {
+    const certificate = makeCertificate()
+    relay = await startRelay({
+      certificate,
+      implicitTls: true,
+      onConnect: () => plant('address', 'evil@attacker.test')
+    })
+
+    await expect(
+      new SmtpEmailProvider({
+        host: '127.0.0.1',
+        port: relay.port,
+        secure: true,
+        tls: { ca: certificate.cert }
+      }).send(MESSAGE)
+    ).rejects.toMatchObject({ code: 'notification.invalid_scope_identifier' })
+
+    expect(relay.messages).toHaveLength(0)
+  })
+
+  it('should send as before when nothing is planted', async () => {
+    relay = await startRelay({ onConnect: () => undefined })
+
+    await new SmtpEmailProvider({ host: '127.0.0.1', port: relay.port }).send(MESSAGE)
+
+    expect(relay.messages).toHaveLength(1)
+  })
+})
