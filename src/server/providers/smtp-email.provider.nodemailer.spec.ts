@@ -314,6 +314,26 @@ describe('the transport options the SMTP adapter gives Nodemailer', () => {
     expect(options?.socket).toBeUndefined()
   })
 
+  it('should keep the transport options whatever is planted after the provider was built, before its first send', async () => {
+    let transporter: { transporter: { options: Record<string, unknown> } } | undefined
+    const real = nodemailer.createTransport.bind(nodemailer)
+    jest.spyOn(nodemailer, 'createTransport').mockImplementation(((config: object) => {
+      transporter = real(config) as never
+      return transporter
+    }) as never)
+    const provider = new SmtpEmailProvider({ host: '127.0.0.1', port: 1 })
+    plantKeys({ service: 'gmail', proxy: 'http://evil.test:3128', socket: { planted: true } })
+
+    await provider.send(MESSAGE).catch(() => undefined)
+
+    const options = transporter?.transporter.options
+    expect(options?.host).toBe('127.0.0.1')
+    expect(options?.port).toBe(1)
+    expect(options?.service).toBeUndefined()
+    expect(options?.proxy).toBeUndefined()
+    expect(options?.socket).toBeUndefined()
+  })
+
   it('should build the transport Nodemailer builds for the same plain configuration', async () => {
     const options: Record<string, unknown>[] = []
     const real = nodemailer.createTransport.bind(nodemailer)

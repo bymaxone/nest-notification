@@ -314,15 +314,19 @@ afterEach(() => {
 })
 
 describe('an event Node emits on the socket, with a string planted under its name on a later tick', () => {
+  // Not `pause` or `resume`: Nodemailer's own streams emit those, and they are not the adapter's to seal.
   const EVENTS = [
     'lookup',
     'connectionAttempt',
     'connectionAttemptFailed',
     'connectionAttemptTimeout',
     'ready',
+    'drain',
+    'timeout',
     'keylog',
     'session',
-    'OCSPResponse'
+    'OCSPResponse',
+    'anArbitraryName'
   ]
 
   /** Plants `name` the moment the real connection has been started, as a later request would. */

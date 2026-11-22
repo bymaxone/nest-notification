@@ -71,6 +71,15 @@ export function makeCertificate(): TestCertificate {
   }
 }
 
+/**
+ * Keeps a key planted on Node's root from reaching this relay's own sockets: the relay shares the
+ * process with the code under test, and Node's emitter would read a planted event name on them.
+ */
+function sealed<T extends net.Socket>(socket: T): T {
+  Object.setPrototypeOf(Reflect.get(socket, '_events') as object, null)
+  return socket
+}
+
 /** Answers the SMTP conversation on one socket, upgrading it on STARTTLS when it has a certificate. */
 function converse(
   socket: net.Socket,
@@ -105,7 +114,11 @@ function converse(
       } else if (/^STARTTLS/iu.test(line) && certificate) {
         socket.write('220 go ahead\r\n')
         socket.removeAllListeners('data')
-        converse(new tls.TLSSocket(socket, { isServer: true, ...certificate }), log, undefined)
+        converse(
+          sealed(new tls.TLSSocket(socket, { isServer: true, ...certificate })),
+          log,
+          undefined
+        )
         return
       } else if (/^DATA/iu.test(line)) {
         body = ''
@@ -132,7 +145,7 @@ export async function startRelay(
   const log: RelayLog = { commands: [], messages: [], servernames: [] }
   const onSocket = (socket: net.Socket): void => {
     socket.write('220 relay ready\r\n')
-    converse(socket, log, options.implicitTls ? undefined : options.certificate)
+    converse(sealed(socket), log, options.implicitTls ? undefined : options.certificate)
   }
   const server =
     options.implicitTls && options.certificate

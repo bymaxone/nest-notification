@@ -9,7 +9,7 @@
  * belongs to. Over-masking a word is the accepted price; a missed address is not.
  */
 
-/** The longest text that is read; what follows is dropped. */
+/** The longest text that is kept; what follows is dropped, except the end of a token that starts inside it. */
 const MAX_TEXT = 8192
 
 /**

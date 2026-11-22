@@ -52,43 +52,33 @@ function tlsOptions(plan: SmtpSocketPlan): tls.ConnectionOptions {
 }
 
 /**
- * Events Node emits on a socket that this adapter does not use. Emitting an event with no listener
- * reads the name from the emitter's table of listeners, which can reach `Object.prototype`: a string
- * planted there as `lookup` is read by Node's own emitter on a later tick and throws, uncaught. A
- * listener of its own for each of them keeps those reads on the socket.
+ * Gives a socket's table of listeners no prototype. Emitting an event reads its name from that table,
+ * and the table is an ordinary object, so a string planted on `Object.prototype` under an event name
+ * (`lookup`, `resume`, `drain`, any other) is read by Node's own emitter on a later tick and throws,
+ * uncaught. With no prototype nothing is inherited, whatever the name, and the listeners the socket
+ * and Nodemailer register keep working.
+ *
+ * @param socket - A socket that has not started to connect, or has not yet had a tick.
+ * @returns The same socket.
  */
-const QUIET_EVENTS = [
-  'lookup',
-  'connectionAttempt',
-  'connectionAttemptFailed',
-  'connectionAttemptTimeout',
-  'ready',
-  'keylog',
-  'session',
-  'OCSPResponse'
-] as const
-
-/** Gives a socket a listener that does nothing for each event of {@link QUIET_EVENTS}. */
-function quiet<T extends net.Socket>(socket: T): T {
-  for (const event of QUIET_EVENTS) {
-    socket.on(event, () => undefined)
-  }
+function seal<T extends net.Socket>(socket: T): T {
+  Object.setPrototypeOf(Reflect.get(socket, '_events') as object, null)
   return socket
 }
 
 /**
- * Starts the connection of a plan. A plain connection is made on a socket that has its listeners
- * before it connects; a TLS one gets them in the same run as `tls.connect`, before any event can
- * fire, since Node emits them on a later tick.
+ * Starts the connection of a plan. A plain connection is made on a socket whose table of listeners is
+ * sealed before it connects; a TLS one is sealed in the same run as `tls.connect`, before any event
+ * can fire, since Node emits them on a later tick.
  *
  * @param plan - The resolved plan.
  * @returns The socket, connecting.
  */
 function connect(plan: SmtpSocketPlan): net.Socket {
   if (plan.secure) {
-    return quiet(tls.connect(tlsOptions(plan)))
+    return seal(tls.connect(tlsOptions(plan)))
   }
-  return quiet(new net.Socket()).connect(nullProto({ host: plan.host, port: plan.port }))
+  return seal(new net.Socket()).connect(nullProto({ host: plan.host, port: plan.port }))
 }
 
 /**
