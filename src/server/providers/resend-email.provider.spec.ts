@@ -121,6 +121,10 @@ describe('ResendEmailProvider', () => {
       })
 
       await expect(sending).rejects.toBeInstanceOf(NotificationException)
+      const refusal = await sending.catch((error: unknown) => error)
+      expect(JSON.stringify((refusal as NotificationException).getResponse())).toContain(
+        '[ResendEmailProvider] attachments Resend inlines an attachment by its cid only'
+      )
       expect(mockSend).not.toHaveBeenCalled()
     }
   )
@@ -135,6 +139,41 @@ describe('ResendEmailProvider', () => {
     })
 
     expect(mockSend).toHaveBeenCalledTimes(1)
+  })
+
+  it('should read the cid and the disposition of an attachment once, judging what it sends', async () => {
+    const reads: string[] = []
+    const attachment = {
+      filename: 'a.txt',
+      content: 'eA==',
+      get cid(): string {
+        reads.push('cid')
+        return 'logo'
+      },
+      get contentDisposition(): 'inline' {
+        reads.push('contentDisposition')
+        return 'inline'
+      }
+    }
+
+    await new ResendEmailProvider({ apiKey: 'k' }).send({
+      ...baseOptions,
+      attachments: [attachment]
+    })
+
+    expect(reads).toStrictEqual(['cid', 'contentDisposition'])
+  })
+
+  it('should keep the availability code on a failure whose provider text is withheld', async () => {
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    mockSend.mockResolvedValue({ data: null, error: { message: 'down', statusCode: 503 } })
+
+    const caught = (await new ResendEmailProvider({ apiKey: 'k' })
+      .send({ ...baseOptions, publishProviderText: false })
+      .catch((error: unknown) => error)) as Error & { code?: string }
+
+    expect(caught.message).toBe('Resend send failed')
+    expect(caught.code).toBe('EUNAVAILABLE')
   })
 
   it('should log and throw a failure with the address the provider quoted masked', async () => {

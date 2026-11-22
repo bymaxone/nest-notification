@@ -46,6 +46,7 @@ function fromPercent(run: string): string {
   try {
     return decodeURIComponent(run)
   } catch {
+    // Stryker disable next-line Regex: equivalent — a byte pair outside 0-7 left in place, or decoded to a letter, is never an at-sign, and an at-sign pair beside it is decoded on the next pass; a token that needs more passes than MAX_DECODES is masked either way.
     return run.replace(/%[0-7][0-9a-f]/giu, (pair) =>
       String.fromCharCode(parseInt(pair.slice(1), 16))
     )
@@ -64,13 +65,15 @@ function decodeOne(
   braced?: string
 ): string {
   if (named !== undefined) {
-    return named.toLowerCase() === 'amp' ? '&' : '@'
+    // `amp` is the three-letter name, `commat` the six-letter one.
+    return named.length === 3 ? '&' : '@'
   }
   const digits = u4 ?? hex ?? decimal ?? x2 ?? uEsc ?? braced
   if (digits === undefined) {
     return fromPercent(spelling)
   }
   const point = parseInt(digits, decimal === undefined ? 16 : 10)
+  // Stryker disable next-line EqualityOperator: equivalent — U+10FFFF is no at-sign, so keeping its spelling or decoding it leaves the answer of holdsAtSign the same.
   return point <= 0x10ffff ? String.fromCodePoint(point) : spelling
 }
 
@@ -115,6 +118,11 @@ export function maskAddressTokens(text: string, mask: (recipient: string) => str
     answers.set(head, answer)
     return answer
   })
+}
+
+/** Masks every address-shaped token of `text` with the fixed `[address]`, for text no host mask is asked about. */
+export function maskAddresses(text: string): string {
+  return maskAddressTokens(text, () => ADDRESS_MASK)
 }
 
 /**

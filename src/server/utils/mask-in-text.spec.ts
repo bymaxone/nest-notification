@@ -63,6 +63,20 @@ describe('maskAddressTokens', () => {
     expect(maskAddressTokens(`a ${layered} b`, () => '#')).toBe('a # b')
   })
 
+  it('should mask a token that needs exactly as many passes as the limit allows', () => {
+    const atTheLimit = `x%${'25'.repeat(7)}41`
+
+    expect(maskAddressTokens(`a ${atTheLimit} b`, () => '#')).toBe('a # b')
+  })
+
+  it('should leave an ampersand entity that is not an at-sign alone', () => {
+    expect(maskAddressTokens('AT&amp;T said &AMP; no', () => '#')).toBe('AT&amp;T said &AMP; no')
+  })
+
+  it('should decode the largest code point without treating it as out of range', () => {
+    expect(maskAddressTokens('a &#x10ffff;&#64; b', () => '#')).toBe('a # b')
+  })
+
   it('should leave an escape that is not an at-sign and a code point out of range alone', () => {
     expect(maskAddressTokens('a %41 &#x110000; &#65; b', () => '#')).toBe(
       'a %41 &#x110000; &#65; b'

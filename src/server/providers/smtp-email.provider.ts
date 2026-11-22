@@ -35,8 +35,8 @@ import { describeError, UNPRINTABLE_ERROR } from '../utils/describe-error'
 import { assertBodyParts } from '../utils/email-body'
 import { loadOptionalPeer } from '../utils/load-optional-peer'
 import { logEvent } from '../utils/log-event'
-import { loggableError } from '../utils/loggable-error'
 import { assertPort } from '../utils/port-option'
+import { publishedFailure } from '../utils/provider-failure'
 import {
   collectEchoedExcerpts,
   isSafeError,
@@ -403,18 +403,14 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
       return this.withheldFailure(raw, code, redactValuesList)
     }
     const reason = this.scrubTransportError(raw, payload, redactValuesList)
-    const failure = Object.assign(
-      new Error(`SMTP send failed: ${reason}`),
-      code === undefined ? {} : { code }
-    )
-    logEvent(
+    return publishedFailure(
       this.logger,
-      'warn',
       NOTIFICATION_LOG_EVENTS.SMTP_SEND_FAILED,
       '[SMTP_SEND_FAILED] The send failed; the relay error is in the err field.',
-      loggableError(failure)
+      'SMTP',
+      reason,
+      code
     )
-    return failure
   }
 
   /**
@@ -626,14 +622,18 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
   private mapAttachments(
     attachments: ReadonlyArray<EmailAttachment> | undefined
   ): SmtpAttachment[] | undefined {
-    return attachments?.map((attachment) => ({
-      filename: attachment.filename,
-      content: attachment.content,
-      contentType: attachment.contentType,
-      encoding: typeof attachment.content === 'string' ? 'base64' : undefined,
-      cid: attachment.cid,
-      contentDisposition: attachment.contentDisposition
-    }))
+    return attachments?.map((attachment) => {
+      // Each field is read once: the encoding and the content must describe the same value.
+      const { filename, content, contentType, cid, contentDisposition } = attachment
+      return {
+        filename,
+        content,
+        contentType,
+        encoding: typeof content === 'string' ? 'base64' : undefined,
+        cid,
+        contentDisposition
+      }
+    })
   }
 
   /**

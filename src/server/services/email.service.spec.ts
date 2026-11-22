@@ -379,6 +379,18 @@ describe('EmailService.send', () => {
     )
   })
 
+  it('should keep the provider text as it is when nothing is declared and nothing is echoed', async () => {
+    const provider = makeProvider()
+    provider.send.mockRejectedValue(new Error('relay said Stryker was here'))
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), makeAudit())
+
+    const error: unknown = await service.send(baseInput).catch((thrown: unknown) => thrown)
+
+    expect(((error as NotificationException).cause as Error).message).toBe(
+      'relay said Stryker was here'
+    )
+  })
+
   // A non-Error provider rejection is stringified for the audit message.
   it('should stringify a non-Error provider rejection for the audit', async () => {
     const provider = makeProvider()

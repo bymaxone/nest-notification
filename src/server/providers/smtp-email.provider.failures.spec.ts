@@ -53,6 +53,40 @@ describe('SmtpEmailProvider failure handling', () => {
     warnSpy.mockRestore()
   })
 
+  // A relay quotes the address it refused; the thrown message and the log line both carry it masked.
+  it('should mask the address a relay quoted in the thrown message and in the log line', async () => {
+    mockSendMail.mockRejectedValue(new Error('550 <bob@x.com>: Recipient rejected'))
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+    const caught = (await new SmtpEmailProvider({ host: 'h' })
+      .send(baseOptions)
+      .catch((error: unknown) => error)) as Error
+
+    expect(caught.message).toBe('SMTP send failed: 550 <[address]>: Recipient rejected')
+    expect(loggedAll(warnSpy.mock.calls[0])).toContain('550 <[address]>: Recipient rejected')
+    expect(loggedAll(warnSpy.mock.calls[0])).not.toContain('bob@x.com')
+    warnSpy.mockRestore()
+  })
+
+  it('should read each field of an attachment once, so the encoding describes the content sent', async () => {
+    let reads = 0
+    const attachment = {
+      filename: 'a.txt',
+      get content(): string | Buffer {
+        reads += 1
+        return reads === 1 ? 'eA==' : Buffer.from('x')
+      }
+    }
+
+    await new SmtpEmailProvider({ host: 'h' }).send({ ...baseOptions, attachments: [attachment] })
+
+    expect(reads).toBe(1)
+    expect(mockSendMail.mock.calls[0]?.[0].attachments[0]).toMatchObject({
+      content: 'eA==',
+      encoding: 'base64'
+    })
+  })
+
   // The passphrase of a client key is secret material like a password: a transport error that
   // quotes the connection options must not put it in the thrown message or the warn line.
   it('should scrub the tls passphrase out of a transport error', async () => {

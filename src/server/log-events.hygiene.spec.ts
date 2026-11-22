@@ -171,7 +171,8 @@ const ROWS: Record<NotificationLogEvent, Row> = {
       mockSendMail.mockRejectedValue(new Error(`550 ${SENTINEL} unknown`))
       await new SmtpEmailProvider({ host: 'h' }).send(SEND_OPTIONS).catch(() => undefined)
     },
-    errCarriesSentinel: true
+    errCarriesSentinel: false,
+    errMasked: true
   },
   NOTIFICATION_SMTP_CLOSE_FAILED: {
     provoke: async () => {
