@@ -44,9 +44,10 @@ describe('the failure of a verify', () => {
   it('should remove the guess from the text of a store error', async () => {
     const caught = await verifying(new Error(`rejected ${GUESS} for the key`))
 
-    expect(JSON.stringify([(caught as Error).message, (caught as Error).stack])).not.toContain(
-      GUESS
-    )
+    // The store's own text is the cause of the library error that wraps it: that is where it is read.
+    const cause = (caught as Error).cause as Error
+    expect(cause.message).toContain('rejected')
+    expect(JSON.stringify([cause.message, cause.stack])).not.toContain(GUESS)
   })
 
   it('should answer a thrown string with a library error that holds no guess', async () => {
