@@ -196,6 +196,23 @@ describe('the TLS options the SMTP adapter gives Nodemailer, with the real tls m
     expect(options.timeout).toBe(5000)
   })
 
+  it('should read a tls value that is undefined as not set, so a real tls.connect still gets Node defaults', async () => {
+    const own = ownTlsKeys({ checkServerIdentity: undefined, minDHSize: undefined } as Record<
+      string,
+      unknown
+    >)
+    const options = Object.assign({ host: '127.0.0.1', port: await closedPort() }, own)
+
+    const socket = realTls.connect(options)
+    const outcome = await new Promise<string>((resolve) => {
+      socket.once('error', (error: NodeJS.ErrnoException) => resolve(String(error.code)))
+    })
+
+    expect(outcome).toBe('ECONNREFUSED')
+    expect(typeof own.checkServerIdentity).toBe('function')
+    expect(own.minDHSize).toBe(1024)
+  })
+
   it('should reach the connection with implicit TLS and not stop on an argument Node refuses', async () => {
     const port = await closedPort()
 
