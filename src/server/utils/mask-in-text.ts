@@ -16,7 +16,7 @@ const MAX_TEXT = 8192
  * How far past {@link MAX_TEXT} a token that starts before it is followed, so a token that straddles the
  * bound is read whole and masked whole, and not published as the front half of an address.
  */
-const LOOKAHEAD = 1024
+export const LOOKAHEAD = 1024
 
 /** What stands for a token whose mask threw. */
 const MASK_FAILED = '[masked]'
@@ -29,7 +29,7 @@ const MAX_TOKEN = 512
 
 /**
  * How many units a quoted piece may hold between its quotes: a unit is one character, or a backslash
- * and the character it escapes, so the piece spans up to twice this between its quotes. The pattern below spells the number out, and
+ * and the character it escapes, so the piece spans up to this many units between its quotes. The pattern below spells the number out, and
  * a spec holds the two to each other.
  */
 export const QUOTED_UNITS = 300
@@ -45,12 +45,20 @@ export const QUOTED_UNITS = 300
 const TOKEN = /(?:"(?:[^"\\]|\\.){0,300}"|[^\t-\r ()<>[\],])+/gu
 
 /**
- * How near the end of what was read a token may end before its end is in doubt: a quoted piece is at
- * most twice {@link QUOTED_UNITS} characters between its quotes, and the quotes, so a quote that opens
- * this close to the end may close beyond it, and the token that precedes it would be published
- * without the at-sign that follows.
+ * The most UTF-16 code units one unit of a quoted piece can take: the pattern reads whole code points
+ * (`u`), so a unit is a backslash and a code point, and an astral code point is two code units, which
+ * makes three. The string the text is cut by is counted in code units.
  */
-const EDGE = 2 * QUOTED_UNITS + 2
+const UNIT_WIDTH = 3
+
+/**
+ * How near the end of what was read a token may end before its end is in doubt: a quoted piece is at
+ * most {@link QUOTED_UNITS} units of {@link UNIT_WIDTH} code units between its quotes, and the quotes,
+ * so a quote that opens this close to the end may close beyond it, and the token that precedes it
+ * would be published without the at-sign that follows. It stays below {@link LOOKAHEAD}, or what is
+ * read would end inside the zone it is meant to leave out.
+ */
+export const EDGE = UNIT_WIDTH * QUOTED_UNITS + 2
 
 /** The at-sign itself: `@`, fullwidth `\uff20` or small `\ufe6b`. */
 const AT_SIGN = /[@\uff20\ufe6b]/u

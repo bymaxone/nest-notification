@@ -4,7 +4,7 @@
  * @layer utils
  */
 
-import { maskAddressTokens, QUOTED_UNITS, maskExact } from './mask-in-text'
+import { EDGE, LOOKAHEAD, maskAddressTokens, QUOTED_UNITS, maskExact } from './mask-in-text'
 
 const mask = (recipient: string): string => `<${String(recipient.length)}>`
 
@@ -156,10 +156,11 @@ describe('maskAddressTokens', () => {
   })
 
   it.each([
-    ['ends one past the edge', 515, false],
-    ['ends exactly at the edge', 514, true]
-  ])('should %s of what was read: kept is %s', (_name, length, kept) => {
-    // What is read is 9,216 characters; the edge is 602 before its end, 8,614. The run starts at 8,100.
+    ['ends one past the edge', 1, false],
+    ['ends exactly at the edge', 0, true]
+  ])('should %s of what was read: kept is %s', (_name, past, kept) => {
+    // What is read is 9,216 characters and the edge is EDGE before its end. The run starts at 8,100.
+    const length = 9216 - EDGE - 8100 + past
     const text = `${' '.repeat(8100)}${'z'.repeat(length)} ${'y'.repeat(1200)}`
 
     const out = maskAddressTokens(text, () => '#')
@@ -177,6 +178,26 @@ describe('maskAddressTokens', () => {
     const text = 'z'.repeat(8500)
 
     expect(maskAddressTokens(text, () => '#')).toBe(`${text}…`)
+  })
+
+  it('should leave out the front of an address whose quoted piece holds escaped astral characters', () => {
+    // An escaped astral character is a backslash and two UTF-16 code units, three in all, so the
+    // piece is longer in what the text is cut by than twice its units.
+    const text = `${' '.repeat(8100)}${'x'.repeat(250)}"Alice ${'\\😀'.repeat(294)}"@example.com`
+
+    const out = maskAddressTokens(text, () => '#')
+
+    expect(out).not.toMatch(/Alice/u)
+  })
+
+  it('should read a quoted piece of the most units, each an escaped astral character, as one token', () => {
+    const piece = `"${'\\😀'.repeat(QUOTED_UNITS)}"@example.com`
+
+    expect(maskAddressTokens(piece, () => '#')).toBe('#')
+  })
+
+  it('should keep the zone it leaves out inside what is read past the bound', () => {
+    expect(EDGE).toBeLessThan(LOOKAHEAD)
   })
 
   it('should leave out a token that runs to the end of what was read', () => {
