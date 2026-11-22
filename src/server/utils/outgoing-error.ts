@@ -41,24 +41,26 @@ export function outgoingError(
   values: readonly string[],
   keepLibraryErrors = false
 ): unknown {
-  const { catalog, authored } =
-    keepLibraryErrors && isLibraryError(failure) ? libraryText(failure) : NO_TEXT
+  const text = keepLibraryErrors && isLibraryError(failure) ? libraryText(failure) : undefined
   // A value that is a stretch of the catalog text stays, unless a store's own text echoes it too:
   // then it is scrubbed everywhere, the code included, because a guess left in a log is worse.
-  const scrubbed = values.filter((value) => !catalog.includes(value) || authored.includes(value))
+  const scrubbed =
+    text === undefined
+      ? values
+      : values.filter((value) => !text.catalog.includes(value) || text.authored.includes(value))
   return isSafeError(failure)
     ? scrubValuesFromErrorChain(failure, scrubbed)
     : coerceRedacted(failure, scrubbed)
 }
 
-const NO_TEXT = { catalog: '', authored: '' }
-
 /**
  * What of a library error is the library's and what a store wrote into it. The library's is its code
  * and the catalog's message for that code. What a store wrote is a message of its own, the details
- * and the cause chain. Both are empty when the error cannot be read, so nothing is kept.
+ * and the cause chain. Nothing is answered when the error cannot be read, so nothing is kept.
  */
-function libraryText(error: NotificationException): { catalog: string; authored: string } {
+function libraryText(
+  error: NotificationException
+): { catalog: string; authored: string } | undefined {
   try {
     const { code } = error
     // A code that is not in the catalog is no library error: the destructuring throws and nothing is kept.
@@ -71,6 +73,6 @@ function libraryText(error: NotificationException): { catalog: string; authored:
       authored: `${body.message === own ? '' : body.message} ${JSON.stringify(body.details ?? '')} ${collectErrorChainText(error.cause)}`
     }
   } catch {
-    return NO_TEXT
+    return undefined
   }
 }

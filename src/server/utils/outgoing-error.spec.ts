@@ -152,6 +152,14 @@ describe('outgoingError', () => {
     expect((out.cause as Error).message).not.toContain(VALUE)
   })
 
+  it('should not keep the library words unless it is asked to', () => {
+    const error = new NotificationException('OTP_STORAGE_FAILED')
+
+    const out = outgoingError(error, ['otp']) as NotificationException
+
+    expect(JSON.stringify(out.getResponse())).not.toContain('otp')
+  })
+
   it('should flatten a thrown string and remove the value', () => {
     expect(outgoingError(`bad ${VALUE}`, [VALUE])).toBe('bad [redacted]')
   })
