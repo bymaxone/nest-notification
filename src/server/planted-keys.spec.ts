@@ -372,7 +372,8 @@ describe('a key planted on the realm-root prototype', () => {
       }
 
       // Own keys: a parsed object would answer for a planted key through its own prototype.
-      expect(Object.keys(options.tls ?? {})).toStrictEqual(['servername'])
+      // The server name is the host's; `minDHSize` is the default Node requires to be set.
+      expect(Object.keys(options.tls ?? {}).sort()).toStrictEqual(['minDHSize', 'servername'])
     })
 
     it('should not give a pool the host left unset a planted limit', async () => {

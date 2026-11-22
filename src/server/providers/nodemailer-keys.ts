@@ -13,6 +13,8 @@
  * message, the transport options or the credentials is missing here.
  */
 
+import { checkServerIdentity } from 'node:tls'
+
 import { refuseInput } from '../utils/bounded-list'
 import { withOwnKeys } from '../utils/read-options'
 
@@ -38,15 +40,23 @@ export const AUTH_KEYS =
     ' '
   )
 
-/** What `tls.connect` and `net.connect` read from the options Nodemailer builds out of `tls`. */
+/**
+ * What `tls.connect` reads from the options Nodemailer builds out of `tls`, and is not given by
+ * Nodemailer itself. Nodemailer copies `tls` over options it has set (`host`, `port`, `socket`,
+ * `timeout`), so those cannot be here: an own `undefined` would overwrite them. `checkServerIdentity`
+ * and `minDHSize` are checked by Node when they are present, so they are given their defaults below.
+ */
 export const TLS_KEYS =
-  'ALPNProtocols allowHalfOpen allowPartialTrustChain ca cert checkServerIdentity ciphers clientCertEngine crl dhparam ecdhCurve enableTrace family handshakeTimeout highWaterMark hints honorCipherOrder host key keepAlive localAddress lookup maxVersion minDHSize minVersion noDelay onread passphrase path pfx port privateKeyEngine privateKeyIdentifier pskCallback pskIdentityHint rejectUnauthorized requestCert secureContext secureOptions secureProtocol servername session sessionIdContext sessionTimeout sigalgs socket ticketKeys timeout'.split(
+  'ALPNProtocols allowHalfOpen allowPartialTrustChain ca cert ciphers clientCertEngine crl dhparam ecdhCurve enableTrace family handshakeTimeout highWaterMark hints honorCipherOrder key keepAlive localAddress lookup maxVersion minVersion noDelay onread passphrase path pfx privateKeyEngine privateKeyIdentifier pskCallback pskIdentityHint rejectUnauthorized requestCert secureContext secureOptions secureProtocol servername session sessionIdContext sessionTimeout sigalgs ticketKeys'.split(
     ' '
   )
 
+/** The defaults of the two options Node validates when they are present, so they cannot be unset. */
+const TLS_DEFAULTS = { checkServerIdentity, minDHSize: 1024 }
+
 /**
  * The `tls` option as the transport gets it: an object with an own key for every name `tls.connect`
- * reads, the host's values in place. A value that is not an options object (`x`, `5`, an array) is
+ * reads that Nodemailer does not set, the host's values in place. A value that is not an options object (`x`, `5`, an array) is
  * left to the transport as it is, and an unset one becomes an object of unset keys, so a key planted
  * on the realm root cannot turn the certificate check off.
  *
@@ -56,7 +66,9 @@ export const TLS_KEYS =
 export function ownTlsKeys<T>(tls: T): T {
   const isOptions =
     tls === undefined || (typeof tls === 'object' && tls !== null && !Array.isArray(tls))
-  return (isOptions ? withOwnKeys((tls ?? {}) as object, TLS_KEYS) : tls) as T
+  return (
+    isOptions ? withOwnKeys({ ...TLS_DEFAULTS, ...((tls ?? {}) as object) }, TLS_KEYS) : tls
+  ) as T
 }
 
 /**

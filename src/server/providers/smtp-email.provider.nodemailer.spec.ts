@@ -8,12 +8,21 @@
  */
 
 import { readdirSync, readFileSync, statSync } from 'node:fs'
+import * as net from 'node:net'
 import { join } from 'node:path'
+import * as realTls from 'node:tls'
 
 import { Logger } from '@nestjs/common'
 import * as nodemailer from 'nodemailer'
 
-import { AUTH_KEYS, INTERNAL_KEYS, MESSAGE_KEYS, TLS_KEYS, TRANSPORT_KEYS } from './nodemailer-keys'
+import {
+  AUTH_KEYS,
+  INTERNAL_KEYS,
+  MESSAGE_KEYS,
+  ownTlsKeys,
+  TLS_KEYS,
+  TRANSPORT_KEYS
+} from './nodemailer-keys'
 import { SmtpEmailProvider } from './smtp-email.provider'
 
 const MESSAGE = {
@@ -156,6 +165,72 @@ describe('the message the SMTP adapter gives Nodemailer', () => {
   })
 })
 
+describe('the TLS options the SMTP adapter gives Nodemailer, with the real tls module', () => {
+  /** A port nothing listens on. */
+  async function closedPort(): Promise<number> {
+    const server = net.createServer()
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const { port } = server.address() as net.AddressInfo
+    await new Promise((resolve) => server.close(resolve))
+    return port
+  }
+
+  it('should give a real tls.connect options it accepts, over the ones Nodemailer sets itself', async () => {
+    const own = ownTlsKeys(undefined as Record<string, unknown> | undefined) ?? {}
+    const options = Object.assign(
+      { host: '127.0.0.1', port: await closedPort(), timeout: 5000 },
+      own
+    )
+
+    const socket = realTls.connect(options)
+    const outcome = await new Promise<string>((resolve) => {
+      socket.once('error', (error: NodeJS.ErrnoException) => resolve(String(error.code)))
+    })
+
+    expect(outcome).toBe('ECONNREFUSED')
+    expect(options.host).toBe('127.0.0.1')
+    expect(options.timeout).toBe(5000)
+  })
+
+  it('should reach the connection with implicit TLS and not stop on an argument Node refuses', async () => {
+    const port = await closedPort()
+
+    const failure = (await new SmtpEmailProvider({ host: '127.0.0.1', port, secure: true })
+      .send(MESSAGE)
+      .catch((error: unknown) => error)) as Error
+
+    expect(failure.message).toContain('ECONNREFUSED')
+    expect(failure.message).not.toMatch(/ERR_INVALID_ARG|must be of type/u)
+  })
+
+  it('should upgrade to TLS after STARTTLS without stopping on an argument Node refuses', async () => {
+    const commands: string[] = []
+    const server = net.createServer((socket) => {
+      socket.write('220 relay ready\r\n')
+      socket.on('data', (chunk) => {
+        const line = chunk.toString('utf8').trim()
+        commands.push(line.split(' ')[0] ?? '')
+        if (/^EHLO/iu.test(line)) {
+          socket.write('250-relay\r\n250 STARTTLS\r\n')
+        } else if (/^STARTTLS/iu.test(line)) {
+          socket.write('220 go ahead\r\n')
+          setTimeout(() => socket.destroy(), 200)
+        }
+      })
+    })
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+    const { port } = server.address() as net.AddressInfo
+
+    const failure = (await new SmtpEmailProvider({ host: '127.0.0.1', port, requireTls: true })
+      .send(MESSAGE)
+      .catch((error: unknown) => error)) as Error
+    await new Promise((resolve) => server.close(resolve))
+
+    expect(commands).toContain('STARTTLS')
+    expect(failure.message).not.toMatch(/ERR_INVALID_ARG|must be of type|ERR_MISSING_ARGS/u)
+  })
+})
+
 describe('a realm root that holds a name Nodemailer reads from objects it builds itself', () => {
   it.each(INTERNAL_KEYS)(
     'should refuse the send, with nothing created or sent, when %s is planted',
@@ -239,11 +314,13 @@ describe('the transport options the SMTP adapter gives Nodemailer', () => {
       JSON.stringify(
         Object.fromEntries(
           Object.entries(value)
-            .filter(([, v]) => v !== undefined)
+            .filter(
+              ([key, v]) => v !== undefined && key !== 'checkServerIdentity' && key !== 'minDHSize'
+            )
             .sort(([a], [b]) => a.localeCompare(b))
         )
       )
-    expect(defined(mine)).toBe(defined({ ...direct, tls: {} }))
+    expect(defined(mine)).toBe(defined({ ...direct, tls: { minDHSize: 1024 } }))
   })
 
   it('should connect with the certificate check on and to the host asked, whatever tls keys are planted', async () => {
@@ -265,6 +342,9 @@ describe('the transport options the SMTP adapter gives Nodemailer', () => {
     expect(seen.length).toBeGreaterThan(0)
     expect(Reflect.get(options, 'rejectUnauthorized')).toBeUndefined()
     expect(Reflect.get(options, 'servername')).toBeUndefined()
+    // The destination is the host's, whatever the options were padded with.
+    expect(Reflect.get(options, 'host')).toBe('127.0.0.1')
+    expect(Reflect.get(options, 'port')).toBe(465)
     expect(Reflect.get(options, 'minVersion')).toBeUndefined()
   })
 })

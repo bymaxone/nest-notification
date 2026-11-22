@@ -4,6 +4,8 @@
  * @layer infrastructure
  */
 
+import { checkServerIdentity } from 'node:tls'
+
 import type { EmailSendOptions } from '../../interfaces/email-provider.interface'
 
 export const baseOptions: EmailSendOptions = {
@@ -12,6 +14,14 @@ export const baseOptions: EmailSendOptions = {
   subject: 'Your code',
   html: '<p>Secret 123456</p>',
   text: 'Secret 123456'
+}
+
+/** The two TLS options the adapter gives their Node defaults, because Node refuses them when unset. */
+function isNodeDefault(key: string, value: unknown): boolean {
+  return (
+    (key === 'checkServerIdentity' && value === checkServerIdentity) ||
+    (key === 'minDHSize' && value === 1024)
+  )
 }
 
 /**
@@ -27,7 +37,7 @@ export function definedOnly(value: unknown): Record<string, unknown> {
     isOptions(item)
       ? Object.fromEntries(
           Object.entries(item)
-            .filter(([, entry]) => entry !== undefined)
+            .filter(([key, entry]) => entry !== undefined && !isNodeDefault(key, entry))
             .map(([key, entry]) => [key, strip(entry)])
         )
       : item
