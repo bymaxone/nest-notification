@@ -27,9 +27,7 @@ the entries that carry one, is the compatibility contract — read it, not the n
   row the audit interceptor writes for a handler's error, carried the store's, the provider's or the handler's own text,
   which can quote the address it refused. Every token of that text that holds an at-sign is replaced, whole, by what
   `audit.maskRecipient` answers for it, whoever the address belongs to and however it is spelled (`550 <bob@x.com>
-unknown` keeps its brackets). The at-sign is `@`, fullwidth `\uff20`, small `\ufe6b`, or any escape of one of them: each token is decoded
-  (percent bytes, overlong UTF-8 spellings of the at-sign, `%u0040`, numeric and named entities, `\x40`, `\x{40}`,
-  `\u0040`, `\u{40}`, `\U00000040`, octal `\100`, quoted-printable `=40` and RFC 2047 `Q` and `B` encoded words) again and
+unknown` keeps its brackets). The at-sign is `@`, fullwidth `\uff20`, small `\ufe6b`, or any escape of one of them: each token is decoded again and
   again until it stops changing, so `%2540`, `&amp;#64;`, `%25%34%30` and `%EF%BC%A0` are all found, and a token that never stops changing
   is masked. An answer of `audit.maskRecipient` that still holds an at-sign (the default mask hands the address back, and a mask that keeps the domain does too) is replaced by `[address]`. A token is
   a run of characters that are not ASCII white space and not one of `<>(),[]`, a quoted string counting as one piece
