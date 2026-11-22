@@ -18,6 +18,13 @@ const MAX_TEXT = 8192
  */
 const LOOKAHEAD = 1024
 
+/**
+ * How near the end of what was read a token may end before its end is in doubt: a quoted piece is at
+ * most 300 characters between its quotes, so a quote that opens this close to the end may close
+ * beyond it, and the token that precedes it would be published without the at-sign that follows.
+ */
+const EDGE = 302
+
 /** What stands for a token whose mask threw. */
 const MASK_FAILED = '[masked]'
 
@@ -143,14 +150,14 @@ export function maskAddressTokens(text: string, mask: (recipient: string) => str
   // The text is bounded before it is read: the cost of the rule grows with its length, and the text is
   // a provider's, so its length is the provider's to choose. A token that starts inside the bound is
   // read to its end, so it is masked whole; one that starts past it is left out, and so is one that
-  // runs to the end of what was read, whose end is not known.
+  // ends near the end of what was read, whose end is not known.
   const clipped = text.length > MAX_TEXT
   const window = clipped ? text.slice(0, MAX_TEXT + LOOKAHEAD) : text
   const unfinished = window.length < text.length
   const masked = window.replace(TOKEN, (token, offset: number) => {
     if (
       clipped &&
-      (offset >= MAX_TEXT || (unfinished && offset + token.length === window.length))
+      (offset >= MAX_TEXT || (unfinished && offset + token.length > window.length - EDGE))
     ) {
       return ''
     }

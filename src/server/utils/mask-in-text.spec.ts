@@ -126,6 +126,17 @@ describe('maskAddressTokens', () => {
     expect(out).toBe(`${' '.repeat(8185)}#…`)
   })
 
+  it('should leave out the front of an address whose quote opens just before the end of what was read', () => {
+    // A run of 1,100 characters that starts at 8,105, inside the bound, and a quoted local part whose
+    // quote opens at 9,205 and closes at 9,217, past the end of what was read (9,216): the quoted
+    // piece does not close in what is read, so the token is cut at its space, short of the at-sign.
+    const text = `${' '.repeat(8105)}${'z'.repeat(1100)}"alice smith"@example.com`
+
+    const out = maskAddressTokens(text, () => '#')
+
+    expect(out).not.toMatch(/alice|zzz{10}"/u)
+  })
+
   it('should leave out a token that runs to the end of what was read', () => {
     const out = maskAddressTokens('x'.repeat(20_000), () => '#')
 
