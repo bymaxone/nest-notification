@@ -67,20 +67,35 @@ describe('the failure of a verify', () => {
     expect(caught).toBeInstanceOf(Error)
   })
 
-  // A guess that is not a string removes nothing from the error's text, whatever the text holds.
-  it.each(['store down 123456', 'Stryker was here'])(
-    'should leave the text %p as it is when the guess is not a string',
-    async (text) => {
-      const service = new OtpService(makeOptions({}), throwing(new Error(text)), makeAudit())
-
-      const caught = await service
-        .verify({ ...ref, ...(JSON.parse('{"code":123456}') as { code: string }) })
-        .catch((error: unknown) => error)
-
-      expect(JSON.stringify((caught as NotificationException).getResponse())).not.toContain(
-        'redacted'
+  // A guess that is not a string is refused before it reaches the digest or the comparison, where a
+  // platform error quotes what it was given: no storage call, no TypeError, no echo of the value.
+  it.each([
+    ['a number', 271620],
+    ['a String object', new String('271620')],
+    ['an object', { toString: () => '271620' }],
+    ['null', null],
+    ['no code', undefined]
+  ])(
+    'should refuse %s as the guess with a typed error that does not echo it',
+    async (_label, code) => {
+      const storage = throwing(new Error('store down'))
+      const get = jest.spyOn(storage, 'get')
+      const service = new OtpService(
+        makeOptions({ codeSecret: 'a-secret-of-at-least-thirty-two-bytes!!' }),
+        storage,
+        makeAudit()
       )
-      expect(((caught as Error).cause as Error).message).toBe(text)
+
+      const caught = (await service
+        .verify({ ...ref, ...({ code } as { code: string }) })
+        .catch((error: unknown) => error)) as NotificationException
+
+      expect(caught).toBeInstanceOf(NotificationException)
+      expect(caught.code).toBe('notification.invalid_scope_identifier')
+      expect(JSON.stringify([caught.getResponse(), caught.message, caught.stack])).not.toContain(
+        '271620'
+      )
+      expect(get).not.toHaveBeenCalled()
     }
   )
 

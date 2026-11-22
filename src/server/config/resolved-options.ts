@@ -28,6 +28,7 @@ import type {
   OtpPurposeConfig
 } from '../interfaces/notification-module-options.interface'
 import { createCodeDigester } from '../utils/code-digest'
+import { nullProto } from '../utils/read-options'
 
 /** Resolved global section — always present. */
 export interface ResolvedGlobalOptions {
@@ -93,12 +94,14 @@ export interface ResolvedNotificationOptions {
 export function resolveOptions(
   options: BymaxNotificationModuleOptions
 ): Readonly<ResolvedNotificationOptions> {
-  const resolved: ResolvedNotificationOptions = {
-    global: resolveGlobal(options.global),
-    audit: resolveAudit(options),
-    ...(options.email ? { email: resolveEmail(options.email) } : {}),
-    ...(options.otp ? { otp: resolveOtp(options.otp) } : {})
-  }
+  // Every section has no prototype: an option that is not set is absent, and does not answer with a
+  // key planted on the realm root.
+  const resolved: ResolvedNotificationOptions = nullProto({
+    global: nullProto(resolveGlobal(options.global)),
+    audit: nullProto(resolveAudit(options)),
+    ...(options.email ? { email: nullProto(resolveEmail(options.email)) } : {}),
+    ...(options.otp ? { otp: nullProto(resolveOtp(options.otp)) } : {})
+  })
   return deepFreeze(resolved)
 }
 
@@ -135,7 +138,7 @@ function resolveOtp(otp: OtpChannelOptions): ResolvedOtpOptions {
   const entries = Object.entries(otp.perPurpose ?? {}).map(
     ([purpose, partial]) => [purpose, { ...base, ...partial }] as const
   )
-  const perPurpose = Object.fromEntries(entries)
+  const perPurpose = nullProto(Object.fromEntries(entries))
   const perPurposeMap = new Map<string, OtpPurposeConfig>(entries)
   // A Set, not an object: an object lookup finds 'constructor' and 'toString' through its prototype.
   const registered = new Set<string>([

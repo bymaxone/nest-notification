@@ -45,8 +45,9 @@ import { attachmentBytes, readSendInput } from '../utils/email-send-input'
 import { readHostName } from '../utils/host-name'
 import { isLibraryError } from '../utils/is-library-error'
 import { maskAddressTokens } from '../utils/mask-in-text'
-import { maskedFailure } from '../utils/masked-failure'
 import { reportSend, runInSpan } from '../utils/observe'
+import { rethrowRefusal } from '../utils/provider-refusal'
+import { nullProto } from '../utils/read-options'
 import { countRecipients } from '../utils/recipient-list'
 import {
   collectEchoedExcerpts,
@@ -429,6 +430,8 @@ export class EmailService {
       progress.stage = 'accepted'
       return result
     } catch (error) {
+      // The provider refused the message as given: nothing was sent, so it is not a failed delivery.
+      rethrowRefusal(error)
       progress.stage = 'failed'
       return this.failDelivery(error, sendOptions, input, recipient)
     }
@@ -469,7 +472,7 @@ export class EmailService {
       'EMAIL_SEND_FAILED',
       { providerName },
       {
-        cause: maskedFailure(text, error, secretValues),
+        cause: new Error(text),
         ...status
       }
     )
@@ -601,7 +604,9 @@ export class EmailService {
   ): EmailSendOptions {
     const fromName = input.fromName ?? email.defaultFromName
     const replyTo = input.replyTo ?? email.defaultReplyTo
-    return {
+    // No prototype: a field that is not set is absent for the provider too, and does not answer
+    // with a key planted on the realm root.
+    return nullProto({
       to: input.to,
       from: input.from ?? email.defaultFrom,
       subject: input.subject,
@@ -617,7 +622,7 @@ export class EmailService {
       ...(input.publishProviderText !== undefined
         ? { publishProviderText: input.publishProviderText }
         : {})
-    }
+    })
   }
 
   /**

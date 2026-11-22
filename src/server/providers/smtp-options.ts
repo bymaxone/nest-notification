@@ -8,7 +8,7 @@
  * not set. The options whose default is the weaker transport or login posture refuse a `null`.
  */
 
-import { assertOptionsObject, namesOf, readOptionKeys } from '../utils/read-options'
+import { assertOptionsObject, namesOf, readName, readOptionKeys } from '../utils/read-options'
 import {
   SMTP_CREDENTIAL_KEYS,
   SMTP_OPTION_KEYS,
@@ -146,9 +146,9 @@ function isTlsEntry(field: 'pem' | 'buf'): (value: unknown) => boolean {
     if (typeof item !== 'object' || item === null || ArrayBuffer.isView(item)) {
       return material(item)
     }
-    const passphrase: unknown = Reflect.get(item, 'passphrase')
+    const passphrase: unknown = readName(item, 'passphrase')
     return (
-      material(Reflect.get(item, field)) &&
+      material(readName(item, field)) &&
       (passphrase === undefined || typeof passphrase === 'string')
     )
   }
@@ -165,7 +165,7 @@ function isTlsEntry(field: 'pem' | 'buf'): (value: unknown) => boolean {
  * @param field - The property that holds the material: `pem` or `buf`.
  */
 function copyTlsEntries(tls: object, name: 'key' | 'pfx', field: 'pem' | 'buf'): void {
-  const value: unknown = Reflect.get(tls, name)
+  const value: unknown = readName(tls, name)
   if (!Array.isArray(value)) {
     return
   }
@@ -178,10 +178,10 @@ function copyTlsEntries(tls: object, name: 'key' | 'pfx', field: 'pem' | 'buf'):
       if (typeof item !== 'object' || item === null || ArrayBuffer.isView(item)) {
         return item
       }
-      const passphrase: unknown = Reflect.get(item, 'passphrase')
+      const passphrase: unknown = readName(item, 'passphrase')
       return passphrase === undefined
-        ? { [field]: Reflect.get(item, field) }
-        : { [field]: Reflect.get(item, field), passphrase }
+        ? { [field]: readName(item, field) }
+        : { [field]: readName(item, field), passphrase }
     })
   )
 }
@@ -216,7 +216,7 @@ function assertTlsValues(tls: unknown): void {
     return
   }
   for (const [key, accepts, expected] of TLS_VALUE_RULES) {
-    const value: unknown = Reflect.get(tls, key)
+    const value: unknown = readName(tls, key)
     if (value !== undefined && !accepts(value)) {
       throw new Error(`SmtpEmailProvider: tls.${key} must be ${expected}`)
     }
@@ -235,7 +235,7 @@ export function readSmtpOptions(options: SmtpEmailProviderOptions): SmtpEmailPro
   assertOptionsObject('SmtpEmailProvider', options)
   const own = readOptionKeys(options, SMTP_OPTION_KEYS, SMTP_WEAKER_WHEN_UNSET)
   for (const key of SMTP_WEAKER_WHEN_UNSET) {
-    if (Reflect.get(own, key) === null) {
+    if (readName(own, key) === null) {
       throw new Error(`SmtpEmailProvider: ${key} must not be null`)
     }
   }

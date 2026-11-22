@@ -57,6 +57,42 @@ describe('maskAddressTokens', () => {
     }
   )
 
+  it.each([
+    ['a quoted-printable byte', 'bob=40x.com'],
+    ['an RFC 2047 Q word', '=?utf-8?Q?bob=40x.com?='],
+    ['an RFC 2047 Q word with a lowercase type', '=?UTF-8?q?bob=40x.com?='],
+    ['an RFC 2047 B word', '=?utf-8?B?Ym9iQHguY29t?='],
+    ['an octal escape', 'bob\\100x.com'],
+    ['a wide unicode escape', 'bob\\U00000040x.com'],
+    ['a braced hex escape', 'bob\\x{40}x.com'],
+    ['an escape followed by hex letters', 'bob\\u0040abcd.com'],
+    ['an overlong two-byte UTF-8 at-sign', 'bob%C1%80x.com'],
+    ['an overlong three-byte UTF-8 at-sign', 'bob%E0%81%80x.com'],
+    ['an overlong four-byte UTF-8 at-sign', 'bob%F0%80%81%80x.com'],
+    ['an overlong at-sign among other bytes', 'bob%41%C1%80%42x.com']
+  ])('should mask an address written as %s', (_label, address) => {
+    expect(maskAddressTokens(`rejected ${address} now`, () => '#')).toBe('rejected # now')
+  })
+
+  it('should read only the first part of a text that is longer than the bound', () => {
+    const asked: string[] = []
+    const text = `${'x'.repeat(8192)} tail@x.com`
+
+    const out = maskAddressTokens(text, (token) => {
+      asked.push(token)
+      return '#'
+    })
+
+    expect(out).toBe(`${'x'.repeat(8192)}…`)
+    expect(asked).toStrictEqual([])
+  })
+
+  it('should keep the whole of a text that is exactly at the bound', () => {
+    const text = 'x'.repeat(8191) + '@'
+
+    expect(maskAddressTokens(text, () => '#')).toBe('#')
+  })
+
   it('should mask a token that is still changing after the decoding limit', () => {
     const layered = `x%${'25'.repeat(9)}41`
 

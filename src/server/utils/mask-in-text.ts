@@ -9,6 +9,9 @@
  * belongs to. Over-masking a word is the accepted price; a missed address is not.
  */
 
+/** The longest text that is read; what follows is dropped. */
+const MAX_TEXT = 8192
+
 /** What stands for a token whose mask threw. */
 const MASK_FAILED = '[masked]'
 
@@ -32,41 +35,58 @@ const TOKEN = /(?:"(?:[^"\\]|\\.){0,300}"|[^\t-\r ()<>[\],])+/gu
 const AT_SIGN = /[@\uff20\ufe6b]/u
 
 /**
- * One spelling of a character that stands for another: a run of `%xx` bytes, `%u0040`, a numeric
- * entity (decimal or hex, semicolon optional), `&commat;` or `&amp;`, `\x40`, `\u0040` and `\u{40}`.
+ * One spelling of a character that stands for another, in the order its groups are read: `%u0040`,
+ * a numeric entity (hex or decimal, semicolon optional), `&commat;` or `&amp;`, `\x{40}`, `\x40`,
+ * `\u{40}`, `\u0040`, an octal escape (`\100`), an RFC 2047 encoded word (`=?utf-8?Q?..?=` or
+ * `?B?`), a quoted-printable byte (`=40`), and a run of `%xx` bytes.
  */
 const ESCAPE =
-  /(?:%[0-9a-f]{2})+|%u([0-9a-f]{4})|&#x([0-9a-f]+);?|&#(\d+);?|&(commat|amp);?|\\x([0-9a-f]{2})|\\u([0-9a-f]{4})|\\u\{([0-9a-f]+)\}/giu
+  /%u([0-9a-f]{4})|&#x([0-9a-f]+);?|&#(\d+);?|&(commat|amp);?|\\x\{([0-9a-f]+)\}|\\x([0-9a-f]{2})|\\u\{([0-9a-f]+)\}|\\u([0-9a-f]{4})|\\([0-7]{1,3})|=\?[^?\s]{1,40}\?([qb])\?([^?\s]{0,1000})\?=|=([0-9a-f]{2})|(?:%[0-9a-f]{2})+/giu
+
+/** `\U0000hhhh`, whose capital U the case-blind pattern above cannot tell from `\u`. */
+const WIDE_ESCAPE = /\\U([0-9A-Fa-f]{8})/gu
+
+/** The overlong spellings of `@` in UTF-8, which a strict decoder turns into U+FFFD. */
+const OVERLONG_AT = /%c1%80|%e0%81%80|%f0%80%81%80/giu
 
 /** The most times a token is decoded; one that still changes after that is treated as an address. */
 const MAX_DECODES = 8
 
 /** A run of `%xx` bytes as UTF-8 text; a byte that is not valid UTF-8 becomes U+FFFD, the ASCII around it stays. */
 function fromPercent(run: string): string {
-  return Buffer.from(run.replaceAll('%', ''), 'hex').toString('utf8')
+  return Buffer.from(run.replace(OVERLONG_AT, '%40').replaceAll('%', ''), 'hex').toString('utf8')
+}
+
+/** An RFC 2047 encoded word's payload: `Q` is quoted-printable with `_` for a space, `B` is base64. */
+function fromWord(type: string, payload: string): string {
+  return type.toLowerCase() === 'b'
+    ? Buffer.from(payload, 'base64').toString('utf8')
+    : payload
+        .replaceAll('_', ' ')
+        .replace(/=([0-9a-f]{2})/giu, '%$1')
+        .replace(/(?:%[0-9a-f]{2})+/giu, fromPercent)
 }
 
 /** One spelling decoded; a code point out of range stays as it was written. */
-function decodeOne(
-  spelling: string,
-  u4?: string,
-  hex?: string,
-  decimal?: string,
-  named?: string,
-  x2?: string,
-  uEsc?: string,
-  braced?: string
-): string {
+function decodeOne(spelling: string, ...groups: Array<string | undefined>): string {
+  const [percentU, hexEntity, decimal, named, braceX, x2, braceU, u4, octal, type, word, quoted] =
+    groups
   if (named !== undefined) {
     // `amp` is the three-letter name, `commat` the six-letter one.
     return named.length === 3 ? '&' : '@'
   }
-  const digits = u4 ?? hex ?? decimal ?? x2 ?? uEsc ?? braced
-  if (digits === undefined) {
+  if (type !== undefined) {
+    return fromWord(type, String(word))
+  }
+  const hex = percentU ?? hexEntity ?? braceX ?? x2 ?? braceU ?? u4 ?? quoted
+  const number = hex ?? decimal ?? octal
+  if (number === undefined) {
     return fromPercent(spelling)
   }
   try {
-    return String.fromCodePoint(parseInt(digits, decimal === undefined ? 16 : 10))
+    return String.fromCodePoint(
+      parseInt(number, hex !== undefined ? 16 : decimal !== undefined ? 10 : 8)
+    )
   } catch {
     // A number past U+10FFFF, or too long to be one, is no character: the spelling stays.
     return spelling
@@ -84,7 +104,9 @@ function holdsAtSign(token: string): boolean {
     if (AT_SIGN.test(text)) {
       return true
     }
-    const next = text.replace(ESCAPE, decodeOne)
+    const next = text
+      .replace(WIDE_ESCAPE, (_all, hex: string) => decodeOne('', hex))
+      .replace(ESCAPE, decodeOne)
     if (next === text) {
       return false
     }
@@ -105,7 +127,10 @@ function holdsAtSign(token: string): boolean {
  */
 export function maskAddressTokens(text: string, mask: (recipient: string) => string): string {
   const answers = new Map<string, string>()
-  return text.replace(TOKEN, (token) => {
+  // The text is bounded before it is read: the cost of the rule grows with its length, and the text is
+  // a provider's, so its length is the provider's to choose.
+  const bounded = text.length > MAX_TEXT ? `${text.slice(0, MAX_TEXT)}…` : text
+  return bounded.replace(TOKEN, (token) => {
     if (!holdsAtSign(token)) {
       return token
     }

@@ -28,8 +28,9 @@ the entries that carry one, is the compatibility contract — read it, not the n
   which can quote the address it refused. Every token of that text that holds an at-sign is replaced, whole, by what
   `audit.maskRecipient` answers for it, whoever the address belongs to and however it is spelled (`550 <bob@x.com>
 unknown` keeps its brackets). The at-sign is `@`, fullwidth `\uff20`, small `\ufe6b`, or any escape of one of them: each token is decoded
-  (percent bytes, `%u0040`, numeric and named entities, `\x40`, `\u0040`, `\u{40}`) again and again until it stops
-  changing, so `%2540`, `&amp;#64;`, `%25%34%30` and `%EF%BC%A0` are all found, and a token that never stops changing
+  (percent bytes, overlong UTF-8 spellings of the at-sign, `%u0040`, numeric and named entities, `\x40`, `\x{40}`,
+  `\u0040`, `\u{40}`, `\U00000040`, octal `\100`, quoted-printable `=40` and RFC 2047 `Q` and `B` encoded words) again and
+  again until it stops changing, so `%2540`, `&amp;#64;`, `%25%34%30` and `%EF%BC%A0` are all found, and a token that never stops changing
   is masked. An answer of `audit.maskRecipient` that still holds an at-sign (the default mask hands the address back, and a mask that keeps the domain does too) is replaced by `[address]`. A token is
   a run of characters that are not ASCII white space and not one of `<>(),[]`, a quoted string counting as one piece
   (`"first last"@x.com`, escapes and all); every other space (no-break, zero-width) stays inside the token, so it cannot
@@ -37,11 +38,28 @@ unknown` keeps its brackets). The at-sign is `@`, fullwidth `\uff20`, small `\uf
   mistake; a mask of yours that throws is answered with `[masked]`, and the failure it was called from is still
   reported. A recipient that is not an address (a phone number) is replaced where the OTP path wrote it exactly.
 - **A failed send no longer carries the provider's error as its `cause`.** When the provider's text is published (the
-  default), the `cause` of `EMAIL_SEND_FAILED` is a fresh `Error` that holds the provider's message with secrets removed and address tokens masked, and the provider's `code`, which is dropped when it holds a value declared secret (`auditRedactValues`, or
-  `redactValues` on a provider's own send) and is dropped the same way from the adapters' thrown error and log line;
+  default), the `cause` of `EMAIL_SEND_FAILED` is a fresh `Error` that holds the provider's message with secrets removed and address tokens masked, and nothing else (no `code`: the provider's code is read for the status of the failure);
   the provider's own error and its nested chain are not kept. A send with `publishProviderText: false`, or one whose error
-  chain is too large to examine, still carries no `cause` at all. The Resend and SMTP adapters' failure log line and thrown message mask
-  address tokens the same way (`[address]`).
+  chain is too large to examine, still carries no `cause` at all. The Resend and SMTP adapters copy the provider's `code` to the error they throw and to the log line, and drop it when it holds a value declared secret (`auditRedactValues`, or `redactValues` on a provider's own send). Their failure log line and thrown message mask
+  address tokens the same way (`[address]`). Out of scope, with the reason: the at-sign spelled as a word or
+  with spaces (`bob [at] x.com`, `bob (at) x.com`, `bob @ x.com`), which no mail system or SDK writes into an error and
+  which cannot be told from prose without reading its meaning. The text is read to its first 8,192 characters, and the
+  rest is dropped, since its length is the provider's to choose.
+- **A key planted on `Object.prototype` no longer reaches an option or an input.** Every option, every input of
+  `send()`, the OTP calls and `dispatch()`, the provider options and the TLS options were read by property access, which
+  follows the prototype chain to the realm root, so code that ran first could set `Object.prototype.bcc` (a copy of every
+  message), `maxAttempts`, `resendCooldownSeconds` or `codeSecret` (the limits and the key of the codes), `maskRecipient`,
+  `host` or `apiKey` (a provider that is configured and points elsewhere), and any option the host left unset took the
+  value. A value found only on the realm-root prototype is now absent; an own property, a property of a class of yours
+  and a getter on its prototype still count, and so does an object of another realm. The options and the message
+  handed to a provider have no prototype, so a key that is not set is absent for a custom provider too.
+- **A guess that is not a string is refused before anything uses it.** `verify({ code: 271620 })` reached the
+  digest, whose `TypeError` quotes the value it was given, and a `String` object compared as the code. A `code` that is
+  not a string is now `INVALID_SCOPE_IDENTIFIER`, naming the field and never the value.
+- **A provider's refusal of a message reaches the caller as a refusal.** Resend refuses a `contentDisposition` that
+  disagrees with the `cid` before anything is sent; `send()` answered that as a 502 `EMAIL_SEND_FAILED` and a failed
+  delivery. A provider's `INVALID_SCOPE_IDENTIFIER` now passes on as the library's own refusal, with the library's words
+  (a provider can be yours, and its text is its own), and no failed audit row.
 - **A failed `verify()` leaves the way a failed `generate()` does,** with the guess removed from the error's chain and a
   value that is not an error flattened.
 - **An OTP action or delivery channel the library does not know is refused.** An `action` such as `'verfy'` fell through
@@ -92,7 +110,9 @@ wrong kinds, now ends the call in `OTP_STORAGE_FAILED` (or `OTP_STORAGE_NOT_CONF
 bundled stores answer correctly. A caller of `send()` that passed a list over 1000 entries, an attachment with a
 non-text, non-binary `content` or with a field other than `filename`, `content`, `contentType`, `cid` and `contentDisposition`, or a string for a boolean now gets a refusal (`EMAIL_INVALID_RECIPIENT` for the
 recipient fields, `INVALID_SCOPE_IDENTIFIER` for the rest). A dispatch with an unknown `action` or `deliverVia` now
-raises `INVALID_SCOPE_IDENTIFIER` instead of sending or storing a code.
+raises `INVALID_SCOPE_IDENTIFIER` instead of sending or storing a code, and so does a `verify()` whose `code` is not a string. A
+provider of your own that read a key from the options object it is given, or an option from `Object.prototype`, finds
+the object has no prototype: read the keys by name, as before, and do not call methods of `Object.prototype` on it.
 
 ## [1.4.22] - 2026-11-21
 

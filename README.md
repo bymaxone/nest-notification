@@ -762,7 +762,7 @@ A one-time password is a credential, so every behavior is pinned so that a regre
 | Coverage       | **100%** line/branch/function/statement per file (`pnpm test:cov:all`)                                             |
 | Mutation       | Stryker score **100%** (`break: 100`), no survivors                                                                |
 | Lint           | ESLint flat config + `eslint-plugin-security`, zero warnings                                                       |
-| Bundle budgets | server < 43.59 KB · shared < 4 KB · react < 8 KB · testing < 4.5 KB · observability < 2.70 KB brotli (`pnpm size`) |
+| Bundle budgets | server < 44.02 KB · shared < 4 KB · react < 8 KB · testing < 4.5 KB · observability < 2.70 KB brotli (`pnpm size`) |
 | Prisma-free    | `pnpm check:no-prisma` — the library never imports `@prisma/client`                                                |
 | Export map     | `pnpm check:exports` — `attw` against the packed tarball, ESM and CJS                                              |
 | Supply chain   | published with npm provenance (OIDC), CodeQL + OpenSSF Scorecard                                                   |
@@ -1171,7 +1171,7 @@ Codes never change once published; default messages are English, so localize on 
 | `notification.channel_disabled`                  | 501    | `NotificationService` — the channel is absent, or its provider or storage is not usable                                                                   |
 | `notification.invalid_scope_identifier`          | 400    | `OtpService`, `EmailService` and `NotificationAuditInterceptor` — a blank or control-character tenant or recipient                                        |
 
-The library attaches the underlying error as the native `Error.cause`, as a **log-safe copy**: `name`, `message`, `stack` and the depth-bounded `cause` chain survive, and every other property is dropped, because SDK errors retain the request payload and, for an OTP email, that payload holds the code. The one exception is a failed send that publishes the provider's text (the default): the `cause` of `EMAIL_SEND_FAILED` is a fresh `Error` with the provider's message (secrets removed, every address-shaped token masked) and its `code`, and no chain. The cause never enters the HTTP response, and `details` stays client-safe. To attach one yourself, pass the options bag third: `new NotificationException('EMAIL_SEND_FAILED', { providerName }, { cause: error })`.
+The library attaches the underlying error as the native `Error.cause`, as a **log-safe copy**: `name`, `message`, `stack` and the depth-bounded `cause` chain survive, and every other property is dropped, because SDK errors retain the request payload and, for an OTP email, that payload holds the code. The one exception is a failed send that publishes the provider's text (the default): the `cause` of `EMAIL_SEND_FAILED` is a fresh `Error` with the provider's message (secrets removed, every address-shaped token masked) and nothing else: no `code`, no chain. The provider's code is read for the status of the failure, and the reference adapters copy it to the error they throw unless it holds a value you declared secret. The cause never enters the HTTP response, and `details` stays client-safe. To attach one yourself, pass the options bag third: `new NotificationException('EMAIL_SEND_FAILED', { providerName }, { cause: error })`.
 
 ### Secrets in provider error text
 

@@ -18,6 +18,7 @@ import type {
   IEmailTemplateRenderer,
   RenderedEmail
 } from '../interfaces/email-template-renderer.interface'
+import { readName } from '../utils/read-options'
 
 /** A raw template: subject + html (+ optional text) with `{{var}}` placeholders. */
 export interface TemplateDefinition {
@@ -186,7 +187,7 @@ export class DefaultTemplateRenderer implements IEmailTemplateRenderer {
    */
   private ownValue(object: Record<string, unknown>, key: string): unknown {
     return Object.prototype.propertyIsEnumerable.call(object, key)
-      ? Reflect.get(object, key)
+      ? readName(object, key)
       : undefined
   }
 

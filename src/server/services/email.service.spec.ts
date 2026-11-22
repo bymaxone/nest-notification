@@ -391,6 +391,54 @@ describe('EmailService.send', () => {
     )
   })
 
+  it('should pass a refusal of the provider on as a refusal with the library words, not a failed delivery', async () => {
+    const provider = makeProvider()
+    provider.send.mockRejectedValue(
+      new NotificationException('INVALID_SCOPE_IDENTIFIER', {
+        reason: 'text of the provider bob@x.com'
+      })
+    )
+    const audit = makeAudit()
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), audit)
+
+    const caught = (await service
+      .send(baseInput)
+      .catch((error: unknown) => error)) as NotificationException
+
+    expect(caught.code).toBe('notification.invalid_scope_identifier')
+    expect(JSON.stringify(caught.getResponse())).toContain(
+      'the provider refused the message as given'
+    )
+    expect(JSON.stringify([caught.getResponse(), caught.cause])).not.toContain('bob@x.com')
+    expect(audit.create).not.toHaveBeenCalled()
+  })
+
+  it('should still convert any other library error a provider throws into a failed delivery', async () => {
+    const provider = makeProvider()
+    provider.send.mockRejectedValue(new NotificationException('TEMPLATE_NOT_FOUND'))
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), makeAudit())
+
+    await expect(service.send(baseInput)).rejects.toMatchObject({
+      code: 'notification.email_send_failed'
+    })
+  })
+
+  it('should convert a library error whose code cannot be read into a failed delivery', async () => {
+    const provider = makeProvider()
+    const hostile = new NotificationException('INVALID_SCOPE_IDENTIFIER')
+    Object.defineProperty(hostile, 'code', {
+      get: () => {
+        throw new Error('code getter of the host')
+      }
+    })
+    provider.send.mockRejectedValue(hostile)
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), makeAudit())
+
+    await expect(service.send(baseInput)).rejects.toMatchObject({
+      code: 'notification.email_send_failed'
+    })
+  })
+
   // A non-Error provider rejection is stringified for the audit message.
   it('should stringify a non-Error provider rejection for the audit', async () => {
     const provider = makeProvider()

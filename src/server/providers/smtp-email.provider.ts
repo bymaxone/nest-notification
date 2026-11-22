@@ -38,6 +38,7 @@ import { logEvent } from '../utils/log-event'
 import { codeWithoutSecrets } from '../utils/masked-failure'
 import { assertPort } from '../utils/port-option'
 import { publishedFailure } from '../utils/provider-failure'
+import { readName } from '../utils/read-options'
 import {
   collectEchoedExcerpts,
   isSafeError,
@@ -488,11 +489,11 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
     if (typeof tls !== 'object' || tls === null) {
       return []
     }
-    const carriers = [Reflect.get(tls, 'key'), Reflect.get(tls, 'pfx')].flat() as unknown[]
+    const carriers = [readName(tls, 'key'), readName(tls, 'pfx')].flat() as unknown[]
     const found = [
-      Reflect.get(tls, 'passphrase'),
+      readName(tls, 'passphrase'),
       ...carriers.map((entry) =>
-        typeof entry === 'object' && entry !== null ? Reflect.get(entry, 'passphrase') : undefined
+        typeof entry === 'object' && entry !== null ? readName(entry, 'passphrase') : undefined
       )
     ]
     return found.filter((value): value is string => typeof value === 'string')
