@@ -53,10 +53,35 @@ beforeEach(() => {
   jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
 })
 
+/** What a stream transport answers: the envelope it was given and the message it built. */
+interface Sent {
+  envelope: { from: string; to: string[] }
+  message: Buffer
+}
+
+/** Narrows what a stream transport answered, and fails the row when it is not a message. */
+async function sentOf(pending: Promise<unknown>): Promise<Sent> {
+  const info = await pending
+  if (typeof info === 'object' && info !== null && Buffer.isBuffer(Reflect.get(info, 'message'))) {
+    return info as Sent
+  }
+  throw new Error('the stream transport did not answer with a message')
+}
+
+/** The options a real transport keeps, as a copy; fails the row when it keeps none. */
+function optionsOf(transport: unknown): Record<string, unknown> {
+  const transporter: unknown =
+    typeof transport === 'object' ? Reflect.get(transport ?? {}, 'transporter') : undefined
+  const options: unknown =
+    typeof transporter === 'object' ? Reflect.get(transporter ?? {}, 'options') : undefined
+  if (typeof options !== 'object' || options === null) {
+    throw new Error('the transport keeps no options')
+  }
+  return { ...options }
+}
+
 /** Makes the adapter's `createTransport` hand back a stream transport, and records the message. */
-function streamTransport(): {
-  info: () => { envelope: { from: string; to: string[] }; message: Buffer }
-} {
+function streamTransport(): { info: () => Promise<Sent> } {
   const created = nodemailer.createTransport({ streamTransport: true, buffer: true })
   let last: unknown
   jest.spyOn(nodemailer, 'createTransport').mockImplementation(() => created as never)
@@ -66,7 +91,7 @@ function streamTransport(): {
     return last
   }) as never)
   return {
-    info: () => last as never
+    info: () => sentOf(last as Promise<unknown>)
   }
 }
 
@@ -93,7 +118,7 @@ describe('the message the SMTP adapter gives Nodemailer', () => {
 
     await new SmtpEmailProvider({ host: '127.0.0.1' }).send(MESSAGE)
 
-    const sent = (await stream.info()) as unknown as { envelope: { to: string[] }; message: Buffer }
+    const sent = await stream.info()
     const text = sent.message.toString('utf8')
     expect(sent.envelope.to).toStrictEqual(['real@acme.com'])
     expect(text).toContain('real@acme.com')
@@ -126,10 +151,8 @@ describe('the message the SMTP adapter gives Nodemailer', () => {
 
     await new SmtpEmailProvider({ host: '127.0.0.1' }).send({ ...MESSAGE, attachments })
 
-    const sent = (await stream.info()) as unknown as { message: Buffer }
-    expect(normalise(sent.message)).toBe(
-      normalise((direct as unknown as { message: Buffer }).message)
-    )
+    const sent = await stream.info()
+    expect(normalise(sent.message)).toBe(normalise((await sentOf(Promise.resolve(direct))).message))
   })
 
   it('should say plainly that Nodemailer reads these names from objects it builds itself', async () => {
@@ -142,7 +165,7 @@ describe('the message the SMTP adapter gives Nodemailer', () => {
 
     await new SmtpEmailProvider({ host: '127.0.0.1' }).send(MESSAGE)
 
-    const sent = (await stream.info()) as unknown as { message: Buffer }
+    const sent = await stream.info()
     expect(sent.message.toString('utf8')).toContain('planted')
   })
 })
@@ -171,8 +194,8 @@ describe('the transport options the SMTP adapter gives Nodemailer', () => {
     const options: Record<string, unknown>[] = []
     const real = nodemailer.createTransport.bind(nodemailer)
     jest.spyOn(nodemailer, 'createTransport').mockImplementation(((config: object) => {
-      const transport = real(config) as unknown as { transporter: { options: object } }
-      options.push({ ...transport.transporter.options })
+      const transport = real(config)
+      options.push(optionsOf(transport))
       return transport
     }) as never)
     const plain = nodemailer.createTransport({
@@ -188,8 +211,7 @@ describe('the transport options the SMTP adapter gives Nodemailer', () => {
     await new SmtpEmailProvider({ host: '127.0.0.1', port: 1 }).send(MESSAGE).catch(() => undefined)
 
     const mine = options.at(-1) ?? {}
-    const direct = (plain as unknown as { transporter: { options: Record<string, unknown> } })
-      .transporter.options
+    const direct = optionsOf(plain)
     const defined = (value: Record<string, unknown>): string =>
       JSON.stringify(
         Object.fromEntries(

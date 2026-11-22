@@ -350,7 +350,7 @@ Nodemailer copies a message, its transport options, the credentials and the TLS 
 before it reads names this library never sets, so the SMTP adapter gives it an own key, set to your value or to
 `undefined`, for every name it reads (a planted `envelope` sent the one-time code to another recipient while the
 headers still named yours), and the Resend payload the same for the fields its SDK reads after spreading it. The lists
-for a message, an attachment, the transport options and the credentials come from the sources of the Nodemailer the
+for a message, the transport options and the credentials come from the sources of the Nodemailer the
 tests install, and a spec reads those sources and fails when a name is missing; the TLS list names what `tls.connect` reads.
 Nodemailer's own internals still read `raw`, `headers`, `encoding`, `newline` and the fields of an attachment from
 objects they create themselves: that is outside this library, and the README says to freeze `Object.prototype` at
