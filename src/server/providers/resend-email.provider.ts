@@ -22,10 +22,12 @@ import type {
   IEmailProvider
 } from '../interfaces/email-provider.interface'
 import { errorCodeOf } from '../utils/availability'
+import { refuseInput } from '../utils/bounded-list'
 import { assertBodyParts } from '../utils/email-body'
 import { loadOptionalPeer } from '../utils/load-optional-peer'
 import { logEvent } from '../utils/log-event'
 import { loggableError } from '../utils/loggable-error'
+import { maskAddressTokens } from '../utils/mask-in-text'
 import { assertOptionsObject, readOptionKeys } from '../utils/read-options'
 import {
   REDACTED_VALUE,
@@ -174,6 +176,26 @@ function toPayload(options: EmailSendOptions, from: string): ResendSendPayload {
   }
 }
 
+/**
+ * Refuses an attachment whose `contentDisposition` Resend cannot carry. Resend has no disposition
+ * field: an attachment with a content id is inline and one without is an attachment, so a
+ * disposition that says otherwise would be dropped without a word.
+ */
+function assertDispositionsHonoured(attachments: EmailSendOptions['attachments']): void {
+  for (const { contentDisposition, cid } of attachments ?? []) {
+    if (
+      contentDisposition !== undefined &&
+      (contentDisposition === 'inline') !== (cid !== undefined)
+    ) {
+      throw refuseInput(
+        'ResendEmailProvider',
+        'attachments',
+        'Resend inlines an attachment by its cid only, so contentDisposition must agree with cid'
+      )
+    }
+  }
+}
+
 /** The request options of the SDK this adapter uses: the signal that aborts the call. */
 interface ResendRequestOptions {
   signal: AbortSignal
@@ -261,6 +283,7 @@ export class ResendEmailProvider implements IEmailProvider {
    */
   async send(options: EmailSendOptions): Promise<EmailSendResult> {
     assertBodyParts(options.html, options.text)
+    assertDispositionsHonoured(options.attachments)
     const client = await this.getClient()
     const from = this.formatFrom(options.from, options.fromName)
     const timeoutMs = this.#options.timeoutMs ?? DEFAULT_TIMEOUT_MS
@@ -316,7 +339,7 @@ export class ResendEmailProvider implements IEmailProvider {
       return withCode(new Error('Resend send failed'), code)
     }
     // Surface only the provider's message — never the email body.
-    const reason = this.scrubSendError(rawMessage, options)
+    const reason = maskAddressTokens(this.scrubSendError(rawMessage, options), () => '[address]')
     const failure = withCode(new Error(`Resend send failed: ${reason}`), code)
     logEvent(
       this.logger,

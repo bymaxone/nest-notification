@@ -27,13 +27,19 @@ the entries that carry one, is the compatibility contract — read it, not the n
   row the audit interceptor writes for a handler's error, carried the store's, the provider's or the handler's own text,
   which can quote the address it refused. Every token of that text that holds an at-sign is replaced, whole, by what
   `audit.maskRecipient` answers for it, whoever the address belongs to and however it is spelled (`550 <bob@x.com>
-unknown` keeps its brackets). The at-sign is `@`, fullwidth `\uff20`, small `\ufe6b`, or an escape of it (`%40`,
-  `%2540`, `%u0040`, `&commat;`, `&#64;`, `&#x40;` with or without the semicolon, `\x40`, `\u0040`, `\u{40}`). A token is
+unknown` keeps its brackets). The at-sign is `@`, fullwidth `\uff20`, small `\ufe6b`, or any escape of one of them: each token is decoded
+  (percent bytes, `%u0040`, numeric and named entities, `\x40`, `\u0040`, `\u{40}`) again and again until it stops
+  changing, so `%2540`, `&amp;#64;`, `%25%34%30` and `%EF%BC%A0` are all found, and a token still changing after eight
+  passes is masked. A mask that hands the address back (the default one) is replaced by `[address]`. A token is
   a run of characters that are not ASCII white space and not one of `<>(),[]`, a quoted string counting as one piece
   (`"first last"@x.com`, escapes and all); every other space (no-break, zero-width) stays inside the token, so it cannot
   cut an address in two. Words that merely contain an at-sign are masked too, since a missed address is the worse
   mistake; a mask of yours that throws is answered with `[masked]`, and the failure it was called from is still
   reported. A recipient that is not an address (a phone number) is replaced where the OTP path wrote it exactly.
+- **A failed send no longer carries the provider's error as its `cause`.** The `cause` of `EMAIL_SEND_FAILED` is a fresh
+  `Error` that holds the provider's message with secrets removed and address tokens masked, and the provider's `code`;
+  the provider's own error and its nested chain are not kept. The Resend adapter's log line and thrown message mask
+  address tokens the same way (`[address]`).
 - **A failed `verify()` leaves the way a failed `generate()` does,** with the guess removed from the error's chain and a
   value that is not an error flattened.
 - **An OTP action or delivery channel the library does not know is refused.** An `action` such as `'verfy'` fell through
@@ -57,12 +63,13 @@ unknown` keeps its brackets). The at-sign is `@`, fullwidth `\uff20`, small `\uf
 - **An attachment carries `filename`, `content`, `contentType`, `cid` and `contentDisposition`, and nothing else.** An
   inline image is `cid` (1 to 128 printable ASCII characters, no space, quote or angle bracket) with
   `contentDisposition: 'inline'`; SMTP writes them as the `Content-ID` and the `Content-Disposition`, and Resend takes the
-  `cid` as its content id and has no disposition field, so it ignores that one. Any other field (`encoding`, `headers`,
-  `path`) is refused with a refusal that names the attachments, where a copy would drop it without a word. The kinds of
+  `cid` as its content id and has no disposition field, so it refuses a `contentDisposition` that disagrees with the
+  `cid` (inline without one, attachment with one) instead of dropping it. Any other field, enumerable or not, string or symbol (`encoding`, `headers`,
+  `path`), on an attachment or a tag is refused with a refusal that names the attachments, where a copy would drop it without a word. The kinds of
   `filename`, `contentType`, `cid` and `contentDisposition` are checked. The byte budget measures a `Buffer` or a
   `Uint8Array` through the typed array's own getter, so an own `length` or `byteLength` property cannot make it look
   empty.
-- **A store that counted more attempts than the entry's ceiling is `max_attempts`,** where the remainder was negative.
+- **A store that counted more attempts than the entry's ceiling, or a ceiling that is not a number, is `max_attempts`,** where the remainder was negative.
 - **A failed delivery releases the cooldown and the entry, whichever step fails.** A `clearCooldown` that threw left the
   entry behind; both now run and the first failure is the one the caller sees.
 - **The health indicator counts a `verify` it cannot read as present,** so the check runs and reports `down`, and the

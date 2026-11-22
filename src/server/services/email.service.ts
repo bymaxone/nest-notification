@@ -45,6 +45,7 @@ import { attachmentBytes, readSendInput } from '../utils/email-send-input'
 import { readHostName } from '../utils/host-name'
 import { isLibraryError } from '../utils/is-library-error'
 import { maskAddressTokens } from '../utils/mask-in-text'
+import { maskedFailure } from '../utils/masked-failure'
 import { reportSend, runInSpan } from '../utils/observe'
 import { countRecipients } from '../utils/recipient-list'
 import {
@@ -429,42 +430,49 @@ export class EmailService {
       return result
     } catch (error) {
       progress.stage = 'failed'
-      // The status is read from the failure as the provider raised it: the removal of secrets below
-      // strips the error's own properties in place, the code among them, so nothing may read the
-      // error for its status after that.
-      const status = unavailableStatus(error)
-      // A chain too large to examine, like a send that asked for it, publishes none of the
-      // provider's text: reading it, scanning it and scrubbing it would all grow with a length
-      // the provider chose.
-      const chain = inspectErrorChain(error)
-      if (input.publishProviderText === false || chain.withheld) {
-        await this.failWithoutProviderText(error, input, recipient)
-      }
-      // Declared secrets plus detected BODY ECHOES: a relay that quotes the
-      // rejected content back puts the rendered body — and any secret inside
-      // it — into the provider error, detectably, even when the caller
-      // declared nothing.
-      const secretValues = this.gatherRedactionValues(
-        chain.parts,
-        input.auditRedactValues,
-        sendOptions
-      )
-      // Read once: the audit entry and the error then name the provider alike.
-      const providerName = providerNameOf(this.provider)
-      await this.audit(
-        this.auditEntry('failed', providerName, input.tenantId, recipient, input.userId, {
-          errorMessage: this.auditText(error, secretValues)
-        })
-      )
-      throw new NotificationException(
-        'EMAIL_SEND_FAILED',
-        { providerName },
-        {
-          cause: secretValues.length > 0 ? scrubValuesFromErrorChain(error, secretValues) : error,
-          ...status
-        }
-      )
+      return this.failDelivery(error, sendOptions, input, recipient)
     }
+  }
+
+  /**
+   * Answers a failed provider call: the audit row, then `EMAIL_SEND_FAILED`.
+   *
+   * @throws NotificationException Always.
+   */
+  private async failDelivery(
+    error: unknown,
+    sendOptions: EmailSendOptions,
+    input: EmailSendInput,
+    recipient: string
+  ): Promise<never> {
+    const status = unavailableStatus(error)
+    // A chain too large to examine, like a send that asked for it, publishes none of the provider's text.
+    const chain = inspectErrorChain(error)
+    if (input.publishProviderText === false || chain.withheld) {
+      await this.failWithoutProviderText(error, input, recipient)
+    }
+    // Declared secrets plus detected body echoes: a relay that quotes the rejected content back.
+    const secretValues = this.gatherRedactionValues(
+      chain.parts,
+      input.auditRedactValues,
+      sendOptions
+    )
+    // Read once, like the text: the audit row, the error and the cause all carry these.
+    const providerName = providerNameOf(this.provider)
+    const text = this.auditText(error, secretValues)
+    await this.audit(
+      this.auditEntry('failed', providerName, input.tenantId, recipient, input.userId, {
+        errorMessage: text
+      })
+    )
+    throw new NotificationException(
+      'EMAIL_SEND_FAILED',
+      { providerName },
+      {
+        cause: maskedFailure(text, error),
+        ...status
+      }
+    )
   }
 
   /** The provider's text for the audit row: secrets removed, and every address-shaped token masked. */

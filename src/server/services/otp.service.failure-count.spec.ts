@@ -81,3 +81,20 @@ describe('a failure count from the store', () => {
     expect(JSON.stringify(caught)).not.toContain('SECRET-ANSWER')
   })
 })
+
+describe('a ceiling that is not a number', () => {
+  it('should refuse the guess as max_attempts, never compare it as if the ceiling had not been reached', async () => {
+    const storage = new InMemoryOtpStorage()
+    const service = new OtpService(
+      makeOptions({ defaultMaxAttempts: Number.NaN, resendCooldownSeconds: 0 }),
+      storage,
+      makeAudit()
+    )
+    await service.generate(base)
+    const code = (await storage.get('acme', ref.recipient, ref.purpose))?.code ?? ''
+
+    const outcome = await service.verify({ ...base, code }).catch((e: unknown) => e)
+
+    expect(outcome).toMatchObject({ valid: false, reason: 'max_attempts' })
+  })
+})

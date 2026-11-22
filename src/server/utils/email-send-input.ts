@@ -29,7 +29,17 @@ const ATTACHMENT_KEYS = [
   'contentDisposition'
 ] as const satisfies readonly (keyof EmailAttachment)[]
 
-const KNOWN_ATTACHMENT_KEYS: readonly string[] = ATTACHMENT_KEYS
+/** Refuses an entry that owns a key the library does not carry, whether enumerable, hidden or a symbol. */
+function refuseExtraKeys(
+  entry: object,
+  known: readonly string[],
+  label: string,
+  what: string
+): void {
+  if (Reflect.ownKeys(entry).some((key) => typeof key !== 'string' || !known.includes(key))) {
+    throw refuseInput(OWNER, label, `${what} has a field the library does not carry`)
+  }
+}
 
 /** The fields of a tag or an attachment that the lists above leave out; `never` while they list them all. */
 export type UnlistedEntryKey =
@@ -65,9 +75,7 @@ const DISPOSITIONS: readonly unknown[] = ['attachment', 'inline']
  * and a field of another kind than the contract declares.
  */
 function readAttachment(entry: object): Record<string, unknown> {
-  if (Object.keys(entry).some((key) => !KNOWN_ATTACHMENT_KEYS.includes(key))) {
-    throw refuseInput(OWNER, 'attachments', 'an attachment has a field the library does not carry')
-  }
+  refuseExtraKeys(entry, ATTACHMENT_KEYS, 'attachments', 'an attachment')
   const copy = copyByName(entry, ATTACHMENT_KEYS)
   const { filename, content, contentType, cid, contentDisposition } = copy
   if (
@@ -136,7 +144,10 @@ export function readSendInput<T extends object>(input: T, keys: readonly (keyof 
   // check and the byte budget and a large one to the provider is read once, here, and never again.
   const tags: unknown = read.tags
   if (tags !== undefined) {
-    read.tags = boundedList(OWNER, 'tags', tags, isObject).map((tag) => copyByName(tag, TAG_KEYS))
+    read.tags = boundedList(OWNER, 'tags', tags, isObject).map((tag) => {
+      refuseExtraKeys(tag, TAG_KEYS, 'tags', 'a tag')
+      return copyByName(tag, TAG_KEYS)
+    })
   }
   const attachments: unknown = read.attachments
   if (attachments !== undefined) {

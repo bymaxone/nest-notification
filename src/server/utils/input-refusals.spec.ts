@@ -95,6 +95,41 @@ describe('the message and the details of each refusal', () => {
       'an attachment has a field the library does not carry'
     ],
     [
+      'an attachment with a hidden field',
+      () =>
+        readSend({
+          attachments: [
+            Object.defineProperty({ filename: 'f', content: 'x' }, 'encoding', {
+              value: 'base64',
+              enumerable: false
+            })
+          ]
+        }),
+      '[EmailService] attachments an attachment has a field the library does not carry',
+      'an attachment has a field the library does not carry'
+    ],
+    [
+      'an attachment with a symbol field',
+      () => readSend({ attachments: [{ filename: 'f', content: 'x', [Symbol('s')]: 1 }] }),
+      '[EmailService] attachments an attachment has a field the library does not carry',
+      'an attachment has a field the library does not carry'
+    ],
+    [
+      'a tag with a field the library does not carry',
+      () => readSend({ tags: [{ name: 'n', value: 'v', extra: 'x' }] }),
+      '[EmailService] tags a tag has a field the library does not carry',
+      'a tag has a field the library does not carry'
+    ],
+    [
+      'a tag with a hidden field',
+      () =>
+        readSend({
+          tags: [Object.defineProperty({ name: 'n', value: 'v' }, 'extra', { value: 1 })]
+        }),
+      '[EmailService] tags a tag has a field the library does not carry',
+      'a tag has a field the library does not carry'
+    ],
+    [
       'an attachment with a field of an unexpected kind',
       () => readSend({ attachments: [{ filename: 5, content: 'x' }] }),
       '[EmailService] attachments an attachment has a field of an unexpected kind',

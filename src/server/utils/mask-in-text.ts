@@ -12,6 +12,9 @@
 /** What stands for a token whose mask threw. */
 const MASK_FAILED = '[masked]'
 
+/** What stands for a token whose mask answered with the address again, as the default mask does. */
+const ADDRESS_MASK = '[address]'
+
 /** The longest token handed to the mask; a longer one with an at-sign is replaced from its first characters. */
 const MAX_TOKEN = 512
 
@@ -25,12 +28,71 @@ const MAX_TOKEN = 512
  */
 const TOKEN = /(?:"(?:[^"\\]|\\.){0,300}"|[^\t-\r ()<>[\],])+/gu
 
+/** The at-sign itself: `@`, fullwidth `\uff20` or small `\ufe6b`. */
+const AT_SIGN = /[@\uff20\ufe6b]/u
+
 /**
- * The at-sign: `@`, fullwidth `\uff20`, small `\ufe6b`, or an escape of it (`%40`, `%2540`, `%u0040`,
- * `&commat;`, `&#64;`, `&#x40;` with or without the semicolon, `\x40`, `\u0040`, `\u{40}`), in any case.
+ * One spelling of a character that stands for another: a run of `%xx` bytes, `%u0040`, a numeric
+ * entity (decimal or hex, semicolon optional), `&commat;` or `&amp;`, `\x40`, `\u0040` and `\u{40}`.
  */
-const AT_SIGN =
-  /[@\uff20\ufe6b]|%(?:25)*40|%u0*40|&commat;?|&#0*64;?|&#x0*40;?|\\x0*40|\\u0*40|\\u\{0*40\}/iu
+const ESCAPE =
+  /(?:%[0-9a-f]{2})+|%u([0-9a-f]{4})|&#x([0-9a-f]+);?|&#(\d+);?|&(commat|amp);?|\\x([0-9a-f]{2})|\\u([0-9a-f]{4})|\\u\{([0-9a-f]+)\}/giu
+
+/** The most times a token is decoded; one that still changes after that is treated as an address. */
+const MAX_DECODES = 8
+
+/** A run of `%xx` bytes as text; when it is not UTF-8, the bytes that are ASCII. */
+function fromPercent(run: string): string {
+  try {
+    return decodeURIComponent(run)
+  } catch {
+    return run.replace(/%[0-7][0-9a-f]/giu, (pair) =>
+      String.fromCharCode(parseInt(pair.slice(1), 16))
+    )
+  }
+}
+
+/** One spelling decoded; a code point out of range stays as it was written. */
+function decodeOne(
+  spelling: string,
+  u4?: string,
+  hex?: string,
+  decimal?: string,
+  named?: string,
+  x2?: string,
+  uEsc?: string,
+  braced?: string
+): string {
+  if (named !== undefined) {
+    return named.toLowerCase() === 'amp' ? '&' : '@'
+  }
+  const digits = u4 ?? hex ?? decimal ?? x2 ?? uEsc ?? braced
+  if (digits === undefined) {
+    return fromPercent(spelling)
+  }
+  const point = parseInt(digits, decimal === undefined ? 16 : 10)
+  return point <= 0x10ffff ? String.fromCodePoint(point) : spelling
+}
+
+/**
+ * Whether a token holds an at-sign once every layer of escaping is taken off: it is decoded again
+ * until it stops changing, so `%2540`, `&amp;#64;`, `%25%34%30` and `%EF%BC%A0` are all found by
+ * the same rule, with no pattern to add for the next spelling.
+ */
+function holdsAtSign(token: string): boolean {
+  let text = token
+  for (let pass = 0; pass < MAX_DECODES; pass += 1) {
+    if (AT_SIGN.test(text)) {
+      return true
+    }
+    const next = text.replace(ESCAPE, decodeOne)
+    if (next === text) {
+      return false
+    }
+    text = next
+  }
+  return true
+}
 
 /**
  * Replaces every token of `text` that holds an at-sign with what the mask answers for it. The whole
@@ -45,7 +107,7 @@ const AT_SIGN =
 export function maskAddressTokens(text: string, mask: (recipient: string) => string): string {
   const answers = new Map<string, string>()
   return text.replace(TOKEN, (token) => {
-    if (!AT_SIGN.test(token)) {
+    if (!holdsAtSign(token)) {
       return token
     }
     const head = token.slice(0, MAX_TOKEN)
@@ -80,7 +142,10 @@ export function maskExact(
  */
 function askMask(mask: (recipient: string) => string, token: string): string {
   try {
-    return mask(token)
+    // A mask that hands the address back (the default one) hides nothing, so its answer is
+    // replaced; a host's own form is kept whenever it holds no at-sign.
+    const answer = mask(token)
+    return holdsAtSign(answer) ? ADDRESS_MASK : answer
   } catch {
     return MASK_FAILED
   }

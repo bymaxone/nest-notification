@@ -288,7 +288,7 @@ export class OtpService implements OnModuleInit {
     if (attempt === null) {
       return this.rejectNotFound(scope)
     }
-    if (attempt !== undefined && attempt > cfg.maxAttempts) {
+    if (attempt !== undefined && !(attempt <= cfg.maxAttempts)) {
       return this.rejectMaxAttempts(scope)
     }
     const result = await this.storage.consumeAttempt(scope.tenantId, scope.recipient, scope.purpose)
@@ -299,7 +299,7 @@ export class OtpService implements OnModuleInit {
       return this.rejectMaxAttempts(scope)
     }
     const { entry } = result
-    if (entry.attempts > entry.maxAttempts) {
+    if (!(entry.attempts <= entry.maxAttempts)) {
       return this.rejectMaxAttempts(scope)
     }
     if (!matchesStoredCode(entry.code, scope.code, otp.digestCode)) {

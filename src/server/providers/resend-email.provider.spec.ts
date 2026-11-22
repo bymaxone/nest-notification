@@ -106,6 +106,54 @@ describe('ResendEmailProvider', () => {
     ])
   })
 
+  it.each([
+    ['inline with no cid', { filename: 'a.txt', content: 'eA==', contentDisposition: 'inline' }],
+    [
+      'attachment with a cid',
+      { filename: 'a.txt', content: 'eA==', cid: 'logo', contentDisposition: 'attachment' }
+    ]
+  ] as const)(
+    'should refuse a %s before anything is sent, since Resend would drop the disposition',
+    async (_label, attachment) => {
+      const sending = new ResendEmailProvider({ apiKey: 'k' }).send({
+        ...baseOptions,
+        attachments: [attachment]
+      })
+
+      await expect(sending).rejects.toBeInstanceOf(NotificationException)
+      expect(mockSend).not.toHaveBeenCalled()
+    }
+  )
+
+  it('should send an attachment whose disposition agrees with its cid, and one with no disposition', async () => {
+    await new ResendEmailProvider({ apiKey: 'k' }).send({
+      ...baseOptions,
+      attachments: [
+        { filename: 'a.txt', content: 'eA==', contentDisposition: 'attachment' },
+        { filename: 'b.txt', content: 'eA==', cid: 'logo' }
+      ]
+    })
+
+    expect(mockSend).toHaveBeenCalledTimes(1)
+  })
+
+  it('should log and throw a failure with the address the provider quoted masked', async () => {
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    mockSend.mockResolvedValue({
+      data: null,
+      error: { message: 'The to address bob@x.com is invalid' }
+    })
+
+    const caught: unknown = await new ResendEmailProvider({ apiKey: 'k' })
+      .send(baseOptions)
+      .catch((error: unknown) => error)
+
+    const everything = `${loggedAll(warnSpy.mock.calls[0])}\n${String((caught as Error).message)}`
+    expect(everything).toContain('The to address [address] is invalid')
+    expect(everything).not.toContain('bob@x.com')
+    warnSpy.mockRestore()
+  })
+
   it('should send an attachment that has no filename and no content type as its content alone', async () => {
     await new ResendEmailProvider({ apiKey: 'k' }).send({
       ...baseOptions,

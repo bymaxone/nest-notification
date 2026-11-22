@@ -331,7 +331,52 @@ describe('EmailService.send', () => {
     }
     expect(error).toBeInstanceOf(NotificationException)
     expect(chain.join('\n')).not.toContain('998877')
-    expect(chain.join('\n')).toContain('socket closed')
+    // The cause is a fresh error that carries the provider's message and nothing nested.
+    expect(chain.join('\n')).toContain('request failed')
+    expect((error as NotificationException).cause).not.toBe(providerError)
+    expect(((error as NotificationException).cause as Error).cause).toBeUndefined()
+  })
+
+  it('should carry no address the provider quoted in the message, the details or the cause', async () => {
+    const provider = makeProvider()
+    provider.send.mockRejectedValue(
+      Object.assign(new Error('The to address bob@x.com is invalid'), {
+        cause: new Error('upstream refused bob%40x.com')
+      })
+    )
+    const service = new EmailService(
+      makeOptions({}, { maskRecipient: () => '[masked]' }),
+      provider,
+      makeRenderer(),
+      makeAudit()
+    )
+
+    const error: unknown = await service.send(baseInput).catch((thrown: unknown) => thrown)
+
+    const seen: string[] = [JSON.stringify((error as NotificationException).getResponse())]
+    let cursor: unknown = (error as NotificationException).cause
+    while (cursor instanceof Error) {
+      seen.push(cursor.message, cursor.stack ?? '', JSON.stringify({ ...cursor }))
+      cursor = cursor.cause
+    }
+    expect(seen.join('\n')).not.toMatch(/bob(@|%40)x\.com/)
+    expect(seen.join('\n')).toContain('The to address')
+  })
+
+  it('should carry no address the provider quoted when no maskRecipient is configured', async () => {
+    const provider = makeProvider()
+    provider.send.mockRejectedValue(new Error('The to address bob@x.com is invalid'))
+    const audit = makeAudit()
+    const service = new EmailService(makeOptions(), provider, makeRenderer(), audit)
+
+    const error: unknown = await service.send(baseInput).catch((thrown: unknown) => thrown)
+
+    expect(((error as NotificationException).cause as Error).message).toBe(
+      'The to address [address] is invalid'
+    )
+    expect(audit.create).toHaveBeenCalledWith(
+      expect.objectContaining({ errorMessage: 'The to address [address] is invalid' })
+    )
   })
 
   // A non-Error provider rejection is stringified for the audit message.

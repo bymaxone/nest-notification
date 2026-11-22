@@ -40,6 +40,35 @@ describe('maskAddressTokens', () => {
     expect(maskAddressTokens(`quoted ${address} here`, () => '#')).toBe('quoted # here')
   })
 
+  it.each([
+    ['percent-encoded fullwidth', 'bob%EF%BC%A0x.com'],
+    ['hex entity of fullwidth', 'bob&#xff20;x.com'],
+    ['decimal entity of fullwidth', 'bob&#65312;x.com'],
+    ['hex entity of small', 'bob&#xFE6B;x.com'],
+    ['entity inside an entity', 'bob&amp;#64;x.com'],
+    ['percent-encoded percent signs', 'bob%25%34%30x.com'],
+    ['three layers of percent', 'bob%252540x.com'],
+    ['percent over a hex entity', 'bob%26%23x40%3Bx.com'],
+    ['a percent run that is not UTF-8', 'bob%FF%40x.com']
+  ])(
+    'should mask an address written as %s, by decoding until the token stops changing',
+    (_l, a) => {
+      expect(maskAddressTokens(`rejected ${a} now`, () => '#')).toBe('rejected # now')
+    }
+  )
+
+  it('should mask a token that is still changing after the decoding limit', () => {
+    const layered = `x%${'25'.repeat(9)}41`
+
+    expect(maskAddressTokens(`a ${layered} b`, () => '#')).toBe('a # b')
+  })
+
+  it('should leave an escape that is not an at-sign and a code point out of range alone', () => {
+    expect(maskAddressTokens('a %41 &#x110000; &#65; b', () => '#')).toBe(
+      'a %41 &#x110000; &#65; b'
+    )
+  })
+
   it('should split tokens at white space, brackets, commas and parentheses', () => {
     expect(maskAddressTokens('a@b.c,d@e.f(j@k.l)[m@n.o] s@t.u\tv@w.x', () => '#')).toBe(
       '#,#(#)[#] #\t#'

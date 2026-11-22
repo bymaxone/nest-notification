@@ -33,9 +33,9 @@ describe('the failed-generate audit entry under audit.maskRecipient', () => {
     expect(JSON.stringify(entry)).not.toContain(ref.recipient)
   })
 
-  it('should leave the text as it is when the mask returns the recipient', async () => {
+  it('should replace the address with a fixed mask when the host mask returns it unchanged', async () => {
     const entry = await failedEntry(`write failed for ${ref.recipient}`)
 
-    expect(entry?.metadata?.errorMessage).toBe(`write failed for ${ref.recipient}`)
+    expect(entry?.metadata?.errorMessage).toBe('write failed for [address]')
   })
 })
