@@ -20,8 +20,8 @@ const isObject = (entry: unknown): entry is object => typeof entry === 'object' 
 type EmailTag = NonNullable<EmailSendOptions['tags']>[number]
 
 /** Every field of a tag and of an attachment, read by name. */
-const TAG_KEYS = ['name', 'value'] as const satisfies readonly (keyof EmailTag)[]
-const ATTACHMENT_KEYS = [
+export const TAG_KEYS = ['name', 'value'] as const satisfies readonly (keyof EmailTag)[]
+export const ATTACHMENT_KEYS = [
   'filename',
   'content',
   'contentType',

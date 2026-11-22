@@ -24,7 +24,6 @@ import type { OnModuleDestroy } from '@nestjs/common'
 
 import { NOTIFICATION_LOG_EVENTS } from '../constants/log-events.constants'
 import type {
-  EmailAttachment,
   EmailSendOptions,
   EmailSendResult,
   IEmailProvider
@@ -38,6 +37,10 @@ import { logEvent } from '../utils/log-event'
 import { codeWithoutSecrets } from '../utils/masked-failure'
 import { assertPort } from '../utils/port-option'
 import { publishedFailure } from '../utils/provider-failure'
+import { rethrowRefusal } from '../utils/provider-refusal'
+import { readSendOptions } from '../utils/provider-send-options'
+import { nullProto, readName, withOwnKeys } from '../utils/read-options'
+import { assertStandardRealmRoot } from '../utils/realm-root'
 import {
   collectEchoedExcerpts,
   isSafeError,
@@ -45,9 +48,10 @@ import {
   redactValues
 } from '../utils/redact'
 import { assertTimerMs } from '../utils/timer-option'
+import { AUTH_KEYS, MESSAGE_KEYS } from './nodemailer-keys'
+import { mapSmtpAttachments } from './smtp-attachments'
 import type {
   NodemailerLike,
-  SmtpAttachment,
   SmtpCredentials,
   SmtpEmailProviderOptions,
   SmtpPoolOptions,
@@ -57,6 +61,8 @@ import type {
   SmtpTransportLike
 } from './smtp-email.types'
 import { readPool, readSmtpOptions } from './smtp-options'
+import { relayRefused } from './smtp-relay-refused'
+import { buildSmtpTransportConfig } from './smtp-transport-config'
 export type {
   SmtpCredentials,
   SmtpEmailProviderOptions,
@@ -65,21 +71,6 @@ export type {
   SmtpTlsOptions,
   SmtpTlsPfxEntry
 } from './smtp-email.types'
-
-/** Submission port, used when no `port` is supplied. */
-const DEFAULT_PORT = 587
-
-/** Port that implies implicit TLS ("SMTPS"), used to derive `secure` by default. */
-const IMPLICIT_TLS_PORT = 465
-
-/** Default TCP connection timeout, in milliseconds. */
-const DEFAULT_CONNECTION_TIMEOUT_MS = 10_000
-
-/** Default timeout for the server greeting, in milliseconds. */
-const DEFAULT_GREETING_TIMEOUT_MS = 10_000
-
-/** Default idle-socket timeout during the SMTP conversation, in milliseconds. */
-const DEFAULT_SOCKET_TIMEOUT_MS = 20_000
 
 /** Default bound on one whole send, in milliseconds. */
 const DEFAULT_SEND_TIMEOUT_MS = 60_000
@@ -107,33 +98,6 @@ function settleOrTimeout<T>(call: Promise<T>, timeoutMs: number): Promise<T> {
       clearTimeout(timer)
     })
   })
-}
-
-/**
- * Hosts that cannot be reached across a network, and for which an unencrypted
- * session is therefore not exposed to a STARTTLS-stripping attacker. Used to decide
- * the `requireTls` default.
- */
-const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '[::1]'])
-
-/**
- * The transport settings a pool turns on: none without the option, so an unpooled transport gets
- * the configuration it always did.
- *
- * @param pool - The validated option.
- * @returns The keys to add to the transport configuration.
- */
-function poolConfig(
-  pool: SmtpPoolOptions | undefined
-): Pick<SmtpTransportConfig, 'pool' | 'maxConnections' | 'maxMessages'> {
-  if (pool === undefined) {
-    return {}
-  }
-  return {
-    pool: true,
-    ...(pool.maxConnections === undefined ? {} : { maxConnections: pool.maxConnections }),
-    ...(pool.maxMessages === undefined ? {} : { maxMessages: pool.maxMessages })
-  }
 }
 
 /**
@@ -219,6 +183,7 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
    */
   constructor(options: SmtpEmailProviderOptions = {}) {
     // A copy first, so every check below reads the values that are kept, once.
+    assertStandardRealmRoot('SmtpEmailProvider')
     const own = readSmtpOptions(options)
     assertPort('SmtpEmailProvider', own.port)
     for (const [name, value] of [
@@ -269,24 +234,37 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
    * comes back. `EmailService` maps any thrown `Error` to `EMAIL_SEND_FAILED`.
    */
   async send(options: EmailSendOptions): Promise<EmailSendResult> {
+    return this.sendRead(readSendOptions(options))
+  }
+
+  /** Sends a message already read by name, whose fields no key planted on the realm root can answer for. */
+  private async sendRead(options: EmailSendOptions): Promise<EmailSendResult> {
     assertBodyParts(options.html, options.text)
+    assertStandardRealmRoot('SmtpEmailProvider')
     this.guardHeaderInjection(options)
     const from = this.buildSender(options.from, options.fromName)
     const transport = await this.getTransport()
     const info = await this.dispatch(
       transport,
-      {
-        from,
-        to: options.to,
-        subject: options.subject,
-        html: options.html,
-        text: options.text,
-        replyTo: options.replyTo,
-        cc: options.cc,
-        bcc: options.bcc,
-        headers: options.headers,
-        attachments: this.mapAttachments(options.attachments)
-      },
+      // No prototype: nodemailer reads keys this adapter never sets (`envelope`, `raw`, `list`,
+      // `alternatives`...), and a key planted on the realm root must not answer for them.
+      withOwnKeys(
+        {
+          from,
+          to: options.to,
+          subject: options.subject,
+          html: options.html,
+          text: options.text,
+          replyTo: options.replyTo,
+          cc: options.cc,
+          bcc: options.bcc,
+          headers: options.headers,
+          attachments: mapSmtpAttachments(options.attachments),
+          disableFileAccess: true,
+          disableUrlAccess: true
+        },
+        MESSAGE_KEYS
+      ),
       options.redactValues,
       options.publishProviderText
     )
@@ -304,14 +282,19 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
    * The failure carries no text of the relay's or of Nodemailer's, which can quote the options, so
    * what it reports is the same words every time.
    *
+   * @throws NotificationException `INVALID_SCOPE_IDENTIFIER` when `Object.prototype` holds a non-standard
+   *   key, before the transport is built and again before it connects.
    * @throws Error `SmtpEmailProvider: the relay did not accept the connection`, whatever the cause.
    */
   async verify(): Promise<void> {
+    assertStandardRealmRoot('SmtpEmailProvider')
+    const transport = await this.getTransport().catch(relayRefused)
+    // Again before the connection, with nothing between it and the call, and outside the wrap.
+    assertStandardRealmRoot('SmtpEmailProvider')
     try {
-      const transport = await this.getTransport()
       await transport.verify?.()
     } catch {
-      throw new Error('SmtpEmailProvider: the relay did not accept the connection')
+      relayRefused()
     }
   }
 
@@ -371,12 +354,15 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
     redactValuesList?: readonly string[],
     publishProviderText?: boolean
   ): Promise<{ messageId?: string }> {
+    // Checked again where the message is handed over, after the transport was created.
+    assertStandardRealmRoot('SmtpEmailProvider')
     try {
       return await settleOrTimeout(
         transport.sendMail(payload),
         this.#options.sendTimeoutMs ?? DEFAULT_SEND_TIMEOUT_MS
       )
     } catch (error) {
+      rethrowRefusal(error)
       throw this.failure(error, payload, redactValuesList, publishProviderText)
     }
   }
@@ -488,11 +474,11 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
     if (typeof tls !== 'object' || tls === null) {
       return []
     }
-    const carriers = [Reflect.get(tls, 'key'), Reflect.get(tls, 'pfx')].flat() as unknown[]
+    const carriers = [readName(tls, 'key'), readName(tls, 'pfx')].flat() as unknown[]
     const found = [
-      Reflect.get(tls, 'passphrase'),
+      readName(tls, 'passphrase'),
       ...carriers.map((entry) =>
-        typeof entry === 'object' && entry !== null ? Reflect.get(entry, 'passphrase') : undefined
+        typeof entry === 'object' && entry !== null ? readName(entry, 'passphrase') : undefined
       )
     ]
     return found.filter((value): value is string => typeof value === 'string')
@@ -508,7 +494,9 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
    * them.
    */
   private credentialValues(): string[] {
-    const { user, pass } = this.#options.credentials ?? {}
+    const credentials = this.#options.credentials
+    const user = credentials === undefined ? undefined : readName(credentials, 'user')
+    const pass = credentials === undefined ? undefined : readName(credentials, 'pass')
     const secrets = [user, pass].filter((secret): secret is string => Boolean(secret))
     const plainToken = `\u0000${secrets.join('\u0000')}`
     const encoded = (secrets.length === 2 ? [...secrets, plainToken] : secrets).map((value) =>
@@ -607,34 +595,7 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
         'SmtpEmailProvider: no sender address — set `email.defaultFrom` or pass `from`'
       )
     }
-    return { name: fromName ?? '', address: from }
-  }
-
-  /**
-   * Maps the library's attachments onto Nodemailer's shape.
-   *
-   * `EmailAttachment.content` is documented as a `Buffer` **or a base64 string**, so
-   * a string is tagged `encoding: 'base64'` — left untagged, Nodemailer would treat
-   * the base64 text as the literal body and deliver a corrupt file.
-   *
-   * @param attachments - The attachments to map, if any.
-   * @returns The mapped attachments, or `undefined` when there are none.
-   */
-  private mapAttachments(
-    attachments: ReadonlyArray<EmailAttachment> | undefined
-  ): SmtpAttachment[] | undefined {
-    return attachments?.map((attachment) => {
-      // Each field is read once: the encoding and the content must describe the same value.
-      const { filename, content, contentType, cid, contentDisposition } = attachment
-      return {
-        filename,
-        content,
-        contentType,
-        encoding: typeof content === 'string' ? 'base64' : undefined,
-        cid,
-        contentDisposition
-      }
-    })
+    return nullProto({ name: fromName ?? '', address: from })
   }
 
   /**
@@ -727,32 +688,13 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
   }
 
   /**
-   * Resolves the transport configuration, applying defaults and validating that the
-   * relay is fully described.
+   * Resolves the transport configuration; see {@link buildSmtpTransportConfig}.
    *
    * @returns The resolved configuration.
    * @throws Error When `host` is missing, or `credentials` were supplied incomplete.
    */
   private buildTransportConfig(): SmtpTransportConfig {
-    const options = this.#options
-    const host = options.host
-    if (!host) {
-      throw new Error('SmtpEmailProvider: missing host — pass { host } to the constructor')
-    }
-    const port = options.port ?? DEFAULT_PORT
-    const secure = options.secure ?? port === IMPLICIT_TLS_PORT
-    return {
-      host,
-      port,
-      secure,
-      requireTLS: options.requireTls ?? (!secure && !LOOPBACK_HOSTS.has(host.toLowerCase())),
-      auth: this.resolveCredentials(),
-      tls: options.tls,
-      connectionTimeout: options.connectionTimeout ?? DEFAULT_CONNECTION_TIMEOUT_MS,
-      greetingTimeout: options.greetingTimeout ?? DEFAULT_GREETING_TIMEOUT_MS,
-      socketTimeout: options.socketTimeout ?? DEFAULT_SOCKET_TIMEOUT_MS,
-      ...poolConfig(this.#pool)
-    }
+    return buildSmtpTransportConfig(this.#options, this.#pool, () => this.resolveCredentials())
   }
 
   /**
@@ -773,7 +715,7 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
         'SmtpEmailProvider: incomplete credentials — `credentials` needs both `user` and `pass`'
       )
     }
-    return { user: credentials.user, pass: credentials.pass }
+    return withOwnKeys({ user: credentials.user, pass: credentials.pass }, AUTH_KEYS)
   }
 
   /**

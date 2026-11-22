@@ -28,7 +28,9 @@ import { loadOptionalPeer } from '../utils/load-optional-peer'
 import { logEvent } from '../utils/log-event'
 import { codeWithoutSecrets } from '../utils/masked-failure'
 import { publishedFailure } from '../utils/provider-failure'
-import { assertOptionsObject, readOptionKeys } from '../utils/read-options'
+import { readSendOptions } from '../utils/provider-send-options'
+import { assertOptionsObject, nullProto, readOptionKeys, withOwnKeys } from '../utils/read-options'
+import { assertStandardRealmRoot } from '../utils/realm-root'
 import {
   REDACTED_VALUE,
   collectEchoedExcerpts,
@@ -149,25 +151,40 @@ interface ResendSendPayload {
   attachments: ReadonlyArray<Record<string, unknown>> | undefined
 }
 
+/**
+ * What the SDK reads from the payload, which it spreads into an ordinary object first: the fields it
+ * sends and the ones this adapter never sets (`react`, `scheduledAt`, `template`, `topicId`), which
+ * would otherwise answer with a key planted on the realm root.
+ */
+const RESEND_PAYLOAD_KEYS =
+  'attachments bcc cc from headers html react replyTo scheduledAt subject tags template text to topicId'.split(
+    ' '
+  )
+
 /** The payload the SDK is given: the envelope and the body, and nothing else of the input. */
 function toPayload(
   options: EmailSendOptions,
   from: string,
   attachments: ResendSendPayload['attachments']
 ): ResendSendPayload {
-  return {
-    from,
-    to: options.to,
-    subject: options.subject,
-    html: options.html,
-    text: options.text,
-    replyTo: options.replyTo,
-    cc: options.cc,
-    bcc: options.bcc,
-    tags: options.tags,
-    headers: options.headers,
-    attachments
-  }
+  // No prototype: the SDK reads fields this adapter never sets (`scheduledAt`...), and a key planted
+  // on the realm root must not answer for them.
+  return withOwnKeys(
+    {
+      from,
+      to: options.to,
+      subject: options.subject,
+      html: options.html,
+      text: options.text,
+      replyTo: options.replyTo,
+      cc: options.cc,
+      bcc: options.bcc,
+      tags: options.tags,
+      headers: options.headers,
+      attachments
+    },
+    RESEND_PAYLOAD_KEYS
+  )
 }
 
 /**
@@ -192,12 +209,12 @@ function toPayloadAttachments(
         'Resend inlines an attachment by its cid only, so contentDisposition must agree with cid'
       )
     }
-    return {
+    return nullProto({
       ...(filename !== undefined ? { filename } : {}),
       content,
       ...(contentType !== undefined ? { contentType } : {}),
       ...(cid !== undefined ? { contentId: cid } : {})
-    }
+    })
   })
 }
 
@@ -262,6 +279,7 @@ export class ResendEmailProvider implements IEmailProvider {
 
   constructor(options: ResendEmailProviderOptions = {}) {
     // A copy first, so the check reads the value that is kept, once.
+    assertStandardRealmRoot('ResendEmailProvider')
     assertOptionsObject('ResendEmailProvider', options)
     const own = readOptionKeys(options, RESEND_OPTION_KEYS)
     assertTimerMs('ResendEmailProvider', 'timeoutMs', own.timeoutMs)
@@ -287,12 +305,20 @@ export class ResendEmailProvider implements IEmailProvider {
    * maps any thrown `Error` to `EMAIL_SEND_FAILED`.
    */
   async send(options: EmailSendOptions): Promise<EmailSendResult> {
+    return this.sendRead(readSendOptions(options))
+  }
+
+  /** Sends a message already read by name, whose fields no key planted on the realm root can answer for. */
+  private async sendRead(options: EmailSendOptions): Promise<EmailSendResult> {
     assertBodyParts(options.html, options.text)
+    assertStandardRealmRoot('ResendEmailProvider')
     const attachments = toPayloadAttachments(options.attachments)
     const client = await this.getClient()
     const from = this.formatFrom(options.from, options.fromName)
     const timeoutMs = this.#options.timeoutMs ?? DEFAULT_TIMEOUT_MS
     const signal = AbortSignal.timeout(timeoutMs)
+    // Checked again where the SDK is called, after the client was loaded.
+    assertStandardRealmRoot('ResendEmailProvider')
     let result: ResendSendOutcome
     try {
       result = await settleOrAbort(

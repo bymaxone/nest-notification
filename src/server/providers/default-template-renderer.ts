@@ -18,6 +18,8 @@ import type {
   IEmailTemplateRenderer,
   RenderedEmail
 } from '../interfaces/email-template-renderer.interface'
+import { copyByName } from '../utils/bounded-list'
+import { nullProto, readName } from '../utils/read-options'
 
 /** A raw template: subject + html (+ optional text) with `{{var}}` placeholders. */
 export interface TemplateDefinition {
@@ -46,6 +48,13 @@ const TEMPLATE_VAR_PATTERN = /\{\{\s*([\w.]+)\s*\}\}/g
 
 /** Default locale chain tried after the requested locale. */
 const DEFAULT_FALLBACK_LOCALES: readonly string[] = ['en']
+
+/** A template as the renderer keeps it: its three fields read once, in an object with no prototype. */
+function copyTemplate(template: unknown): unknown {
+  return typeof template === 'object' && template !== null
+    ? copyByName(template, ['subject', 'html', 'text'])
+    : template
+}
 
 /**
  * Default renderer based on `{{var}}` interpolation with html-only escaping.
@@ -79,14 +88,23 @@ export class DefaultTemplateRenderer implements IEmailTemplateRenderer {
    * carries a non-string `text`.
    */
   constructor(options: DefaultTemplateRendererOptions = {}) {
-    const entries = Object.entries(options.templates ?? {})
+    // Every option and every field of a template is read by name, so a key planted on the realm root
+    // (a `templates` of its own, a `text` for every template) is not taken for the host's.
+    const templates = readName(options, 'templates') as DefaultTemplateRendererOptions['templates']
+    const entries = Object.entries(templates ?? {}).map(
+      ([key, template]) => [key, copyTemplate(template) as TemplateDefinition] as const
+    )
     for (const [key, template] of entries) {
       this.assertValidTemplate(key, template)
     }
     this.templates = new Map(entries)
-    this.fallbackLocales = options.fallbackLocales ?? DEFAULT_FALLBACK_LOCALES
-    this.onMissingVar = options.onMissingVar ?? 'empty'
-    this.enableNestedPaths = options.enableNestedPaths ?? false
+    this.fallbackLocales =
+      (readName(options, 'fallbackLocales') as readonly string[] | undefined) ??
+      DEFAULT_FALLBACK_LOCALES
+    this.onMissingVar =
+      (readName(options, 'onMissingVar') as MissingVariableMode | undefined) ?? 'empty'
+    this.enableNestedPaths =
+      (readName(options, 'enableNestedPaths') as boolean | undefined) ?? false
   }
 
   /**
@@ -117,13 +135,15 @@ export class DefaultTemplateRenderer implements IEmailTemplateRenderer {
   ): Promise<RenderedEmail> {
     const template = this.resolveTemplate(templateName, locale)
     const resolve = this.buildResolver(data)
-    return {
+    // No prototype: the caller reads `text`, and a template without one must not answer with a key
+    // planted on the realm root.
+    return nullProto({
       subject: this.interpolate(template.subject, false, resolve),
       html: this.interpolate(template.html, true, resolve),
       ...(template.text !== undefined
         ? { text: this.interpolate(template.text, false, resolve) }
         : {})
-    }
+    })
   }
 
   /** Resolves the first registered template along `[locale, ...fallbackLocales]`. */
@@ -186,7 +206,7 @@ export class DefaultTemplateRenderer implements IEmailTemplateRenderer {
    */
   private ownValue(object: Record<string, unknown>, key: string): unknown {
     return Object.prototype.propertyIsEnumerable.call(object, key)
-      ? Reflect.get(object, key)
+      ? readName(object, key)
       : undefined
   }
 

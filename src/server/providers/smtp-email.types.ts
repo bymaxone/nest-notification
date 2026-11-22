@@ -166,10 +166,15 @@ export interface SmtpTransportConfig {
   connectionTimeout: number
   greetingTimeout: number
   socketTimeout: number
+  /** Opens the connection from the adapter's own configuration; see `smtp-socket.ts`. */
+  getSocket: (options: unknown, answer: (error: Error | null, socket?: object) => void) => void
+  /** Always `true`: the adapter sends `content` and never a path or a URL for Nodemailer to open. */
+  disableFileAccess: true
+  disableUrlAccess: true
   /** Present, as `true`, only when the pool option is set. */
   pool?: true
-  maxConnections?: number
-  maxMessages?: number
+  maxConnections?: number | undefined
+  maxMessages?: number | undefined
 }
 
 /** An attachment in the shape Nodemailer expects. */
@@ -209,6 +214,9 @@ export interface SmtpSendPayload {
   bcc: string | string[] | undefined
   headers: Record<string, string> | undefined
   attachments: SmtpAttachment[] | undefined
+  /** Always `true`; see {@link SmtpTransportConfig.disableFileAccess}. */
+  disableFileAccess: true
+  disableUrlAccess: true
 }
 
 /** The slim transport surface this adapter relies on. */

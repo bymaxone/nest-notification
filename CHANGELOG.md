@@ -27,9 +27,8 @@ the entries that carry one, is the compatibility contract — read it, not the n
   row the audit interceptor writes for a handler's error, carried the store's, the provider's or the handler's own text,
   which can quote the address it refused. Every token of that text that holds an at-sign is replaced, whole, by what
   `audit.maskRecipient` answers for it, whoever the address belongs to and however it is spelled (`550 <bob@x.com>
-unknown` keeps its brackets). The at-sign is `@`, fullwidth `\uff20`, small `\ufe6b`, or any escape of one of them: each token is decoded
-  (percent bytes, `%u0040`, numeric and named entities, `\x40`, `\u0040`, `\u{40}`) again and again until it stops
-  changing, so `%2540`, `&amp;#64;`, `%25%34%30` and `%EF%BC%A0` are all found, and a token that never stops changing
+unknown` keeps its brackets). The at-sign is `@`, fullwidth `\uff20`, small `\ufe6b`, or any escape of one of them: each token is decoded again and
+  again until it stops changing, so `%2540`, `&amp;#64;`, `%25%34%30` and `%EF%BC%A0` are all found, and a token that still changes after the decoder's bound
   is masked. An answer of `audit.maskRecipient` that still holds an at-sign (the default mask hands the address back, and a mask that keeps the domain does too) is replaced by `[address]`. A token is
   a run of characters that are not ASCII white space and not one of `<>(),[]`, a quoted string counting as one piece
   (`"first last"@x.com`, escapes and all); every other space (no-break, zero-width) stays inside the token, so it cannot
@@ -37,11 +36,37 @@ unknown` keeps its brackets). The at-sign is `@`, fullwidth `\uff20`, small `\uf
   mistake; a mask of yours that throws is answered with `[masked]`, and the failure it was called from is still
   reported. A recipient that is not an address (a phone number) is replaced where the OTP path wrote it exactly.
 - **A failed send no longer carries the provider's error as its `cause`.** When the provider's text is published (the
-  default), the `cause` of `EMAIL_SEND_FAILED` is a fresh `Error` that holds the provider's message with secrets removed and address tokens masked, and the provider's `code`, which is dropped when it holds a value declared secret (`auditRedactValues`, or
-  `redactValues` on a provider's own send) and is dropped the same way from the adapters' thrown error and log line;
+  default), the `cause` of `EMAIL_SEND_FAILED` is a fresh `Error` that holds the provider's message with secrets removed and address tokens masked, and nothing else (no `code`: the provider's code is read for the status of the failure);
   the provider's own error and its nested chain are not kept. A send with `publishProviderText: false`, or one whose error
-  chain is too large to examine, still carries no `cause` at all. The Resend and SMTP adapters' failure log line and thrown message mask
-  address tokens the same way (`[address]`).
+  chain is too large to examine, still carries no `cause` at all. The Resend and SMTP adapters copy the provider's `code` to the error they throw (and to the log line when the provider's text is published), and drop it when it holds a value declared secret (`auditRedactValues`, or `redactValues` on a provider's own send). Where the provider's text is published, their failure log line and thrown message mask
+  address tokens the same way (`[address]`). Out of scope, with the reason: the at-sign spelled as a word or
+  with spaces (`bob [at] x.com`, `bob (at) x.com`, `bob @ x.com`), which no mail system or SDK writes into an error and
+  which cannot be told from prose without reading its meaning. The text is bounded before it is read, since its length
+  is the provider's to choose; a token that starts inside the bound is read to its end and masked whole, and one that starts past it, or that ends near the end of what was read while more text follows, is left out, so the bound never publishes the front half of an address.
+- **A key planted on `Object.prototype` no longer reaches an option or an input.** Every option, every input of
+  `send()`, the OTP calls and `dispatch()`, the provider options and the TLS options were read by property access, which
+  follows the prototype chain to the realm root, so code that ran first could set `Object.prototype.bcc` (a copy of every
+  message), `maxAttempts`, `resendCooldownSeconds` or `codeSecret` (the limits and the key of the codes), `maskRecipient`,
+  `host` or `apiKey` (a provider that is configured and points elsewhere), and any option the host left unset took the
+  value. A value found only on the realm-root prototype is now absent; an own property, a property of a class of yours
+  and a getter on its prototype still count. The options and the message
+  handed to a provider have no prototype, so a key that is not set is absent for a custom provider too.
+  The same holds for what the library hands to a mail transport, an SDK, a renderer or a store: the SMTP message and
+  transport configuration (nodemailer reads keys this library never sets, and a planted key must not answer for them),
+  the Resend payload, the default template renderer (its options,
+  each template's `text`, and what it renders), the store wrapper (an operation the store does not have stays absent),
+  the dispatch request and its OTP payload, and the error codes and credentials the adapters read. The reference
+  adapters also read the message they are given by name, so a direct caller's plain object is covered. A `Proxy` around
+  your options or input answers for itself, and the topmost prototype of a chain built by hand cannot be told from the
+  realm root, so it is read as absent.
+- **A guess that is not a string is refused before anything uses it.** `verify({ code: 271620 })` reached the
+  digest, whose `TypeError` quotes the value it was given, and a `String` object compared as the code. A `code` that is
+  not a string is now `INVALID_SCOPE_IDENTIFIER`, naming the field and never the value.
+- **A provider's refusal of a message reaches the caller as a refusal.** Resend refuses a `contentDisposition` that
+  disagrees with the `cid` before anything is sent; `send()` answered that as a 502 `EMAIL_SEND_FAILED` and a failed
+  delivery. A provider's `INVALID_SCOPE_IDENTIFIER` now passes on as the library's own refusal, with the library's words
+  (a provider can be yours, and its text is its own). No audit row is written for it: nothing was sent, as with any other
+  refusal of the input.
 - **A failed `verify()` leaves the way a failed `generate()` does,** with the guess removed from the error's chain and a
   value that is not an error flattened.
 - **An OTP action or delivery channel the library does not know is refused.** An `action` such as `'verfy'` fell through
@@ -92,7 +117,9 @@ wrong kinds, now ends the call in `OTP_STORAGE_FAILED` (or `OTP_STORAGE_NOT_CONF
 bundled stores answer correctly. A caller of `send()` that passed a list over 1000 entries, an attachment with a
 non-text, non-binary `content` or with a field other than `filename`, `content`, `contentType`, `cid` and `contentDisposition`, or a string for a boolean now gets a refusal (`EMAIL_INVALID_RECIPIENT` for the
 recipient fields, `INVALID_SCOPE_IDENTIFIER` for the rest). A dispatch with an unknown `action` or `deliverVia` now
-raises `INVALID_SCOPE_IDENTIFIER` instead of sending or storing a code.
+raises `INVALID_SCOPE_IDENTIFIER` instead of sending or storing a code, and so does a `verify()` whose `code` is not a string, and a send, or building an adapter, in a process whose `Object.prototype` holds a non-standard key. A
+provider of your own that read a key from the options object it is given, or an option from `Object.prototype`, finds
+the object has no prototype: read the keys by name, as before, and do not call methods of `Object.prototype` on it.
 
 ## [1.4.22] - 2026-11-21
 
@@ -318,7 +345,14 @@ The declarations gain `INotificationObserver`, its event types (`NotificationSen
 `NotificationOtpEvent`, `NotificationSpanAttributes` and the name unions), `BYMAX_NOTIFICATION_OBSERVER`
 and `SmtpEmailProvider.verify()`, and the package gains the `./observability` subpath with its own
 declarations; the constructors of `EmailService` and `OtpService` take an optional last parameter, the
-observer, which only matters if you build them by hand. An `IEmailProvider` of your own needs no change.
+observer, which only matters if you build them by hand.
+Nodemailer copies a message, its transport options, the credentials and the TLS options into ordinary objects
+before it reads names this library never sets, so the SMTP adapter gives it an own key, set to your value or to
+`undefined`, for every name it reads (a planted `envelope` sent the one-time code to another recipient while the
+headers still named yours), and the Resend payload the same for the fields its SDK reads after spreading it. The lists
+for a message, the transport options and the credentials come from the sources of the Nodemailer the
+tests install, and a spec reads those sources and fails when a name is missing; the TLS list names what `tls.connect` reads.
+Nodemailer's own internals read names from objects they create themselves, which no key this library hands over can shadow, so the SMTP and Resend adapters refuse while `Object.prototype` holds any string key outside the runtime's standard set, or a standard key that was overwritten, redefined or removed since the library loaded (`INVALID_SCOPE_IDENTIFIER`): when the adapter is built, when a send or the SMTP `verify()` starts, and again immediately before the transport's `sendMail` or `verify` or the SDK's `emails.send`, so a name planted after boot is refused before any I/O. The error reports a count of keys and never a key or a value. It is an allowlist and not a list of names, so a name a later Nodemailer reads is refused without a release. A host that extends `Object.prototype` cannot send through the library. The check cannot close a timing window, so the reads are closed too: the SMTP adapter opens the connection itself, from its own configuration, with options that have no prototype, and hands Nodemailer the open socket; it sets `disableFileAccess` and `disableUrlAccess`, since the adapter sends `content` only, so a `path`, `localAddress` or `href` planted by a concurrent request after a send has started neither moves the connection nor reads a file. The table of listeners of the socket the adapter opens has no prototype, so a string planted under any event name no longer throws in Node's emitter; the sockets and streams Nodemailer builds itself (the STARTTLS upgrade, a message) are its own, and a string planted under `pause` or `resume` after the check can still throw there. A standard key that was not what it must be at load (a native function that is not a Proxy, with its own name; `__proto__` an accessor of native functions) counts on every use. A `tls` key that reads as `undefined` is read as not set. An `IEmailProvider` of your own needs no change.
 A log line is now an object where it was a string: with `@bymax-one/nest-logger` 1.4.23 or later `event` and
 `message` are fields of the entry, so match on `event`; with the default Nest logger the line prints as the
 object, and a custom logger that read the first argument as a string must read `message`. A match on the

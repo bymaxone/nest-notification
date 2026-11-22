@@ -2,7 +2,7 @@ import { inspect } from 'node:util'
 
 import { Logger } from '@nestjs/common'
 
-import { baseOptions } from './__tests__/smtp-email-provider.fixtures'
+import { baseOptions, definedOnly } from './__tests__/smtp-email-provider.fixtures'
 import { SmtpEmailProvider } from './smtp-email.provider'
 
 // `mock`-prefixed names are allowed inside the hoisted jest.mock factory.
@@ -49,7 +49,7 @@ jest.mock(
 
 /** The transport config handed to `createTransport` on the most recent init. */
 function lastTransportConfig(): Record<string, unknown> {
-  return mockCreateTransport.mock.calls.at(-1)?.[0] as Record<string, unknown>
+  return definedOnly(mockCreateTransport.mock.calls.at(-1)?.[0])
 }
 
 /** The payload handed to `sendMail` on the most recent send. */
@@ -133,11 +133,15 @@ describe('SmtpEmailProvider', () => {
         port: 587,
         secure: false,
         requireTLS: true,
-        auth: undefined,
-        tls: undefined,
+        // Nothing of the host's: the transport still gets an object, of keys that are unset.
+        tls: {},
         connectionTimeout: 10_000,
         greetingTimeout: 10_000,
-        socketTimeout: 20_000
+        socketTimeout: 20_000,
+        // The adapter opens the connection and Nodemailer opens no file and no URL.
+        getSocket: expect.any(Function),
+        disableFileAccess: true,
+        disableUrlAccess: true
       })
     })
 
@@ -294,7 +298,10 @@ describe('SmtpEmailProvider', () => {
         cc: 'cc@acme.com',
         bcc: ['bcc@acme.com'],
         headers: { 'X-Entity-Ref-ID': 'abc' },
-        attachments: undefined
+        attachments: undefined,
+        // Nodemailer is told it may open no file and no URL: the adapter sends `content` only.
+        disableFileAccess: true,
+        disableUrlAccess: true
       })
     })
 

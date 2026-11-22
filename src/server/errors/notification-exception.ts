@@ -153,6 +153,12 @@ export class NotificationException extends HttpException {
     // property, so a spread or JSON serializer prints `options.cause` beside
     // the real `cause` — a duplicate reference to the same sanitized copy.
     // Hide it from enumeration; deliberate reads still work.
-    Object.defineProperty(this, 'options', { enumerable: false })
+    // The descriptor has no prototype: a literal would inherit `get`, `set` or `value` from a
+    // polluted `Object.prototype`, and building the refusal would then run the planted code.
+    Object.defineProperty(
+      this,
+      'options',
+      Object.assign(Object.create(null), { enumerable: false })
+    )
   }
 }

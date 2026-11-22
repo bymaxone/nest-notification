@@ -4,6 +4,7 @@
  */
 
 import { NotificationException } from '../errors/notification-exception'
+import { nullProto, readName } from './read-options'
 
 /** The most entries a list read from a host or a caller may have. */
 export const MAX_LIST_ENTRIES = 1000
@@ -63,7 +64,7 @@ export function boundedList<T>(
   }
   const copy: T[] = []
   for (let index = 0; index < length; index += 1) {
-    const entry: unknown = Reflect.get(value, index)
+    const entry: unknown = readName(value, index)
     if (!isEntry(entry)) {
       throw refuse(`entry ${String(index)} is of an unexpected kind`)
     }
@@ -81,9 +82,9 @@ export function boundedList<T>(
  * @returns A plain object holding each named field that is not `undefined`.
  */
 export function copyByName(source: object, keys: readonly string[]): Record<string, unknown> {
-  const copy: Record<string, unknown> = {}
+  const copy = nullProto<Record<string, unknown>>({})
   for (const key of keys) {
-    const value: unknown = Reflect.get(source, key)
+    const value: unknown = readName(source, key)
     if (value !== undefined) {
       Reflect.set(copy, key, value)
     }

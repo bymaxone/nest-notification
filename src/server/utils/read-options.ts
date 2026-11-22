@@ -13,6 +13,75 @@
  * list is checked against its type where it is written and the specs list every key of every type.
  */
 
+import { types } from 'node:util'
+
+// Captured when the module loads, so a later replacement on `Object` cannot change what is read.
+const hasOwn = Object.hasOwn
+
+/**
+ * Reads one property by name the way `source[key]` does, getters and prototypes included, except
+ * that a value found ONLY on the realm-root prototype (`Object.prototype`, or the same object of
+ * another realm) is absent. Code that runs before this library can plant a key there, and an option
+ * or an input the host did not set would take the planted value: a `bcc` on every message, a ceiling
+ * of a million attempts, a key of its own for the codes. An own property, a property of a class the
+ * host wrote and a getter on its prototype all still count. A `Proxy` is read through its own traps,
+ * as the host built it.
+ *
+ * The root is found by its shape, never by a property read off it: it is the prototype that has no
+ * prototype. A test that read its `constructor` could be bypassed by overwriting that property, and
+ * nothing is read from the root at all. The trade-off is that the topmost prototype of a chain the
+ * host built by hand (`Object.create(Object.create(null))`) cannot be told from the realm root, so a
+ * key held only there is absent too: put an option on the object, or on a class prototype, which
+ * always has `Object.prototype` above it.
+ *
+ * @param source - The object the host gave.
+ * @param key - The property name or index.
+ * @returns The value, or `undefined` when there is none below the root.
+ */
+export function readName(source: object, key: string | number): unknown {
+  if (types.isProxy(source) || hasOwn(source, key)) {
+    return Reflect.get(source, key)
+  }
+  for (
+    let prototype = Object.getPrototypeOf(source) as object | null;
+    prototype !== null && Object.getPrototypeOf(prototype) !== null;
+    prototype = Object.getPrototypeOf(prototype) as object | null
+  ) {
+    if (hasOwn(prototype, key)) {
+      return Reflect.get(source, key)
+    }
+  }
+  return undefined
+}
+
+/**
+ * A copy with no prototype, for what the library builds from the host's values and reads again
+ * later: a key that is not in it is then absent, where an ordinary object would answer for it with
+ * whatever the realm root holds.
+ *
+ * @param source - The object to copy.
+ * @returns A new object with the same own enumerable properties and no prototype.
+ */
+export function nullProto<T extends object>(source: T): T {
+  return Object.assign(Object.create(null) as T, source)
+}
+
+/**
+ * Copies `value` into an object with no prototype that has an own key for each of `names`, `undefined`
+ * where `value` has none: for a reader that copies what it is given into an ordinary object and
+ * then reads names the host never set, so the own key shadows what the realm root holds.
+ *
+ * @param value - What the adapter sets.
+ * @param names - Every name the reader looks for.
+ * @returns The object to hand over.
+ */
+export function withOwnKeys<T extends object>(value: T, names: readonly string[]): T {
+  return Object.assign(
+    nullProto(Object.fromEntries(names.map((name) => [name, undefined]))),
+    value
+  ) as T
+}
+
 /**
  * Reads `keys` from `source` once each, into a new plain object. A value that is `undefined` or
  * `null` is left out: an option that reads as either is not set and takes its default, the same as
@@ -24,7 +93,7 @@
  * @param refuseNull - Options whose default is the weaker security posture: a `null` stays in the
  * copy so the validation refuses it, because a `null` from a config lookup is a misconfiguration
  * and must not start the module unkeyed or non-strict.
- * @returns A plain object holding what was read, or `source` itself when it is not an object.
+ * @returns An object with no prototype holding what was read, or `source` itself when it is not an object.
  */
 export function readOptionKeys<T>(
   source: T,
@@ -34,11 +103,10 @@ export function readOptionKeys<T>(
   if (typeof source !== 'object' || source === null || Array.isArray(source)) {
     return source
   }
-  // `Reflect.get` is the same property access as `source[key]`, getters and prototypes included.
   const entries = keys
-    .map((key) => [key, Reflect.get(source, key) as unknown] as const)
+    .map((key) => [key, readName(source, key)] as const)
     .filter(([key, value]) => value !== undefined && (value !== null || refuseNull.includes(key)))
-  return Object.fromEntries(entries) as T
+  return nullProto(Object.fromEntries(entries) as object) as T
 }
 
 /** What a built-in constructor's source looks like once printed. */

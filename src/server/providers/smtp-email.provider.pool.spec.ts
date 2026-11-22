@@ -10,7 +10,7 @@ import { Test } from '@nestjs/testing'
 
 import { BymaxNotificationModule } from '../bymax-notification.module'
 
-import { baseOptions } from './__tests__/smtp-email-provider.fixtures'
+import { baseOptions, definedOnly } from './__tests__/smtp-email-provider.fixtures'
 import { SmtpEmailProvider } from './smtp-email.provider'
 import type { SmtpEmailProviderOptions } from './smtp-email.types'
 
@@ -39,7 +39,7 @@ function revokedProxy(): object {
 
 /** The transport config handed to `createTransport` on the most recent init. */
 function lastTransportConfig(): Record<string, unknown> {
-  return mockCreateTransport.mock.calls.at(-1)?.[0] as Record<string, unknown>
+  return definedOnly(mockCreateTransport.mock.calls.at(-1)?.[0])
 }
 
 beforeEach(() => {
@@ -203,7 +203,8 @@ describe('SmtpEmailProvider pool option', () => {
 
     await provider.send(baseOptions).catch(() => undefined)
 
-    expect(lastTransportConfig()).toMatchObject({ host: 'h', auth: undefined, tls: undefined })
+    expect(lastTransportConfig()).toMatchObject({ host: 'h', tls: {} })
+    expect(lastTransportConfig()).not.toHaveProperty('auth')
     expect(lastTransportConfig()).not.toHaveProperty('pool')
   })
 

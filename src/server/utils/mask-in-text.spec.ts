@@ -4,7 +4,7 @@
  * @layer utils
  */
 
-import { maskAddressTokens, maskExact } from './mask-in-text'
+import { EDGE, LOOKAHEAD, maskAddressTokens, QUOTED_UNITS, maskExact } from './mask-in-text'
 
 const mask = (recipient: string): string => `<${String(recipient.length)}>`
 
@@ -56,6 +56,187 @@ describe('maskAddressTokens', () => {
       expect(maskAddressTokens(`rejected ${a} now`, () => '#')).toBe('rejected # now')
     }
   )
+
+  it.each([
+    ['a quoted-printable byte', 'bob=40x.com'],
+    ['an RFC 2047 Q word', '=?utf-8?Q?bob=40x.com?='],
+    ['an RFC 2047 Q word with a lowercase type', '=?UTF-8?q?bob=40x.com?='],
+    ['an RFC 2047 B word', '=?utf-8?B?Ym9iQHguY29t?='],
+    ['a quoted-printable fullwidth at-sign', 'bob=EF=BC=A0x.com'],
+    ['a quoted-printable overlong at-sign', 'bob=C1=80x.com'],
+    ['a quoted-printable three-byte overlong at-sign', 'bob=E0=81=80x.com'],
+    ['an RFC 2047 Q word with a fullwidth at-sign', '=?utf-8?Q?bob=EF=BC=A0x.com?='],
+    ['an RFC 2047 Q word with an overlong at-sign', '=?utf-8?Q?bob=C1=80x.com?='],
+    ['bytes of both spellings in one run', 'bob%EF=BC%A0x.com'],
+    ['an RFC 2047 B word with a fullwidth at-sign', '=?utf-8?B?Ym9i77ygeC5jb20=?='],
+    ['an RFC 2047 B word with a two-byte overlong at-sign', '=?utf-8?B?Ym9iwYB4LmNvbQ==?='],
+    ['an RFC 2047 B word with a three-byte overlong at-sign', '=?utf-8?B?Ym9i4IGAeC5jb20=?='],
+    ['an RFC 2047 B word with a four-byte overlong at-sign', '=?utf-8?B?Ym9i8ICBgHguY29t?='],
+    [
+      'an RFC 2047 B word with bytes that are not UTF-8 before an at-sign',
+      '=?utf-8?B?Ym9i/0B4LmNvbQ==?='
+    ],
+    ['an octal escape', 'bob\\100x.com'],
+    ['a wide unicode escape', 'bob\\U00000040x.com'],
+    ['a braced hex escape', 'bob\\x{40}x.com'],
+    ['an escape followed by hex letters', 'bob\\u0040abcd.com'],
+    ['an overlong two-byte UTF-8 at-sign', 'bob%C1%80x.com'],
+    ['an overlong three-byte UTF-8 at-sign', 'bob%E0%81%80x.com'],
+    ['an overlong four-byte UTF-8 at-sign', 'bob%F0%80%81%80x.com'],
+    ['an overlong at-sign among other bytes', 'bob%41%C1%80%42x.com']
+  ])('should mask an address written as %s', (_label, address) => {
+    expect(maskAddressTokens(`rejected ${address} now`, () => '#')).toBe('rejected # now')
+  })
+
+  it('should read only the first part of a text that is longer than the bound', () => {
+    const asked: string[] = []
+    const text = `${'x'.repeat(8192)} tail@x.com`
+
+    const out = maskAddressTokens(text, (token) => {
+      asked.push(token)
+      return '#'
+    })
+
+    expect(out).toBe(`${'x'.repeat(8192)}…`)
+    expect(asked).toStrictEqual([])
+  })
+
+  it.each([
+    ['a quoted local part that ends at the bound', ' '.repeat(8179) + '"Alice Smith"@example.com'],
+    [
+      'a plain address that starts a few characters before the bound',
+      ' '.repeat(8190) + 'alice@example.com'
+    ],
+    [
+      'a quoted local part that the bound cuts in two',
+      ' '.repeat(8170) + '"Alice Smith"@example.com'
+    ]
+  ])('should publish no front half of an address that %s', (_name, text) => {
+    const out = maskAddressTokens(text, () => '#')
+
+    expect(out).not.toMatch(/Alice|alice|al\b/u)
+    expect(out.endsWith('…')).toBe(true)
+  })
+
+  it('should mask whole an address that starts inside the bound and ends past it', () => {
+    const text = `${' '.repeat(8185)}bob@example.com and more`
+
+    const out = maskAddressTokens(text, () => '#')
+
+    expect(out).toBe(`${' '.repeat(8185)}#…`)
+  })
+
+  it('should leave out the front of an address whose quote opens just before the end of what was read', () => {
+    // A run of 1,100 characters that starts at 8,105, inside the bound, and a quoted local part whose
+    // quote opens at 9,205 and closes at 9,217, past the end of what was read (9,216): the quoted
+    // piece does not close in what is read, so the token is cut at its space, short of the at-sign.
+    const text = `${' '.repeat(8105)}${'z'.repeat(1100)}"alice smith"@example.com`
+
+    const out = maskAddressTokens(text, () => '#')
+
+    expect(out).not.toMatch(/alice|zzz{10}"/u)
+  })
+
+  it('should read a quoted piece of as many escaped pairs as the constant allows as one token, and no more', () => {
+    const piece = (units: number): string => `"${'\\ '.repeat(units)}"@example.com`
+
+    expect(maskAddressTokens(piece(QUOTED_UNITS), () => '#')).toBe('#')
+    expect(maskAddressTokens(piece(QUOTED_UNITS + 1), () => '#')).not.toBe('#')
+  })
+
+  it('should leave out the front of an address whose quoted piece is made of escaped pairs and closes beyond what was read', () => {
+    // The quote opens 501 characters before the end of what was read (9,216) and its body, 300 escaped
+    // spaces, closes past it: the token is cut at the first space, far from the end by a count of one
+    // character per unit, and near it by a count of two.
+    const text = `${' '.repeat(8100)}${'z'.repeat(615)}"alice ${'\\ '.repeat(300)}"@example.com`
+
+    const out = maskAddressTokens(text, () => '#')
+
+    expect(out).not.toMatch(/alice/u)
+  })
+
+  it.each([
+    ['ends one past the edge', 1, false],
+    ['ends exactly at the edge', 0, true]
+  ])('should %s of what was read: kept is %s', (_name, past, kept) => {
+    // What is read is 9,216 characters and the edge is EDGE before its end. The run starts at 8,100.
+    const length = 9216 - EDGE - 8100 + past
+    const text = `${' '.repeat(8100)}${'z'.repeat(length)} ${'y'.repeat(1200)}`
+
+    const out = maskAddressTokens(text, () => '#')
+
+    expect(out.includes('z'.repeat(length))).toBe(kept)
+  })
+
+  it('should leave out a token that starts exactly at the bound', () => {
+    const text = `${' '.repeat(8192)}qqqqq ${'y'.repeat(1200)}`
+
+    expect(maskAddressTokens(text, () => '#')).not.toContain('q')
+  })
+
+  it('should keep a token that runs to the end of a text that fits in what is read', () => {
+    const text = 'z'.repeat(8500)
+
+    expect(maskAddressTokens(text, () => '#')).toBe(`${text}…`)
+  })
+
+  it('should leave out the front of an address whose quoted piece holds escaped astral characters', () => {
+    // An escaped astral character is a backslash and two UTF-16 code units, three in all, so the
+    // piece is longer in what the text is cut by than twice its units.
+    const text = `${' '.repeat(8100)}${'x'.repeat(250)}"Alice ${'\\😀'.repeat(294)}"@example.com`
+
+    const out = maskAddressTokens(text, () => '#')
+
+    expect(out).not.toMatch(/Alice/u)
+  })
+
+  it('should leave out the front of an address whose longest quoted piece that still breaks the token closes one past what was read', () => {
+    // The quote opens at 8,317, then a space, then 299 escaped astral characters and the closing
+    // quote: 900 code units, so the closing quote is at 9,216, one past what was read. The quoted
+    // piece cannot close, the token is cut at the space after the quote and ends at 8,318, which is
+    // 898 before the end of what was read: it is inside the zone that is left out, by one.
+    const text = `${' '.repeat(8100)}${'x'.repeat(217)}" ${'\\😀'.repeat(299)}"@example.com`
+
+    const out = maskAddressTokens(text, () => '#')
+
+    expect(out).not.toContain('xxx')
+  })
+
+  it('should read a quoted piece of the most units, each an escaped astral character, as one token', () => {
+    const piece = `"${'\\😀'.repeat(QUOTED_UNITS)}"@example.com`
+
+    expect(maskAddressTokens(piece, () => '#')).toBe('#')
+  })
+
+  it('should keep the zone it leaves out inside what is read past the bound', () => {
+    expect(EDGE).toBeLessThan(LOOKAHEAD)
+  })
+
+  it('should leave out a token that runs to the end of what was read', () => {
+    const out = maskAddressTokens('x'.repeat(20_000), () => '#')
+
+    expect(out).toBe('…')
+  })
+
+  it('should return a text of exactly the bound as it is, with nothing added', () => {
+    const text = 'x'.repeat(8192)
+
+    expect(maskAddressTokens(text, () => '#')).toBe(text)
+  })
+
+  it('should keep a wide escape that is not a code point in place, so it cannot join its neighbours', () => {
+    expect(maskAddressTokens('%4\\U001100000', () => '#')).toBe('%4\\U001100000')
+  })
+
+  it('should leave a wide escape that is not a code point as it was written', () => {
+    expect(maskAddressTokens('bob\\U00110000x.com', () => '#')).toBe('bob\\U00110000x.com')
+  })
+
+  it('should keep the whole of a text that is exactly at the bound', () => {
+    const text = 'x'.repeat(8191) + '@'
+
+    expect(maskAddressTokens(text, () => '#')).toBe('#')
+  })
 
   it('should mask a token that is still changing after the decoding limit', () => {
     const layered = `x%${'25'.repeat(9)}41`

@@ -53,10 +53,12 @@ const MAX_RETRIES_NAME = 'MaxRetriesPerRequestError'
 /** Links of a cause chain read; a provider or SDK chooses how deep its chain is. */
 const MAX_LINKS = 8
 
+import { readName } from './read-options'
+
 /** Reads one property, `undefined` when the read throws: the value comes from code that is not ours. */
 function read(value: unknown, key: string): unknown {
   try {
-    return Reflect.get(Object(value), key)
+    return readName(Object(value), key)
   } catch {
     return undefined
   }

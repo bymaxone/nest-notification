@@ -57,6 +57,20 @@ export interface OtpDispatchPayload {
   userId?: string
 }
 
+/** The fields of a dispatch request and of an OTP payload, read by name so the root prototype is never asked. */
+const DISPATCH_KEYS = ['channel', 'tenantId', 'payload'] as const
+const OTP_PAYLOAD_KEYS = [
+  'action',
+  'recipient',
+  'purpose',
+  'userId',
+  'code',
+  'deliverVia',
+  'emailTemplate',
+  'emailData',
+  'locale'
+] as const satisfies readonly (keyof OtpDispatchPayload)[]
+
 /** Discriminated dispatch input, one variant per channel. */
 export type DispatchInput =
   | { channel: 'email'; tenantId: string; payload: EmailDispatchPayload }
@@ -91,7 +105,10 @@ export class NotificationService implements OnModuleInit {
    */
   async dispatch(input: DispatchInput): Promise<DispatchResult> {
     // The request is read once: the channel that routes is the channel whose payload is used.
-    const { channel, tenantId, payload } = input
+    const { channel, tenantId, payload } = copyByName(
+      input,
+      DISPATCH_KEYS
+    ) as unknown as DispatchInput
     if (channel === 'email') {
       return { channel: 'email', messageId: await this.dispatchEmail(tenantId, payload) }
     }
@@ -213,7 +230,7 @@ export class NotificationService implements OnModuleInit {
       emailTemplate,
       emailData,
       locale
-    } = payload
+    } = copyByName(payload, OTP_PAYLOAD_KEYS) as unknown as OtpDispatchPayload
     const run = readOtpAction('NotificationService', action)
     const ref = {
       tenantId,

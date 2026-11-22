@@ -8,7 +8,7 @@
  * would be checked as one and delivered as the other, so the fields are copied before anything runs.
  */
 
-import { copyByName } from '../utils/bounded-list'
+import { copyByName, refuseInput } from '../utils/bounded-list'
 import { assertDeliverVia } from '../utils/otp-input'
 import type {
   OtpConsumeInput,
@@ -62,9 +62,16 @@ export type UnlistedVerifyKey = Exclude<keyof OtpVerifyInput, (typeof VERIFY_KEY
  *
  * @param input - The input as the caller gave it.
  * @returns A plain copy that the rest of the call uses.
+ * @throws NotificationException `INVALID_SCOPE_IDENTIFIER` for a `code` that is not a string. The
+ *   refusal names the field and never the value: a number, an object or a `String` would otherwise
+ *   reach the digest or the comparison, where a platform error quotes what it was given.
  */
 export function readVerifyInput(input: OtpVerifyInput): OtpVerifyInput {
-  return copyByName(input, VERIFY_KEYS) as unknown as OtpVerifyInput
+  const copy = copyByName(input, VERIFY_KEYS)
+  if (typeof copy.code !== 'string') {
+    throw refuseInput('OtpService', 'code', 'expected a string')
+  }
+  return copy as unknown as OtpVerifyInput
 }
 
 /** Every field of {@link OtpConsumeInput} and of {@link OtpStatusInput}, read by name. */

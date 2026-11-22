@@ -8,7 +8,13 @@
  * not set. The options whose default is the weaker transport or login posture refuse a `null`.
  */
 
-import { assertOptionsObject, namesOf, readOptionKeys } from '../utils/read-options'
+import {
+  assertOptionsObject,
+  namesOf,
+  nullProto,
+  readName,
+  readOptionKeys
+} from '../utils/read-options'
 import {
   SMTP_CREDENTIAL_KEYS,
   SMTP_OPTION_KEYS,
@@ -28,7 +34,7 @@ function isArrayLike(value: object): boolean {
   return (
     ArrayBuffer.isView(value) ||
     value instanceof ArrayBuffer ||
-    typeof (value as { length?: unknown }).length === 'number'
+    typeof readName(value, 'length') === 'number'
   )
 }
 
@@ -47,7 +53,10 @@ function readLimits(
     if (typeof pool !== 'object' || isArrayLike(pool)) {
       return undefined
     }
-    return [pool.maxConnections, pool.maxMessages]
+    return [
+      readName(pool, 'maxConnections') as number | undefined,
+      readName(pool, 'maxMessages') as number | undefined
+    ]
   } catch {
     return undefined
   }
@@ -82,10 +91,11 @@ export function readPool(pool: SmtpPoolOptions | undefined): SmtpPoolOptions | u
       )
     }
   }
-  return {
+  // No prototype: a limit that is not set is absent when the transport is built, whatever the root holds.
+  return nullProto({
     ...(maxConnections === undefined ? {} : { maxConnections }),
     ...(maxMessages === undefined ? {} : { maxMessages })
-  }
+  })
 }
 /**
  * Refuses a key of `tls` that the provider does not forward. Dropping it would leave the session
@@ -146,9 +156,9 @@ function isTlsEntry(field: 'pem' | 'buf'): (value: unknown) => boolean {
     if (typeof item !== 'object' || item === null || ArrayBuffer.isView(item)) {
       return material(item)
     }
-    const passphrase: unknown = Reflect.get(item, 'passphrase')
+    const passphrase: unknown = readName(item, 'passphrase')
     return (
-      material(Reflect.get(item, field)) &&
+      material(readName(item, field)) &&
       (passphrase === undefined || typeof passphrase === 'string')
     )
   }
@@ -165,7 +175,7 @@ function isTlsEntry(field: 'pem' | 'buf'): (value: unknown) => boolean {
  * @param field - The property that holds the material: `pem` or `buf`.
  */
 function copyTlsEntries(tls: object, name: 'key' | 'pfx', field: 'pem' | 'buf'): void {
-  const value: unknown = Reflect.get(tls, name)
+  const value: unknown = readName(tls, name)
   if (!Array.isArray(value)) {
     return
   }
@@ -178,10 +188,10 @@ function copyTlsEntries(tls: object, name: 'key' | 'pfx', field: 'pem' | 'buf'):
       if (typeof item !== 'object' || item === null || ArrayBuffer.isView(item)) {
         return item
       }
-      const passphrase: unknown = Reflect.get(item, 'passphrase')
+      const passphrase: unknown = readName(item, 'passphrase')
       return passphrase === undefined
-        ? { [field]: Reflect.get(item, field) }
-        : { [field]: Reflect.get(item, field), passphrase }
+        ? nullProto({ [field]: readName(item, field) })
+        : nullProto({ [field]: readName(item, field), passphrase })
     })
   )
 }
@@ -216,7 +226,7 @@ function assertTlsValues(tls: unknown): void {
     return
   }
   for (const [key, accepts, expected] of TLS_VALUE_RULES) {
-    const value: unknown = Reflect.get(tls, key)
+    const value: unknown = readName(tls, key)
     if (value !== undefined && !accepts(value)) {
       throw new Error(`SmtpEmailProvider: tls.${key} must be ${expected}`)
     }
@@ -235,7 +245,7 @@ export function readSmtpOptions(options: SmtpEmailProviderOptions): SmtpEmailPro
   assertOptionsObject('SmtpEmailProvider', options)
   const own = readOptionKeys(options, SMTP_OPTION_KEYS, SMTP_WEAKER_WHEN_UNSET)
   for (const key of SMTP_WEAKER_WHEN_UNSET) {
-    if (Reflect.get(own, key) === null) {
+    if (readName(own, key) === null) {
       throw new Error(`SmtpEmailProvider: ${key} must not be null`)
     }
   }
@@ -245,10 +255,9 @@ export function readSmtpOptions(options: SmtpEmailProviderOptions): SmtpEmailPro
   if (own.tls !== undefined) {
     refuseUnknownTlsKeys(own.tls)
     own.tls = readOptionKeys(own.tls, SMTP_TLS_KEYS)
-    if (typeof own.tls === 'object' && !Array.isArray(own.tls)) {
-      copyTlsEntries(own.tls, 'key', 'pem')
-      copyTlsEntries(own.tls, 'pfx', 'buf')
-    }
+    // Read by name, so a `tls` that is not an object has no `key` or `pfx` and nothing is copied.
+    copyTlsEntries(own.tls as object, 'key', 'pem')
+    copyTlsEntries(own.tls as object, 'pfx', 'buf')
     assertTlsValues(own.tls)
   }
   return own

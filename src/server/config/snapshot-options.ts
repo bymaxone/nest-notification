@@ -21,7 +21,13 @@ import type {
   OtpChannelOptions,
   OtpPurposeConfig
 } from '../interfaces/notification-module-options.interface'
-import { isPlainOrClassInstance, namesOf, readOptionKeys } from '../utils/read-options'
+import {
+  isPlainOrClassInstance,
+  namesOf,
+  nullProto,
+  readName,
+  readOptionKeys
+} from '../utils/read-options'
 
 /** A default tag of the email channel. */
 type DefaultTag = NonNullable<EmailChannelOptions['defaultTags']>[number]
@@ -126,10 +132,10 @@ function readPerPurpose<T>(perPurpose: T): T {
     (key) =>
       [
         key,
-        readOptionKeys(Reflect.get(perPurpose, key) as Partial<OtpPurposeConfig>, PURPOSE_KEYS)
+        readOptionKeys(readName(perPurpose, key) as Partial<OtpPurposeConfig>, PURPOSE_KEYS)
       ] as const
   )
-  return Object.fromEntries(entries) as T
+  return nullProto(Object.fromEntries(entries) as object) as T
 }
 
 /**

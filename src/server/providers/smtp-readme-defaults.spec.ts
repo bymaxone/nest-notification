@@ -6,7 +6,7 @@
 
 import { readmeTable, unquote } from '../config/__tests__/readme-tables'
 
-import { baseOptions } from './__tests__/smtp-email-provider.fixtures'
+import { baseOptions, definedOnly } from './__tests__/smtp-email-provider.fixtures'
 import { SmtpEmailProvider } from './smtp-email.provider'
 
 // `mock`-prefixed names are allowed inside the hoisted jest.mock factory.
@@ -37,7 +37,7 @@ async function transportFor(
     sendMail: jest.fn().mockResolvedValue({ messageId: '<a>' })
   })
   await new SmtpEmailProvider(options).send(baseOptions)
-  return mockCreateTransport.mock.calls.at(-1)?.[0] as Record<string, unknown>
+  return definedOnly(mockCreateTransport.mock.calls.at(-1)?.[0])
 }
 
 /** Converts a README duration such as `10s` to milliseconds. */

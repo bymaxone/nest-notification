@@ -47,7 +47,11 @@ export interface EmailAttachment {
    * Resend as its content id.
    */
   cid?: string
-  /** `'inline'` shows the attachment in the message body; `'attachment'` (the default) lists it. SMTP only: Resend has no such field and ignores it. */
+  /**
+   * `'inline'` shows the attachment in the message body; `'attachment'` (the default) lists it. SMTP
+   * sends it as the `Content-Disposition`. Resend has no such field: an attachment with a `cid` is
+   * inline there and one without is not, so it refuses a value that disagrees with `cid`.
+   */
   contentDisposition?: 'attachment' | 'inline'
 }
 
