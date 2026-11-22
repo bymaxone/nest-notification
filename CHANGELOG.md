@@ -11,6 +11,8 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 ## [Unreleased]
 
+## [1.4.24] - 2026-11-22
+
 ### Fixed
 
 - **The `Object.prototype` check could be blinded by a built-in replaced after the library was imported.** The check

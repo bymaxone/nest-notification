@@ -178,7 +178,7 @@ export function assertStandardRealmRoot(owner: string): void {
     throw refuseInput(
       owner,
       'Object.prototype',
-      `holds ${String(count)} key(s) outside the runtime's standard set, so nothing is sent`
+      `holds ${count} key(s) outside the runtime's standard set, so nothing is sent`
     )
   }
 }

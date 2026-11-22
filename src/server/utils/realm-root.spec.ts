@@ -467,6 +467,7 @@ describe('a built-in replaced after the module was imported', () => {
     ['Array.prototype.at', Array.prototype, 'at', () => undefined],
     ['Array.prototype[Symbol.iterator]', Array.prototype, Symbol.iterator, function* () {}],
     ['String.prototype.endsWith', String.prototype, 'endsWith', () => true],
+    ['String', globalThis, 'String', () => ''],
     ['Function.prototype.call', Function.prototype, 'call', () => true],
     ['Function.prototype.bind', Function.prototype, 'bind', () => () => true],
     [
@@ -533,4 +534,25 @@ describe('a built-in replaced after the module was imported', () => {
       expect(caught).not.toBe('did not refuse')
     }
   )
+
+  it('should write the count of the refusal without asking the global String', () => {
+    const original = Object.getOwnPropertyDescriptor(globalThis, 'String') as PropertyDescriptor
+    Object.defineProperty(Object.prototype, 'plantedAfterImport', {
+      value: 1,
+      configurable: true,
+      enumerable: true
+    })
+    Object.defineProperty(globalThis, 'String', { ...original, value: () => 'replaced' })
+    let response: unknown
+    try {
+      assertStandardRealmRoot('Owner')
+    } catch (error) {
+      response = (error as { getResponse?: () => unknown }).getResponse?.()
+    } finally {
+      Object.defineProperty(globalThis, 'String', original)
+      Reflect.deleteProperty(Object.prototype, 'plantedAfterImport')
+    }
+
+    expect(JSON.stringify(response)).toContain('holds 1 key(s)')
+  })
 })
