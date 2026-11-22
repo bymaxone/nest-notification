@@ -212,6 +212,22 @@ describe('maskAddressTokens', () => {
     expect(EDGE).toBeLessThan(LOOKAHEAD)
   })
 
+  it.each([
+    ['a soft break in the local part', 'rejected bo=\r\nb@example.com now'],
+    ['a soft break in the domain', 'rejected bob@exam=\r\nple.com now'],
+    ['a soft break with a bare line feed', 'rejected bo=\nb@example.com now'],
+    ['a fold inside a quoted local part', 'rejected "first\r\n last"@example.com now'],
+    ['a fold with a bare line feed', 'rejected "first\n last"@example.com now']
+  ])('should read %s as one address and mask it whole', (_name, text) => {
+    const out = maskAddressTokens(text, () => '#')
+
+    expect(out).toBe('rejected # now')
+  })
+
+  it('should leave a line break that folds nothing where it is', () => {
+    expect(maskAddressTokens('line one\r\nline two', () => '#')).toBe('line one\r\nline two')
+  })
+
   it('should leave out a token that runs to the end of what was read', () => {
     const out = maskAddressTokens('x'.repeat(20_000), () => '#')
 
