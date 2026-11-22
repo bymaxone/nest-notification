@@ -9,8 +9,8 @@
  * which host it is sent to, or whether the certificate is checked. An object with no prototype is not
  * enough, because the copy has one. An own key that is `undefined` is copied too, and it shadows the
  * root: every name below is an own key of what Nodemailer receives, set to our value or to
- * `undefined`. The lists come from the sources of the pinned Nodemailer, and a spec reads those sources
- * and fails when a name they read is missing here.
+ * `undefined`. A spec reads the sources of the Nodemailer the tests install and fails when a name it reads from a
+ * message, an attachment, the transport options or the credentials is missing here.
  */
 
 import { withOwnKeys } from '../utils/read-options'
