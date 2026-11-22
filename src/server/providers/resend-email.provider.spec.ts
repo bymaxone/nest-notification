@@ -176,6 +176,17 @@ describe('ResendEmailProvider', () => {
     expect(caught.code).toBe('EUNAVAILABLE')
   })
 
+  it('should give a withheld failure no code of its own when the provider sent none', async () => {
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    mockSend.mockResolvedValue({ data: null, error: { message: 'bad request', statusCode: 422 } })
+
+    const caught = (await new ResendEmailProvider({ apiKey: 'k' })
+      .send({ ...baseOptions, publishProviderText: false })
+      .catch((error: unknown) => error)) as Error
+
+    expect('code' in caught).toBe(false)
+  })
+
   it('should log and throw a failure with the address the provider quoted masked', async () => {
     const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
     mockSend.mockResolvedValue({
