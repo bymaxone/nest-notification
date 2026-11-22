@@ -42,7 +42,7 @@ unknown` keeps its brackets). The at-sign is `@`, fullwidth `\uff20`, small `\uf
   address tokens the same way (`[address]`). Out of scope, with the reason: the at-sign spelled as a word or
   with spaces (`bob [at] x.com`, `bob (at) x.com`, `bob @ x.com`), which no mail system or SDK writes into an error and
   which cannot be told from prose without reading its meaning. The text is bounded before it is read, since its length
-  is the provider's to choose; a token that starts inside the bound is read to its end and masked whole, and one that starts past it, or that runs to the end of what was read, is left out, so the bound never publishes the front half of an address.
+  is the provider's to choose; a token that starts inside the bound is read to its end and masked whole, and one that starts past it, or that runs to the end of what was read while more text follows, is left out, so the bound never publishes the front half of an address.
 - **A key planted on `Object.prototype` no longer reaches an option or an input.** Every option, every input of
   `send()`, the OTP calls and `dispatch()`, the provider options and the TLS options were read by property access, which
   follows the prototype chain to the realm root, so code that ran first could set `Object.prototype.bcc` (a copy of every
