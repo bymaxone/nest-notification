@@ -244,6 +244,9 @@ describe('the refusal names the adapter that refused, at every point that checks
     expect(await boundaryOf(() => new SmtpEmailProvider({ host: 'h' }).send(MESSAGE))).toBe(
       'SmtpEmailProvider'
     )
+    // The key is planted again while the transport is built, so the check that refuses is the one
+    // before `transport.verify`, and not the one that opens `verify()`.
+    Reflect.deleteProperty(Object.prototype, 'anything')
     expect(await boundaryOf(() => new SmtpEmailProvider({ host: 'h' }).verify())).toBe(
       'SmtpEmailProvider'
     )
