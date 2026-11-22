@@ -43,8 +43,8 @@ unknown` keeps its brackets). The at-sign is `@`, fullwidth `\uff20`, small `\uf
   chain is too large to examine, still carries no `cause` at all. The Resend and SMTP adapters copy the provider's `code` to the error they throw and to the log line, and drop it when it holds a value declared secret (`auditRedactValues`, or `redactValues` on a provider's own send). Their failure log line and thrown message mask
   address tokens the same way (`[address]`). Out of scope, with the reason: the at-sign spelled as a word or
   with spaces (`bob [at] x.com`, `bob (at) x.com`, `bob @ x.com`), which no mail system or SDK writes into an error and
-  which cannot be told from prose without reading its meaning. The text is read to its first 8,192 characters, and the
-  rest is dropped, since its length is the provider's to choose.
+  which cannot be told from prose without reading its meaning. The text is bounded before it is read, since its length
+  is the provider's to choose.
 - **A key planted on `Object.prototype` no longer reaches an option or an input.** Every option, every input of
   `send()`, the OTP calls and `dispatch()`, the provider options and the TLS options were read by property access, which
   follows the prototype chain to the realm root, so code that ran first could set `Object.prototype.bcc` (a copy of every
