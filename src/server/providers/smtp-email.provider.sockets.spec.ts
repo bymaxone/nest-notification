@@ -50,7 +50,13 @@ const timers: NodeJS.Timeout[] = []
 const LATER_TICK_MS = 3
 
 function plant(name: string, value: unknown): void {
-  Object.defineProperty(Object.prototype, name, { value, configurable: true, writable: true })
+  // As plain assignment does it: enumerable, so a merge that walks `for (key in source)` sees it.
+  Object.defineProperty(Object.prototype, name, {
+    value,
+    configurable: true,
+    writable: true,
+    enumerable: true
+  })
   planted.push(name)
 }
 
@@ -236,4 +242,94 @@ describe('the connection the adapter opens itself', () => {
       /ETIMEDOUT|timed out|timeout/iu
     )
   })
+})
+
+/**
+ * The `Object.prototype` of the realm Node's own modules run in. A test runs in a sandbox of its own,
+ * where `Object.prototype` is another object, so a key planted there never reaches Node's emitter;
+ * the prototype of `EventEmitter` belongs to Node, and its parent is the root Node's code sees.
+ */
+const NODE_ROOT = Object.getPrototypeOf(
+  (
+    jest.requireActual<typeof import('node:events')>('node:events').EventEmitter as {
+      prototype: object
+    }
+  ).prototype
+) as object
+const plantedOnNodeRoot: string[] = []
+
+function plantOnNodeRoot(name: string, value: unknown): void {
+  Object.defineProperty(NODE_ROOT, name, {
+    value,
+    configurable: true,
+    writable: true,
+    enumerable: true
+  })
+  plantedOnNodeRoot.push(name)
+}
+
+afterEach(() => {
+  for (const name of plantedOnNodeRoot.splice(0)) {
+    Reflect.deleteProperty(NODE_ROOT, name)
+  }
+})
+
+describe('an event Node emits on the socket, with a string planted under its name on a later tick', () => {
+  const EVENTS = [
+    'lookup',
+    'connectionAttempt',
+    'connectionAttemptFailed',
+    'connectionAttemptTimeout',
+    'ready',
+    'keylog',
+    'session',
+    'OCSPResponse'
+  ]
+
+  /** Plants `name` the moment the real connection has been started, as a later request would. */
+  function plantOnceConnecting(
+    name: string,
+    target: { connect: (...args: never[]) => unknown },
+    method: 'connect'
+  ): void {
+    const original = target[method]
+    jest.spyOn(target, method).mockImplementation(function (this: unknown, ...args: never[]) {
+      const started = original.apply(this, args)
+      plantOnNodeRoot(name, 'x')
+      return started
+    } as never)
+  }
+
+  it.each(EVENTS)(
+    'should deliver over a plain connection to a hostname, whatever %s is planted',
+    async (name) => {
+      relay = await startRelay()
+      plantOnceConnecting(name, net.Socket.prototype as never, 'connect')
+
+      await new SmtpEmailProvider({ host: 'localhost', port: relay.port }).send(MESSAGE)
+
+      expect(relay.messages).toHaveLength(1)
+    }
+  )
+
+  it.each(EVENTS)(
+    'should deliver over implicit TLS to a hostname, whatever %s is planted',
+    async (name) => {
+      relay = await startRelay({ certificate, implicitTls: true })
+      plantOnceConnecting(
+        name,
+        jest.requireActual<typeof import('node:tls')>('node:tls') as never,
+        'connect'
+      )
+
+      await new SmtpEmailProvider({
+        host: 'localhost',
+        port: relay.port,
+        secure: true,
+        tls: { ca: certificate.cert }
+      }).send(MESSAGE)
+
+      expect(relay.messages).toHaveLength(1)
+    }
+  )
 })

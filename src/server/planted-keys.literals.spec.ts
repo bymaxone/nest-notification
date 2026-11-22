@@ -111,10 +111,16 @@ describe('the SMTP message and transport', () => {
       attachments: [{ filename: 'a.txt', content: 'eA==' }]
     })
 
-    const message = mockSendMail.mock.calls[0]?.[0] as { attachments: object[] }
+    const message = mockSendMail.mock.calls[0]?.[0] as { to: unknown; attachments: object[] }
     for (const key of Object.keys(NODEMAILER_KEYS)) {
       expect(Reflect.get(message, key)).toBeUndefined()
     }
+    // The recipient is the one asked for, and the attachment is the one given, whatever is planted.
+    expect(message.to).toBe('a@x.com')
+    expect(message.attachments).toHaveLength(1)
+    expect(Reflect.get(message.attachments[0] ?? {}, 'filename')).toBe('a.txt')
+    expect(Reflect.get(message.attachments[0] ?? {}, 'content')).toBe('eA==')
+    expect(Reflect.get(message.attachments[0] ?? {}, 'encoding')).toBe('base64')
   })
 
   it('should not scrub a planted user or password out of a relay error', async () => {

@@ -302,7 +302,7 @@ describe('the transport options the SMTP adapter gives Nodemailer', () => {
       transporter = real(config) as never
       return transporter
     }) as never)
-    plantKeys({ service: 'gmail', proxy: 'http://evil.test:3128' })
+    plantKeys({ service: 'gmail', proxy: 'http://evil.test:3128', socket: { planted: true } })
 
     await new SmtpEmailProvider({ host: '127.0.0.1', port: 1 }).send(MESSAGE).catch(() => undefined)
 
@@ -311,6 +311,7 @@ describe('the transport options the SMTP adapter gives Nodemailer', () => {
     expect(options?.port).toBe(1)
     expect(options?.service).toBeUndefined()
     expect(options?.proxy).toBeUndefined()
+    expect(options?.socket).toBeUndefined()
   })
 
   it('should build the transport Nodemailer builds for the same plain configuration', async () => {

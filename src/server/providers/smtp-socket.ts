@@ -48,6 +48,46 @@ function tlsOptions(plan: SmtpSocketPlan): tls.ConnectionOptions {
 }
 
 /**
+ * Events Node emits on a socket that this adapter does not use. Emitting an event with no listener
+ * reads the name from the emitter's table of listeners, which can reach `Object.prototype`: a string
+ * planted there as `lookup` is read by Node's own emitter on a later tick and throws, uncaught. A
+ * listener of its own for each of them keeps those reads on the socket.
+ */
+const QUIET_EVENTS = [
+  'lookup',
+  'connectionAttempt',
+  'connectionAttemptFailed',
+  'connectionAttemptTimeout',
+  'ready',
+  'keylog',
+  'session',
+  'OCSPResponse'
+] as const
+
+/** Gives a socket a listener that does nothing for each event of {@link QUIET_EVENTS}. */
+function quiet<T extends net.Socket>(socket: T): T {
+  for (const event of QUIET_EVENTS) {
+    socket.on(event, () => undefined)
+  }
+  return socket
+}
+
+/**
+ * Starts the connection of a plan. A plain connection is made on a socket that has its listeners
+ * before it connects; a TLS one gets them in the same run as `tls.connect`, before any event can
+ * fire, since Node emits them on a later tick.
+ *
+ * @param plan - The resolved plan.
+ * @returns The socket, connecting.
+ */
+function connect(plan: SmtpSocketPlan): net.Socket {
+  if (plan.secure) {
+    return quiet(tls.connect(tlsOptions(plan)))
+  }
+  return quiet(new net.Socket()).connect(nullProto({ host: plan.host, port: plan.port }))
+}
+
+/**
  * Opens the socket, and answers once it is connected (and, for implicit TLS, secured) or has failed.
  *
  * @param plan - The resolved plan.
@@ -57,9 +97,7 @@ function open(plan: SmtpSocketPlan, answer: SocketAnswer): void {
   let socket: net.Socket
   try {
     assertStandardRealmRoot('SmtpEmailProvider')
-    socket = plan.secure
-      ? tls.connect(tlsOptions(plan))
-      : net.connect(nullProto({ host: plan.host, port: plan.port }))
+    socket = connect(plan)
   } catch (error) {
     setImmediate(answer, error as Error)
     return

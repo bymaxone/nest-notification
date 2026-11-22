@@ -52,7 +52,7 @@ export function makeCertificate(): TestCertificate {
         '-subj',
         '/CN=127.0.0.1',
         '-addext',
-        'subjectAltName=IP:127.0.0.1',
+        'subjectAltName=IP:127.0.0.1,DNS:localhost',
         '-keyout',
         join(directory, 'key.pem'),
         '-out',
