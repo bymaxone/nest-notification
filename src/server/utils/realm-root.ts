@@ -309,8 +309,19 @@ const BASELINE: ReadonlyArray<readonly [object, readonly PropertyKey[]]> = [
 ]
 
 /**
- * What stands for a member: its value, or its getter when it is an accessor (a flag of a regular
- * expression, the `size` of a collection). Called while the module loads.
+ * The field of a member's descriptor that stands for it: `value`, or `get` for an accessor (a flag of
+ * a regular expression, the `size` of a collection). Called while the module loads, so it asks the
+ * descriptor what it owns: a name planted on `Object.prototype` before the import must not reach it.
+ *
+ * @param descriptor - The descriptor of a member.
+ * @returns `value` for a data property, `get` for an accessor.
+ */
+function fieldOf(descriptor: PropertyDescriptor): string {
+  return hasOwn(descriptor, 'value') ? 'value' : 'get'
+}
+
+/**
+ * What stands for a member: its value, or its getter when it is an accessor.
  *
  * @param holder - The object that holds the member.
  * @param name - The member's name, one the holder has.
@@ -318,7 +329,7 @@ const BASELINE: ReadonlyArray<readonly [object, readonly PropertyKey[]]> = [
  */
 function memberOf(holder: object, name: PropertyKey): unknown {
   const descriptor = descriptorOf(holder, name) as PropertyDescriptor
-  return descriptor.value ?? descriptor.get
+  return readField(descriptor, fieldOf(descriptor))
 }
 
 /** Each member of {@link BASELINE} that was there at load, as its holder and its name. */
@@ -336,7 +347,7 @@ const MEMBER_VALUES: readonly unknown[] = BASELINE_MEMBERS.map(([holder, name]) 
 )
 /** Which field of the descriptor holds each member: `value`, or `get` for an accessor. */
 const MEMBER_FIELDS: readonly string[] = BASELINE_MEMBERS.map(([holder, name]) =>
-  (descriptorOf(holder, name) as PropertyDescriptor).value === undefined ? 'get' : 'value'
+  fieldOf(descriptorOf(holder, name) as PropertyDescriptor)
 )
 const MEMBER_COUNT = MEMBER_HOLDERS.length
 

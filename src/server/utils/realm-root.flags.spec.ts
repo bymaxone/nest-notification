@@ -6,7 +6,7 @@
  * @layer infrastructure
  */
 
-import { assertStandardRealmRoot } from './realm-root'
+import { assertStandardRealmRoot, BASELINE_MEMBERS } from './realm-root'
 
 type Loaded = typeof import('./realm-root')
 
@@ -161,6 +161,42 @@ describe('a built-in the runtime does not have', () => {
         )
       ).toBe(false)
       expect(thrown(() => loaded?.assertStandardRealmRoot('Owner'))).toBeUndefined()
+    }
+  )
+})
+
+describe('a name planted on Object.prototype before the module loads', () => {
+  const PLANTS: ReadonlyArray<readonly [string, PropertyDescriptor]> = [
+    ['a data property called value', { value: 'planted', configurable: true }],
+    [
+      'a getter called value that throws',
+      {
+        get: () => {
+          throw new Error('planted getter ran')
+        },
+        configurable: true
+      }
+    ]
+  ]
+
+  it.each(PLANTS)(
+    'should not change the baseline when it is %s, once the name is removed',
+    (_name, plant) => {
+      let loaded: Loaded | undefined
+      jest.isolateModules(() => {
+        // The module's own imports load first: a planted name would break the libraries they pull in.
+        require('./bounded-list')
+        require('./captured-crypto')
+        try {
+          Object.defineProperty(Object.prototype, 'value', plant)
+          loaded = require('./realm-root') as Loaded
+        } finally {
+          Reflect.deleteProperty(Object.prototype, 'value')
+        }
+      })
+
+      expect(thrown(() => loaded?.assertStandardRealmRoot('Owner'))).toBeUndefined()
+      expect(loaded?.BASELINE_MEMBERS.length).toBe(BASELINE_MEMBERS.length)
     }
   )
 })

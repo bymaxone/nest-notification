@@ -494,7 +494,7 @@ describe('descriptors read while the root holds an accessor named like a descrip
 })
 
 describe('a built-in replaced after the module was imported', () => {
-  /** What lies in favour of a clean root, for the built-ins the check could once have called. */
+  /** Replacements that falsely report a clean root, and that the check must not be bypassed by. */
   const LIARS: ReadonlyArray<readonly [string, object, PropertyKey, unknown]> = [
     ['Object.getOwnPropertyNames', Object, 'getOwnPropertyNames', () => []],
     ['Object.hasOwn', Object, 'hasOwn', () => false],
