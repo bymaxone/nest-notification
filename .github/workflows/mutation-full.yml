@@ -34,12 +34,11 @@ jobs:
     uses: bymaxone/.github/.github/workflows/mutation-full.yml@v1
     with:
       # The ceiling is per shard job, and a run it cancels leaves no score and no baseline for the
-      # week, so it is 1.5 times the slowest shard measured. The work is split into six shards: four
-      # shards of two workers took 10.0 to 27.1 minutes in run 44164948564, one shard passed 32
-      # minutes in run 44202615327, and the same suite took 52 minutes as one job in run 44098809136.
-      # The slowest shard of run 45067764671 took 57.4 minutes on a configuration without the
+      # week, so it is set with room above the slowest shard measured. The suite is split into six
+      # shards. The slowest shard of run 45067764671 took 57.4 minutes on a configuration without the
       # module-level baseline of built-ins. The baseline makes a static mutant of each of its members,
-      # which every test then pays for, so the ceiling is 120 until a run measures the current one.
+      # which every test then pays for, so the ceiling is 120 until a run measures the current
+      # configuration; the ceiling is then 1.5 times the slowest shard it measures.
       timeout-minutes: 120
       # A unit test the cold run did not run fails the job: the score cannot notice a test the
       # related-test lookup never selected. The specs that run no mutated source are listed with
