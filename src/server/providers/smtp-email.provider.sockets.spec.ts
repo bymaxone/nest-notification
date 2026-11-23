@@ -287,6 +287,7 @@ describe('the connection the adapter opens itself', () => {
       .catch((error: Error) => error)
 
     expect(failure).toBeInstanceOf(Error)
+    expect((failure as Error).message).toMatch(/self-signed certificate/u)
     expect(relay.commands).not.toContain('MAIL')
     expect(relay.messages).toHaveLength(0)
   })

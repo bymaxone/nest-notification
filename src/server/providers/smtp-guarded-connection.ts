@@ -81,10 +81,14 @@ export class GuardedConnection extends Duplex {
     apply(this.#inner.end, this.#inner, [done])
   }
 
-  /** @inheritdoc */
+  /**
+   * Closes the socket underneath, and reports the close one turn of the event loop later: when the TLS
+   * layer ends a session it destroys this stream first and raises the reason on its own socket after,
+   * and Nodemailer treats a close that comes first as the connection having dropped.
+   */
   override _destroy(error: Error | null, done: (error?: Error | null) => void): void {
     this.#inner.destroy(error ?? undefined)
-    done(error)
+    setImmediate(done, error)
   }
 
   /** The address of the peer, as the socket underneath has it. */

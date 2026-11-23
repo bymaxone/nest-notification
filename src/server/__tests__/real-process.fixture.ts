@@ -7,7 +7,7 @@
  */
 
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, realpathSync, rmSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -15,10 +15,13 @@ import { join, resolve } from 'node:path'
 const ROOT = resolve(__dirname, '../../..')
 
 /**
- * esbuild is not a dependency of this package; the build tool it already depends on brings it, and
- * only that tool's own folder can resolve it under a strict install.
+ * The folder of the build tool that brings esbuild. esbuild is not a dependency of this package, and
+ * under a strict install only that tool's own folder can resolve it. The path is the real one: node
+ * does not follow the link `node_modules/tsup` when it resolves from there.
  */
-const esbuild = createRequire(join(ROOT, 'node_modules/tsup/package.json'))('esbuild') as {
+export const BUILD_TOOL_PACKAGE = realpathSync(join(ROOT, 'node_modules/tsup/package.json'))
+
+const esbuild = createRequire(BUILD_TOOL_PACKAGE)('esbuild') as {
   buildSync(options: Record<string, unknown>): unknown
 }
 

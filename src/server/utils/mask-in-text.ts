@@ -34,8 +34,12 @@ const MAX_TOKEN = 512
  */
 export const QUOTED_UNITS = 300
 
-/** A soft line break of quoted-printable text, and a line break that folds a header onto the next line. */
-const UNFOLD = /=\r?\n|\r?\n(?=[\t ])/gu
+/**
+ * A soft line break of quoted-printable text (an equals sign, any blanks, a line break), and a line
+ * break that folds a header onto the next line together with the white space that indents the
+ * continuation: both leave nothing between the pieces they join. A line break is CRLF, LF or a bare CR.
+ */
+const UNFOLD = /=[\t ]*(?:\r\n|[\r\n])|(?:\r\n|[\r\n])[\t ]+/gu
 
 /**
  * A token: a run of characters that are neither ASCII white space nor one of `<>(),[]` (any other

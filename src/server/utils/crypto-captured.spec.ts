@@ -84,6 +84,66 @@ describe('node:crypto functions read once, when the modules load', () => {
     expect(accepted).toBe(false)
   })
 
+  describe('a built-in the OTP paths call, replaced after the import', () => {
+    /** Runs `body` with `holder[name]` replaced, and puts the original property back at once. */
+    function replacing<T>(holder: object, name: string, value: unknown, body: () => T): T {
+      const original = Object.getOwnPropertyDescriptor(holder, name) as PropertyDescriptor
+      Object.defineProperty(holder, name, { value, configurable: true, writable: true })
+      try {
+        return body()
+      } finally {
+        Object.defineProperty(holder, name, original)
+      }
+    }
+
+    it('should refuse a wrong code when Buffer.from answers one byte for any text', () => {
+      const accepted = replacing(
+        Buffer,
+        'from',
+        () => Buffer.alloc(1),
+        () => safeCompare('abc', 'xyz')
+      )
+
+      expect(accepted).toBe(false)
+    })
+
+    it('should accept the right code when Buffer.from answers one byte for any text', () => {
+      const accepted = replacing(
+        Buffer,
+        'from',
+        () => Buffer.alloc(1),
+        () => safeCompare('abc', 'abc')
+      )
+
+      expect(accepted).toBe(true)
+    })
+
+    it('should key the digest with the secret when Buffer.from answers one byte for any text', () => {
+      const keyed = createCodeDigester(SECRET)('111111')
+
+      const replaced = replacing(
+        Buffer,
+        'from',
+        () => Buffer.alloc(1),
+        () => createCodeDigester(SECRET)('111111')
+      )
+
+      expect(replaced).toBe(keyed)
+    })
+
+    it('should draw every character of a code when charAt answers 0', () => {
+      const codes = replacing(
+        String.prototype,
+        'charAt',
+        () => '0',
+        () => Array.from({ length: 20 }, () => generateOtpCode(6, 'numeric'))
+      )
+
+      expect(codes.every((code) => code === '000000')).toBe(false)
+      expect(codes.every((code) => /^[0-9]{6}$/u.test(code))).toBe(true)
+    })
+  })
+
   it('should key two recipients differently when createHash is replaced by one that answers a constant', () => {
     const fake = { update: () => fake, digest: () => 'constant' }
 
