@@ -8,8 +8,8 @@
  * @layer infrastructure
  */
 
-import { execFileSync } from 'node:child_process'
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 
 import * as ts from 'typescript'
 
@@ -76,13 +76,16 @@ interface Calls {
   readonly methods: Map<string, Set<string>>
 }
 
-/** The source files of the library that ship, read as syntax. */
+/**
+ * The source files of the library that ship, read as syntax. Read from the folders and not from git,
+ * which the sandbox of a mutation run has no history for.
+ */
 function sources(): string[] {
-  return execFileSync('git', ['ls-files', 'src/server', 'src/react', 'src/shared'], {
-    encoding: 'utf8'
-  })
-    .split('\n')
-    .filter((file) => file.endsWith('.ts') && !/\.spec\.ts$|__tests__|\.d\.ts$/u.test(file))
+  return ['src/server', 'src/react', 'src/shared'].flatMap((folder) =>
+    readdirSync(folder, { recursive: true, encoding: 'utf8' })
+      .map((file) => join(folder, file))
+      .filter((file) => file.endsWith('.ts') && !/\.spec\.ts$|__tests__|\.d\.ts$/u.test(file))
+  )
 }
 
 /** Every static call on a global and every call of a built-in method name, by file. */
