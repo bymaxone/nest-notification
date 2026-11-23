@@ -152,6 +152,10 @@ unknown` keeps its brackets). The at-sign is `@`, fullwidth `\uff20`, small `\uf
   `Object.prototype` at startup is the defence. Recipients that are not a bare mailbox (`Bob <bob@x.com>`) go to Nodemailer as the strings they were.
   Address masking leaves out the base64 of a whole address and the spelled-out forms (`bob at x`, `[at]`), and a quoted
   local part of more than 300 units is read as ordinary characters up to a space.
+- **A name planted on `Object.prototype` no longer reaches the descriptors the library defines.** The copy of an
+  error cause, the scrubbed copy of an error chain and the wrapped operations of a store were defined with a descriptor
+  object that inherits from the realm root, so a planted `enumerable` made the copied `name` and `cause` enumerable and a
+  planted `get` or `set` made the definition throw. Each descriptor has no prototype now.
 
 ### Documentation
 

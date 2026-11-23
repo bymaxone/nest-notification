@@ -45,3 +45,36 @@ describe('a key planted on the realm root under the name of a field of an except
     expect(observe()).toStrictEqual(baseline)
   })
 })
+
+describe('a key planted on the realm root under the name of a field of a descriptor', () => {
+  const PLANTS: ReadonlyArray<readonly [string, unknown]> = [
+    ['enumerable', true],
+    ['get', () => 'planted'],
+    ['set', () => undefined]
+  ]
+
+  afterEach(() => {
+    for (const [name] of PLANTS) {
+      Reflect.deleteProperty(Object.prototype, name)
+    }
+  })
+
+  it.each(PLANTS)('should keep the copy of a cause as it is when %s is planted', (name, value) => {
+    Object.defineProperty(Object.prototype, name, {
+      value,
+      configurable: true,
+      writable: true,
+      enumerable: false
+    })
+    const inner = new Error('inner words')
+    const cause = new Error('outer words', { cause: inner })
+
+    const copy = new NotificationException('OTP_STORAGE_FAILED', undefined, { cause })
+      .cause as Error
+
+    expect(copy.message).toBe('outer words')
+    expect(Object.keys(copy)).toStrictEqual([])
+    expect((copy.cause as Error).message).toBe('inner words')
+    expect(Object.keys(copy.cause as Error)).toStrictEqual([])
+  })
+})
