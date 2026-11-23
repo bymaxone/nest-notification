@@ -46,6 +46,14 @@ the entries that carry one, is the compatibility contract — read it, not the n
   address**, so `bo=` and a line break before `b@x.com`, or a quoted local part folded onto the next line, is one address
   and is masked whole. Blanks before a soft break, the white space that indents a fold and a bare carriage return as the
   line break are all read as part of the join.
+- **`generate` and `verify` of the OTP service make the realm check the adapters make.** While `Object.prototype` holds a
+  key that is not standard, or a built-in the check compares was replaced since the library loaded, they refuse with the
+  same count-only `INVALID_SCOPE_IDENTIFIER`, when they start and again after the store call whose answer decides the
+  next step (the cooldown, the attempt count). A `Set.prototype.has` that answers `true` no longer registers a purpose,
+  and a `Map.prototype.has` that answers `false` no longer lifts a lock. The comparison also holds
+  `Buffer.prototype.readUIntBE` (which `randomInt` reads), `Map.prototype.keys` and `String.prototype.toString`. The
+  refusal now ends "so the operation is refused" in place of "so nothing is sent". A host that patches a built-in late
+  could already not send; it now cannot generate or verify either.
 - **The refusal and every exception of the library are built from their own fields.** A `status`, a `message` or a body
   field planted on the realm root answers for none of them. A connection error of the adapter's own socket now carries
   Node's native code (`ECONNREFUSED`, `ETIMEDOUT`, ...) where Nodemailer used to wrap it as `ESOCKET`, and a certificate

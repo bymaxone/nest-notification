@@ -248,6 +248,7 @@ const BASELINE: ReadonlyArray<readonly [object, readonly PropertyKey[]]> = [
       'startsWith',
       'substring',
       'toLowerCase',
+      'toString',
       'toUpperCase',
       'trim',
       'trimEnd',
@@ -257,7 +258,9 @@ const BASELINE: ReadonlyArray<readonly [object, readonly PropertyKey[]]> = [
   ],
   [RegExp.prototype, ['exec', 'test', Symbol.match, Symbol.matchAll, Symbol.replace, Symbol.split]],
   [Set.prototype, ['add', 'clear', 'delete', 'forEach', 'has', 'values', Symbol.iterator]],
-  [Map.prototype, ['clear', 'delete', 'entries', 'forEach', 'get', 'has', 'set']],
+  [Map.prototype, ['clear', 'delete', 'entries', 'forEach', 'get', 'has', 'keys', 'set']],
+  // `crypto.randomInt` reads its random bytes with it, so a replaced one decides the code.
+  [Buffer.prototype, ['readUIntBE']],
   [Buffer, ['byteLength', 'from']],
   [Symbol, ['for']],
   [Function.prototype, ['apply', 'bind', 'call', 'toString']]
@@ -367,7 +370,7 @@ export function assertStandardRealmRoot(owner: string): void {
     throw refuseInput(
       owner,
       'Object.prototype',
-      `holds ${count} key(s) or built-in(s) that are not the standard ones, so nothing is sent`
+      `holds ${count} key(s) or built-in(s) that are not the standard ones, so the operation is refused`
     )
   }
 }

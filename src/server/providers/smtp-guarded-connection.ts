@@ -14,8 +14,10 @@ import { Duplex } from 'node:stream'
 
 import { assertStandardRealmRoot } from '../utils/realm-root'
 
-// Read from the global once, when the module loads: the stream calls its owner's methods through it.
+// Read from the global once, when the module loads: the stream calls its owner's methods through it,
+// and a host that fakes the timers later must not leave a close pending.
 const apply = Reflect.apply
+const defer = setImmediate
 
 /** The socket the stream stands for. */
 type Inner = net.Socket
@@ -88,7 +90,7 @@ export class GuardedConnection extends Duplex {
    */
   override _destroy(error: Error | null, done: (error?: Error | null) => void): void {
     this.#inner.destroy(error ?? undefined)
-    setImmediate(done, error)
+    defer(done, error)
   }
 
   /** The address of the peer, as the socket underneath has it. */

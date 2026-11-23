@@ -173,4 +173,24 @@ describe('GuardedConnection', () => {
     expect(noDelay).toHaveBeenCalledWith(true)
     expect([first, second]).toStrictEqual([connection, connection])
   })
+
+  it('should still close when a host fakes the timers while the connection is destroyed', async () => {
+    const connection = new GuardedConnection(inner)
+    const realTimeout = setTimeout
+    const closed = new Promise<string>((resolve) =>
+      connection.once('close', () => resolve('closed'))
+    )
+    jest.useFakeTimers()
+    try {
+      connection.destroy()
+    } finally {
+      jest.useRealTimers()
+    }
+    const outcome = await Promise.race([
+      closed,
+      new Promise<string>((resolve) => realTimeout(() => resolve('pending'), 300))
+    ])
+
+    expect(outcome).toBe('closed')
+  })
 })
