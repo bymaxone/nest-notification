@@ -11,58 +11,6 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 ## [Unreleased]
 
-## [1.4.24] - 2026-11-22
-
-### Fixed
-
-- **The `Object.prototype` check could be blinded by a built-in replaced after the library was imported.** The check
-  that makes the SMTP and Resend adapters refuse while the realm root holds a key that is not standard looked its
-  built-ins up when it ran, so code that replaced one of them after the import, with a version that says the root is
-  clean, made the check say so. It now calls only references taken when the library loaded, and walks with index loops.
-  It also compares, by identity, the built-ins the library calls with the ones that were there when it loaded,
-  and refuses while one has been replaced, so a polyfill or a patch that replaces one after the import stops the
-  send with the same count-only refusal.
-- **A replaced built-in no longer makes every OTP code predictable or accepts a wrong one.** `randomInt`, `createHmac`,
-  `createHash`, `timingSafeEqual`, `randomUUID`, `Buffer.from` and `String.prototype.charAt` are read once, when the
-  library loads, so a host, a test or a dependency that replaces one after the import (`crypto.randomInt = () => 0`, a
-  `timingSafeEqual` that answers `true`, a `Buffer.from` that answers the same bytes for any text) changes nothing the
-  library does.
-- **A template send, a dispatch of one and the OTP email path read `bcc`, `cc`, `attachments`, `text`, `from`,
-  `fromName`, `replyTo`, `auditRedactValues` and `publishProviderText` off the realm root.** The input the template send
-  hands on has no prototype and the renderer's answer is read by name, so a custom provider receives the options it was
-  given, and a failure that echoes the code is still redacted and its text withheld.
-- **A write made while the realm root is polluted refuses the send.** The adapter's own socket checks the root before
-  it writes: a key planted after the checks that began the send, and before a byte left, destroys the connection and the
-  send fails with the same count-only refusal, where it used to change the recipients or the body. It covers plain,
-  implicit-TLS and STARTTLS connections: every connection is handed to Nodemailer as a stream that checks every write,
-  and the TLS upgrade Nodemailer makes after STARTTLS writes its encrypted bytes through it, so `MAIL FROM`, `RCPT TO`
-  and the body cannot leave while the root is polluted. Nodemailer is handed each recipient and each body part as an object with its own keys, and a
-  failure of a send while the root is polluted is reported as that refusal.
-- **A runtime without `__proto__` is a standard one, and a frozen root is not pollution.** `node --disable-proto=delete`
-  no longer makes every adapter refuse, and `Object.freeze(Object.prototype)` after the import, or a standard key that
-  only became read-only with the same value, is hardening and not a change; a changed value or enumerability still
-  refuses.
-- **The text bound of the address masker joins a quoted-printable soft break and a folded line before it looks for an
-  address**, so `bo=` and a line break before `b@x.com`, or a quoted local part folded onto the next line, is one address
-  and is masked whole. Blanks before a soft break, the white space that indents a fold and a bare carriage return as the
-  line break are all read as part of the join.
-- **`generate` and `verify` of the OTP service make the realm check the adapters make.** While `Object.prototype` holds a
-  key that is not standard, or a built-in the check compares was replaced since the library loaded, they refuse with the
-  same count-only `INVALID_SCOPE_IDENTIFIER`, when they start and again after the store call whose answer decides the
-  next step (the cooldown, the attempt count, the consumption of the code), and a refusal after the cooldown was taken gives it back. A `Set.prototype.has` that answers `true` no longer registers a purpose,
-  and a `Map.prototype.has` that answers `false` no longer lifts a lock. The comparison also holds
-  `Buffer.prototype.readUIntBE` (which `randomInt` reads), `Map.prototype.keys` and `String.prototype.toString`. The
-  refusal now ends "so the operation is refused" in place of "so nothing is sent". A host that patches a built-in late
-  could already not send; it now cannot generate or verify either.
-- **The refusal and every exception of the library are built from their own fields.** A `status`, a `message` or a body
-  field planted on the realm root answers for none of them. A connection error of the adapter's own socket now carries
-  Node's native code (`ECONNREFUSED`, `ETIMEDOUT`, ...) where Nodemailer used to wrap it as `ESOCKET`, and a certificate
-  that is not trusted after STARTTLS reports the certificate's reason.
-- **Stated limits.** A function planted under `pipe` ends the process inside Nodemailer's streams, and freezing
-  `Object.prototype` at startup is the defence. Recipients that are not a bare mailbox (`Bob <bob@x.com>`) go to Nodemailer as the strings they were.
-  Address masking leaves out the base64 of a whole address and the spelled-out forms (`bob at x`, `[at]`), and a quoted
-  local part of more than 300 units is read as ordinary characters up to a space. There is nothing to apply.
-
 ## [1.4.23] - 2026-11-22
 
 ### Fixed
@@ -153,6 +101,53 @@ unknown` keeps its brackets). The at-sign is `@`, fullwidth `\uff20`, small `\uf
   entry behind; both now run and the first failure is the one the caller sees.
 - **The health indicator counts a `verify` it cannot read as present,** so the check runs and reports `down`, and the
   log copy of an error reads its `code` once.
+- **The `Object.prototype` check could be blinded by a built-in replaced after the library was imported.** The check
+  that makes the SMTP and Resend adapters refuse while the realm root holds a key that is not standard looked its
+  built-ins up when it ran, so code that replaced one of them after the import, with a version that says the root is
+  clean, made the check say so. It now calls only references taken when the library loaded, and walks with index loops.
+  It also compares, by identity, the built-ins the library calls with the ones that were there when it loaded,
+  and refuses while one has been replaced, so a polyfill or a patch that replaces one after the import stops the
+  send with the same count-only refusal.
+- **A replaced built-in no longer makes every OTP code predictable or accepts a wrong one.** `randomInt`, `createHmac`,
+  `createHash`, `timingSafeEqual`, `randomUUID`, `Buffer.from` and `String.prototype.charAt` are read once, when the
+  library loads, so a host, a test or a dependency that replaces one after the import (`crypto.randomInt = () => 0`, a
+  `timingSafeEqual` that answers `true`, a `Buffer.from` that answers the same bytes for any text) changes nothing the
+  library does.
+- **A template send, a dispatch of one and the OTP email path read `bcc`, `cc`, `attachments`, `text`, `from`,
+  `fromName`, `replyTo`, `auditRedactValues` and `publishProviderText` off the realm root.** The input the template send
+  hands on has no prototype and the renderer's answer is read by name, so a custom provider receives the options it was
+  given, and a failure that echoes the code is still redacted and its text withheld.
+- **A write made while the realm root is polluted refuses the send.** The adapter's own socket checks the root before
+  it writes: a key planted after the checks that began the send, and before a byte left, destroys the connection and the
+  send fails with the same count-only refusal, where it used to change the recipients or the body. It covers plain,
+  implicit-TLS and STARTTLS connections: every connection is handed to Nodemailer as a stream that checks every write,
+  and the TLS upgrade Nodemailer makes after STARTTLS writes its encrypted bytes through it, so `MAIL FROM`, `RCPT TO`
+  and the body cannot leave while the root is polluted. Nodemailer is handed each recipient and each body part as an object with its own keys, and a
+  failure of a send while the root is polluted is reported as that refusal.
+- **A runtime without `__proto__` is a standard one, and a frozen root is not pollution.** `node --disable-proto=delete`
+  no longer makes every adapter refuse, and `Object.freeze(Object.prototype)` after the import, or a standard key that
+  only became read-only with the same value, is hardening and not a change; a changed value or enumerability still
+  refuses.
+- **The text bound of the address masker joins a quoted-printable soft break and a folded line before it looks for an
+  address**, so `bo=` and a line break before `b@x.com`, or a quoted local part folded onto the next line, is one address
+  and is masked whole. Blanks before a soft break, the white space that indents a fold and a bare carriage return as the
+  line break are all read as part of the join.
+- **`generate` and `verify` of the OTP service make the realm check the adapters make.** While `Object.prototype` holds a
+  key that is not standard, or a built-in the check compares was replaced since the library loaded, they refuse with the
+  same count-only `INVALID_SCOPE_IDENTIFIER`, when they start and again after the store call whose answer decides the
+  next step (the cooldown, the attempt count, the consumption of the code), and a refusal after the cooldown was taken gives it back. A `Set.prototype.has` that answers `true` no longer registers a purpose,
+  and a `Map.prototype.has` that answers `false` no longer lifts a lock. The comparison also holds
+  `Buffer.prototype.readUIntBE` (which `randomInt` reads), `Map.prototype.keys` and `String.prototype.toString`. The
+  refusal now ends "so the operation is refused" in place of "so nothing is sent". A host that patches a built-in late
+  could already not send; it now cannot generate or verify either.
+- **The refusal and every exception of the library are built from their own fields.** A `status`, a `message` or a body
+  field planted on the realm root answers for none of them. A connection error of the adapter's own socket now carries
+  Node's native code (`ECONNREFUSED`, `ETIMEDOUT`, ...) where Nodemailer used to wrap it as `ESOCKET`, and a certificate
+  that is not trusted after STARTTLS reports the certificate's reason.
+- **Stated limits.** A function planted under `pipe` ends the process inside Nodemailer's streams, and freezing
+  `Object.prototype` at startup is the defence. Recipients that are not a bare mailbox (`Bob <bob@x.com>`) go to Nodemailer as the strings they were.
+  Address masking leaves out the base64 of a whole address and the spelled-out forms (`bob at x`, `[at]`), and a quoted
+  local part of more than 300 units is read as ordinary characters up to a space.
 
 ### Documentation
 
@@ -161,7 +156,7 @@ unknown` keeps its brackets). The at-sign is `@`, fullwidth `\uff20`, small `\uf
 
 #### Apply to a derived backend
 
-The declaration changes are the name of the parameter of `generate()`, `consume()` and `getStatus()` (`raw`, where it was `input`) and two optional fields of `EmailAttachment`, `cid` and `contentDisposition`. A configuration that was accepted before now fails when the module is built: a boolean option
+The declaration changes against 1.4.22 are three. The parameter of `OtpService.generate()`, `consume()` and `getStatus()` is named `raw` where it was `input`: its type is the same, and a caller passes it by position, so nothing changes for a caller. `EmailAttachment` gains `cid?: string` and `contentDisposition?: 'attachment' | 'inline'`: both are new and optional, so an attachment written for 1.4.22 compiles and sends unchanged, and a consumer needs nothing from them. Private members of `OtpService`, `EmailService`, `NotificationService`, `SmtpEmailProvider` and `ResendEmailProvider` were added, removed or renamed (`countAttempt`, `matchesStoredCode`, `toGenerateInput` and `mapAttachments` are gone; `readInput`, `sendRead`, `verifyChecked`, `rejectInvalidCode`, `failDelivery`, `auditText` and `assertRealmOrRelease` are new): they are not part of the contract, and no public or protected member was removed or changed in type. A configuration that was accepted before now fails when the module is built: a boolean option
 given as a string, a `maskRecipient` that is not a function, a `perPurpose` of `null`. A custom `IOtpStorage` that
 answered `tryAcquireCooldown`, `deleteIfCode` or `isConfigured` with something other than a boolean, `recordFailure`
 with something other than an integer of at least `1`, or `consumeAttempt` with an unknown status or an entry of the
@@ -1908,8 +1903,7 @@ rejected at startup rather than failing on the first send.
 
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.4.24...HEAD
-[1.4.24]: https://github.com/bymaxone/nest-notification/compare/v1.4.23...v1.4.24
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.4.23...HEAD
 [1.4.23]: https://github.com/bymaxone/nest-notification/compare/v1.4.22...v1.4.23
 [1.4.22]: https://github.com/bymaxone/nest-notification/compare/v1.4.21...v1.4.22
 [1.4.21]: https://github.com/bymaxone/nest-notification/compare/v1.4.20...v1.4.21
