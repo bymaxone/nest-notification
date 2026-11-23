@@ -5,7 +5,7 @@
  * @layer infrastructure
  */
 
-import { assertStandardRealmRoot, STANDARD_ROOT_KEYS } from './realm-root'
+import { assertStandardRealmRoot, BASELINE_MEMBERS, STANDARD_ROOT_KEYS } from './realm-root'
 
 let planted: string[] = []
 
@@ -106,15 +106,57 @@ describe('assertStandardRealmRoot', () => {
     expect(published).not.toMatch(/secretKeyName|another|secretValue/u)
   })
 
-  it('should ignore a symbol key, which no transport reads by name', () => {
-    const symbol = Symbol('s')
-    Object.defineProperty(Object.prototype, symbol, { value: 1, configurable: true })
+  describe('a symbol key on the root', () => {
+    const PROTECT = Symbol.for('$$jest-protect-from-deletion')
 
-    try {
-      expect(() => assertStandardRealmRoot('Owner')).not.toThrow()
-    } finally {
-      Reflect.deleteProperty(Object.prototype, symbol)
+    /** Runs the check with `symbol` defined on the root as `descriptor`, and puts the root back. */
+    function checkWith(symbol: symbol, descriptor: PropertyDescriptor): unknown {
+      const original = Object.getOwnPropertyDescriptor(Object.prototype, symbol)
+      Object.defineProperty(Object.prototype, symbol, { configurable: true, ...descriptor })
+      let outcome = 'accepted'
+      try {
+        assertStandardRealmRoot('Owner')
+      } catch {
+        outcome = 'refused'
+      } finally {
+        if (original === undefined) {
+          Reflect.deleteProperty(Object.prototype, symbol)
+        } else {
+          Object.defineProperty(Object.prototype, symbol, original)
+        }
+      }
+      return outcome
     }
+
+    it.each([
+      ['a well-known symbol, enumerable', Symbol.iterator, true],
+      ['a well-known symbol, not enumerable', Symbol.iterator, false],
+      ['an unregistered symbol', Symbol('planted'), true],
+      ['an unregistered symbol, not enumerable', Symbol('planted'), false]
+    ])('should be refused: %s', (_name, symbol, enumerable) => {
+      expect(checkWith(symbol, { value: 1, enumerable })).toBe('refused')
+    })
+
+    it('should accept the key jest keeps on the root, while it is not enumerable', () => {
+      expect(Object.getOwnPropertyDescriptor(Object.prototype, PROTECT)?.enumerable).toBe(false)
+      expect(() => assertStandardRealmRoot('Owner')).not.toThrow()
+    })
+
+    it('should refuse that key when it is enumerable', () => {
+      expect(checkWith(PROTECT, { value: 1, enumerable: true })).toBe('refused')
+    })
+
+    it('should refuse another symbol of the registry', () => {
+      expect(checkWith(Symbol.for('$$another-registry-key'), { value: 1, enumerable: false })).toBe(
+        'refused'
+      )
+    })
+
+    it('should refuse an unregistered symbol that has the description of that key', () => {
+      expect(
+        checkWith(Symbol('$$jest-protect-from-deletion'), { value: 1, enumerable: false })
+      ).toBe('refused')
+    })
   })
 
   it('should answer for the root as it is now, not as it was when the module loaded', () => {
@@ -449,4 +491,168 @@ describe('descriptors read while the root holds an accessor named like a descrip
       expect(caught).toMatchObject({ code: 'notification.invalid_scope_identifier' })
     }
   )
+})
+
+describe('a built-in replaced after the module was imported', () => {
+  /** Replacements that falsely report a clean root, and that the check must not be bypassed by. */
+  const LIARS: ReadonlyArray<readonly [string, object, PropertyKey, unknown]> = [
+    ['Object.getOwnPropertyNames', Object, 'getOwnPropertyNames', () => []],
+    ['Object.hasOwn', Object, 'hasOwn', () => false],
+    ['Object.is', Object, 'is', () => true],
+    ['Reflect.get', Reflect, 'get', () => undefined],
+    ['Set.prototype.has', Set.prototype, 'has', () => true],
+    ['Set.prototype[Symbol.iterator]', Set.prototype, Symbol.iterator, function* () {}],
+    ['Map.prototype.get', Map.prototype, 'get', () => undefined],
+    ['Array.prototype.filter', Array.prototype, 'filter', () => []],
+    ['Array.prototype.map', Array.prototype, 'map', () => []],
+    ['Array.prototype.some', Array.prototype, 'some', () => false],
+    ['Array.prototype.at', Array.prototype, 'at', () => undefined],
+    ['Array.prototype[Symbol.iterator]', Array.prototype, Symbol.iterator, function* () {}],
+    ['String.prototype.endsWith', String.prototype, 'endsWith', () => true],
+    ['String', globalThis, 'String', () => ''],
+    ['Function.prototype.call', Function.prototype, 'call', () => true],
+    ['Function.prototype.bind', Function.prototype, 'bind', () => () => true],
+    [
+      'Function.prototype.toString',
+      Function.prototype,
+      'toString',
+      () => 'function () { [native code] }'
+    ]
+  ]
+
+  /**
+   * Runs the check once with `replacement` in place of `target[key]` and the root made unclean: by a
+   * key it does not hold (`plant`), or by a standard key overwritten (`overwrite`). It returns what
+   * the check did.
+   */
+  function checkWith(
+    target: object,
+    key: PropertyKey,
+    replacement: unknown,
+    how: 'plant' | 'overwrite'
+  ): unknown {
+    const original = Object.getOwnPropertyDescriptor(target, key) as PropertyDescriptor
+    const standard = Object.getOwnPropertyDescriptor(
+      Object.prototype,
+      'toString'
+    ) as PropertyDescriptor
+    if (how === 'plant') {
+      Object.defineProperty(Object.prototype, 'plantedAfterImport', {
+        value: 1,
+        configurable: true,
+        enumerable: true
+      })
+    } else {
+      Object.defineProperty(Object.prototype, 'toString', {
+        ...standard,
+        value: () => 'overwritten'
+      })
+    }
+    Object.defineProperty(target, key, { ...original, value: replacement })
+    let caught: unknown = 'did not refuse'
+    try {
+      assertStandardRealmRoot('Owner')
+    } catch (error) {
+      caught = error
+    } finally {
+      Object.defineProperty(target, key, original)
+      Reflect.deleteProperty(Object.prototype, 'plantedAfterImport')
+      Object.defineProperty(Object.prototype, 'toString', standard)
+    }
+    return caught
+  }
+
+  const CASES = LIARS.flatMap(([label, target, key, replacement]) =>
+    (['plant', 'overwrite'] as const).map((how) => [label, target, key, replacement, how] as const)
+  )
+
+  it.each(CASES)(
+    'should still refuse when %s answers that the root is clean: %s',
+    (_label, target, key, replacement, how) => {
+      const caught = checkWith(target, key, replacement, how)
+
+      // It refuses: the send stops. What the refusal is built from is not the check's, and a built-in
+      // the exception uses may change its words, so what is held here is that nothing is let through.
+      expect(caught).not.toBe('did not refuse')
+    }
+  )
+
+  it('should write the count of the refusal without asking the global String', () => {
+    const original = Object.getOwnPropertyDescriptor(globalThis, 'String') as PropertyDescriptor
+    Object.defineProperty(Object.prototype, 'plantedAfterImport', {
+      value: 1,
+      configurable: true,
+      enumerable: true
+    })
+    Object.defineProperty(globalThis, 'String', { ...original, value: () => 'replaced' })
+    let response: unknown
+    try {
+      assertStandardRealmRoot('Owner')
+    } catch (error) {
+      response = (error as { getResponse?: () => unknown }).getResponse?.()
+    } finally {
+      Object.defineProperty(globalThis, 'String', original)
+      Reflect.deleteProperty(Object.prototype, 'plantedAfterImport')
+    }
+
+    // The planted key and the replaced global String are two, and the number is written as digits.
+    expect(JSON.stringify(response)).toContain('holds 2 key(s)')
+  })
+})
+
+describe('the built-ins the options and the send paths call', () => {
+  // References taken before any member is replaced, so the restore below cannot be undone by the row.
+  const define = Object.defineProperty
+  const describeMember = Object.getOwnPropertyDescriptor
+
+  const label = (key: PropertyKey): string => (typeof key === 'symbol' ? key.toString() : `${key}`)
+
+  it('should be ones the check holds, and not none', () => {
+    expect(BASELINE_MEMBERS.length).toBeGreaterThan(100)
+  })
+
+  it.each(
+    BASELINE_MEMBERS.map(([holder, key], index) => [`${index} ${label(key)}`, holder, key] as const)
+  )(
+    'should refuse when member %s is replaced after the import, with nothing else wrong',
+    (_name, holder, key) => {
+      const original = describeMember(holder, key) as PropertyDescriptor
+      define(
+        holder,
+        key,
+        'get' in original
+          ? { ...original, get: () => undefined }
+          : { ...original, value: () => undefined }
+      )
+      let outcome = 'did not refuse'
+      try {
+        assertStandardRealmRoot('Owner')
+      } catch {
+        outcome = 'refused'
+      } finally {
+        define(holder, key, original)
+      }
+
+      expect(outcome).toBe('refused')
+    }
+  )
+
+  it('should refuse when a member is deleted after the import', () => {
+    const original = describeMember(Math, 'ceil') as PropertyDescriptor
+    Reflect.deleteProperty(Math, 'ceil')
+    let outcome = 'did not refuse'
+    try {
+      assertStandardRealmRoot('Owner')
+    } catch {
+      outcome = 'refused'
+    } finally {
+      define(Math, 'ceil', original)
+    }
+
+    expect(outcome).toBe('refused')
+  })
+
+  it('should not refuse a realm in which nothing was replaced', () => {
+    expect(() => assertStandardRealmRoot('Owner')).not.toThrow()
+  })
 })

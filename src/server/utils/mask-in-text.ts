@@ -35,6 +35,13 @@ const MAX_TOKEN = 512
 export const QUOTED_UNITS = 300
 
 /**
+ * A soft line break of quoted-printable text (an equals sign, any blanks, a line break), and a line
+ * break that folds a header onto the next line together with the white space that indents the
+ * continuation: both leave nothing between the pieces they join. A line break is CRLF, LF or a bare CR.
+ */
+const UNFOLD = /=[\t ]*(?:\r\n|[\r\n])|(?:\r\n|[\r\n])[\t ]+/gu
+
+/**
  * A token: a run of characters that are neither ASCII white space nor one of `<>(),[]` (any other
  * space stays inside it, so it cannot cut an address in two), where a quoted string
  * (`"first last"@x.com`) is one piece. Inside the quotes a backslash escapes the next character and
@@ -168,8 +175,11 @@ export function maskAddressTokens(text: string, mask: (recipient: string) => str
   // read to its end, so it is masked whole; one that starts past it is left out, and so is one that
   // ends near the end of what was read, whose end is not known.
   const clipped = text.length > MAX_TEXT
-  const window = clipped ? text.slice(0, MAX_TEXT + LOOKAHEAD) : text
-  const unfinished = window.length < text.length
+  const read = clipped ? text.slice(0, MAX_TEXT + LOOKAHEAD) : text
+  const unfinished = read.length < text.length
+  // A quoted-printable soft break (`=` and a line break) and a folded line (a line break before white
+  // space) cut a word in two; the pieces are joined first, so the address in it is one token.
+  const window = read.replace(UNFOLD, '')
   const masked = window.replace(TOKEN, (token, offset: number) => {
     if (
       clipped &&

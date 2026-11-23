@@ -21,6 +21,9 @@ import type {
 } from '../interfaces/email-provider.interface'
 import { logEvent } from '../utils/log-event'
 
+// Read from the module once, when it loads: a replaced `crypto.randomUUID` must not repeat the ids.
+const newId = randomUUID
+
 /**
  * Reduce an email address to a first-initial mask (`m***@example.com`).
  *
@@ -64,6 +67,6 @@ export class NoOpEmailProvider implements IEmailProvider {
     const recipients = Array.isArray(options.to) ? options.to : [options.to]
     const masked = recipients.map(maskEmail).join(',')
     logEvent(this.logger, 'debug', NOTIFICATION_LOG_EVENTS.NOOP_EMAIL, `[NoOpEmail] to=${masked}`)
-    return { messageId: `noop-${randomUUID()}` }
+    return { messageId: `noop-${newId()}` }
   }
 }

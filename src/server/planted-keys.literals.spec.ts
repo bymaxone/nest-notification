@@ -116,7 +116,7 @@ describe('the SMTP message and transport', () => {
       expect(Reflect.get(message, key)).toBeUndefined()
     }
     // The recipient is the one asked for, and the attachment is the one given, whatever is planted.
-    expect(message.to).toBe('a@x.com')
+    expect(Reflect.get(message.to as object, 'address')).toBe('a@x.com')
     expect(message.attachments).toHaveLength(1)
     expect(Reflect.get(message.attachments[0] ?? {}, 'filename')).toBe('a.txt')
     expect(Reflect.get(message.attachments[0] ?? {}, 'content')).toBe('eA==')

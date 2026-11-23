@@ -12,16 +12,18 @@
  */
 
 import * as net from 'node:net'
+import type { Duplex } from 'node:stream'
 import * as tls from 'node:tls'
 
 import { nullProto } from '../utils/read-options'
 import { assertStandardRealmRoot } from '../utils/realm-root'
+import { GuardedConnection } from './smtp-guarded-connection'
 
 /** What the connection needs, resolved before the transport is built. */
 export interface SmtpSocketPlan {
   readonly host: string
   readonly port: number
-  /** Whether the connection starts in TLS (implicit TLS); STARTTLS is left to Nodemailer. */
+  /** Whether the connection starts in TLS (implicit TLS); STARTTLS is Nodemailer's, over a guarded stream. */
   readonly secure: boolean
   /** The host's `tls` options, which a TLS connection starts with. */
   readonly tls: object | undefined
@@ -32,7 +34,7 @@ export interface SmtpSocketPlan {
 /** What Nodemailer's `getSocket` hands back: the open socket, and whether TLS is already on it. */
 type SocketAnswer = (
   error: Error | null,
-  socket?: { readonly connection: net.Socket; readonly secured: boolean }
+  socket?: { readonly connection: Duplex; readonly secured: boolean }
 ) => void
 
 /**
@@ -102,7 +104,9 @@ function open(plan: SmtpSocketPlan, answer: SocketAnswer): void {
     socket.removeListener('error', settle)
     socket.removeListener(ready, onReady)
     if (error === null) {
-      answer(null, { connection: socket, secured: plan.secure })
+      // Handed over as a stream that checks the realm root before every write, so a STARTTLS upgrade
+      // Nodemailer makes on it writes its encrypted bytes through the same check.
+      answer(null, { connection: new GuardedConnection(socket), secured: plan.secure })
       return
     }
     socket.destroy()

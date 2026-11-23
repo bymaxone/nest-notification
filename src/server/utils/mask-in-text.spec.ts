@@ -212,6 +212,30 @@ describe('maskAddressTokens', () => {
     expect(EDGE).toBeLessThan(LOOKAHEAD)
   })
 
+  it.each([
+    ['a soft break in the local part', 'rejected bo=\r\nb@example.com now'],
+    ['a soft break in the domain', 'rejected bob@exam=\r\nple.com now'],
+    ['a soft break with a bare line feed', 'rejected bo=\nb@example.com now'],
+    ['a fold inside a quoted local part', 'rejected "first\r\n last"@example.com now'],
+    ['a fold with a bare line feed', 'rejected "first\n last"@example.com now'],
+    ['a fold between the local part and the at-sign', 'rejected bob\r\n @example.com now'],
+    ['a fold after the at-sign', 'rejected bob@\r\n example.com now'],
+    ['a fold that indents with a tab', 'rejected bob\r\n\t@example.com now'],
+    ['a fold that indents with several spaces', 'rejected bob\r\n   @example.com now'],
+    ['a soft break with spaces before the line break', 'rejected bo=  \r\nb@example.com now'],
+    ['a soft break with a tab before the line break', 'rejected bo=\t\r\nb@example.com now'],
+    ['a soft break ended by a bare carriage return', 'rejected bo=\rb@example.com now'],
+    ['a fold made by a bare carriage return', 'rejected bob\r @example.com now']
+  ])('should read %s as one address and mask it whole', (_name, text) => {
+    const out = maskAddressTokens(text, () => '#')
+
+    expect(out).toBe('rejected # now')
+  })
+
+  it('should leave a line break that folds nothing where it is', () => {
+    expect(maskAddressTokens('line one\r\nline two', () => '#')).toBe('line one\r\nline two')
+  })
+
   it('should leave out a token that runs to the end of what was read', () => {
     const out = maskAddressTokens('x'.repeat(20_000), () => '#')
 

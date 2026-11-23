@@ -290,19 +290,44 @@ describe('SmtpEmailProvider', () => {
 
       expect(lastSendPayload()).toEqual({
         from: { name: '', address: 'noreply@acme.com' },
-        to: 'jane@acme.com',
+        // Each mailbox and each body part is an object with its own keys, so a name planted on the
+        // realm root is not read for it; the values are those the caller gave.
+        to: { name: '', address: 'jane@acme.com' },
         subject: 'Your code',
-        html: '<p>Secret 123456</p>',
-        text: 'Secret 123456',
-        replyTo: 'support@acme.com',
-        cc: 'cc@acme.com',
-        bcc: ['bcc@acme.com'],
+        html: { content: '<p>Secret 123456</p>' },
+        text: { content: 'Secret 123456' },
+        replyTo: { name: '', address: 'support@acme.com' },
+        cc: { name: '', address: 'cc@acme.com' },
+        bcc: [{ name: '', address: 'bcc@acme.com' }],
         headers: { 'X-Entity-Ref-ID': 'abc' },
         attachments: undefined,
         // Nodemailer is told it may open no file and no URL: the adapter sends `content` only.
         disableFileAccess: true,
         disableUrlAccess: true
       })
+    })
+
+    it('should hand Nodemailer an empty text body as an absent one, so the message still builds', async () => {
+      await new SmtpEmailProvider({ host: 'h' }).send({
+        ...baseOptions,
+        text: '',
+        html: '<p>x</p>'
+      })
+
+      expect(lastSendPayload().text).toBeUndefined()
+      expect(lastSendPayload().html).toMatchObject({ content: '<p>x</p>' })
+    })
+
+    it('should leave a recipient that is more than a bare mailbox as the string it was', async () => {
+      await new SmtpEmailProvider({ host: 'h' }).send({
+        ...baseOptions,
+        to: ['Bob Smith <bob@acme.com>', 'plain@acme.com']
+      })
+
+      expect(lastSendPayload().to).toEqual([
+        'Bob Smith <bob@acme.com>',
+        { name: '', address: 'plain@acme.com' }
+      ])
     })
 
     // A display name must be folded into the RFC-5322 "Name <email>" from header.

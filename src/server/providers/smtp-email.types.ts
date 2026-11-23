@@ -202,16 +202,24 @@ export interface SmtpSender {
   address: string
 }
 
+/** A recipient handed to the transport: a mailbox as an object with its own keys, or the string as given. */
+export type SmtpRecipient = string | { name: string; address: string }
+
+/** A body part handed to the transport as an object, so that no name Nodemailer reads on it is inherited. */
+export interface SmtpBodyPart {
+  content: string
+}
+
 /** The exact payload subset {@link SmtpEmailProvider} forwards to the transport. */
 export interface SmtpSendPayload {
   from: SmtpSender
-  to: string | string[]
+  to: SmtpRecipient | SmtpRecipient[]
   subject: string
-  html: string
-  text: string | undefined
-  replyTo: string | undefined
-  cc: string | string[] | undefined
-  bcc: string | string[] | undefined
+  html: SmtpBodyPart | undefined
+  text: SmtpBodyPart | undefined
+  replyTo: SmtpRecipient | undefined
+  cc: SmtpRecipient | SmtpRecipient[] | undefined
+  bcc: SmtpRecipient | SmtpRecipient[] | undefined
   headers: Record<string, string> | undefined
   attachments: SmtpAttachment[] | undefined
   /** Always `true`; see {@link SmtpTransportConfig.disableFileAccess}. */

@@ -11,6 +11,11 @@
 
 import { timingSafeEqual } from 'node:crypto'
 
+// Read once, when the module loads: a replaced `crypto.timingSafeEqual` that says `true`, or a
+// `Buffer.from` that answers the same bytes for any text, must not accept a code.
+const constantTimeEqual = timingSafeEqual
+const bytesOf = Buffer.from
+
 /**
  * Compares two strings in constant time (after a length guard).
  *
@@ -20,10 +25,10 @@ import { timingSafeEqual } from 'node:crypto'
  * on a length mismatch (which leaks only the already-public expected length).
  */
 export function safeCompare(expected: string, actual: string): boolean {
-  const expectedBytes = Buffer.from(expected, 'utf8')
-  const actualBytes = Buffer.from(actual, 'utf8')
+  const expectedBytes = bytesOf(expected, 'utf8')
+  const actualBytes = bytesOf(actual, 'utf8')
   if (expectedBytes.length !== actualBytes.length) {
     return false
   }
-  return timingSafeEqual(expectedBytes, actualBytes)
+  return constantTimeEqual(expectedBytes, actualBytes)
 }

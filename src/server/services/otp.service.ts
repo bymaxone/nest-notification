@@ -48,7 +48,9 @@ import { loggableError } from '../utils/loggable-error'
 import { maskAddressTokens, maskExact } from '../utils/mask-in-text'
 import { matchesStoredCode } from '../utils/matches-stored-code'
 import { reportOtp, runInSpan } from '../utils/observe'
+import { carriesFailures, countAttempt } from '../utils/otp-failure-count'
 import { outgoingError } from '../utils/outgoing-error'
+import { assertStandardRealmRoot } from '../utils/realm-root'
 import { normalizeRecipient } from '../utils/recipient'
 import { assertSingleMailbox } from '../utils/recipient-list'
 import { attachCauseIfAbsent, readRedactedMessage } from '../utils/redact'
@@ -108,23 +110,6 @@ export interface OtpStatusInput {
 export interface OtpGenerateResult {
   expiresAt: number
   cooldownSeconds: number
-}
-
-/** A storage that implements all three optional failure methods, which only work together. */
-type FailureCarryingStorage = IOtpStorage &
-  Required<Pick<IOtpStorage, 'getFailures' | 'recordFailure' | 'clearFailures'>>
-
-/**
- * Whether the storage carries failed attempts across a re-issue. Counting without the means to
- * read and clear the count would lock a recipient out for good, so a storage with only some of
- * the methods is treated as having none.
- */
-function carriesFailures(storage: IOtpStorage): storage is FailureCarryingStorage {
-  return (
-    storage.getFailures !== undefined &&
-    storage.recordFailure !== undefined &&
-    storage.clearFailures !== undefined
-  )
 }
 
 /** Result of {@link OtpService.getStatus} — never carries the plaintext code. */
@@ -215,6 +200,7 @@ export class OtpService implements OnModuleInit {
    * releasing the cooldown lock.
    */
   async generate(raw: OtpGenerateInput): Promise<OtpGenerateResult> {
+    assertStandardRealmRoot('OtpService')
     const input = readGenerateInput(raw)
     const otp = this.requireOtpOptions()
     this.assertScope(input)
@@ -223,6 +209,7 @@ export class OtpService implements OnModuleInit {
     this.assertMailbox(input)
     const cfg = otp.resolveForPurpose(input.purpose)
     await this.acquireCooldownOrThrow(scope, cfg.resendCooldownSeconds)
+    await this.assertRealmOrRelease(scope)
     const code = generateOtpCode(cfg.length, cfg.codeType)
     const expiresAt = Date.now() + cfg.ttlSeconds * MS_PER_SECOND
     const entry: OtpEntry = {
@@ -264,6 +251,7 @@ export class OtpService implements OnModuleInit {
    * @returns Whether the code is valid, and why not when it is not.
    */
   private async verifyUnobserved(raw: OtpVerifyInput): Promise<OtpVerifyResult> {
+    assertStandardRealmRoot('OtpService')
     const input = readVerifyInput(raw)
     try {
       return await this.verifyChecked(input)
@@ -284,7 +272,8 @@ export class OtpService implements OnModuleInit {
     // counted before the code is compared: the increment is atomic, so guesses that arrive
     // together each get their own number and only those within the ceiling are compared. An
     // attempt is counted only while a code is live.
-    const attempt = await this.countAttempt(scope, cfg.ttlSeconds)
+    const attempt = await countAttempt(this.storage, scope, cfg.ttlSeconds)
+    assertStandardRealmRoot('OtpService')
     if (attempt === null) {
       return this.rejectNotFound(scope)
     }
@@ -292,6 +281,7 @@ export class OtpService implements OnModuleInit {
       return this.rejectMaxAttempts(scope)
     }
     const result = await this.storage.consumeAttempt(scope.tenantId, scope.recipient, scope.purpose)
+    assertStandardRealmRoot('OtpService')
     if (result.status === 'not_found') {
       return this.rejectNotFound(scope)
     }
@@ -303,17 +293,11 @@ export class OtpService implements OnModuleInit {
       return this.rejectMaxAttempts(scope)
     }
     if (!matchesStoredCode(entry.code, scope.code, otp.digestCode)) {
-      await this.audit(this.otpAuditEntry('failed', scope, { reason: 'invalid_code' }))
-      const ofCode = entry.maxAttempts - entry.attempts
-      return {
-        valid: false,
-        reason: 'invalid_code',
-        // The code's own budget and the recipient's failure budget both run out; the nearer wins.
-        remainingAttempts:
-          attempt === undefined ? ofCode : Math.min(ofCode, cfg.maxAttempts - attempt)
-      }
+      return this.rejectInvalidCode(scope, entry, attempt, cfg.maxAttempts)
     }
-    if (await this.lostConsume(scope, entry.code, otp.consumeOnVerify)) {
+    const lost = await this.lostConsume(scope, entry.code, otp.consumeOnVerify)
+    assertStandardRealmRoot('OtpService')
+    if (lost) {
       return this.rejectNotFound(scope)
     }
     await this.storage.clearFailures?.(scope.tenantId, scope.recipient, scope.purpose)
@@ -552,27 +536,6 @@ export class OtpService implements OnModuleInit {
     }
   }
 
-  /**
-   * Counts one verification attempt against the recipient. Returns `undefined` when the storage
-   * does not carry failures, and `null` when no code is live: a verification with no code guesses
-   * at nothing, so it spends no budget, and the caller must answer `not_found` instead of going on
-   * to consume an attempt from a code issued in the meantime, which would then go uncounted.
-   */
-  private async countAttempt(
-    scope: OtpRecipientRef,
-    ttlSeconds: number
-  ): Promise<number | null | undefined> {
-    const storage = this.storage
-    if (!carriesFailures(storage)) {
-      return undefined
-    }
-    const live = await storage.get(scope.tenantId, scope.recipient, scope.purpose)
-    if (live === null) {
-      return null
-    }
-    return storage.recordFailure(scope.tenantId, scope.recipient, scope.purpose, ttlSeconds)
-  }
-
   /** How a generated code reaches the recipient: by email when asked or when an email channel exists. */
   private deliveryOf(input: OtpGenerateInput): 'email' | 'manual' {
     // Stryker disable next-line StringLiteral: when no email service is present the default is any non-'email' value; both 'manual' and an emptied string fall into the `!== 'email'` early return, so the literal is equivalent.
@@ -626,6 +589,20 @@ export class OtpService implements OnModuleInit {
     await this.emailService.sendTemplate(this.buildOtpEmail(input, code, cfg))
   }
 
+  /**
+   * The realm check after the cooldown was taken: a refusal gives the cooldown back before it is
+   * thrown, since no code was stored or sent and the recipient must not be locked out of generating.
+   * Only the cooldown goes: a code that is still live from an earlier generate stays.
+   */
+  private async assertRealmOrRelease(ref: OtpRecipientRef): Promise<void> {
+    try {
+      assertStandardRealmRoot('OtpService')
+    } catch (error) {
+      await this.storage.clearCooldown(ref.tenantId, ref.recipient, ref.purpose)
+      throw error
+    }
+  }
+
   /** Clears the cooldown and deletes the OTP — used to undo a failed delivery. */
   private async releaseOtp(ref: OtpRecipientRef): Promise<void> {
     await releaseStored(this.storage, ref)
@@ -658,6 +635,28 @@ export class OtpService implements OnModuleInit {
   private async rejectNotFound(scope: OtpVerifyInput): Promise<OtpVerifyResult> {
     await this.audit(this.otpAuditEntry('failed', scope, { reason: 'not_found' }))
     return { valid: false, reason: 'not_found' }
+  }
+
+  /**
+   * Audits and returns the `invalid_code` verdict, with the attempts that are left.
+   *
+   * @param attempt - The recipient's failure count, when the store keeps one.
+   * @param ceiling - The recipient's failure budget.
+   */
+  private async rejectInvalidCode(
+    scope: OtpVerifyInput,
+    entry: OtpEntry,
+    attempt: number | undefined,
+    ceiling: number
+  ): Promise<OtpVerifyResult> {
+    await this.audit(this.otpAuditEntry('failed', scope, { reason: 'invalid_code' }))
+    const ofCode = entry.maxAttempts - entry.attempts
+    return {
+      valid: false,
+      reason: 'invalid_code',
+      // The code's own budget and the recipient's failure budget both run out; the nearer wins.
+      remainingAttempts: attempt === undefined ? ofCode : Math.min(ofCode, ceiling - attempt)
+    }
   }
 
   /** Audits and returns the `max_attempts` verdict. */

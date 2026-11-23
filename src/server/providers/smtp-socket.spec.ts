@@ -83,6 +83,35 @@ describe('smtpGetSocket', () => {
     connection.destroy()
   })
 
+  it('should not answer again when the peer resets the socket after it connected', async () => {
+    let peer: net.Socket | undefined
+    const port = await listen((socket) => {
+      peer = socket
+      socket.on('error', () => undefined)
+      socket.resume()
+    })
+    const answers: unknown[][] = []
+    const answer: Answer = (...args) => {
+      answers.push(args)
+    }
+    smtpGetSocket({
+      host: '127.0.0.1',
+      port,
+      secure: false,
+      tls: undefined,
+      connectionTimeoutMs: 1000
+    })(undefined, answer)
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    const connection = (answers[0]?.[1] as { connection: net.Socket }).connection
+    connection.on('error', () => undefined)
+
+    peer?.resetAndDestroy()
+    await new Promise((resolve) => setTimeout(resolve, 100))
+
+    expect(answers).toHaveLength(1)
+    connection.destroy()
+  })
+
   it('should answer a handshake that never completes with a timeout error that has its code and words', async () => {
     const port = await listen((socket) => socket.resume())
 
@@ -130,5 +159,71 @@ describe('smtpGetSocket', () => {
     await relay.close()
 
     expect(relay.servernames).toStrictEqual(['localhost'])
+  })
+
+  it('should destroy the connection with the refusal when it is ended while the root is polluted', async () => {
+    const port = await listen((socket) => socket.resume())
+    const answers: unknown[][] = []
+    const answer: Answer = (...args) => {
+      answers.push(args)
+    }
+    smtpGetSocket({
+      host: '127.0.0.1',
+      port,
+      secure: false,
+      tls: undefined,
+      connectionTimeoutMs: 1000
+    })(undefined, answer)
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    const connection = (answers[0]?.[1] as { connection: net.Socket }).connection
+    const closed = new Promise<Error | undefined>((resolve) => {
+      connection.once('error', (error: Error) => resolve(error))
+    })
+    Object.defineProperty(Object.prototype, 'planted', {
+      value: 1,
+      configurable: true,
+      writable: true
+    })
+
+    connection.end('QUIT\r\n')
+
+    expect(await closed).toMatchObject({ code: 'notification.invalid_scope_identifier' })
+  })
+
+  it('should not take its write and end from a bind that was replaced while the socket opened', async () => {
+    // The Function.prototype of the realm Node's own methods belong to: the jest sandbox has its own.
+    const nodeFunctions = Object.getPrototypeOf(net.Socket.prototype.write) as Function
+    const originalBind = nodeFunctions.bind
+    const write = net.Socket.prototype.write
+    const end = net.Socket.prototype.end
+    let handedOut = 0
+    const port = await listen((socket) => socket.resume())
+    // Replaced in the realm Node's sockets belong to, so the jest sandbox's own check does not see it.
+    nodeFunctions.bind = function (this: unknown, thisArg: unknown, ...bound: unknown[]) {
+      if (this === write || this === end) {
+        handedOut += 1
+        return () => true
+      }
+      return Reflect.apply(originalBind, this, [thisArg, ...bound]) as never
+    } as typeof Function.prototype.bind
+    const answers: unknown[][] = []
+    const answer: Answer = (...args) => {
+      answers.push(args)
+    }
+    smtpGetSocket({
+      host: '127.0.0.1',
+      port,
+      secure: false,
+      tls: undefined,
+      connectionTimeoutMs: 1000
+    })(undefined, answer)
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    nodeFunctions.bind = originalBind
+    const connection = (answers[0]?.[1] as { connection: net.Socket }).connection
+
+    connection.write('MAIL FROM:<x@y.z>\r\n')
+    connection.destroy()
+
+    expect(handedOut).toBe(0)
   })
 })

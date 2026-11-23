@@ -23,6 +23,8 @@ export interface RelayLog {
   readonly messages: string[]
   /** The names clients sent as SNI, when the relay serves TLS from the first byte. */
   readonly servernames: string[]
+  /** The MAIL FROM and RCPT TO lines, as the client sent them. */
+  readonly envelope: string[]
 }
 
 /** A running relay. */
@@ -80,11 +82,48 @@ function sealed<T extends net.Socket>(socket: T): T {
   return socket
 }
 
+/** Notes a command line in what the relay saw: its verb, and the whole line for an envelope command. */
+function record(log: RelayLog, line: string): void {
+  log.commands.push(line.split(' ')[0]?.toUpperCase() ?? '')
+  if (/^(MAIL|RCPT)/iu.test(line)) {
+    log.envelope.push(line)
+  }
+}
+
+/** Adds to a message body; once it ends with the terminator the message is logged and acknowledged. */
+function collect(socket: net.Socket, log: RelayLog, body: string): string | undefined {
+  if (!body.endsWith('\r\n.\r\n')) {
+    return body
+  }
+  log.messages.push(body)
+  socket.write('250 queued\r\n')
+  return undefined
+}
+
+/** Carries on the conversation on the TLS socket made over a plain one, recording the name asked for. */
+function upgrade(socket: net.Socket, log: RelayLog, certificate: TestCertificate): void {
+  converse(
+    sealed(
+      new tls.TLSSocket(socket, {
+        isServer: true,
+        ...certificate,
+        SNICallback: (name, done): void => {
+          log.servernames.push(name)
+          done(null, tls.createSecureContext(certificate))
+        }
+      })
+    ),
+    log,
+    undefined
+  )
+}
+
 /** Answers the SMTP conversation on one socket, upgrading it on STARTTLS when it has a certificate. */
 function converse(
   socket: net.Socket,
   log: RelayLog,
-  certificate: TestCertificate | undefined
+  certificate: TestCertificate | undefined,
+  onStarttls?: () => void
 ): void {
   let body: string | undefined
   let pending = ''
@@ -93,13 +132,8 @@ function converse(
     pending += chunk.toString('utf8')
     while (pending.length > 0) {
       if (body !== undefined) {
-        body += pending
+        body = collect(socket, log, body + pending)
         pending = ''
-        if (body.endsWith('\r\n.\r\n')) {
-          log.messages.push(body)
-          body = undefined
-          socket.write('250 queued\r\n')
-        }
         return
       }
       const end = pending.indexOf('\r\n')
@@ -108,18 +142,17 @@ function converse(
       }
       const line = pending.slice(0, end)
       pending = pending.slice(end + 2)
-      log.commands.push(line.split(' ')[0]?.toUpperCase() ?? '')
+      record(log, line)
       if (/^EHLO/iu.test(line)) {
         socket.write(certificate ? '250-relay\r\n250 STARTTLS\r\n' : '250 relay\r\n')
       } else if (/^STARTTLS/iu.test(line) && certificate) {
         socket.write('220 go ahead\r\n')
+        onStarttls?.()
         socket.removeAllListeners('data')
-        converse(
-          sealed(new tls.TLSSocket(socket, { isServer: true, ...certificate })),
-          log,
-          undefined
-        )
+        upgrade(socket, log, certificate)
         return
+      } else if (/^STARTTLS/iu.test(line)) {
+        socket.write('502 STARTTLS is not offered\r\n')
       } else if (/^DATA/iu.test(line)) {
         body = ''
         socket.write('354 go\r\n')
@@ -140,12 +173,25 @@ function converse(
  * @returns The relay, with what it saw.
  */
 export async function startRelay(
-  options: { certificate?: TestCertificate; implicitTls?: boolean } = {}
+  options: {
+    certificate?: TestCertificate
+    implicitTls?: boolean
+    /** Runs when a client has connected, just before the relay greets it. */
+    onConnect?: () => void
+    /** Runs when the relay has agreed to a STARTTLS upgrade, before the handshake. */
+    onStarttls?: () => void
+  } = {}
 ): Promise<Relay> {
-  const log: RelayLog = { commands: [], messages: [], servernames: [] }
+  const log: RelayLog = { commands: [], messages: [], servernames: [], envelope: [] }
   const onSocket = (socket: net.Socket): void => {
+    options.onConnect?.()
     socket.write('220 relay ready\r\n')
-    converse(sealed(socket), log, options.implicitTls ? undefined : options.certificate)
+    converse(
+      sealed(socket),
+      log,
+      options.implicitTls ? undefined : options.certificate,
+      options.onStarttls
+    )
   }
   const server =
     options.implicitTls && options.certificate

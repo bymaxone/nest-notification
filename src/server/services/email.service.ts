@@ -58,6 +58,7 @@ import {
 } from '../utils/redact'
 import { assertIdentifies } from '../utils/tenant-scope'
 import { SEND_KEYS, TEMPLATE_KEYS } from './email-send-keys'
+import { templateSendInput } from './email-template-input'
 
 /** Locale used as the fallback when the requested locale has no template. */
 const FALLBACK_LOCALE = 'en'
@@ -200,41 +201,6 @@ function unavailableStatus(error: unknown): { status?: HttpStatus } {
   return isUnavailableProviderError(error) ? { status: HttpStatus.SERVICE_UNAVAILABLE } : {}
 }
 
-/**
- * The send input a template send hands to the send itself. Each optional field is carried only when
- * the caller gave it, so an absent field never becomes an `{ x: undefined }` key that the send would
- * read as an explicit value rather than a missing one.
- *
- * @param input - What the caller asked for.
- * @param rendered - The rendered subject and body.
- * @param tags - The tags of the message, the template's among them.
- * @returns The input of the send.
- */
-export function templateSendInput(
-  input: EmailSendTemplateInput,
-  rendered: { subject: string; html: string; text?: string | undefined },
-  tags: EmailTag[]
-): EmailSendInput {
-  return {
-    tenantId: input.tenantId,
-    to: input.to,
-    subject: rendered.subject,
-    html: rendered.html,
-    tags,
-    ...(rendered.text !== undefined ? { text: rendered.text } : {}),
-    ...(input.from !== undefined ? { from: input.from } : {}),
-    ...(input.fromName !== undefined ? { fromName: input.fromName } : {}),
-    ...(input.replyTo !== undefined ? { replyTo: input.replyTo } : {}),
-    ...(input.userId !== undefined ? { userId: input.userId } : {}),
-    ...(input.auditRedactValues !== undefined
-      ? { auditRedactValues: input.auditRedactValues }
-      : {}),
-    ...(input.publishProviderText !== undefined
-      ? { publishProviderText: input.publishProviderText }
-      : {})
-  }
-}
-
 /** Nanoseconds in a second, to turn a high-resolution timer into the seconds a metric holds. */
 const NANOSECONDS_PER_SECOND = 1_000_000_000
 
@@ -285,6 +251,8 @@ function providerConfigured(provider: IEmailProvider): boolean {
     throw new NotificationException('EMAIL_PROVIDER_NOT_CONFIGURED', undefined, { cause: error })
   }
 }
+
+export { templateSendInput }
 
 /** Transactional email service. */
 @Injectable()

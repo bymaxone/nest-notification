@@ -83,8 +83,10 @@ describe('outgoingError', () => {
 
     const out = outgoingError(error, ['storage'], true) as NotificationException
 
-    expect(out.getResponse()).toStrictEqual(
-      new NotificationException('OTP_STORAGE_FAILED').getResponse()
+    // The body has no prototype (a key planted on the realm root answers for none of it), so the two are
+    // compared by what they hold.
+    expect(JSON.stringify(out.getResponse())).toBe(
+      JSON.stringify(new NotificationException('OTP_STORAGE_FAILED').getResponse())
     )
   })
 
@@ -120,8 +122,8 @@ describe('outgoingError', () => {
 
       const out = outgoingError(error, [guess], true) as NotificationException
 
-      expect(out.getResponse()).toStrictEqual(
-        new NotificationException('OTP_STORAGE_FAILED').getResponse()
+      expect(JSON.stringify(out.getResponse())).toBe(
+        JSON.stringify(new NotificationException('OTP_STORAGE_FAILED').getResponse())
       )
     }
   )
