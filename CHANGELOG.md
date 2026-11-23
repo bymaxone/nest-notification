@@ -33,7 +33,7 @@ the entries that carry one, is the compatibility contract — read it, not the n
 - **A write made while the realm root is polluted refuses the send.** The adapter's own socket checks the root before
   it writes: a key planted after the checks that began the send, and before a byte left, destroys the connection and the
   send fails with the same count-only refusal, where it used to change the recipients or the body. It covers plain,
-  implicit-TLS and STARTTLS connections: a plain connection is handed to Nodemailer as a stream that checks every write,
+  implicit-TLS and STARTTLS connections: every connection is handed to Nodemailer as a stream that checks every write,
   and the TLS upgrade Nodemailer makes after STARTTLS writes its encrypted bytes through it, so `MAIL FROM`, `RCPT TO`
   and the body cannot leave while the root is polluted. Nodemailer is handed each recipient and each body part as an object with its own keys, and a
   failure of a send while the root is polluted is reported as that refusal.
