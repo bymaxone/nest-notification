@@ -6,12 +6,21 @@
  * @layer test
  */
 
-import { execFileSync, spawnSync } from 'node:child_process'
+import { spawnSync } from 'node:child_process'
 import { mkdtempSync, rmSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
 const ROOT = resolve(__dirname, '../../..')
+
+/**
+ * esbuild is not a dependency of this package; the build tool it already depends on brings it, and
+ * only that tool's own folder can resolve it under a strict install.
+ */
+const esbuild = createRequire(join(ROOT, 'node_modules/tsup/package.json'))('esbuild') as {
+  buildSync(options: Record<string, unknown>): unknown
+}
 
 /** What a child process did. */
 export interface ChildResult {
@@ -35,19 +44,16 @@ export interface Bundle {
 export function bundle(entry: string): Bundle {
   const directory = mkdtempSync(join(tmpdir(), 'real-process-'))
   const file = join(directory, 'entry.cjs')
-  execFileSync(
-    join(ROOT, 'node_modules/.bin/esbuild'),
-    [
-      join(ROOT, entry),
-      '--bundle',
-      '--platform=node',
-      '--format=cjs',
-      '--packages=external',
-      '--log-level=error',
-      `--outfile=${file}`
-    ],
-    { cwd: ROOT, stdio: 'pipe' }
-  )
+  esbuild.buildSync({
+    entryPoints: [join(ROOT, entry)],
+    bundle: true,
+    platform: 'node',
+    format: 'cjs',
+    packages: 'external',
+    logLevel: 'error',
+    outfile: file,
+    absWorkingDir: ROOT
+  })
   return { file, remove: () => rmSync(directory, { recursive: true, force: true }) }
 }
 
