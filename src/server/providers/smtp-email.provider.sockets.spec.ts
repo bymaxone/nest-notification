@@ -259,6 +259,22 @@ describe('the connection the adapter opens itself', () => {
     expect(relay.servernames).toStrictEqual(['localhost'])
   })
 
+  it('should leave keepalive and no-delay set on the connection when Nodemailer upgrades it', async () => {
+    relay = await startRelay({ certificate })
+    const keepAlive = jest.spyOn(net.Socket.prototype, 'setKeepAlive')
+    const noDelay = jest.spyOn(net.Socket.prototype, 'setNoDelay')
+
+    await new SmtpEmailProvider({
+      host: '127.0.0.1',
+      port: relay.port,
+      requireTls: true,
+      tls: { ca: certificate.cert }
+    }).send(MESSAGE)
+
+    expect(keepAlive).toHaveBeenCalledWith(true, expect.any(Number))
+    expect(noDelay).toHaveBeenCalledWith(true)
+  })
+
   it('should refuse a certificate it does not trust after STARTTLS, and send nothing', async () => {
     relay = await startRelay({ certificate })
 

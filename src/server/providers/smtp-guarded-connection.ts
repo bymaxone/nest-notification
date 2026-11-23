@@ -107,6 +107,18 @@ export class GuardedConnection extends Duplex {
     return this.#inner.localPort
   }
 
+  /** Turns TCP keepalive on or off on the socket underneath, which Nodemailer asks of a socket it is given. */
+  setKeepAlive(enable?: boolean, initialDelay?: number): this {
+    this.#inner.setKeepAlive(enable, initialDelay)
+    return this
+  }
+
+  /** Turns Nagle's algorithm off or on for the socket underneath, which Nodemailer asks of a socket it is given. */
+  setNoDelay(noDelay?: boolean): this {
+    this.#inner.setNoDelay(noDelay)
+    return this
+  }
+
   /** Sets the idle timeout of the socket underneath; its `timeout` event is forwarded. */
   setTimeout(milliseconds: number, listener?: () => void): this {
     this.#inner.setTimeout(milliseconds)

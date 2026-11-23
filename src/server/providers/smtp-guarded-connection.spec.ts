@@ -160,4 +160,17 @@ describe('GuardedConnection', () => {
     expect((await failure).code).toBe('notification.invalid_scope_identifier')
     expect(inner.destroyed).toBe(true)
   })
+
+  it('should set keepalive and no-delay on the socket underneath, which Nodemailer asks of a socket', () => {
+    const connection = new GuardedConnection(inner)
+    const keepAlive = jest.spyOn(inner, 'setKeepAlive')
+    const noDelay = jest.spyOn(inner, 'setNoDelay')
+
+    const first = connection.setKeepAlive(true, 30000)
+    const second = connection.setNoDelay(true)
+
+    expect(keepAlive).toHaveBeenCalledWith(true, 30000)
+    expect(noDelay).toHaveBeenCalledWith(true)
+    expect([first, second]).toStrictEqual([connection, connection])
+  })
 })
