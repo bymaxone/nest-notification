@@ -174,10 +174,15 @@ describe('a key planted under the name of a field of a send', () => {
 
       await viaPaths(moduleRef, seen)
 
-      // The code is echoed by the relay: it is a digit string in the text, whatever the planted keys say.
-      for (const row of rows) {
-        expect(JSON.stringify(row)).not.toMatch(/relay said: \d{6}/u)
-      }
+      // The relay echoes the code it was given. The plain template send has none, so its text is the
+      // relay's own; the two OTP paths publish no provider text at all, whatever the planted keys say.
+      const published = rows.filter((row) => row.text !== undefined).map((row) => row.text)
+      expect(published).toStrictEqual([
+        'relay said: no value',
+        '[provider text withheld]',
+        '[provider text withheld]'
+      ])
+      expect(JSON.stringify(rows)).not.toMatch(/\d{6}/u)
     }
   )
 })
