@@ -59,6 +59,9 @@ export function ownRecipients<T extends string | string[] | undefined>(value: T)
 /**
  * A body as an object with its own keys.
  *
+ * An empty string is no part: Nodemailer reads a falsy body as absent, and an object around it
+ * fails the build.
+ *
  * @param content - The text or the HTML, or nothing.
  * @returns The part Nodemailer is given, or nothing.
  */
@@ -66,6 +69,8 @@ export function ownBody<T extends string | undefined>(
   content: T
 ): T extends undefined ? undefined : SmtpBodyPart {
   return (
-    content === undefined ? undefined : withOwnKeys(nullProto({ content }), BODY_KEYS)
+    content === undefined || content === ''
+      ? undefined
+      : withOwnKeys(nullProto({ content }), BODY_KEYS)
   ) as T extends undefined ? undefined : SmtpBodyPart
 }

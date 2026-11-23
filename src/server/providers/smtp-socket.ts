@@ -17,6 +17,10 @@ import * as tls from 'node:tls'
 import { nullProto } from '../utils/read-options'
 import { assertStandardRealmRoot } from '../utils/realm-root'
 
+// Read from the global once, when the module loads: the guard below calls the socket's methods through
+// it, so a `bind` or a `call` replaced later cannot hand the guard an unguarded method.
+const apply = Reflect.apply
+
 /** What the connection needs, resolved before the transport is built. */
 export interface SmtpSocketPlan {
   readonly host: string
@@ -91,8 +95,8 @@ function connect(plan: SmtpSocketPlan): net.Socket {
  * @param socket - A connected socket.
  */
 function guardWrites(socket: net.Socket): void {
-  const write = socket.write.bind(socket) as (...args: unknown[]) => boolean
-  const end = socket.end.bind(socket) as (...args: unknown[]) => net.Socket
+  const write = socket.write as (...args: unknown[]) => boolean
+  const end = socket.end as (...args: unknown[]) => net.Socket
   socket.write = ((...args: unknown[]): boolean => {
     try {
       assertStandardRealmRoot('SmtpEmailProvider')
@@ -100,7 +104,7 @@ function guardWrites(socket: net.Socket): void {
       socket.destroy(error as Error)
       return false
     }
-    return write(...args)
+    return apply(write, socket, args)
   }) as net.Socket['write']
   socket.end = ((...args: unknown[]): net.Socket => {
     try {
@@ -108,7 +112,7 @@ function guardWrites(socket: net.Socket): void {
     } catch (error) {
       return socket.destroy(error as Error)
     }
-    return end(...args)
+    return apply(end, socket, args)
   }) as net.Socket['end']
 }
 

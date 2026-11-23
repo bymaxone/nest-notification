@@ -307,6 +307,17 @@ describe('SmtpEmailProvider', () => {
       })
     })
 
+    it('should hand Nodemailer an empty text body as an absent one, so the message still builds', async () => {
+      await new SmtpEmailProvider({ host: 'h' }).send({
+        ...baseOptions,
+        text: '',
+        html: '<p>x</p>'
+      })
+
+      expect(lastSendPayload().text).toBeUndefined()
+      expect(lastSendPayload().html).toMatchObject({ content: '<p>x</p>' })
+    })
+
     it('should leave a recipient that is more than a bare mailbox as the string it was', async () => {
       await new SmtpEmailProvider({ host: 'h' }).send({
         ...baseOptions,
