@@ -31,10 +31,11 @@ function plant(): void {
 }
 
 /** A store that plants a key on the realm root once the named method has answered, and counts its calls. */
-function planting(after: string | undefined): { storage: IOtpStorage; called: string[] } {
+function planting(after: string | undefined, nth = 1): { storage: IOtpStorage; called: string[] } {
   const inner = new InMemoryOtpStorage()
   const called: string[] = []
   let planted = false
+  let seen = 0
   const storage = new Proxy(inner, {
     get(target, property) {
       const value = Reflect.get(target, property, target) as unknown
@@ -44,7 +45,10 @@ function planting(after: string | undefined): { storage: IOtpStorage; called: st
       return async (...args: unknown[]) => {
         called.push(String(property))
         const answer = await (value as (...a: unknown[]) => unknown).apply(target, args)
-        if (property === after && !planted) {
+        if (property === after) {
+          seen += 1
+        }
+        if (property === after && seen === nth && !planted) {
           planted = true
           plant()
         }
@@ -133,6 +137,21 @@ describe('OtpService when the realm check refuses after a store call', () => {
     const again = await issuing.generate({ ...ref })
 
     expect(again.expiresAt).toBeGreaterThan(Date.now())
+  })
+
+  it('should keep the code that was already live when the refusal comes after the cooldown lapsed', async () => {
+    const { storage } = planting('tryAcquireCooldown', 2)
+    const issuing = service(storage)
+    await issuing.generate({ ...ref })
+    const sent = emailSendTemplate.mock.calls.at(-1)?.[0] as { data: { code: string } }
+    // The cooldown has run out; the code has not.
+    await storage.clearCooldown(ref.tenantId, 'jane@acme.com', ref.purpose)
+    await expect(issuing.generate({ ...ref })).rejects.toMatchObject(REFUSAL)
+    Reflect.deleteProperty(Object.prototype, 'planted')
+
+    const verdict = await issuing.verify({ ...ref, code: sent.data.code })
+
+    expect(verdict).toStrictEqual({ valid: true })
   })
 
   it('should refuse verify, and never accept the code, when a key is planted while the code is consumed', async () => {

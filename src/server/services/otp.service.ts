@@ -592,12 +592,13 @@ export class OtpService implements OnModuleInit {
   /**
    * The realm check after the cooldown was taken: a refusal gives the cooldown back before it is
    * thrown, since no code was stored or sent and the recipient must not be locked out of generating.
+   * Only the cooldown goes: a code that is still live from an earlier generate stays.
    */
   private async assertRealmOrRelease(ref: OtpRecipientRef): Promise<void> {
     try {
       assertStandardRealmRoot('OtpService')
     } catch (error) {
-      await this.releaseOtp(ref)
+      await this.storage.clearCooldown(ref.tenantId, ref.recipient, ref.purpose)
       throw error
     }
   }
