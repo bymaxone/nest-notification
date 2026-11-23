@@ -209,7 +209,7 @@ export class OtpService implements OnModuleInit {
     this.assertMailbox(input)
     const cfg = otp.resolveForPurpose(input.purpose)
     await this.acquireCooldownOrThrow(scope, cfg.resendCooldownSeconds)
-    assertStandardRealmRoot('OtpService')
+    await this.assertRealmOrRelease(scope)
     const code = generateOtpCode(cfg.length, cfg.codeType)
     const expiresAt = Date.now() + cfg.ttlSeconds * MS_PER_SECOND
     const entry: OtpEntry = {
@@ -295,7 +295,9 @@ export class OtpService implements OnModuleInit {
     if (!matchesStoredCode(entry.code, scope.code, otp.digestCode)) {
       return this.rejectInvalidCode(scope, entry, attempt, cfg.maxAttempts)
     }
-    if (await this.lostConsume(scope, entry.code, otp.consumeOnVerify)) {
+    const lost = await this.lostConsume(scope, entry.code, otp.consumeOnVerify)
+    assertStandardRealmRoot('OtpService')
+    if (lost) {
       return this.rejectNotFound(scope)
     }
     await this.storage.clearFailures?.(scope.tenantId, scope.recipient, scope.purpose)
@@ -585,6 +587,19 @@ export class OtpService implements OnModuleInit {
       throw new NotificationException('OTP_EMAIL_DELIVERY_NOT_CONFIGURED')
     }
     await this.emailService.sendTemplate(this.buildOtpEmail(input, code, cfg))
+  }
+
+  /**
+   * The realm check after the cooldown was taken: a refusal gives the cooldown back before it is
+   * thrown, since no code was stored or sent and the recipient must not be locked out of generating.
+   */
+  private async assertRealmOrRelease(ref: OtpRecipientRef): Promise<void> {
+    try {
+      assertStandardRealmRoot('OtpService')
+    } catch (error) {
+      await this.releaseOtp(ref)
+      throw error
+    }
   }
 
   /** Clears the cooldown and deletes the OTP — used to undo a failed delivery. */

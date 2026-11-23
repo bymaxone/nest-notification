@@ -34,6 +34,7 @@ function plant(): void {
 function planting(after: string | undefined): { storage: IOtpStorage; called: string[] } {
   const inner = new InMemoryOtpStorage()
   const called: string[] = []
+  let planted = false
   const storage = new Proxy(inner, {
     get(target, property) {
       const value = Reflect.get(target, property, target) as unknown
@@ -43,7 +44,8 @@ function planting(after: string | undefined): { storage: IOtpStorage; called: st
       return async (...args: unknown[]) => {
         called.push(String(property))
         const answer = await (value as (...a: unknown[]) => unknown).apply(target, args)
-        if (property === after) {
+        if (property === after && !planted) {
+          planted = true
           plant()
         }
         return answer
@@ -118,6 +120,28 @@ describe('OtpService while the realm root is polluted', () => {
     const sent = emailSendTemplate.mock.calls.at(-1)?.[0] as { data: { code: string } }
 
     await expect(issuing.verify({ ...ref, code: sent.data.code })).rejects.toMatchObject(REFUSAL)
+  })
+})
+
+describe('OtpService when the realm check refuses after a store call', () => {
+  it('should release the cooldown it took, so the recipient can generate again once the root is clean', async () => {
+    const { storage } = planting('tryAcquireCooldown')
+    const issuing = service(storage)
+    await expect(issuing.generate({ ...ref })).rejects.toMatchObject(REFUSAL)
+    Reflect.deleteProperty(Object.prototype, 'planted')
+
+    const again = await issuing.generate({ ...ref })
+
+    expect(again.expiresAt).toBeGreaterThan(Date.now())
+  })
+
+  it('should refuse verify, and never accept the code, when a key is planted while the code is consumed', async () => {
+    const { storage } = planting('deleteIfCode')
+    const consuming = service(storage, { consumeOnVerify: true })
+    await consuming.generate({ ...ref })
+    const sent = emailSendTemplate.mock.calls.at(-1)?.[0] as { data: { code: string } }
+
+    await expect(consuming.verify({ ...ref, code: sent.data.code })).rejects.toMatchObject(REFUSAL)
   })
 })
 

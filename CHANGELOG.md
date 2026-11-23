@@ -49,7 +49,7 @@ the entries that carry one, is the compatibility contract — read it, not the n
 - **`generate` and `verify` of the OTP service make the realm check the adapters make.** While `Object.prototype` holds a
   key that is not standard, or a built-in the check compares was replaced since the library loaded, they refuse with the
   same count-only `INVALID_SCOPE_IDENTIFIER`, when they start and again after the store call whose answer decides the
-  next step (the cooldown, the attempt count). A `Set.prototype.has` that answers `true` no longer registers a purpose,
+  next step (the cooldown, the attempt count, the consumption of the code), and a refusal after the cooldown was taken gives it back. A `Set.prototype.has` that answers `true` no longer registers a purpose,
   and a `Map.prototype.has` that answers `false` no longer lifts a lock. The comparison also holds
   `Buffer.prototype.readUIntBE` (which `randomInt` reads), `Map.prototype.keys` and `String.prototype.toString`. The
   refusal now ends "so the operation is refused" in place of "so nothing is sent". A host that patches a built-in late
