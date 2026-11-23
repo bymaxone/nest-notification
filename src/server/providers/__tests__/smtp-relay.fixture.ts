@@ -100,6 +100,24 @@ function collect(socket: net.Socket, log: RelayLog, body: string): string | unde
   return undefined
 }
 
+/** Carries on the conversation on the TLS socket made over a plain one, recording the name asked for. */
+function upgrade(socket: net.Socket, log: RelayLog, certificate: TestCertificate): void {
+  converse(
+    sealed(
+      new tls.TLSSocket(socket, {
+        isServer: true,
+        ...certificate,
+        SNICallback: (name, done): void => {
+          log.servernames.push(name)
+          done(null, tls.createSecureContext(certificate))
+        }
+      })
+    ),
+    log,
+    undefined
+  )
+}
+
 /** Answers the SMTP conversation on one socket, upgrading it on STARTTLS when it has a certificate. */
 function converse(
   socket: net.Socket,
@@ -131,12 +149,10 @@ function converse(
         socket.write('220 go ahead\r\n')
         onStarttls?.()
         socket.removeAllListeners('data')
-        converse(
-          sealed(new tls.TLSSocket(socket, { isServer: true, ...certificate })),
-          log,
-          undefined
-        )
+        upgrade(socket, log, certificate)
         return
+      } else if (/^STARTTLS/iu.test(line)) {
+        socket.write('502 STARTTLS is not offered\r\n')
       } else if (/^DATA/iu.test(line)) {
         body = ''
         socket.write('354 go\r\n')

@@ -12,20 +12,18 @@
  */
 
 import * as net from 'node:net'
+import type { Duplex } from 'node:stream'
 import * as tls from 'node:tls'
 
 import { nullProto } from '../utils/read-options'
 import { assertStandardRealmRoot } from '../utils/realm-root'
-
-// Read from the global once, when the module loads: the guard below calls the socket's methods through
-// it, so a `bind` or a `call` replaced later cannot hand the guard an unguarded method.
-const apply = Reflect.apply
+import { GuardedConnection } from './smtp-guarded-connection'
 
 /** What the connection needs, resolved before the transport is built. */
 export interface SmtpSocketPlan {
   readonly host: string
   readonly port: number
-  /** Whether the connection starts in TLS (implicit TLS); STARTTLS is left to Nodemailer. */
+  /** Whether the connection starts in TLS (implicit TLS); STARTTLS is Nodemailer's, over a guarded stream. */
   readonly secure: boolean
   /** The host's `tls` options, which a TLS connection starts with. */
   readonly tls: object | undefined
@@ -36,7 +34,7 @@ export interface SmtpSocketPlan {
 /** What Nodemailer's `getSocket` hands back: the open socket, and whether TLS is already on it. */
 type SocketAnswer = (
   error: Error | null,
-  socket?: { readonly connection: net.Socket; readonly secured: boolean }
+  socket?: { readonly connection: Duplex; readonly secured: boolean }
 ) => void
 
 /**
@@ -86,37 +84,6 @@ function connect(plan: SmtpSocketPlan): net.Socket {
 }
 
 /**
- * Makes every write to a socket check the realm root first. A key planted after the check that began
- * the send, and before a byte leaves, would change what Nodemailer builds from ordinary objects; a
- * write made while the realm is polluted destroys the connection with the refusal, so the send fails
- * and nothing is sent after it. It covers the sockets the adapter opens; the socket of a STARTTLS
- * upgrade is made by Nodemailer and is outside it.
- *
- * @param socket - A connected socket.
- */
-function guardWrites(socket: net.Socket): void {
-  const write = socket.write as (...args: unknown[]) => boolean
-  const end = socket.end as (...args: unknown[]) => net.Socket
-  socket.write = ((...args: unknown[]): boolean => {
-    try {
-      assertStandardRealmRoot('SmtpEmailProvider')
-    } catch (error) {
-      socket.destroy(error as Error)
-      return false
-    }
-    return apply(write, socket, args)
-  }) as net.Socket['write']
-  socket.end = ((...args: unknown[]): net.Socket => {
-    try {
-      assertStandardRealmRoot('SmtpEmailProvider')
-    } catch (error) {
-      return socket.destroy(error as Error)
-    }
-    return apply(end, socket, args)
-  }) as net.Socket['end']
-}
-
-/**
  * Opens the socket, and answers once it is connected (and, for implicit TLS, secured) or has failed.
  *
  * @param plan - The resolved plan.
@@ -137,8 +104,9 @@ function open(plan: SmtpSocketPlan, answer: SocketAnswer): void {
     socket.removeListener('error', settle)
     socket.removeListener(ready, onReady)
     if (error === null) {
-      guardWrites(socket)
-      answer(null, { connection: socket, secured: plan.secure })
+      // Handed over as a stream that checks the realm root before every write, so a STARTTLS upgrade
+      // Nodemailer makes on it writes its encrypted bytes through the same check.
+      answer(null, { connection: new GuardedConnection(socket), secured: plan.secure })
       return
     }
     socket.destroy()

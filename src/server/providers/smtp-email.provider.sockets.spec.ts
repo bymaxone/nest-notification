@@ -246,6 +246,98 @@ describe('the connection the adapter opens itself', () => {
     expect(relay.messages).toHaveLength(1)
   })
 
+  it('should send the hostname as the SNI name after STARTTLS when the caller sets none', async () => {
+    relay = await startRelay({ certificate })
+
+    await new SmtpEmailProvider({
+      host: 'localhost',
+      port: relay.port,
+      requireTls: true,
+      tls: { ca: certificate.cert }
+    }).send(MESSAGE)
+
+    expect(relay.servernames).toStrictEqual(['localhost'])
+  })
+
+  it('should refuse a certificate it does not trust after STARTTLS, and send nothing', async () => {
+    relay = await startRelay({ certificate })
+
+    const failure = await new SmtpEmailProvider({
+      host: '127.0.0.1',
+      port: relay.port,
+      requireTls: true
+    })
+      .send(MESSAGE)
+      .catch((error: Error) => error)
+
+    expect(failure).toBeInstanceOf(Error)
+    expect(relay.commands).not.toContain('MAIL')
+    expect(relay.messages).toHaveLength(0)
+  })
+
+  it('should refuse a relay that does not offer STARTTLS when it is required, and send nothing', async () => {
+    relay = await startRelay()
+
+    const failure = await new SmtpEmailProvider({
+      host: '127.0.0.1',
+      port: relay.port,
+      requireTls: true
+    })
+      .send(MESSAGE)
+      .catch((error: Error) => error)
+
+    expect(failure).toBeInstanceOf(Error)
+    expect(relay.commands).not.toContain('MAIL')
+    expect(relay.messages).toHaveLength(0)
+  })
+
+  it('should put on the wire after STARTTLS what Nodemailer puts there when it opens the connection itself', async () => {
+    const strip = (seen: Relay): string =>
+      JSON.stringify([
+        seen.commands,
+        seen.envelope,
+        seen.messages.map((message) =>
+          message
+            .replace(/Message-ID: <[^>]*>/gu, '')
+            .replace(/Date: .*\r\n/gu, '')
+            .replace(/_NmP-[\w-]+/gu, 'B')
+            .replace(/--[\w-]+/gu, '--B')
+        )
+      ])
+    const full = { ...MESSAGE, cc: 'copy@acme.com', bcc: ['hidden@acme.com'], text: 'plain text' }
+    const ours = await startRelay({ certificate })
+    await new SmtpEmailProvider({
+      host: '127.0.0.1',
+      port: ours.port,
+      requireTls: true,
+      tls: { ca: certificate.cert }
+    }).send(full)
+    const direct = await startRelay({ certificate })
+    await nodemailer
+      .createTransport({
+        host: '127.0.0.1',
+        port: direct.port,
+        requireTLS: true,
+        tls: { ca: certificate.cert }
+      })
+      .sendMail({
+        from: { name: '', address: full.from },
+        to: full.to,
+        cc: full.cc,
+        bcc: full.bcc,
+        subject: full.subject,
+        html: full.html,
+        text: full.text,
+        attachments: [{ filename: 'a.txt', content: 'aGVsbG8=', encoding: 'base64' }],
+        disableFileAccess: true,
+        disableUrlAccess: true
+      })
+
+    expect(strip(ours)).toBe(strip(direct))
+    await ours.close()
+    await direct.close()
+  })
+
   it('should report a connection that nothing answers as the connection failing', async () => {
     const closed = await startRelay()
     const port = closed.port
@@ -428,12 +520,10 @@ describe('a key planted after the checks of a send began and before its first by
 })
 
 describe('a name planted once the STARTTLS session is up', () => {
-  // The backstop guards the sockets the adapter opens; the STARTTLS socket is Nodemailer's. What holds
-  // here is that no object the adapter hands to Nodemailer answers for a name from the realm root.
-  // Not here, and measured: `address` (smtp-connection reads `.address` off the envelope strings it
-  // builds, so MAIL FROM and RCPT TO answer for it), `content` and `filename` (the multipart nodes
-  // Nodemailer makes read them off their own options) change what a STARTTLS session sends, and no
-  // object the adapter hands over can shadow them; `encoding` fails the send before any byte.
+  // With the check off, so what is measured is Nodemailer: no object the adapter hands it answers
+  // for a name from the realm root. `address`, `content` and `filename` are not here, because
+  // Nodemailer reads them off objects it builds itself and the message does change; they are held by
+  // the check, in the next block. `encoding` fails the send before any byte.
   const NAMES = [
     'name',
     'group',
@@ -501,4 +591,44 @@ describe('a name planted once the STARTTLS session is up', () => {
 
     expect(sent).toBe(clean)
   })
+})
+
+describe('a name planted once the STARTTLS relay has agreed to upgrade, with the check live', () => {
+  const NAMES = ['address', 'name', 'content', 'filename', 'group', 'raw', 'headers']
+
+  async function sendPlanting(name: string): Promise<{ seen: Relay; failure: unknown }> {
+    mockGuard.enabled = true
+    const cert = makeCertificate()
+    const seen = await startRelay({
+      certificate: cert,
+      onStarttls: () => plant(name, 'PLANTED')
+    })
+    let failure: unknown
+    try {
+      await new SmtpEmailProvider({
+        host: '127.0.0.1',
+        port: seen.port,
+        requireTls: true,
+        tls: { ca: cert.cert }
+      }).send({ ...MESSAGE, cc: 'copy@acme.com', bcc: ['hidden@acme.com'], text: 'plain text' })
+    } catch (error) {
+      failure = error
+    } finally {
+      await seen.close()
+    }
+    return { seen, failure }
+  }
+
+  it.each(NAMES)(
+    'should refuse the send before MAIL FROM, RCPT TO or the body when %s is planted',
+    async (name) => {
+      const { seen, failure } = await sendPlanting(name)
+
+      expect(seen.commands).not.toContain('MAIL')
+      expect(seen.commands).not.toContain('RCPT')
+      expect(seen.commands).not.toContain('DATA')
+      expect(seen.messages).toHaveLength(0)
+      expect(failure).toBeDefined()
+    }
+  )
 })
