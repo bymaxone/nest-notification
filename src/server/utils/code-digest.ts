@@ -13,11 +13,8 @@
  * was set, can be told apart and verified until it expires.
  */
 
-import { createHmac } from 'node:crypto'
+import { hmacSha256Hex } from './captured-crypto'
 
-// Read from the module once, when it loads: a replaced `crypto.createHmac` must not change what a
-// stored code is compared with.
-const keyedHash = createHmac
 // Likewise `Buffer.from`: a replaced one must not turn the secret into a key that is the same for all.
 const bytesOf = Buffer.from
 
@@ -38,8 +35,7 @@ const CONTEXT = 'bymax-notification:otp-code:v1\0'
  */
 export function createCodeDigester(secret: string): (code: string) => string {
   const key = bytesOf(secret, 'utf8')
-  return (code: string): string =>
-    `${CODE_DIGEST_PREFIX}${keyedHash('sha256', key).update(CONTEXT).update(code).digest('hex')}`
+  return (code: string): string => `${CODE_DIGEST_PREFIX}${hmacSha256Hex(key, CONTEXT, code)}`
 }
 
 /**

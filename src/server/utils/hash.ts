@@ -25,17 +25,8 @@
  * at from the other side.
  */
 
-import { createHash } from 'node:crypto'
-
+import { sha256Hex } from './captured-crypto'
 import { assertIdentifies } from './tenant-scope'
-
-// Read from the module once, when it loads: a replaced `crypto.createHash` must not collapse the keys.
-const hashOf = createHash
-
-/** SHA-256 of one value, lowercase hex. */
-function sha256(value: string): string {
-  return hashOf('sha256').update(value).digest('hex')
-}
 
 /**
  * Derives a deterministic, PII-free storage key fragment from a tenant and recipient.
@@ -51,7 +42,5 @@ function sha256(value: string): string {
 export function hashTenantRecipient(tenantId: string, recipient: string): string {
   assertIdentifies('hashTenantRecipient', 'tenantId', tenantId)
   assertIdentifies('hashTenantRecipient', 'recipient', recipient)
-  return hashOf('sha256')
-    .update(`${sha256(tenantId)}:${sha256(recipient)}`)
-    .digest('hex')
+  return sha256Hex(`${sha256Hex(tenantId)}:${sha256Hex(recipient)}`)
 }

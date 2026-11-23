@@ -7,6 +7,7 @@
  */
 
 import type { IOtpStorage } from '../interfaces/otp-storage.interface'
+import { HASH_PROTOTYPE, HMAC_PROTOTYPE } from '../utils/captured-crypto'
 import { InMemoryOtpStorage } from '../providers/in-memory-otp.storage'
 
 import {
@@ -178,6 +179,31 @@ describe('OtpService with a built-in replaced, which the verdict would have read
 
     await expect(attempt).rejects.toMatchObject(REFUSAL)
   })
+
+  it.each([
+    ['Hmac', HMAC_PROTOTYPE, 'digest'],
+    ['Hmac', HMAC_PROTOTYPE, 'update'],
+    ['Hash', HASH_PROTOTYPE, 'digest'],
+    ['Hash', HASH_PROTOTYPE, 'update']
+  ] as const)(
+    'should refuse generate, so no digest is stored, when %s.prototype.%s was replaced',
+    async (_label, holder, name) => {
+      const { storage, called } = planting(undefined)
+      const issuing = service(storage)
+
+      const attempt = replacing(
+        holder,
+        name,
+        function (this: unknown) {
+          return name === 'update' ? this : 'constant'
+        },
+        () => issuing.generate({ ...ref })
+      )
+
+      await expect(attempt).rejects.toMatchObject(REFUSAL)
+      expect(called).not.toContain('set')
+    }
+  )
 
   it('should keep a locked code locked when Map.prototype.has answers false', async () => {
     const issuing = new InMemoryOtpStorage()

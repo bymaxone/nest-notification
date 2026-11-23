@@ -112,7 +112,9 @@ unknown` keeps its brackets). The at-sign is `@`, fullwidth `\uff20`, small `\uf
   `createHash`, `timingSafeEqual`, `randomUUID`, `Buffer.from` and `String.prototype.charAt` are read once, when the
   library loads, so a host, a test or a dependency that replaces one after the import (`crypto.randomInt = () => 0`, a
   `timingSafeEqual` that answers `true`, a `Buffer.from` that answers the same bytes for any text) changes nothing the
-  library does.
+  library does. The `update` and `digest` of the objects `createHash` and `createHmac` return are read once too, and
+  are in the comparison the realm check makes, so a `digest` replaced before a code is issued can no longer make a
+  wrong code verify.
 - **A template send, a dispatch of one and the OTP email path read `bcc`, `cc`, `attachments`, `text`, `from`,
   `fromName`, `replyTo`, `auditRedactValues` and `publishProviderText` off the realm root.** The input the template send
   hands on has no prototype and the renderer's answer is read by name, so a custom provider receives the options it was
@@ -131,7 +133,9 @@ unknown` keeps its brackets). The at-sign is `@`, fullwidth `\uff20`, small `\uf
 - **The text bound of the address masker joins a quoted-printable soft break and a folded line before it looks for an
   address**, so `bo=` and a line break before `b@x.com`, or a quoted local part folded onto the next line, is one address
   and is masked whole. Blanks before a soft break, the white space that indents a fold and a bare carriage return as the
-  line break are all read as part of the join.
+  line break are all read as part of the join. The join is made on the text that is returned, so ordinary text with a
+  line break followed by blanks, or an equals sign, blanks and a line break, comes out joined too (`Hello\n  world`
+  reads `Helloworld`, `total =\n 5` reads `total  5`).
 - **`generate` and `verify` of the OTP service make the realm check the adapters make.** While `Object.prototype` holds a
   key that is not standard, or a built-in the check compares was replaced since the library loaded, they refuse with the
   same count-only `INVALID_SCOPE_IDENTIFIER`, when they start and again after the store call whose answer decides the

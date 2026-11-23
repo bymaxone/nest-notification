@@ -21,6 +21,7 @@
 import { types } from 'node:util'
 
 import { refuseInput } from './bounded-list'
+import { HASH_PROTOTYPE, HMAC_PROTOTYPE } from './captured-crypto'
 
 // Captured when the module loads, so a host that replaces a built-in later cannot change the answer.
 // Everything the check calls after the load is in this block: a built-in that is looked up when the
@@ -261,6 +262,9 @@ const BASELINE: ReadonlyArray<readonly [object, readonly PropertyKey[]]> = [
   [Map.prototype, ['clear', 'delete', 'entries', 'forEach', 'get', 'has', 'keys', 'set']],
   // `crypto.randomInt` reads its random bytes with it, so a replaced one decides the code.
   [Buffer.prototype, ['readUIntBE']],
+  // The methods of the hash objects decide every storage key and every stored digest.
+  [HASH_PROTOTYPE, ['update', 'digest']],
+  [HMAC_PROTOTYPE, ['update', 'digest']],
   [Buffer, ['byteLength', 'from']],
   [Symbol, ['for']],
   [Function.prototype, ['apply', 'bind', 'call', 'toString']]
