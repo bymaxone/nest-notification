@@ -429,7 +429,6 @@ export function assertStandardRealmRoot(owner: string): void {
       count += 1
     }
   }
-  // Stryker disable next-line AssignmentOperator: equivalent, Array.prototype.at accepts the negative index, so a walk that counts down still visits every key
   for (let index = 0; nth(KEYS, index) !== undefined; index += 1) {
     if (changed(index)) {
       count += 1

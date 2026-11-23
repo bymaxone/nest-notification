@@ -219,6 +219,15 @@ describe('a standard key that was overwritten, redefined or removed', () => {
     expect(published).not.toMatch(/hasOwnProperty|secretOver|secretValue|extra/u)
   })
 
+  it('should count the first standard key once, not once for each way the list can be walked', () => {
+    const caught = withChangedKey('__defineGetter__', (current) => ({
+      ...current,
+      value: 1
+    })) as { getResponse(): unknown }
+
+    expect(JSON.stringify(caught.getResponse())).toContain('holds 1 key(s)')
+  })
+
   it('should answer the same again once the key is restored', () => {
     withChangedKey('toString', (current) => ({ ...current, value: 1 }))
 
