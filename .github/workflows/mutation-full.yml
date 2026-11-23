@@ -39,10 +39,10 @@ jobs:
       # work is split into six shards and the ceiling is 60, above the one-job time and so above any
       # shard. A run the ceiling cancels leaves no score and no baseline for the week, so re-measure
       # the slowest shard after the next full run and set the ceiling to 1.5 times it. Run 45067764671
-      # took 57.4 minutes for its slowest shard (a module-level baseline of built-ins is read once at
-      # load and makes a static mutant of each member, which every test then pays for), so the
-      # ceiling is 90.
-      timeout-minutes: 90
+      # took 57.4 minutes for its slowest shard, before the module-level baseline of built-ins was
+      # added. That baseline is read once at load and makes a static mutant of each member, which
+      # every test then pays for, so the ceiling is 120 until a run measures it.
+      timeout-minutes: 120
       # A unit test the cold run did not run fails the job: the score cannot notice a test the
       # related-test lookup never selected. The specs that run no mutated source are listed with
       # their reason in scripts/mutation-inventory.exempt.json.

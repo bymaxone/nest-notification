@@ -617,7 +617,13 @@ describe('the built-ins the options and the send paths call', () => {
     'should refuse when member %s is replaced after the import, with nothing else wrong',
     (_name, holder, key) => {
       const original = describeMember(holder, key) as PropertyDescriptor
-      define(holder, key, { ...original, value: () => undefined })
+      define(
+        holder,
+        key,
+        'get' in original
+          ? { ...original, get: () => undefined }
+          : { ...original, value: () => undefined }
+      )
       let outcome = 'did not refuse'
       try {
         assertStandardRealmRoot('Owner')

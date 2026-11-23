@@ -257,9 +257,47 @@ const BASELINE: ReadonlyArray<readonly [object, readonly PropertyKey[]]> = [
       Symbol.iterator
     ]
   ],
-  [RegExp.prototype, ['exec', 'test', Symbol.match, Symbol.matchAll, Symbol.replace, Symbol.split]],
-  [Set.prototype, ['add', 'clear', 'delete', 'forEach', 'has', 'values', Symbol.iterator]],
-  [Map.prototype, ['clear', 'delete', 'entries', 'forEach', 'get', 'has', 'keys', 'set']],
+  [
+    RegExp.prototype,
+    [
+      'exec',
+      'test',
+      Symbol.match,
+      Symbol.matchAll,
+      Symbol.replace,
+      Symbol.search,
+      Symbol.split,
+      // The flag accessors a `replace` or a `split` reads.
+      'dotAll',
+      'flags',
+      'global',
+      'hasIndices',
+      'ignoreCase',
+      'multiline',
+      'source',
+      'sticky',
+      'unicode',
+      'unicodeSets'
+    ]
+  ],
+  [Set.prototype, ['add', 'clear', 'delete', 'forEach', 'has', 'size', 'values', Symbol.iterator]],
+  [
+    Map.prototype,
+    [
+      'clear',
+      'delete',
+      'entries',
+      'forEach',
+      'get',
+      'has',
+      'keys',
+      'set',
+      'size',
+      'values',
+      Symbol.iterator
+    ]
+  ],
+  [Date.prototype, [Symbol.toPrimitive]],
   // `crypto.randomInt` reads its random bytes with it, so a replaced one decides the code.
   [Buffer.prototype, ['readUIntBE']],
   // The methods of the hash objects decide every storage key and every stored digest.
@@ -270,18 +308,35 @@ const BASELINE: ReadonlyArray<readonly [object, readonly PropertyKey[]]> = [
   [Function.prototype, ['apply', 'bind', 'call', 'toString']]
 ]
 
-/** Each member of {@link BASELINE} that was there at load, as its holder, its name and its value. */
+/**
+ * What stands for a member: its value, or its getter when it is an accessor (a flag of a regular
+ * expression, the `size` of a collection). Called while the module loads.
+ *
+ * @param holder - The object that holds the member.
+ * @param name - The member's name, one the holder has.
+ * @returns The value or the getter.
+ */
+function memberOf(holder: object, name: PropertyKey): unknown {
+  const descriptor = descriptorOf(holder, name) as PropertyDescriptor
+  return descriptor.value ?? descriptor.get
+}
+
+/** Each member of {@link BASELINE} that was there at load, as its holder and its name. */
 export const BASELINE_MEMBERS: ReadonlyArray<readonly [object, PropertyKey]> = BASELINE.flatMap(
   ([holder, names]) =>
     names
-      .filter((name) => descriptorOf(holder, name)?.value !== undefined)
+      .filter((name) => hasOwn(holder, name) && memberOf(holder, name) !== undefined)
       .map((name) => [holder, name] as const)
 )
 
 const MEMBER_HOLDERS: readonly object[] = BASELINE_MEMBERS.map(([holder]) => holder)
 const MEMBER_NAMES: readonly PropertyKey[] = BASELINE_MEMBERS.map(([, name]) => name)
-const MEMBER_VALUES: readonly unknown[] = BASELINE_MEMBERS.map(
-  ([holder, name]) => descriptorOf(holder, name)?.value as unknown
+const MEMBER_VALUES: readonly unknown[] = BASELINE_MEMBERS.map(([holder, name]) =>
+  memberOf(holder, name)
+)
+/** Which field of the descriptor holds each member: `value`, or `get` for an accessor. */
+const MEMBER_FIELDS: readonly string[] = BASELINE_MEMBERS.map(([holder, name]) =>
+  (descriptorOf(holder, name) as PropertyDescriptor).value === undefined ? 'get' : 'value'
 )
 const MEMBER_COUNT = MEMBER_HOLDERS.length
 
@@ -298,7 +353,10 @@ function replacedBuiltins(): number {
       nth(MEMBER_HOLDERS, index) as object,
       nth(MEMBER_NAMES, index) as PropertyKey
     )
-    const now = descriptor === undefined ? undefined : readField(descriptor, 'value')
+    const now =
+      descriptor === undefined
+        ? undefined
+        : readField(descriptor, nth(MEMBER_FIELDS, index) as string)
     if (!same(now, nth(MEMBER_VALUES, index))) {
       replaced += 1
     }

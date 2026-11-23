@@ -105,7 +105,9 @@ unknown` keeps its brackets). The at-sign is `@`, fullwidth `\uff20`, small `\uf
   that makes the SMTP and Resend adapters refuse while the realm root holds a key that is not standard looked its
   built-ins up when it ran, so code that replaced one of them after the import, with a version that says the root is
   clean, made the check say so. It now calls only references taken when the library loaded, and walks with index loops.
-  It also compares, by identity, the built-ins the library calls with the ones that were there when it loaded,
+  It also compares, by identity, the built-ins the library calls with the ones that were there when it loaded, the
+  functions that a symbol names (`RegExp.prototype[Symbol.replace]`, `Map.prototype[Symbol.iterator]`,
+  `Date.prototype[Symbol.toPrimitive]`) and the getters of the regular-expression flags and of `size` among them,
   and refuses while one has been replaced, so a polyfill or a patch that replaces one after the import stops the
   send with the same count-only refusal.
 - **A replaced built-in no longer makes every OTP code predictable or accepts a wrong one.** The built-ins the library calls are read once, when the
