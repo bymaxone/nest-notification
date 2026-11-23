@@ -108,8 +108,7 @@ unknown` keeps its brackets). The at-sign is `@`, fullwidth `\uff20`, small `\uf
   It also compares, by identity, the built-ins the library calls with the ones that were there when it loaded,
   and refuses while one has been replaced, so a polyfill or a patch that replaces one after the import stops the
   send with the same count-only refusal.
-- **A replaced built-in no longer makes every OTP code predictable or accepts a wrong one.** `randomInt`, `createHmac`,
-  `createHash`, `timingSafeEqual`, `randomUUID`, `Buffer.from` and `String.prototype.charAt` are read once, when the
+- **A replaced built-in no longer makes every OTP code predictable or accepts a wrong one.** The built-ins the library calls are read once, when the
   library loads, so a host, a test or a dependency that replaces one after the import (`crypto.randomInt = () => 0`, a
   `timingSafeEqual` that answers `true`, a `Buffer.from` that answers the same bytes for any text) changes nothing the
   library does. The `update` and `digest` of the objects `createHash` and `createHmac` return are read once too, and
@@ -140,8 +139,7 @@ unknown` keeps its brackets). The at-sign is `@`, fullwidth `\uff20`, small `\uf
   key that is not standard, or a built-in the check compares was replaced since the library loaded, they refuse with the
   same count-only `INVALID_SCOPE_IDENTIFIER`, when they start and again after the store call whose answer decides the
   next step (the cooldown, the attempt count, the consumption of the code), and a refusal after the cooldown was taken gives it back. A `Set.prototype.has` that answers `true` no longer registers a purpose,
-  and a `Map.prototype.has` that answers `false` no longer lifts a lock. The comparison also holds
-  `Buffer.prototype.readUIntBE` (which `randomInt` reads), `Map.prototype.keys` and `String.prototype.toString`. The
+  and a `Map.prototype.has` that answers `false` no longer lifts a lock. The
   refusal now ends "so the operation is refused" in place of "so nothing is sent". A host that patches a built-in late
   could already not send; it now cannot generate or verify either.
 - **The refusal and every exception of the library are built from their own fields.** A `status`, a `message` or a body
@@ -160,7 +158,7 @@ unknown` keeps its brackets). The at-sign is `@`, fullwidth `\uff20`, small `\uf
 
 #### Apply to a derived backend
 
-The declaration changes against 1.4.22 are three. The parameter of `OtpService.generate()`, `consume()` and `getStatus()` is named `raw` where it was `input`: its type is the same, and a caller passes it by position, so nothing changes for a caller. `EmailAttachment` gains `cid?: string` and `contentDisposition?: 'attachment' | 'inline'`: both are new and optional, so an attachment written for 1.4.22 compiles and sends unchanged, and a consumer needs nothing from them. Private members of `OtpService`, `EmailService`, `NotificationService`, `SmtpEmailProvider` and `ResendEmailProvider` were added, removed or renamed (`countAttempt`, `matchesStoredCode`, `toGenerateInput` and `mapAttachments` are gone; `readInput`, `sendRead`, `verifyChecked`, `rejectInvalidCode`, `failDelivery`, `auditText` and `assertRealmOrRelease` are new): they are not part of the contract, and no public or protected member was removed or changed in type. A configuration that was accepted before now fails when the module is built: a boolean option
+The declaration changes against 1.4.22 are three. The parameter of `OtpService.generate()`, `consume()` and `getStatus()` is named `raw` where it was `input`: its type is the same, and a caller passes it by position, so nothing changes for a caller. `EmailAttachment` gains `cid?: string` and `contentDisposition?: 'attachment' | 'inline'`: both are new and optional, so an attachment written for 1.4.22 compiles and sends unchanged, and a consumer needs nothing from them. Private members were added, removed or renamed: they are not part of the contract, and no public or protected member was removed or changed in type. A configuration that was accepted before now fails when the module is built: a boolean option
 given as a string, a `maskRecipient` that is not a function, a `perPurpose` of `null`. A custom `IOtpStorage` that
 answered `tryAcquireCooldown`, `deleteIfCode` or `isConfigured` with something other than a boolean, `recordFailure`
 with something other than an integer of at least `1`, or `consumeAttempt` with an unknown status or an entry of the
