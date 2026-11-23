@@ -25,7 +25,7 @@ the entries that carry one, is the compatibility contract — read it, not the n
 - **A replaced `node:crypto` function no longer makes every OTP code predictable.** `randomInt`, `createHmac`,
   `createHash`, `timingSafeEqual` and `randomUUID` are read from the module once, when the library loads, so a host,
   a test or a dependency that replaces one after the import (`crypto.randomInt = () => 0`, a `timingSafeEqual` that
-  answers `true`) changes nothing the library does. Nothing legitimate replaces them in a host's tests.
+  answers `true`) changes nothing the library does.
 - **A template send, a dispatch of one and the OTP email path read `bcc`, `cc`, `attachments`, `text`, `from`,
   `fromName`, `replyTo`, `auditRedactValues` and `publishProviderText` off the realm root.** The input the template send
   hands on has no prototype and the renderer's answer is read by name, so a custom provider receives the options it was
