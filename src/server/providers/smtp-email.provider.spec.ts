@@ -307,6 +307,18 @@ describe('SmtpEmailProvider', () => {
       })
     })
 
+    it('should leave a recipient that is more than a bare mailbox as the string it was', async () => {
+      await new SmtpEmailProvider({ host: 'h' }).send({
+        ...baseOptions,
+        to: ['Bob Smith <bob@acme.com>', 'plain@acme.com']
+      })
+
+      expect(lastSendPayload().to).toEqual([
+        'Bob Smith <bob@acme.com>',
+        { name: '', address: 'plain@acme.com' }
+      ])
+    })
+
     // A display name must be folded into the RFC-5322 "Name <email>" from header.
     it('should build the from header as "Name <email>" when fromName is provided', async () => {
       await new SmtpEmailProvider({ host: 'h' }).send({ ...baseOptions, fromName: 'Acme' })

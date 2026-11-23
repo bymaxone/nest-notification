@@ -82,6 +82,24 @@ function sealed<T extends net.Socket>(socket: T): T {
   return socket
 }
 
+/** Notes a command line in what the relay saw: its verb, and the whole line for an envelope command. */
+function record(log: RelayLog, line: string): void {
+  log.commands.push(line.split(' ')[0]?.toUpperCase() ?? '')
+  if (/^(MAIL|RCPT)/iu.test(line)) {
+    log.envelope.push(line)
+  }
+}
+
+/** Adds to a message body; once it ends with the terminator the message is logged and acknowledged. */
+function collect(socket: net.Socket, log: RelayLog, body: string): string | undefined {
+  if (!body.endsWith('\r\n.\r\n')) {
+    return body
+  }
+  log.messages.push(body)
+  socket.write('250 queued\r\n')
+  return undefined
+}
+
 /** Answers the SMTP conversation on one socket, upgrading it on STARTTLS when it has a certificate. */
 function converse(
   socket: net.Socket,
@@ -96,13 +114,8 @@ function converse(
     pending += chunk.toString('utf8')
     while (pending.length > 0) {
       if (body !== undefined) {
-        body += pending
+        body = collect(socket, log, body + pending)
         pending = ''
-        if (body.endsWith('\r\n.\r\n')) {
-          log.messages.push(body)
-          body = undefined
-          socket.write('250 queued\r\n')
-        }
         return
       }
       const end = pending.indexOf('\r\n')
@@ -111,10 +124,7 @@ function converse(
       }
       const line = pending.slice(0, end)
       pending = pending.slice(end + 2)
-      log.commands.push(line.split(' ')[0]?.toUpperCase() ?? '')
-      if (/^(MAIL|RCPT)/iu.test(line)) {
-        log.envelope.push(line)
-      }
+      record(log, line)
       if (/^EHLO/iu.test(line)) {
         socket.write(certificate ? '250-relay\r\n250 STARTTLS\r\n' : '250 relay\r\n')
       } else if (/^STARTTLS/iu.test(line) && certificate) {

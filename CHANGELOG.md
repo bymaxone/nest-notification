@@ -21,7 +21,37 @@ the entries that carry one, is the compatibility contract — read it, not the n
   clean, made the check say so. It now calls only references taken when the library loaded, and walks with index loops.
   It also compares, by identity, the built-ins the library calls with the ones that were there when it loaded,
   and refuses while one has been replaced, so a polyfill or a patch that replaces one after the import stops the
-  send with the same count-only refusal. There is nothing to apply.
+  send with the same count-only refusal.
+- **A replaced `node:crypto` function no longer makes every OTP code predictable.** `randomInt`, `createHmac`,
+  `createHash`, `timingSafeEqual` and `randomUUID` are read from the module once, when the library loads, so a host,
+  a test or a dependency that replaces one after the import (`crypto.randomInt = () => 0`, a `timingSafeEqual` that
+  answers `true`) changes nothing the library does. Nothing legitimate replaces them in a host's tests.
+- **A template send, a dispatch of one and the OTP email path read `bcc`, `cc`, `attachments`, `text`, `from`,
+  `fromName`, `replyTo`, `auditRedactValues` and `publishProviderText` off the realm root.** The input the template send
+  hands on has no prototype and the renderer's answer is read by name, so a custom provider receives the options it was
+  given, and a failure that echoes the code is still redacted and its text withheld.
+- **A write made while the realm root is polluted refuses the send.** The adapter's own socket checks the root before
+  it writes: a key planted after the checks that began the send, and before a byte left, destroys the connection and the
+  send fails with the same count-only refusal, where it used to change the recipients or the body. It covers plain and
+  implicit-TLS connections. Nodemailer is handed each recipient and each body part as an object with its own keys, and a
+  failure of a send while the root is polluted is reported as that refusal.
+- **A runtime without `__proto__` is a standard one, and a frozen root is not pollution.** `node --disable-proto=delete`
+  no longer makes every adapter refuse, and `Object.freeze(Object.prototype)` after the import, or a standard key that
+  only became read-only with the same value, is hardening and not a change; a changed value or enumerability still
+  refuses.
+- **The text bound of the address masker joins a quoted-printable soft break and a folded line before it looks for an
+  address**, so `bo=` and a line break before `b@x.com`, or a quoted local part folded onto the next line, is one address
+  and is masked whole.
+- **The refusal and every exception of the library are built from their own fields.** A `status`, a `message` or a body
+  field planted on the realm root answers for none of them. A connection error of the adapter's own socket now carries
+  Node's native code (`ECONNREFUSED`, `ETIMEDOUT`, ...) where Nodemailer used to wrap it as `ESOCKET`.
+- **Stated limits.** On a STARTTLS session the encrypted part is Nodemailer's own socket, so the write check does not
+  cover it, and three names Nodemailer reads off objects it builds itself (`address` on the envelope it derives,
+  `content` and `filename` on the nodes of a multipart message) cannot be shadowed from outside; a string planted under
+  `pipe` as a function ends the process inside Nodemailer's streams. Freezing `Object.prototype` at startup is the
+  defence. Recipients that are not a bare mailbox (`Bob <bob@x.com>`) go to Nodemailer as the strings they were.
+  Address masking leaves out the base64 of a whole address and the spelled-out forms (`bob at x`, `[at]`), and a quoted
+  local part of more than 300 units is read as ordinary characters up to a space. There is nothing to apply.
 
 ## [1.4.23] - 2026-11-22
 

@@ -106,15 +106,57 @@ describe('assertStandardRealmRoot', () => {
     expect(published).not.toMatch(/secretKeyName|another|secretValue/u)
   })
 
-  it('should ignore a symbol key, which no transport reads by name', () => {
-    const symbol = Symbol('s')
-    Object.defineProperty(Object.prototype, symbol, { value: 1, configurable: true })
+  describe('a symbol key on the root', () => {
+    const PROTECT = Symbol.for('$$jest-protect-from-deletion')
 
-    try {
-      expect(() => assertStandardRealmRoot('Owner')).not.toThrow()
-    } finally {
-      Reflect.deleteProperty(Object.prototype, symbol)
+    /** Runs the check with `symbol` defined on the root as `descriptor`, and puts the root back. */
+    function checkWith(symbol: symbol, descriptor: PropertyDescriptor): unknown {
+      const original = Object.getOwnPropertyDescriptor(Object.prototype, symbol)
+      Object.defineProperty(Object.prototype, symbol, { configurable: true, ...descriptor })
+      let outcome = 'accepted'
+      try {
+        assertStandardRealmRoot('Owner')
+      } catch {
+        outcome = 'refused'
+      } finally {
+        if (original === undefined) {
+          Reflect.deleteProperty(Object.prototype, symbol)
+        } else {
+          Object.defineProperty(Object.prototype, symbol, original)
+        }
+      }
+      return outcome
     }
+
+    it.each([
+      ['a well-known symbol, enumerable', Symbol.iterator, true],
+      ['a well-known symbol, not enumerable', Symbol.iterator, false],
+      ['an unregistered symbol', Symbol('planted'), true],
+      ['an unregistered symbol, not enumerable', Symbol('planted'), false]
+    ])('should be refused: %s', (_name, symbol, enumerable) => {
+      expect(checkWith(symbol, { value: 1, enumerable })).toBe('refused')
+    })
+
+    it('should accept the key jest keeps on the root, while it is not enumerable', () => {
+      expect(Object.getOwnPropertyDescriptor(Object.prototype, PROTECT)?.enumerable).toBe(false)
+      expect(() => assertStandardRealmRoot('Owner')).not.toThrow()
+    })
+
+    it('should refuse that key when it is enumerable', () => {
+      expect(checkWith(PROTECT, { value: 1, enumerable: true })).toBe('refused')
+    })
+
+    it('should refuse another symbol of the registry', () => {
+      expect(checkWith(Symbol.for('$$another-registry-key'), { value: 1, enumerable: false })).toBe(
+        'refused'
+      )
+    })
+
+    it('should refuse an unregistered symbol that has the description of that key', () => {
+      expect(
+        checkWith(Symbol('$$jest-protect-from-deletion'), { value: 1, enumerable: false })
+      ).toBe('refused')
+    })
   })
 
   it('should answer for the root as it is now, not as it was when the module loaded', () => {

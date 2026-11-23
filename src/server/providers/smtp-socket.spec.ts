@@ -131,4 +131,33 @@ describe('smtpGetSocket', () => {
 
     expect(relay.servernames).toStrictEqual(['localhost'])
   })
+
+  it('should destroy the connection with the refusal when it is ended while the root is polluted', async () => {
+    const port = await listen((socket) => socket.resume())
+    const answers: unknown[][] = []
+    const answer: Answer = (...args) => {
+      answers.push(args)
+    }
+    smtpGetSocket({
+      host: '127.0.0.1',
+      port,
+      secure: false,
+      tls: undefined,
+      connectionTimeoutMs: 1000
+    })(undefined, answer)
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    const connection = (answers[0]?.[1] as { connection: net.Socket }).connection
+    const closed = new Promise<Error | undefined>((resolve) => {
+      connection.once('error', (error: Error) => resolve(error))
+    })
+    Object.defineProperty(Object.prototype, 'planted', {
+      value: 1,
+      configurable: true,
+      writable: true
+    })
+
+    connection.end('QUIT\r\n')
+
+    expect(await closed).toMatchObject({ code: 'notification.invalid_scope_identifier' })
+  })
 })

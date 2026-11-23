@@ -29,9 +29,13 @@ import { refuseInput } from './bounded-list'
 // replacement whether the root is clean is told what the replacement says.
 const ROOT = Object.prototype
 const namesOf = Object.getOwnPropertyNames
+const symbolsOf = Object.getOwnPropertySymbols
 const descriptorOf = Object.getOwnPropertyDescriptor
 const same = Object.is
 const hasOwn = Object.hasOwn
+// The one symbol key a host's own tooling puts on the root: jest keeps it there, not enumerable, to
+// protect the prototype from deletion. It is that registered symbol, only while it is not enumerable.
+const JEST_PROTECT = Symbol.for('$$jest-protect-from-deletion')
 const reflectGet = Reflect.get
 const isProxy = types.isProxy
 // `uncurry(fn)` is `fn` called with its receiver as the first argument, whatever `fn.call` is later.
@@ -168,6 +172,7 @@ const BASELINE: ReadonlyArray<readonly [object, readonly PropertyKey[]]> = [
       'getOwnPropertyDescriptor',
       'getOwnPropertyDescriptors',
       'getOwnPropertyNames',
+      'getOwnPropertySymbols',
       'getPrototypeOf',
       'hasOwn',
       'is',
@@ -254,6 +259,7 @@ const BASELINE: ReadonlyArray<readonly [object, readonly PropertyKey[]]> = [
   [Set.prototype, ['add', 'clear', 'delete', 'forEach', 'has', 'values', Symbol.iterator]],
   [Map.prototype, ['clear', 'delete', 'entries', 'forEach', 'get', 'has', 'set']],
   [Buffer, ['byteLength', 'from']],
+  [Symbol, ['for']],
   [Function.prototype, ['apply', 'bind', 'call', 'toString']]
 ]
 
@@ -320,6 +326,17 @@ function changed(index: number): boolean {
 }
 
 /**
+ * Whether a symbol key of the root is the one jest puts there: that registered symbol, not enumerable.
+ *
+ * @param symbol - A symbol key of the root.
+ * @returns `true` for the exempt key.
+ */
+function isProtection(symbol: symbol): boolean {
+  const descriptor = same(symbol, JEST_PROTECT) ? descriptorOf(ROOT, symbol) : undefined
+  return descriptor !== undefined && readField(descriptor, 'enumerable') === false
+}
+
+/**
  * Refuses while the realm root holds a string key that is not standard, or a standard key that
  * was overwritten, redefined or removed. Everything it calls is a reference taken when the module
  * loaded, and it walks with index loops, so a built-in replaced after the import cannot blind it.
@@ -337,6 +354,12 @@ export function assertStandardRealmRoot(owner: string): void {
   }
   for (let index = 0; index < KEYS.length; index += 1) {
     if (changed(index)) {
+      count += 1
+    }
+  }
+  const symbols = symbolsOf(ROOT)
+  for (let at = 0; at < symbols.length; at += 1) {
+    if (!isProtection(nth(symbols, at) as symbol)) {
       count += 1
     }
   }
