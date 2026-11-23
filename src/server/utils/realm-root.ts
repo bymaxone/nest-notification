@@ -377,12 +377,13 @@ function changed(index: number): boolean {
   if (before === undefined || now === undefined) {
     return (before === undefined) !== (now === undefined)
   }
-  for (let field = 0; field < DESCRIPTOR_FIELDS.length; field += 1) {
+  for (let field = 0; nth(DESCRIPTOR_FIELDS, field) !== undefined; field += 1) {
     const was = nth(before, field)
     const is = readField(now, nth(DESCRIPTOR_FIELDS, field) as string)
     // A key that only became non-writable or non-configurable, with the same value or accessors, is a
-    // root that was hardened (`Object.freeze(Object.prototype)`), and not one that was polluted.
-    const hardened = (field === WRITABLE || field === CONFIGURABLE) && was === true && is === false
+    // root that was hardened (`Object.freeze(Object.prototype)`), and not one that was polluted. A flag
+    // that was on and differs is off, or the key is an accessor now and its accessors differ.
+    const hardened = (field === WRITABLE || field === CONFIGURABLE) && was === true
     if (!same(was, is) && !hardened) {
       return true
     }
@@ -417,7 +418,7 @@ export function assertStandardRealmRoot(owner: string): void {
       count += 1
     }
   }
-  for (let index = 0; index < KEYS.length; index += 1) {
+  for (let index = 0; nth(KEYS, index) !== undefined; index += 1) {
     if (changed(index)) {
       count += 1
     }

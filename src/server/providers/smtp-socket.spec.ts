@@ -83,6 +83,35 @@ describe('smtpGetSocket', () => {
     connection.destroy()
   })
 
+  it('should not answer again when the peer resets the socket after it connected', async () => {
+    let peer: net.Socket | undefined
+    const port = await listen((socket) => {
+      peer = socket
+      socket.on('error', () => undefined)
+      socket.resume()
+    })
+    const answers: unknown[][] = []
+    const answer: Answer = (...args) => {
+      answers.push(args)
+    }
+    smtpGetSocket({
+      host: '127.0.0.1',
+      port,
+      secure: false,
+      tls: undefined,
+      connectionTimeoutMs: 1000
+    })(undefined, answer)
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    const connection = (answers[0]?.[1] as { connection: net.Socket }).connection
+    connection.on('error', () => undefined)
+
+    peer?.resetAndDestroy()
+    await new Promise((resolve) => setTimeout(resolve, 100))
+
+    expect(answers).toHaveLength(1)
+    connection.destroy()
+  })
+
   it('should answer a handshake that never completes with a timeout error that has its code and words', async () => {
     const port = await listen((socket) => socket.resume())
 

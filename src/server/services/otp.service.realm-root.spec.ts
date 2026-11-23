@@ -20,6 +20,19 @@ import {
 import { OtpService } from './otp.service'
 
 const REFUSAL = { code: 'notification.invalid_scope_identifier' }
+
+/** Awaits `attempt`, which must be refused by the realm check on behalf of `OtpService`, and not by another. */
+async function expectRefusal(attempt: Promise<unknown>): Promise<void> {
+  const caught = await attempt.then(
+    () => undefined,
+    (error: unknown) => error
+  )
+
+  expect(caught).toMatchObject(REFUSAL)
+  expect((caught as { getResponse(): unknown }).getResponse()).toMatchObject({
+    error: { details: { boundary: 'OtpService' } }
+  })
+}
 const SECRET = 'a-secret-of-at-least-thirty-two-bytes!'
 
 function plant(): void {
@@ -94,7 +107,7 @@ describe('OtpService while the realm root is polluted', () => {
     const { storage, called } = planting(undefined)
     plant()
 
-    await expect(service(storage).generate({ ...ref })).rejects.toMatchObject(REFUSAL)
+    await expectRefusal(service(storage).generate({ ...ref }))
 
     expect(called).toStrictEqual([])
     expect(emailSendTemplate).not.toHaveBeenCalled()
@@ -104,7 +117,7 @@ describe('OtpService while the realm root is polluted', () => {
     const { storage, called } = planting(undefined)
     plant()
 
-    await expect(service(storage).verify({ ...ref, code: '123456' })).rejects.toMatchObject(REFUSAL)
+    await expectRefusal(service(storage).verify({ ...ref, code: '123456' }))
 
     expect(called).toStrictEqual([])
   })
@@ -112,7 +125,7 @@ describe('OtpService while the realm root is polluted', () => {
   it('should refuse generate when a key is planted while the cooldown is being taken, before a code is stored or sent', async () => {
     const { storage, called } = planting('tryAcquireCooldown')
 
-    await expect(service(storage).generate({ ...ref })).rejects.toMatchObject(REFUSAL)
+    await expectRefusal(service(storage).generate({ ...ref }))
 
     expect(called).not.toContain('set')
     expect(emailSendTemplate).not.toHaveBeenCalled()
@@ -124,7 +137,18 @@ describe('OtpService while the realm root is polluted', () => {
     await issuing.generate({ ...ref })
     const sent = emailSendTemplate.mock.calls.at(-1)?.[0] as { data: { code: string } }
 
-    await expect(issuing.verify({ ...ref, code: sent.data.code })).rejects.toMatchObject(REFUSAL)
+    await expectRefusal(issuing.verify({ ...ref, code: sent.data.code }))
+  })
+
+  it('should refuse verify, and never accept the code, when a key is planted while the failure is counted', async () => {
+    const { storage, called } = planting('recordFailure')
+    const issuing = service(storage)
+    await issuing.generate({ ...ref })
+    const sent = emailSendTemplate.mock.calls.at(-1)?.[0] as { data: { code: string } }
+
+    await expectRefusal(issuing.verify({ ...ref, code: sent.data.code }))
+
+    expect(called).not.toContain('consumeAttempt')
   })
 })
 
@@ -132,7 +156,7 @@ describe('OtpService when the realm check refuses after a store call', () => {
   it('should release the cooldown it took, so the recipient can generate again once the root is clean', async () => {
     const { storage } = planting('tryAcquireCooldown')
     const issuing = service(storage)
-    await expect(issuing.generate({ ...ref })).rejects.toMatchObject(REFUSAL)
+    await expectRefusal(issuing.generate({ ...ref }))
     Reflect.deleteProperty(Object.prototype, 'planted')
 
     const again = await issuing.generate({ ...ref })
@@ -147,7 +171,7 @@ describe('OtpService when the realm check refuses after a store call', () => {
     const sent = emailSendTemplate.mock.calls.at(-1)?.[0] as { data: { code: string } }
     // The cooldown has run out; the code has not.
     await storage.clearCooldown(ref.tenantId, 'jane@acme.com', ref.purpose)
-    await expect(issuing.generate({ ...ref })).rejects.toMatchObject(REFUSAL)
+    await expectRefusal(issuing.generate({ ...ref }))
     Reflect.deleteProperty(Object.prototype, 'planted')
 
     const verdict = await issuing.verify({ ...ref, code: sent.data.code })
@@ -161,7 +185,7 @@ describe('OtpService when the realm check refuses after a store call', () => {
     await consuming.generate({ ...ref })
     const sent = emailSendTemplate.mock.calls.at(-1)?.[0] as { data: { code: string } }
 
-    await expect(consuming.verify({ ...ref, code: sent.data.code })).rejects.toMatchObject(REFUSAL)
+    await expectRefusal(consuming.verify({ ...ref, code: sent.data.code }))
   })
 })
 
@@ -177,7 +201,7 @@ describe('OtpService with a built-in replaced, which the verdict would have read
       () => strict.generate({ ...ref, purpose: 'unknown_flow', deliverVia: 'manual' })
     )
 
-    await expect(attempt).rejects.toMatchObject(REFUSAL)
+    await expectRefusal(attempt)
   })
 
   it.each([
@@ -200,7 +224,7 @@ describe('OtpService with a built-in replaced, which the verdict would have read
         () => issuing.generate({ ...ref })
       )
 
-      await expect(attempt).rejects.toMatchObject(REFUSAL)
+      await expectRefusal(attempt)
       expect(called).not.toContain('set')
     }
   )
@@ -219,6 +243,6 @@ describe('OtpService with a built-in replaced, which the verdict would have read
       () => locked.verify({ ...ref, code: sent.data.code })
     )
 
-    await expect(attempt).rejects.toMatchObject(REFUSAL)
+    await expectRefusal(attempt)
   })
 })

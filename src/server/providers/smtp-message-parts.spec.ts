@@ -16,7 +16,9 @@ const LISTS: (string | string[] | undefined)[] = [
   [''],
   'a@b.c',
   ['a@b.c', 'Bob <b@x.com>'],
-  ['a@b.c', 'c@d.e']
+  ['a@b.c', 'c@d.e'],
+  'Bob a@b.c',
+  'a@b.c Bob'
 ]
 
 /** The message as text, with the random boundaries made equal so two builds can be compared. */
@@ -69,6 +71,34 @@ describe('the recipients and bodies handed to Nodemailer', () => {
       const own = await build({ ...others, [header]: ownRecipients(value), text: 'x' })
 
       expect(own).toBe(raw)
+    })
+  })
+
+  describe('the own keys of what Nodemailer reads', () => {
+    it('should give a body every name Nodemailer reads on a part, each its own', () => {
+      const part = ownBody('x') as unknown as Record<string, unknown>
+
+      expect(Object.keys(part).sort()).toStrictEqual(
+        [
+          'content',
+          'contentTransferEncoding',
+          'contentType',
+          'encoding',
+          'filename',
+          'headers',
+          'href',
+          'httpHeaders',
+          'path',
+          'raw',
+          'tls'
+        ].sort()
+      )
+    })
+
+    it('should give a mailbox the names Nodemailer reads on a recipient, each its own', () => {
+      const recipient = ownRecipients('a@b.c') as unknown as Record<string, unknown>
+
+      expect(Object.keys(recipient).sort()).toStrictEqual(['address', 'group', 'name'])
     })
   })
 })

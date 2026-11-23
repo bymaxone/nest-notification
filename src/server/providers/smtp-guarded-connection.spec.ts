@@ -102,6 +102,28 @@ describe('GuardedConnection', () => {
     expect(listener).toHaveBeenCalledTimes(1)
   })
 
+  it('should emit timeout when the socket underneath does', () => {
+    const connection = new GuardedConnection(inner)
+    const listener = jest.fn()
+    connection.on('timeout', listener)
+
+    inner.emit('timeout')
+
+    expect(listener).toHaveBeenCalledTimes(1)
+  })
+
+  it('should resume the socket underneath when it is read, so a paused socket delivers again', async () => {
+    const connection = new GuardedConnection(inner)
+    const chunks: Buffer[] = []
+    inner.pause()
+
+    connection.on('data', (chunk: Buffer) => chunks.push(chunk))
+    serverSide?.write('after-pause')
+    await settle()
+
+    expect(Buffer.concat(chunks).toString()).toBe('after-pause')
+  })
+
   it('should set a timeout without a listener', () => {
     const connection = new GuardedConnection(inner)
 
@@ -140,24 +162,36 @@ describe('GuardedConnection', () => {
 
   it('should refuse a write while the root is polluted, destroy the socket and send nothing', async () => {
     const connection = new GuardedConnection(inner)
-    const failure = new Promise<{ code?: string }>((resolve) => connection.once('error', resolve))
+    const failure = new Promise<{ code?: string; getResponse(): unknown }>((resolve) =>
+      connection.once('error', resolve)
+    )
     plant()
 
     connection.write('MAIL FROM:<a@b.c>\r\n')
 
-    expect((await failure).code).toBe('notification.invalid_scope_identifier')
+    const refusal = await failure
+    expect(refusal.code).toBe('notification.invalid_scope_identifier')
+    expect(refusal.getResponse()).toMatchObject({
+      error: { details: { boundary: 'SmtpEmailProvider' } }
+    })
     expect(inner.destroyed).toBe(true)
     expect(Buffer.concat(received)).toHaveLength(0)
   })
 
   it('should refuse an end while the root is polluted', async () => {
     const connection = new GuardedConnection(inner)
-    const failure = new Promise<{ code?: string }>((resolve) => connection.once('error', resolve))
+    const failure = new Promise<{ code?: string; getResponse(): unknown }>((resolve) =>
+      connection.once('error', resolve)
+    )
     plant()
 
     connection.end()
 
-    expect((await failure).code).toBe('notification.invalid_scope_identifier')
+    const refusal = await failure
+    expect(refusal.code).toBe('notification.invalid_scope_identifier')
+    expect(refusal.getResponse()).toMatchObject({
+      error: { details: { boundary: 'SmtpEmailProvider' } }
+    })
     expect(inner.destroyed).toBe(true)
   })
 
