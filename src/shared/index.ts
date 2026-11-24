@@ -9,6 +9,12 @@
 
 export type { OtpPurpose } from './types/otp-purpose.types'
 export type { NotificationChannel } from './types/notification-channel.types'
+export type {
+  PushFailureReason,
+  PushReceiptResult,
+  PushReceiptStatus,
+  PushTokenResult
+} from './types/push.types'
 export type { NotificationErrorResponse } from './types/notification-error.types'
 export { NOTIFICATION_ERROR_CODES, type NotificationErrorCode } from './constants/error-codes'
 export { DEFAULT_TTLS } from './constants/default-ttls'
