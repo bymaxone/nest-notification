@@ -34,8 +34,8 @@ the entries that carry one, is the compatibility contract — read it, not the n
   statement before they return, and the internal verdicts have no prototype. The built-ins the decision awaits sit
   behind are covered by one row per replaceable built-in.
 - **A refusal no longer ends as an unhandled rejection when a hooked built-in planted the forgery.** Every promise the
-  library awaits, and the one `verify` hands back, carries an own `constructor`, so awaiting it takes the native path
-  and a planted `then` can neither answer for it nor drop its rejection; the error constructor reads its catalog
+  library makes on the `verify` path, and the one `verify` hands back, carries an own `constructor`, so awaiting it
+  takes the native path and a planted `then` can neither answer for it nor drop its rejection; the error constructor reads its catalog
   through `Map.prototype.get` taken at load. A hooked `Date.now` or `Map.prototype.get` now ends as a refusal and zero
   unhandled rejections.
 - Known limits: code running concurrently in the same process that plants a `then` after the check and erases it before
