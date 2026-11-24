@@ -571,13 +571,15 @@ describe('a built-in replaced after the module was imported', () => {
     return caught
   }
 
+  // Object rows, titled by name: a positional title formats the second member, the built-in itself,
+  // and the global object it dumps reads differently under the mutation runner than under Jest.
   const CASES = LIARS.flatMap(([label, target, key, replacement]) =>
-    (['plant', 'overwrite'] as const).map((how) => [label, target, key, replacement, how] as const)
+    (['plant', 'overwrite'] as const).map((how) => ({ label, target, key, replacement, how }))
   )
 
   it.each(CASES)(
-    'should still refuse when %s answers that the root is clean: %s',
-    (_label, target, key, replacement, how) => {
+    'should still refuse when $label answers that the root is clean: $how',
+    ({ target, key, replacement, how }) => {
       const caught = checkWith(target, key, replacement, how)
 
       // It refuses: the send stops. What the refusal is built from is not the check's, and a built-in

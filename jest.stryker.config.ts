@@ -29,7 +29,12 @@ const config: Config = {
     // Reads the README as text and compiles the entry points as files to compare their exports
     // with it; it imports nothing from `src` at run time, so it kills no mutant, and `pnpm test`
     // and CI still run it.
-    '<rootDir>/readme-exports\\.spec\\.ts$'
+    '<rootDir>/readme-exports\\.spec\\.ts$',
+    // These two import no module that is mutated, only the fixture under `__tests__`, which the
+    // mutate list excludes, so the related-test lookup never selects them and they kill no mutant;
+    // `pnpm test` and `pnpm test:cov` still run them.
+    '<rootDir>/server/utils/realm-root\\.process\\.spec\\.ts$',
+    '<rootDir>/server/__tests__/real-process\\.fixture\\.spec\\.ts$'
   ]
 }
 
