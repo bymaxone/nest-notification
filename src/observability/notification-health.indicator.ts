@@ -32,17 +32,18 @@ const sourceOf = Function.prototype.call.bind(Function.prototype.toString) as (
 ) => string
 const LOADED_THEN = NATIVE_PROTOTYPE.then
 const LOADED_CONSTRUCTOR = loadedConstructor()
+const LOADED_SPECIES = fieldOf(LOADED_CONSTRUCTOR as object, Symbol.species, 'get')
 // The engine's own %Promise%: the global `Promise` is looked up each time it is named, and a host can swap it.
 const NativePromise = LOADED_CONSTRUCTOR as PromiseConstructor
 
 /**
- * The `value` of a property of an object, only when it is a data property it owns. A descriptor is an
+ * A field of the descriptor of an own property, only when the descriptor owns it. A descriptor is an
  * ordinary object: `descriptor?.value` of an accessor reads `Object.prototype.value`.
  */
-function valueOf(holder: object, name: string): unknown {
+function fieldOf(holder: object, name: PropertyKey, field: 'value' | 'get'): unknown {
   const descriptor = descriptorOf(holder, name)
-  return descriptor !== undefined && hasOwn(descriptor, 'value')
-    ? reflectGet(descriptor, 'value')
+  return descriptor !== undefined && hasOwn(descriptor, field)
+    ? reflectGet(descriptor, field)
     : undefined
 }
 
@@ -52,7 +53,8 @@ function valueOf(holder: object, name: string): unknown {
  * this module loaded would otherwise become the baseline `promisesIntact` compares with.
  */
 function loadedConstructor(): unknown {
-  const slot = valueOf(NATIVE_PROTOTYPE, 'constructor') as { prototype: unknown } | undefined
+  const slot = fieldOf(NATIVE_PROTOTYPE, 'constructor', 'value') as
+    { prototype: unknown } | undefined
   if (
     typeof slot !== 'function' ||
     isProxy(slot) ||
@@ -112,8 +114,9 @@ function silence(value: unknown): void {
 /** Whether the promise machinery is what it was at load, with no `then` on the root prototypes. */
 function promisesIntact(): boolean {
   return (
-    valueOf(NATIVE_PROTOTYPE, 'then') === LOADED_THEN &&
-    valueOf(NATIVE_PROTOTYPE, 'constructor') === LOADED_CONSTRUCTOR &&
+    fieldOf(NATIVE_PROTOTYPE, 'then', 'value') === LOADED_THEN &&
+    fieldOf(NATIVE_PROTOTYPE, 'constructor', 'value') === LOADED_CONSTRUCTOR &&
+    fieldOf(LOADED_CONSTRUCTOR as object, Symbol.species, 'get') === LOADED_SPECIES &&
     !hasOwn(Object.prototype, 'then') &&
     !hasOwn(Array.prototype, 'then') &&
     !hasOwn(Function.prototype, 'then')

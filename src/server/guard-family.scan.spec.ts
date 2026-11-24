@@ -40,14 +40,14 @@ const EXEMPT: Readonly<Record<string, { count: number; reason: string }>> = {
       'Awaits of the host Redis client inside the reference store; every call reaches the services through withStorageFailures, whose guardedCall pins and checks the answer.'
   },
   'server/providers/resend-email.provider.ts': {
-    count: 5,
+    count: 4,
     reason:
       'Provider internals: the promise the service sees is the provider send, which EmailService awaits through own and checks after.'
   },
   'server/providers/smtp-email.provider.ts': {
-    count: 11,
+    count: 7,
     reason:
-      'Provider internals, among them a handler that clears the cached transport when its build fails: the promise the service sees is the provider send, which EmailService awaits through own and checks after.'
+      'Provider internals: the promise the service sees is the provider send, which EmailService awaits through own and checks after. The transport build and the verification are awaited through own and checkedAwait, never through then, catch or finally; what remains is the wait on a send that settleOrTimeout pins.'
   },
   'server/services/otp.service.ts': {
     count: 14,
@@ -87,6 +87,26 @@ const EXEMPT: Readonly<Record<string, { count: number; reason: string }>> = {
     reason:
       'Awaits the undo of a failure path; its failure is absorbed and the original error is thrown.'
   },
+  'react/useOtpInput.ts': {
+    count: 1,
+    reason:
+      'A hook of the browser bundle: it awaits the host callback the component passes it, in a client with no library promise, no storage and no verdict to forge.'
+  },
+  'testing/otp-storage-contract.consume.ts': {
+    count: 8,
+    reason:
+      'The executable contract of a consumer storage: it awaits the storage under test in a spec run by the consumer, and reaches no production bundle.'
+  },
+  'testing/otp-storage-contract.failures.ts': {
+    count: 22,
+    reason:
+      'The executable contract of a consumer storage: it awaits the storage under test in a spec run by the consumer, and reaches no production bundle.'
+  },
+  'testing/otp-storage-contract.ts': {
+    count: 70,
+    reason:
+      'The executable contract of a consumer storage: it awaits the storage under test in a spec run by the consumer, and reaches no production bundle.'
+  },
   'observability/notification-health.indicator.ts': {
     count: 6,
     reason:
@@ -123,9 +143,7 @@ function unpinned(path: string): string[] {
 }
 
 describe('the pinned-await rule', () => {
-  const files = [...sources(join(ROOT, 'server')), ...sources(join(ROOT, 'observability'))].map(
-    (path) => relative(ROOT, path)
-  )
+  const files = sources(ROOT).map((path) => relative(ROOT, path))
 
   it.each(files)('should list every unpinned await or then chain of %s', (file) => {
     const found = unpinned(join(ROOT, file)).length
@@ -143,7 +161,7 @@ describe('the pinned-await rule', () => {
 })
 
 describe('the pinned-await rule, second awaits', () => {
-  const files = [...sources(join(ROOT, 'server')), ...sources(join(ROOT, 'observability'))]
+  const files = sources(ROOT)
 
   it('should never put a second await on a line that pins one', () => {
     const doubled = files.flatMap((path) =>
@@ -259,7 +277,7 @@ function unsealedReturns(path: string): number {
 }
 
 describe('the sealed-return rule', () => {
-  const files = [...sources(join(ROOT, 'server')), ...sources(join(ROOT, 'observability'))]
+  const files = sources(ROOT)
     .map((path) => relative(ROOT, path))
     .filter((file) => RETURN_SCOPE.some((scope) => file.startsWith(scope)))
 

@@ -36,6 +36,36 @@ describe('the realm root at load', () => {
     expect(loadWithSlot(Map)).toThrow('not the engine Promise')
   })
 
+  it('should refuse an accessor in the slot, whatever Object.prototype.value answers', () => {
+    const bare = (fields: object): PropertyDescriptor =>
+      Object.assign(Object.create(null), fields) as PropertyDescriptor
+    const load = (): void => {
+      jest.isolateModules(() => {
+        // The modules the root imports load first, so only the root itself meets the plant.
+        require('./bounded-list')
+        require('./captured-crypto')
+        Object.defineProperty(
+          Promise.prototype,
+          'constructor',
+          bare({ configurable: true, get: () => Promise })
+        )
+        Object.defineProperty(
+          Object.prototype,
+          'value',
+          bare({ configurable: true, get: () => Promise })
+        )
+        try {
+          require('./realm-root')
+        } finally {
+          delete (Object.prototype as { value?: unknown }).value
+          Object.defineProperty(Promise.prototype, 'constructor', SLOT)
+        }
+      })
+    }
+
+    expect(load).toThrow('not the engine Promise')
+  })
+
   it('should load when the slot holds the engine Promise', () => {
     expect(loadWithSlot(Promise)).not.toThrow()
   })

@@ -174,14 +174,39 @@ const PROMISE_PATTERN =
 /** The reads that stay: the file, how many, and why none of them decides anything. */
 const PROMISE_EXEMPT: Readonly<Record<string, { count: number; reason: string }>> = {
   'src/server/providers/resend-email.provider.ts': {
-    count: 3,
+    count: 1,
     reason:
-      'Bounds a send by a timer, and builds that bound with `new Promise`; the send is not an OTP verdict and carries no stored code.'
+      'Bounds a send by an abort signal with `new Promise`; the call it waits on is awaited pinned in an async body, never through then, catch or finally, and the send is not an OTP verdict.'
   },
   'src/server/providers/smtp-email.provider.ts': {
-    count: 5,
+    count: 1,
     reason:
-      'Bounds a send (the `new Promise` among them), refuses a relay and settles a transport build; none decides a verdict.'
+      'Bounds a send by a timer with `new Promise`; the call it waits on, the transport build and the verification are awaited pinned, never through then, catch or finally, and none decides a verdict.'
+  },
+  'src/react/useOtpInput.ts': {
+    count: 2,
+    reason:
+      'A hook of the browser bundle, with no library promise, no storage and no verdict to forge.'
+  },
+  'src/testing/otp-storage-contract.consume.ts': {
+    count: 1,
+    reason:
+      'The executable contract of a consumer storage, run by the consumer in a spec; it reaches no production bundle and decides no verdict of the library.'
+  },
+  'src/testing/otp-storage-contract.failures.ts': {
+    count: 1,
+    reason:
+      'The executable contract of a consumer storage, run by the consumer in a spec; it reaches no production bundle and decides no verdict of the library.'
+  },
+  'src/testing/otp-storage-contract.shared.ts': {
+    count: 1,
+    reason:
+      'The executable contract of a consumer storage, run by the consumer in a spec; it reaches no production bundle and decides no verdict of the library.'
+  },
+  'src/testing/otp-storage-contract.ts': {
+    count: 2,
+    reason:
+      'The executable contract of a consumer storage, run by the consumer in a spec; it reaches no production bundle and decides no verdict of the library.'
   },
   'src/server/utils/observe.ts': {
     count: 1,
@@ -193,7 +218,7 @@ const PROMISE_EXEMPT: Readonly<Record<string, { count: number; reason: string }>
 describe('the promises the library reads', () => {
   const found = (): Map<string, number> => {
     const hits = new Map<string, number>()
-    for (const folder of ['src/server', 'src/observability']) {
+    for (const folder of ['src']) {
       for (const file of readdirSync(folder, { recursive: true, encoding: 'utf8' })) {
         const path = join(folder, file)
         if (!path.endsWith('.ts') || /\.spec\.ts$|__tests__|\.d\.ts$/u.test(path)) {

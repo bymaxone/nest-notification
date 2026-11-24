@@ -68,6 +68,19 @@ the entries that carry one, is the compatibility contract — read it, not the n
   The observer's span, the readiness check's verification and the sync-throw path of the audit write are awaited or
   heard through the `then` taken at load, and a verification promise that carries its own `then` or `constructor`
   cannot answer `up` for a failed verification.
+- **`Promise[Symbol.species]` is part of the realm baseline, and the SMTP and Resend providers no longer chain
+  through it.** `then`, `catch` and `finally` build the promise they return through that accessor, so a getter left
+  in place by a host call could answer a verification the relay refused (`up` against a closed port) or end a failed
+  send with no handler and its timer armed. The accessor is now checked at load and by the realm guard and the health
+  check; `SmtpEmailProvider.verify` awaits the transport build and `transport.verify` pinned inside a `try`;
+  `settleOrTimeout` and `settleOrAbort` await the send in an async `try`/`finally` instead of `.finally`; and the
+  cached transport build is dropped by a handler that awaits it, not by `.catch`. The load check reads `constructor`
+  as an own data property only, so an accessor planted before the load is refused with its own message, and `pinOnce`
+  reads the descriptor's fields own-only, so `Object.prototype.value` cannot make an accessor look like the pin.
+  `testing/` and `react/` are now inside the promise scan, each file exempt with a reason.
+- **The span grace is 5 seconds.** When an observer's span never calls the operation, or never settles, the
+  operation's answer waits at most `SPAN_GRACE_MS` (5000 ms) for the span's promise before the operation runs; a span
+  that settles sooner is not waited on any longer.
 - **A polyfilled global `Promise` no longer fails the load.** The load-time baseline is the prototype of an async
   function's promise, not `globalThis.Promise.prototype`, so a preloaded polyfill is accepted, while a replaced
   `Promise.prototype.constructor` of the engine's own prototype is still refused.
@@ -77,7 +90,9 @@ the entries that carry one, is the compatibility contract — read it, not the n
   returned by a host call is refused and its rejection absorbed, but when the realm's
   `Promise.prototype.constructor` throws on every read, a frozen rejecting promise cannot be given a handler by any
   means and its rejection ends unhandled, and the same holds for a promise whose own non-configurable `constructor`
-  has a `Symbol.species` that throws; a hook installed
+  has a `Symbol.species` that throws; `Promise[Symbol.species]` is covered only as the accessor of the engine's own
+  `Promise`: a species read by code that is not this library's (a store, an SDK, the host's own chains) is not seen, nor
+  is a species installed on a subclass or on one promise's own `constructor`; a hook installed
   before this module loads is not detected, since the intrinsics are the ones found at load, and a bound function
   that imitates the engine's `Promise` with a copied prototype passes the load check; `Date.now` is read live
   for `expiresAt` (`otp.service.ts`) and for the readiness cache, and a replaced clock moves those times; a refusal

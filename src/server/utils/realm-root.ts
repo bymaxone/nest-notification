@@ -154,6 +154,9 @@ const NATIVE_PROMISE_PROTOTYPE = Object.getPrototypeOf(
   then: typeof Promise.prototype.then
 }
 
+// The engine's %Promise%; a slot that is not its own is refused here, before anything is read off it.
+const PROMISE_CONSTRUCTOR = intrinsicPromise() as object
+
 /** The members of the intrinsics that hold the next-methods of the iterators of arrays, strings, sets and maps. */
 const ARRAY_ITERATOR = Object.getPrototypeOf([][Symbol.iterator]()) as object
 const STRING_ITERATOR = Object.getPrototypeOf(''[Symbol.iterator]()) as object
@@ -321,6 +324,7 @@ const BASELINE: ReadonlyArray<readonly [object, readonly PropertyKey[]]> = [
   ],
   // An `await` reads the `constructor` of what it awaits and calls its `then` when that is not %Promise%.
   [NATIVE_PROMISE_PROTOTYPE, ['constructor', 'then']],
+  [PROMISE_CONSTRUCTOR, [Symbol.species]],
   [Date.prototype, [Symbol.toPrimitive]],
   // `crypto.randomInt` reads its random bytes with it, so a replaced one decides the code.
   [Buffer.prototype, ['readUIntBE']],
@@ -507,8 +511,11 @@ const noop = (): void => undefined
  * @throws TypeError when the slot does not hold the engine's own %Promise%.
  */
 function intrinsicPromise(): unknown {
-  const slot = descriptorOf(NATIVE_PROMISE_PROTOTYPE, 'constructor')?.value as
-    { prototype: unknown } | undefined
+  // A data property only: an accessor planted before the load is refused, never called.
+  const slot = readField(
+    descriptorOf(NATIVE_PROMISE_PROTOTYPE, 'constructor') as PropertyDescriptor,
+    'value'
+  ) as { prototype: unknown } | undefined
   if (!isNative(slot) || slot?.prototype !== NATIVE_PROMISE_PROTOTYPE) {
     throw new TypeError('Promise.prototype.constructor is not the engine Promise at load')
   }
@@ -519,7 +526,7 @@ function intrinsicPromise(): unknown {
 const isPromise = types.isPromise
 const defineOwn = Object.defineProperty
 const LOADED_THEN = NATIVE_PROMISE_PROTOTYPE.then
-const INTRINSIC_PROMISE = intrinsicPromise()
+const INTRINSIC_PROMISE = PROMISE_CONSTRUCTOR
 const createBare = Object.create
 
 /** The descriptor of an own `constructor` holding `value`, with no prototype to inherit from. */
@@ -669,9 +676,10 @@ export function ownChecked<T>(promise: Promise<T>, owner = 'OtpService'): Promis
 export function pinOnce<T>(promise: Promise<T>, owner: string): Promise<T> {
   const held = descriptorOf(promise, 'constructor')
   if (
-    held?.value === INTRINSIC_PROMISE &&
-    held?.writable === false &&
-    held?.configurable === false
+    held !== undefined &&
+    readField(held, 'value') === INTRINSIC_PROMISE &&
+    readField(held, 'writable') === false &&
+    readField(held, 'configurable') === false
   ) {
     return promise
   }

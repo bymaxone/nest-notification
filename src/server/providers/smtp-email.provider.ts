@@ -40,7 +40,7 @@ import { publishedFailure } from '../utils/provider-failure'
 import { rethrowRefusal } from '../utils/provider-refusal'
 import { readSendOptions } from '../utils/provider-send-options'
 import { nullProto, readName, withOwnKeys } from '../utils/read-options'
-import { assertStandardRealmRoot } from '../utils/realm-root'
+import { assertStandardRealmRoot, checkedAwait, own } from '../utils/realm-root'
 import {
   collectEchoedExcerpts,
   isSafeError,
@@ -95,9 +95,16 @@ function settleOrTimeout<T>(call: Promise<T>, timeoutMs: number): Promise<T> {
         })
       )
     }, timeoutMs)
-    call.then(resolve, reject).finally(() => {
-      clearTimeout(timer)
-    })
+    // Awaited pinned, not through then/finally: those read `Promise[Symbol.species]`.
+    void (async (): Promise<void> => {
+      try {
+        resolve(await own(call, 'SmtpEmailProvider'))
+      } catch (error) {
+        reject(error)
+      } finally {
+        clearTimeout(timer)
+      }
+    })()
   })
 }
 
@@ -289,11 +296,16 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
    */
   async verify(): Promise<void> {
     assertStandardRealmRoot('SmtpEmailProvider')
-    const transport = await this.getTransport().catch(relayRefused)
+    let transport: SmtpTransportLike
+    try {
+      transport = await own(this.getTransport(), 'SmtpEmailProvider')
+    } catch {
+      relayRefused()
+    }
     // Again before the connection, with nothing between it and the call, and outside the wrap.
     assertStandardRealmRoot('SmtpEmailProvider')
     try {
-      await transport.verify?.()
+      await checkedAwait(transport.verify?.() as Promise<unknown>, 'SmtpEmailProvider')
     } catch {
       relayRefused()
     }
@@ -620,12 +632,19 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
     }
     const build = this.createTransport()
     this.#transportPromise = build
-    build.catch(() => {
+    void this.dropWhenFailed(build)
+    return build
+  }
+
+  /** Drops a build that failed from the cache, only while it is still the cached one. */
+  private async dropWhenFailed(build: Promise<SmtpTransportLike>): Promise<void> {
+    try {
+      await own(build, 'SmtpEmailProvider')
+    } catch {
       if (this.#transportPromise === build) {
         this.#transportPromise = null
       }
-    })
-    return build
+    }
   }
 
   /**

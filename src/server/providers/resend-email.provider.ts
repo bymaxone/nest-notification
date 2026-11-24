@@ -30,7 +30,7 @@ import { codeWithoutSecrets } from '../utils/masked-failure'
 import { publishedFailure } from '../utils/provider-failure'
 import { readSendOptions } from '../utils/provider-send-options'
 import { assertOptionsObject, nullProto, readOptionKeys, withOwnKeys } from '../utils/read-options'
-import { assertStandardRealmRoot } from '../utils/realm-root'
+import { assertStandardRealmRoot, own } from '../utils/realm-root'
 import {
   REDACTED_VALUE,
   collectEchoedExcerpts,
@@ -73,9 +73,16 @@ function settleOrAbort<T>(call: Promise<T>, signal: AbortSignal): Promise<T> {
       reject(signal.reason)
     }
     signal.addEventListener('abort', onAbort, { once: true })
-    call.then(resolve, reject).finally(() => {
-      signal.removeEventListener('abort', onAbort)
-    })
+    // Awaited pinned, not through then/finally: those read `Promise[Symbol.species]`.
+    void (async (): Promise<void> => {
+      try {
+        resolve(await own(call, 'ResendEmailProvider'))
+      } catch (error) {
+        reject(error)
+      } finally {
+        signal.removeEventListener('abort', onAbort)
+      }
+    })()
   })
 }
 
