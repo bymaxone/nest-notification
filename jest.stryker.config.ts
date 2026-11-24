@@ -34,7 +34,12 @@ const config: Config = {
     // mutate list excludes, so the related-test lookup never selects them and they kill no mutant;
     // `pnpm test` and `pnpm test:cov` still run them.
     '<rootDir>/server/utils/realm-root\\.process\\.spec\\.ts$',
-    '<rootDir>/server/__tests__/real-process\\.fixture\\.spec\\.ts$'
+    '<rootDir>/server/__tests__/real-process\\.fixture\\.spec\\.ts$',
+    // Reads every production file as text and parses it to hold each await to the pinned-await and
+    // sealed-return rules; it imports no module from `src`, so the related-test lookup never selects
+    // it and it kills no mutant. Under Stryker the sandbox source is instrumented, so the text it
+    // checks is not the text it was written for; `pnpm test` and CI still run it.
+    '<rootDir>/server/guard-family\\.scan\\.spec\\.ts$'
   ]
 }
 
