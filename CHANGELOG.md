@@ -41,7 +41,7 @@ the entries that carry one, is the compatibility contract — read it, not the n
 - **The store's method is reached through built-ins taken at load, and the handler of an abandoned promise no longer
   reads `Promise[Symbol.species]`.** A hooked `util.types.isProxy` could plant a `Function.prototype.apply` that
   restored itself and answered for the store, and a wrong code returned `valid: true`; a throwing species getter kept
-  the handler from being attached and left two rejections unhandled. The host's audit promise is now awaited only after
+  the handler from being attached and left rejections unhandled. The host's audit promise is now awaited only after
   the realm was checked, with nothing between the check and the `await`.
 - Known limits: code running concurrently in the same process that plants a `then` after the check and erases it before
   the store's own promise settles cannot be seen afterwards; a store or SDK that reads a `Promise` static internally is
