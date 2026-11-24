@@ -74,8 +74,10 @@ the entries that carry one, is the compatibility contract — read it, not the n
 - Known limits: code running concurrently in the same process that plants a `then` after the check and erases it before
   the store's own promise settles cannot be seen afterwards; a store or SDK that reads a `Promise` static internally is
   its own code and is not covered, and neither is what a provider does with its own promises; a frozen promise
-  returned by a host call is refused, but when the realm's `Promise.prototype.constructor` throws, a frozen
-  rejecting promise cannot be given a handler by any means and its rejection ends unhandled; a hook installed
+  returned by a host call is refused and its rejection absorbed, but when the realm's
+  `Promise.prototype.constructor` throws on every read, a frozen rejecting promise cannot be given a handler by any
+  means and its rejection ends unhandled, and the same holds for a promise whose own non-configurable `constructor`
+  has a `Symbol.species` that throws; a hook installed
   before this module loads is not detected, since the intrinsics are the ones found at load, and a bound function
   that imitates the engine's `Promise` with a copied prototype passes the load check; `Date.now` is read live
   for `expiresAt` (`otp.service.ts`) and for the readiness cache, and a replaced clock moves those times; a refusal

@@ -368,6 +368,7 @@ export class EmailService {
     const sendOptions = this.buildSendOptions(input, email)
     const recipient = this.maskRecipients(input.to)
     const result = await own(this.deliver(sendOptions, input, recipient, progress), 'EmailService')
+    const { messageId } = result // once, before the host's audit sink
     await own(
       this.audit(
         this.auditEntry(
@@ -376,16 +377,14 @@ export class EmailService {
           input.tenantId,
           recipient,
           input.userId,
-          {
-            messageId: result.messageId
-          }
+          { messageId }
         )
       ),
       'EmailService'
     )
-    // The last statement before the return: what ran since the awaits (the host's audit sink) is covered.
+    // Last before the return: the host's audit sink ran since the awaits.
     assertStandardRealmRoot('EmailService')
-    return { messageId: result.messageId }
+    return { messageId }
   }
 
   /**
@@ -713,15 +712,16 @@ export class EmailService {
   }
 
   /** Writes an audit entry, swallowing failures unless `audit.swallowErrors` is `false`. */
-  private async audit(entry: NotificationLogEntry): Promise<void> {
-    // The realm refusal is not the policy's to absorb: it is thrown outside the swallow.
-    await writeAudit(
-      () => this.auditLog.create(entry),
-      this.options.audit.swallowErrors,
-      (error) => {
-        this.auditWarning.warn(error)
-      },
-      'EmailService'
+  private audit(entry: NotificationLogEntry): Promise<void> {
+    return ownChecked(
+      writeAudit(
+        () => this.auditLog.create(entry),
+        this.options.audit.swallowErrors,
+        (error) => {
+          this.auditWarning.warn(error)
+        },
+        'EmailService'
+      )
     )
   }
 

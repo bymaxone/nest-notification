@@ -10,10 +10,12 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 
+import ts from 'typescript'
+
 const ROOT = join(__dirname, '..')
 
 const PINNED = /\bawait\s+(own|ownChecked|checkedAwait|pinOnce)\(/u
-const USES = /\bawait\b|\.then\(/u
+const USES = /\bawait\b|\.then\(|\.catch\(|\.finally\(/u
 
 /** Exact count of unpinned uses per file, and why each is acceptable. */
 const EXEMPT: Readonly<Record<string, { count: number; reason: string }>> = {
@@ -43,19 +45,14 @@ const EXEMPT: Readonly<Record<string, { count: number; reason: string }>> = {
       'Provider internals: the promise the service sees is the provider send, which EmailService awaits through own and checks after.'
   },
   'server/providers/smtp-email.provider.ts': {
-    count: 10,
+    count: 11,
     reason:
-      'Provider internals: the promise the service sees is the provider send, which EmailService awaits through own and checks after.'
-  },
-  'server/services/email.service.ts': {
-    count: 1,
-    reason:
-      'Awaits writeAudit, which pins the sink promise, absorbs only the sink own failure and asserts the realm before it returns.'
+      'Provider internals, among them a handler that clears the cached transport when its build fails: the promise the service sees is the provider send, which EmailService awaits through own and checks after.'
   },
   'server/services/otp.service.ts': {
     count: 14,
     reason:
-      'Awaits of the wrapped store (every method returns a promise pinned and checked by guardedCall), plus the detached template check at resolvesTemplate (a boolean probe whose inner awaits are pinned in EmailService; a forged answer can only change which template a code is sent with, never a verdict).'
+      'Awaits of the wrapped store (every method returns a promise pinned and checked by guardedCall), plus the probe at resolvesTemplate, whose awaits are pinned in EmailService.'
   },
   'server/utils/audit-write.ts': {
     count: 1,
@@ -74,7 +71,7 @@ const EXEMPT: Readonly<Record<string, { count: number; reason: string }>> = {
   'server/utils/observe.ts': {
     count: 1,
     reason:
-      'Awaits the span promise checkedAwait pinned; its outcome is never the operation outcome.'
+      'The wait of settledWithin on the span promise checkedAwait pinned; its outcome is never the operation outcome, and the realm is asserted before the return.'
   },
   'server/utils/otp-failure-count.ts': {
     count: 2,
@@ -91,9 +88,9 @@ const EXEMPT: Readonly<Record<string, { count: number; reason: string }>> = {
       'Awaits the undo of a failure path; its failure is absorbed and the original error is thrown.'
   },
   'observability/notification-health.indicator.ts': {
-    count: 5,
+    count: 6,
     reason:
-      'Each await follows promisesIntact() in the same expression and the answer is checked again before the result is built; the verification promise itself is heard with the load-time then.'
+      'Each await follows promisesIntact() in the same expression and the answer is checked again before the result is built; absorbRejection awaits a promise no handler could be attached to; the verification promise itself is heard with the load-time then.'
   },
   'observability/notification-tracing.ts': {
     count: 1,
@@ -142,5 +139,141 @@ describe('the pinned-await rule', () => {
 
   it('should give every exemption a reason', () => {
     expect(Object.values(EXEMPT).filter((entry) => entry.reason.length < 20)).toStrictEqual([])
+  })
+})
+
+describe('the pinned-await rule, second awaits', () => {
+  const files = [...sources(join(ROOT, 'server')), ...sources(join(ROOT, 'observability'))]
+
+  it('should never put a second await on a line that pins one', () => {
+    const doubled = files.flatMap((path) =>
+      readFileSync(path, 'utf8')
+        .split('\n')
+        .filter((line) => !/^\s*(\/\/|\*|\/\*)/u.test(line))
+        .filter((line) => PINNED.test(line) && (line.match(/\bawait\b/gu) ?? []).length > 1)
+        .map((line) => `${relative(ROOT, path)}: ${line.trim()}`)
+    )
+
+    expect(doubled).toStrictEqual([])
+  })
+})
+
+/**
+ * Where a result reaches the host's `await`: the services and the helpers that hand a promise on. A
+ * `return` of anything but a primitive from an async function there resolves with a value whose `then`
+ * is read, so it follows a realm check with nothing between, or is a null-prototype copy, or is listed
+ * here with the reason it is not a decision.
+ */
+const RETURN_SCOPE = [
+  'server/services/',
+  'server/utils/observe.ts',
+  'server/utils/storage-failures.ts',
+  'observability/notification-tracing.ts'
+]
+
+const SEALS = /^(assertStandardRealmRoot|nullProto|assignTo|createBare|frozenCopy|Object\.create)/u
+
+const RETURN_EXEMPT: Readonly<Record<string, { count: number; reason: string }>> = {
+  'server/services/email.service.ts': {
+    count: 8,
+    reason:
+      'Returns of the provider result and of strings after awaits whose callee asserts the realm last, or of a promise that always rejects; sendUnobserved and the public methods assert before they resolve with an object.'
+  },
+  'server/services/notification.service.ts': {
+    count: 4,
+    reason:
+      'route builds the answer from callees that end with their own check and run no host code after it, and dispatch pins and checks it as it is handed over; the two messageId returns are strings.'
+  },
+  'server/services/otp.service.ts': {
+    count: 5,
+    reason:
+      'Returns of a rejecting call (the reject helpers always throw) and of the frozen null-prototype copy of a verdict; the status object follows the realm check of statusChecked.'
+  },
+  'server/utils/observe.ts': {
+    count: 1,
+    reason:
+      'The branch with no span: the answer of run, whose callee asserts the realm last, and nothing of the host runs after it.'
+  },
+  'server/utils/storage-failures.ts': {
+    count: 1,
+    reason:
+      'checkStoreResult answers a primitive or a null-prototype object, and the wrapper pins and checks the promise it hands on.'
+  },
+  'observability/notification-tracing.ts': {
+    count: 1,
+    reason:
+      'The operation of a tracer span: the library takes no verdict from it, and the operation was already sealed.'
+  }
+}
+
+/** Returns inside an async function whose value is not a primitive and which no realm check seals. */
+function unsealedReturns(path: string): number {
+  const file = ts.createSourceFile(path, readFileSync(path, 'utf8'), ts.ScriptTarget.Latest, true)
+  const isAsync = (node: ts.Node): boolean =>
+    ts.canHaveModifiers(node) &&
+    (ts.getModifiers(node) ?? []).some((modifier) => modifier.kind === ts.SyntaxKind.AsyncKeyword)
+  const primitive = (expression: ts.Expression): boolean =>
+    ts.isStringLiteralLike(expression) ||
+    ts.isNumericLiteral(expression) ||
+    ts.isTemplateExpression(expression) ||
+    ts.isPrefixUnaryExpression(expression) ||
+    [ts.SyntaxKind.TrueKeyword, ts.SyntaxKind.FalseKeyword, ts.SyntaxKind.NullKeyword].includes(
+      expression.kind
+    ) ||
+    (ts.isIdentifier(expression) && expression.text === 'undefined')
+  const sealedByPrevious = (statement: ts.Node): boolean => {
+    let current: ts.Node | undefined = statement
+    while (current?.parent !== undefined && !ts.isFunctionLike(current)) {
+      const parent: ts.Node = current.parent
+      if (ts.isBlock(parent)) {
+        const previous = parent.statements[parent.statements.indexOf(current as ts.Statement) - 1]
+        if (previous !== undefined) {
+          return SEALS.test(previous.getText())
+        }
+        current = parent.parent
+      } else {
+        current = parent
+      }
+    }
+    return false
+  }
+  let count = 0
+  const visit = (node: ts.Node, inAsync: boolean): void => {
+    const here = ts.isFunctionLike(node) ? isAsync(node) : inAsync
+    if (
+      ts.isReturnStatement(node) &&
+      inAsync &&
+      node.expression !== undefined &&
+      !primitive(node.expression) &&
+      !SEALS.test(node.expression.getText()) &&
+      !sealedByPrevious(node)
+    ) {
+      count += 1
+    }
+    ts.forEachChild(node, (child) => {
+      visit(child, here)
+    })
+  }
+  visit(file, false)
+  return count
+}
+
+describe('the sealed-return rule', () => {
+  const files = [...sources(join(ROOT, 'server')), ...sources(join(ROOT, 'observability'))]
+    .map((path) => relative(ROOT, path))
+    .filter((file) => RETURN_SCOPE.some((scope) => file.startsWith(scope)))
+
+  it.each(files)('should list every unsealed async return of %s', (file) => {
+    expect(unsealedReturns(join(ROOT, file))).toBe(RETURN_EXEMPT[file]?.count ?? 0)
+  })
+
+  it('should keep no entry for a file outside the scope or that does not exist', () => {
+    expect(Object.keys(RETURN_EXEMPT).filter((file) => !files.includes(file))).toStrictEqual([])
+  })
+
+  it('should give every exemption a reason', () => {
+    expect(Object.values(RETURN_EXEMPT).filter((entry) => entry.reason.length < 20)).toStrictEqual(
+      []
+    )
   })
 })

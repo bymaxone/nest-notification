@@ -183,10 +183,10 @@ const PROMISE_EXEMPT: Readonly<Record<string, { count: number; reason: string }>
     reason:
       'Bounds a send (the `new Promise` among them), refuses a relay and settles a transport build; none decides a verdict.'
   },
-  'src/observability/notification-health.indicator.ts': {
+  'src/server/utils/observe.ts': {
     count: 1,
     reason:
-      'The one `new Promise` of the readiness race; it is awaited only right after the promise check.'
+      'The one `new Promise` that bounds the wait for a span promise; it settles with no value, so it decides nothing, and the realm is asserted before the answer is returned.'
   }
 }
 

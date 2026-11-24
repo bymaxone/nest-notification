@@ -90,6 +90,14 @@ describe('the perPurpose container', () => {
     )
   })
 
+  // The module refuses a built-in when it copies the options, so only the validator itself sees one:
+  // on its own it refuses it too.
+  it('should refuse a Map when the validator is given one directly', () => {
+    expect(() => validateOptions(containerOf(new Map()) as never)).toThrow(
+      'options.otp.perPurpose must be a plain object or a class instance'
+    )
+  })
+
   it('should keep reading a plain object, a null prototype and a class instance', () => {
     class Purposes {
       get mfa_oob(): object {

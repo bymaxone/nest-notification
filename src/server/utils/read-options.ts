@@ -131,7 +131,10 @@ export function isPlainOrClassInstance(value: object): boolean {
     prototype !== null && Object.getPrototypeOf(prototype) !== null;
     prototype = Object.getPrototypeOf(prototype) as object | null
   ) {
-    const constructor: unknown = Object.getOwnPropertyDescriptor(prototype, 'constructor')?.value
+    const slot = Object.getOwnPropertyDescriptor(prototype, 'constructor')
+    // Own-only: an accessor's descriptor has no `value`, and `slot?.value` would read `Object.prototype.value`.
+    const constructor: unknown =
+      slot !== undefined && Object.hasOwn(slot, 'value') ? Reflect.get(slot, 'value') : undefined
     if (
       typeof constructor === 'function' &&
       NATIVE_SOURCE.test(Function.prototype.toString.call(constructor))

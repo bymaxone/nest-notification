@@ -26,11 +26,25 @@ const NATIVE_PROTOTYPE = Object.getPrototypeOf((async (): Promise<void> => undef
   then: typeof Promise.prototype.then
 }
 const isProxy = types.isProxy
+const reflectGet = Reflect.get
 const sourceOf = Function.prototype.call.bind(Function.prototype.toString) as (
   value: unknown
 ) => string
 const LOADED_THEN = NATIVE_PROTOTYPE.then
 const LOADED_CONSTRUCTOR = loadedConstructor()
+// The engine's own %Promise%: the global `Promise` is looked up each time it is named, and a host can swap it.
+const NativePromise = LOADED_CONSTRUCTOR as PromiseConstructor
+
+/**
+ * The `value` of a property of an object, only when it is a data property it owns. A descriptor is an
+ * ordinary object: `descriptor?.value` of an accessor reads `Object.prototype.value`.
+ */
+function valueOf(holder: object, name: string): unknown {
+  const descriptor = descriptorOf(holder, name)
+  return descriptor !== undefined && hasOwn(descriptor, 'value')
+    ? reflectGet(descriptor, 'value')
+    : undefined
+}
 
 /**
  * The `constructor` slot of `Promise.prototype`, accepted only as the engine's own %Promise%: a native
@@ -38,8 +52,7 @@ const LOADED_CONSTRUCTOR = loadedConstructor()
  * this module loaded would otherwise become the baseline `promisesIntact` compares with.
  */
 function loadedConstructor(): unknown {
-  const slot = descriptorOf(NATIVE_PROTOTYPE, 'constructor')?.value as
-    { prototype: unknown } | undefined
+  const slot = valueOf(NATIVE_PROTOTYPE, 'constructor') as { prototype: unknown } | undefined
   if (
     typeof slot !== 'function' ||
     isProxy(slot) ||
@@ -57,10 +70,22 @@ const createBare = Object.create
 const noop = (): void => undefined
 const isPromise = types.isPromise
 
+/** Awaits a promise and discards how it ended; the last resort for a promise no handler can be attached to. */
+async function absorbRejection(promise: unknown): Promise<void> {
+  try {
+    await promise
+  } catch {
+    // Ended in a rejection nobody else will observe.
+  }
+}
+
 /** Gives a promise that will not be awaited a handler, with the `then` taken at load. Never throws. */
 function silence(value: unknown): void {
   try {
-    if (isPromise(value)) {
+    if (!isPromise(value)) {
+      return
+    }
+    try {
       // An own `constructor` answers for the one `then` reads, so a planted or throwing one on
       // `Promise.prototype` cannot keep the handler from being attached; `undefined` also skips
       // the `Promise[Symbol.species]` lookup.
@@ -68,8 +93,17 @@ function silence(value: unknown): void {
       descriptor.value = undefined
       descriptor.configurable = true
       defineOwn(value, 'constructor', descriptor)
-      apply(LOADED_THEN, value, [noop, noop])
+    } catch {
+      // A frozen promise keeps the `constructor` it inherits; the handler is still attached, and
+      // one that cannot be is absorbed by awaiting it.
+      try {
+        apply(LOADED_THEN, value, [noop, noop])
+      } catch {
+        void absorbRejection(value)
+      }
+      return
     }
+    apply(LOADED_THEN, value, [noop, noop])
   } catch {
     // Nothing more can be done for it.
   }
@@ -78,8 +112,8 @@ function silence(value: unknown): void {
 /** Whether the promise machinery is what it was at load, with no `then` on the root prototypes. */
 function promisesIntact(): boolean {
   return (
-    descriptorOf(NATIVE_PROTOTYPE, 'then')?.value === LOADED_THEN &&
-    descriptorOf(NATIVE_PROTOTYPE, 'constructor')?.value === LOADED_CONSTRUCTOR &&
+    valueOf(NATIVE_PROTOTYPE, 'then') === LOADED_THEN &&
+    valueOf(NATIVE_PROTOTYPE, 'constructor') === LOADED_CONSTRUCTOR &&
     !hasOwn(Object.prototype, 'then') &&
     !hasOwn(Array.prototype, 'then') &&
     !hasOwn(Function.prototype, 'then')
@@ -172,7 +206,18 @@ export class NotificationHealthIndicator implements IHealthIndicator {
    *
    * @returns `{ status }` and nothing else.
    */
-  async check(): Promise<HealthIndicatorResult> {
+  check(): Promise<HealthIndicatorResult> {
+    const answer = this.verdict()
+    // The caller's `await` reads `constructor` of this promise and calls `then` unless it is %Promise%:
+    // an own, fixed `constructor` makes that await native, so a realm the provider changed answers for nothing.
+    const pinned = createBare(null) as PropertyDescriptor
+    pinned.value = LOADED_CONSTRUCTOR
+    defineOwn(answer, 'constructor', pinned)
+    return answer
+  }
+
+  /** The check itself; the promise it returns is pinned by {@link NotificationHealthIndicator.check}. */
+  private async verdict(): Promise<HealthIndicatorResult> {
     // Checked right before the await, which reads the promise's `constructor`: a realm that changed
     // the promises is answered with `down`, never with a forged `up`.
     const pending = this.isUp()
@@ -230,7 +275,7 @@ export class NotificationHealthIndicator implements IHealthIndicator {
     let up: boolean
     try {
       // The first answer wins and each is a boolean: no `Promise.race`, no `then` to read.
-      const pending = new Promise<boolean>((resolve) => {
+      const pending = new NativePromise<boolean>((resolve) => {
         timer = setTimeout(() => {
           resolve(false)
         }, this.#options.timeoutMs)

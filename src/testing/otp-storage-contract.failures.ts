@@ -215,6 +215,7 @@ export function failureAtomicCase({ scope, withStorage }: ContractContext): OtpS
         if (!hasFailureMethods(storage)) {
           return
         }
+        // Concurrent calls to the store under test, for its atomicity: this support code reaches no production bundle and decides no verdict of the library.
         const counts = await Promise.all(
           Array.from({ length: RACERS }, () =>
             storage.recordFailure(

@@ -12,7 +12,7 @@ import type {
   NotificationSpanName
 } from '../interfaces/notification-observer.interface'
 import type { OtpVerifyResult } from '../interfaces/otp-storage.interface'
-import { checkedAwait, own, silence } from './realm-root'
+import { assertStandardRealmRoot, checkedAwait, own, silence } from './realm-root'
 
 const freezeObject = Object.freeze
 const assignTo = Object.assign
@@ -70,12 +70,35 @@ export async function runInSpan<T>(
   // Outside the absorbing catch: a refusal of the realm, or of a span promise that cannot be pinned,
   // is the operation's outcome, and a rejection of that promise is never left without a handler.
   const pinned = spanned === undefined ? undefined : checkedAwait(spanned, owner)
-  try {
-    await pinned
-  } catch {
-    // What the span made of the operation is not the operation's outcome.
+  // The operation does not wait on a span that never settles.
+  const pending = once()
+  if (pinned !== undefined) {
+    await own(settledWithin(pinned, SPAN_GRACE_MS), owner)
   }
-  return await own(once(), owner)
+  const result = await own(pending, owner)
+  // The span's `end()` and the rest of the host's code ran while it was awaited: the realm is
+  // checked again right before the return, which reads `then` of the result.
+  assertStandardRealmRoot(owner)
+  return result
+}
+
+/** The longest the operation's answer waits for the span's own promise to settle. */
+const SPAN_GRACE_MS = 5000
+
+/** Resolves when the promise settles either way, or after `ms`; the promise is pinned and awaited, no `then` read. */
+function settledWithin(promise: Promise<unknown>, ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(resolve, ms)
+    void (async (): Promise<void> => {
+      try {
+        await promise
+      } catch {
+        // How the span ended is not the operation's outcome.
+      }
+      clearTimeout(timer)
+      resolve()
+    })()
+  })
 }
 
 /**

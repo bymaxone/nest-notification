@@ -336,9 +336,13 @@ export class OtpService implements OnModuleInit {
    * Returns the current OTP status without ever exposing the plaintext code.
    *
    * @param input - The recipient and purpose.
-   * @returns Existence, expiry, attempt counters, validation flag, and cooldown.
+   * @returns Existence, expiry, attempt counters, validated flag, and cooldown.
    */
-  async getStatus(raw: OtpStatusInput): Promise<OtpStatusResult> {
+  getStatus(raw: OtpStatusInput): Promise<OtpStatusResult> {
+    return ownChecked(this.statusChecked(raw))
+  }
+
+  private async statusChecked(raw: OtpStatusInput): Promise<OtpStatusResult> {
     const input = readRefInput(raw)
     this.assertScope(input)
     const scope = this.keyed(input)
@@ -416,31 +420,25 @@ export class OtpService implements OnModuleInit {
       await this.storage.set(scope.tenantId, scope.recipient, scope.purpose, entry)
       await own(this.deliverOtp(input, code, cfg))
     } catch (error) {
-      throw await own(this.failedOutgoing(scope, error, code))
+      await own(this.failedOutgoing(scope, error, code))
     }
   }
 
   /**
    * Releases the cooldown and the orphan entry after a failed persist or delivery, audits the
-   * failure, and returns what the caller must throw.
+   * failure, and rejects with what the caller must see (never resolves with the `Error`: an object
+   * result reads a `then` its prototype chain could hold).
    *
-   * A failed cleanup supersedes the delivery error — the cooldown/OTP may now be orphaned,
-   * which the caller must see — and it must NOT bypass the scrub below. The delivery error is
-   * preserved as its cause when the cleanup error can verifiably carry one; a hostile trap
-   * inside the attachment is contained by the helper.
-   *
-   * The scrub runs BEFORE the audit write and the rethrow, so neither the entry's
-   * `errorMessage` nor the outgoing chain can carry the plaintext code. An Error chain is
-   * scrubbed (in place, or via redacted copies when a node resists mutation); ANY other
-   * rejection (string, object from a custom storage, number) is flattened to a redacted
-   * string, because a raw object could carry the code in its properties and a primitive
-   * cannot be mutated.
+   * A failed cleanup supersedes the delivery error (kept as its cause when it can carry one) and
+   * must NOT bypass the scrub. The scrub runs BEFORE the audit write and the rethrow, so neither
+   * `errorMessage` nor the outgoing chain carries the plaintext code: an Error chain is scrubbed,
+   * ANY other rejection is flattened to a redacted string.
    */
   private async failedOutgoing(
     scope: OtpGenerateInput,
     error: unknown,
     code: string
-  ): Promise<unknown> {
+  ): Promise<never> {
     let failure: unknown = error
     try {
       await own(this.releaseOtp(scope))
@@ -469,7 +467,7 @@ export class OtpService implements OnModuleInit {
         })
       )
     )
-    return outgoing
+    throw outgoing
   }
 
   /**
