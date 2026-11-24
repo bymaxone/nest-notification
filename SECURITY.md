@@ -84,8 +84,8 @@ boundary against code that can already patch built-ins, and a report that needs 
 out of scope.
 
 Known limits: the first `import()` of an optional peer is awaited unpinned; `Date.now`
-(OTP expiry, the readiness TTL) is read live; and a throwing `setTimeout`, `addEventListener`
-or `clearTimeout` planted by same-process code can end a send in an unhandled rejection.
+(OTP expiry, the readiness TTL) is read live; and a throwing `setTimeout` or `addEventListener`
+planted by same-process code can end a send in an unhandled rejection.
 
 ## Out of scope
 
