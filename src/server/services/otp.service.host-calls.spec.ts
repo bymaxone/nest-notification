@@ -398,7 +398,7 @@ describe('OtpService.generate when the store call that undoes a failed delivery 
     const service = new OtpService(makeOptions(), storage, makeAudit())
     ;(service as unknown as { deliverOtp: () => Promise<void> }).deliverOtp = () =>
       Promise.reject(new Error('delivery down'))
-    storage.delete = (() => {
+    storage.clearCooldown = (() => {
       Object.defineProperty(PROTO, 'constructor', {
         value: function Fake() {
           /* never constructed */

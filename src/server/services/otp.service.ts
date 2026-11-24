@@ -619,7 +619,7 @@ export class OtpService implements OnModuleInit {
 
   /** Clears the cooldown and deletes the OTP — used to undo a failed delivery. */
   private async releaseOtp(ref: OtpRecipientRef): Promise<void> {
-    await releaseStored(this.storage, ref)
+    await own(releaseStored(this.storage, ref))
   }
 
   /** Builds the OTP email payload with the auto-injected `{ code, expiresInMinutes, purpose }`. */
