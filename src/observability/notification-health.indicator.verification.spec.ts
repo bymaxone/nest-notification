@@ -64,43 +64,81 @@ describe('NotificationHealthIndicator against a verification promise with its ow
   })
 })
 
-describe('NotificationHealthIndicator against a rejected verification whose constructor cannot be a species', () => {
-  it.each([1, null])(
-    'should leave no rejection unhandled when the own constructor is %p',
-    async (constructorValue) => {
-      const unhandled: unknown[] = []
-      const record = (reason: unknown): void => {
-        unhandled.push(reason)
-      }
-      const saved = process.listeners('unhandledRejection')
-      process.removeAllListeners('unhandledRejection')
-      process.on('unhandledRejection', record)
-      let status: string
-      try {
-        const indicator = new NotificationHealthIndicator(
-          provider(() => {
-            const failed = Promise.reject(new Error('relay down'))
-            Object.defineProperty(failed, 'constructor', {
-              value: constructorValue,
-              configurable: true
-            })
-            return failed
-          }),
-          { timeoutMs: 50 }
-        )
-        status = (await indicator.check()).status
-        await new Promise((resolve) => setTimeout(resolve, 60))
-      } finally {
-        process.removeListener('unhandledRejection', record)
-        for (const listener of saved) {
-          process.on('unhandledRejection', listener)
-        }
-      }
-
-      expect(status).toBe('down')
-      expect(unhandled).toStrictEqual([])
+/** Runs one check against a verification that fails, and reports what ended unhandled. */
+async function failedVerification(
+  build: () => Promise<unknown>
+): Promise<{ status: string; unhandled: unknown[] }> {
+  const unhandled: unknown[] = []
+  const record = (reason: unknown): void => {
+    unhandled.push(reason)
+  }
+  const saved = process.listeners('unhandledRejection')
+  process.removeAllListeners('unhandledRejection')
+  process.on('unhandledRejection', record)
+  let status: string
+  try {
+    const indicator = new NotificationHealthIndicator(provider(build), { timeoutMs: 50 })
+    status = (await indicator.check()).status
+    await new Promise((resolve) => setTimeout(resolve, 60))
+  } finally {
+    process.removeListener('unhandledRejection', record)
+    for (const listener of saved) {
+      process.on('unhandledRejection', listener)
     }
-  )
+  }
+  return { status, unhandled }
+}
+
+describe('NotificationHealthIndicator against a rejected verification the species lookup cannot read', () => {
+  const cases: [string, () => Promise<unknown>][] = [
+    [
+      'an own constructor that is a number',
+      () => {
+        const failed = Promise.reject(new Error('relay down'))
+        Object.defineProperty(failed, 'constructor', { value: 1, configurable: true })
+        return failed
+      }
+    ],
+    [
+      'an own constructor that is null',
+      () => {
+        const failed = Promise.reject(new Error('relay down'))
+        Object.defineProperty(failed, 'constructor', { value: null, configurable: true })
+        return failed
+      }
+    ],
+    [
+      'an own constructor getter that throws',
+      () => {
+        const failed = Promise.reject(new Error('relay down'))
+        Object.defineProperty(failed, 'constructor', {
+          configurable: true,
+          get: () => {
+            throw new Error('hostile getter')
+          }
+        })
+        return failed
+      }
+    ],
+    [
+      'a subclass whose species getter throws',
+      () => {
+        class Hostile extends Promise<unknown> {
+          static override get [Symbol.species](): PromiseConstructor {
+            throw new Error('hostile species')
+          }
+        }
+        return Hostile.reject(new Error('relay down'))
+      }
+    ]
+  ]
+
+  it.each(cases)('should report down and leave nothing unhandled with %s', async (_name, build) => {
+    const { status, unhandled } = await failedVerification(build)
+
+    expect(status).toBe('down')
+    expect(unhandled).toStrictEqual([])
+  })
 })
 
 describe('NotificationHealthIndicator against a verification that is not a promise', () => {
