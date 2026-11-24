@@ -19,10 +19,6 @@ const FORGED = {
   entry: { code: WRONG, attempts: 1, maxAttempts: 5, expiresAt: Date.now() + 1_000_000 }
 }
 
-// `Date.now` and `Map.prototype.get` also run before the wrapper's check, where the planting is
-// refused and the refusal crosses the library's own awaits: a forged `then` can drop it there, and the
-// call ends as an invalid verdict with an unhandled rejection, which a test runner reports as a failure
-// of its own. That limit is stated in the CHANGELOG; the slots below run after the check or elsewhere.
 type Slot = { holder: Record<string, unknown>; name: string; label: string }
 const SLOTS: Slot[] = [
   { holder: globalThis as never, name: 'setTimeout', label: 'setTimeout' },
@@ -33,7 +29,9 @@ const SLOTS: Slot[] = [
   { holder: Array.prototype as never, name: 'push', label: 'Array.prototype.push' },
   { holder: Array.prototype as never, name: 'indexOf', label: 'Array.prototype.indexOf' },
   { holder: Array.prototype as never, name: 'includes', label: 'Array.prototype.includes' },
-  { holder: Object as never, name: 'freeze', label: 'Object.freeze' }
+  { holder: Object as never, name: 'freeze', label: 'Object.freeze' },
+  { holder: Date as never, name: 'now', label: 'Date.now' },
+  { holder: Map.prototype as never, name: 'get', label: 'Map.prototype.get' }
 ]
 
 function restorePromises(): void {
@@ -78,17 +76,13 @@ describe('OtpService.verify with a built-in that plants a forgery on its first c
         return original.apply(this, args)
       }
       let outcome: string
-      // A forged `then` drops the rejection it was handed, which ends as an unhandled one; that is
-      // the planted code's doing, and what is measured here is the verdict.
-      const swallow = (): void => undefined
-      const events = ['unhandledRejection', 'uncaughtException'] as const
-      const saved = events.map(
-        (event) => [event, (process as NodeJS.EventEmitter).listeners(event)] as const
-      )
-      for (const event of events) {
-        process.removeAllListeners(event)
-        process.on(event, swallow)
+      const unhandled: unknown[] = []
+      const record = (reason: unknown): void => {
+        unhandled.push(reason)
       }
+      const saved = process.listeners('unhandledRejection')
+      process.removeAllListeners('unhandledRejection')
+      process.on('unhandledRejection', record)
       try {
         const result = await service.verify({ ...ref, code: WRONG })
         outcome = result.valid ? 'FORGED' : 'refused'
@@ -98,14 +92,13 @@ describe('OtpService.verify with a built-in that plants a forgery on its first c
         slot.holder[slot.name] = original
         restorePromises()
         await new Promise((resolve) => setTimeout(resolve, 5))
-        for (const [event, listeners] of saved) {
-          process.removeAllListeners(event)
-          for (const listener of listeners) {
-            process.on(event, listener as never)
-          }
+        process.removeListener('unhandledRejection', record)
+        for (const listener of saved) {
+          process.on('unhandledRejection', listener)
         }
       }
 
+      expect(unhandled).toHaveLength(0)
       expect(outcome).not.toBe('FORGED')
     }
   )

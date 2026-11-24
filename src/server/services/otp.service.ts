@@ -48,11 +48,11 @@ import { logEvent } from '../utils/log-event'
 import { loggableError } from '../utils/loggable-error'
 import { maskAddressTokens, maskExact } from '../utils/mask-in-text'
 import { matchesStoredCode } from '../utils/matches-stored-code'
-import { reportOtp, runInSpan } from '../utils/observe'
+import { otpEventOf, reportOtp, runInSpan } from '../utils/observe'
 import { carriesFailures, countAttempt } from '../utils/otp-failure-count'
 import { outgoingError } from '../utils/outgoing-error'
 import { nullProto } from '../utils/read-options'
-import { assertStandardRealmRoot } from '../utils/realm-root'
+import { assertStandardRealmRoot, own } from '../utils/realm-root'
 import { normalizeRecipient } from '../utils/recipient'
 import { assertSingleMailbox } from '../utils/recipient-list'
 import { attachCauseIfAbsent, readRedactedMessage } from '../utils/redact'
@@ -122,21 +122,6 @@ export interface OtpStatusResult {
   maxAttempts?: number
   cooldownSeconds: number
   validated?: boolean
-}
-
-/**
- * What a verification result is, as the observer counts it: an accepted code is `verified`, a
- * recipient that has run into the attempt ceiling is `locked`, and any other refusal (a wrong code,
- * or none live) is `failed`.
- *
- * @param result - The answer of a verification.
- * @returns The event.
- */
-function otpEventOf(result: OtpVerifyResult): 'verified' | 'failed' | 'locked' {
-  if (result.valid) {
-    return 'verified'
-  }
-  return result.reason === 'max_attempts' ? 'locked' : 'failed'
 }
 
 /** OTP generation, verification, consumption, and status. */
@@ -235,15 +220,19 @@ export class OtpService implements OnModuleInit {
    * @returns The discriminated verification result.
    * @throws NotificationException `OTP_STORAGE_NOT_CONFIGURED` when the channel is absent.
    */
-  async verify(input: OtpVerifyInput): Promise<OtpVerifyResult> {
-    const result = await runInSpan(
-      this.observer,
-      'notification.otp.verify',
-      { channel: 'otp' },
-      () => this.verifyUnobserved(input)
+  verify(input: OtpVerifyInput): Promise<OtpVerifyResult> {
+    // Native to the caller's `await` too: a planted `constructor` or `then` cannot answer for it.
+    return own(this.verifyObserved(input))
+  }
+
+  /** The verification inside the observer's span, reported, with the realm checked before the return. */
+  private async verifyObserved(input: OtpVerifyInput): Promise<OtpVerifyResult> {
+    const result = await own(
+      runInSpan(this.observer, 'notification.otp.verify', { channel: 'otp' }, () =>
+        this.verifyUnobserved(input)
+      )
     )
     reportOtp(this.observer, { event: otpEventOf(result) })
-    // The verdicts have no prototype, so no layer read a `then` off them; this one is the caller's.
     assertStandardRealmRoot('OtpService')
     return { ...result }
   }
@@ -258,7 +247,7 @@ export class OtpService implements OnModuleInit {
     assertStandardRealmRoot('OtpService')
     const input = readVerifyInput(raw)
     try {
-      return await this.verifyChecked(input)
+      return await own(this.verifyChecked(input))
     } catch (error) {
       // Whatever the store raised leaves the way a failed generate's does, with the guess removed.
       throw outgoingError(error, [input.code], true)
@@ -276,36 +265,36 @@ export class OtpService implements OnModuleInit {
     // counted before the code is compared: the increment is atomic, so guesses that arrive
     // together each get their own number and only those within the ceiling are compared. An
     // attempt is counted only while a code is live.
-    const attempt = await countAttempt(this.storage, scope, cfg.ttlSeconds)
+    const attempt = await own(countAttempt(this.storage, scope, cfg.ttlSeconds))
     assertStandardRealmRoot('OtpService')
     if (attempt === null) {
-      return this.rejectNotFound(scope)
+      return await own(this.rejectNotFound(scope))
     }
     if (attempt !== undefined && !(attempt <= cfg.maxAttempts)) {
-      return this.rejectMaxAttempts(scope)
+      return await own(this.rejectMaxAttempts(scope))
     }
     const result = await this.storage.consumeAttempt(scope.tenantId, scope.recipient, scope.purpose)
     assertStandardRealmRoot('OtpService')
     if (result.status === 'not_found') {
-      return this.rejectNotFound(scope)
+      return await own(this.rejectNotFound(scope))
     }
     if (result.status === 'max_attempts') {
-      return this.rejectMaxAttempts(scope)
+      return await own(this.rejectMaxAttempts(scope))
     }
     const { entry } = result
     if (!(entry.attempts <= entry.maxAttempts)) {
-      return this.rejectMaxAttempts(scope)
+      return await own(this.rejectMaxAttempts(scope))
     }
     if (!matchesStoredCode(entry.code, scope.code, otp.digestCode)) {
-      return this.rejectInvalidCode(scope, entry, attempt, cfg.maxAttempts)
+      return await own(this.rejectInvalidCode(scope, entry, attempt, cfg.maxAttempts))
     }
-    const lost = await this.lostConsume(scope, entry.code, otp.consumeOnVerify)
+    const lost = await own(this.lostConsume(scope, entry.code, otp.consumeOnVerify))
     assertStandardRealmRoot('OtpService')
     if (lost) {
-      return this.rejectNotFound(scope)
+      return await own(this.rejectNotFound(scope))
     }
     await this.storage.clearFailures?.(scope.tenantId, scope.recipient, scope.purpose)
-    await this.finalizeVerifySuccess(scope, entry, otp.consumeOnVerify)
+    await own(this.finalizeVerifySuccess(scope, entry, otp.consumeOnVerify))
     return nullProto<OtpVerifyResult>({ valid: true })
   }
 
@@ -649,7 +638,7 @@ export class OtpService implements OnModuleInit {
 
   /** Audits and returns the `not_found` verdict: no live code, or it was consumed by another call. */
   private async rejectNotFound(scope: OtpVerifyInput): Promise<OtpVerifyResult> {
-    await this.audit(this.otpAuditEntry('failed', scope, { reason: 'not_found' }))
+    await own(this.audit(this.otpAuditEntry('failed', scope, { reason: 'not_found' })))
     return nullProto<OtpVerifyResult>({ valid: false, reason: 'not_found' })
   }
 
@@ -665,7 +654,7 @@ export class OtpService implements OnModuleInit {
     attempt: number | undefined,
     ceiling: number
   ): Promise<OtpVerifyResult> {
-    await this.audit(this.otpAuditEntry('failed', scope, { reason: 'invalid_code' }))
+    await own(this.audit(this.otpAuditEntry('failed', scope, { reason: 'invalid_code' })))
     const ofCode = entry.maxAttempts - entry.attempts
     return nullProto<OtpVerifyResult>({
       valid: false,
@@ -677,7 +666,9 @@ export class OtpService implements OnModuleInit {
 
   /** Audits and returns the `max_attempts` verdict. */
   private async rejectMaxAttempts(scope: OtpVerifyInput): Promise<OtpVerifyResult> {
-    await this.audit(this.otpAuditEntry('max_attempts_exceeded', scope, { reason: 'max_attempts' }))
+    await own(
+      this.audit(this.otpAuditEntry('max_attempts_exceeded', scope, { reason: 'max_attempts' }))
+    )
     return nullProto<OtpVerifyResult>({ valid: false, reason: 'max_attempts' })
   }
 
@@ -724,7 +715,7 @@ export class OtpService implements OnModuleInit {
         validated: true
       })
     }
-    await this.audit(this.otpAuditEntry('verified', input, undefined))
+    await own(this.audit(this.otpAuditEntry('verified', input, undefined)))
   }
 
   /**

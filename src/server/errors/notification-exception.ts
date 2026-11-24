@@ -19,6 +19,12 @@ import {
   type NotificationErrorKey
 } from './notification-error-codes'
 
+// Taken at load: a `Map.prototype.get` replaced later runs on no refusal this constructor builds.
+const LOADED_MAP_GET = Map.prototype.get
+const apply = Reflect.apply
+const mapGet = (map: ReadonlyMap<string, unknown>, key: string): unknown =>
+  apply(LOADED_MAP_GET, map, [key])
+
 /**
  * Defensive fallback used only when a caller (e.g. untyped JS) passes a key that
  * is not in the catalog. Keeps the response well-formed instead of throwing a
@@ -138,7 +144,9 @@ export class NotificationException extends HttpException {
     optionsOrStatus?: HttpStatus | NotificationExceptionOptions,
     overrideMessage?: string
   ) {
-    const definition = NOTIFICATION_ERROR_DEFINITION_MAP.get(key) ?? FALLBACK_DEFINITION
+    const definition =
+      (mapGet(NOTIFICATION_ERROR_DEFINITION_MAP, key) as NotificationErrorDefinition | undefined) ??
+      FALLBACK_DEFINITION
     const options: NotificationExceptionOptions =
       typeof optionsOrStatus === 'number' ? { status: optionsOrStatus } : (optionsOrStatus ?? {})
     // Every field is read by name and every object handed on has no prototype: a `status`, a

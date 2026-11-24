@@ -19,7 +19,10 @@ import { EmailService } from './email.service'
 import { NotificationService } from './notification.service'
 import { OtpService } from './otp.service'
 
-jest.mock('../utils/realm-root', () => ({ assertStandardRealmRoot: jest.fn() }))
+jest.mock('../utils/realm-root', () => ({
+  ...jest.requireActual<object>('../utils/realm-root'),
+  assertStandardRealmRoot: jest.fn()
+}))
 
 const NAMES: ReadonlyArray<readonly [string, unknown]> = [
   ['bcc', 'planted-bcc@evil.test'],

@@ -505,6 +505,22 @@ function ownConstructor(): PropertyDescriptor {
 }
 
 /**
+ * Gives a promise the library made an own `constructor`, so awaiting it takes the native path: no
+ * `constructor` read off the realm, no `then` called, whatever was planted on `Promise.prototype`.
+ *
+ * @param promise - A promise the library itself made.
+ * @returns The same promise.
+ */
+export function own<T>(promise: Promise<T>): Promise<T> {
+  try {
+    defineOwn(promise, 'constructor', ownConstructor())
+  } catch {
+    // A realm that refuses even this is refused by the check that follows.
+  }
+  return promise
+}
+
+/**
  * Attaches a handler that does nothing to a promise, with the `then` captured at load, so a promise
  * the caller will not await never ends as an unhandled rejection. Never throws.
  *

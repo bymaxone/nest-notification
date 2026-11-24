@@ -11,6 +11,8 @@ import type {
   NotificationSpanAttributes,
   NotificationSpanName
 } from '../interfaces/notification-observer.interface'
+import type { OtpVerifyResult } from '../interfaces/otp-storage.interface'
+import { own } from './realm-root'
 
 /**
  * Runs `run` inside the observer's span when it has one, and plainly when it has none, and never
@@ -31,7 +33,8 @@ export async function runInSpan<T>(
   run: () => Promise<T>
 ): Promise<T> {
   if (observer?.span === undefined) {
-    return run()
+    // Awaited, not returned: returning a promise from an async function reads its `then`.
+    return await own(run())
   }
   let operation: Promise<T> | undefined
   const once = (): Promise<T> => {
@@ -43,7 +46,7 @@ export async function runInSpan<T>(
   } catch {
     // What the span made of the operation is not the operation's outcome.
   }
-  return once()
+  return await own(once())
 }
 
 /**
@@ -79,4 +82,19 @@ export function reportOtp(
   } catch {
     // Telemetry must never change the result of the operation it describes.
   }
+}
+
+/**
+ * What a verification result is, as the observer counts it: an accepted code is `verified`, a
+ * recipient that has run into the attempt ceiling is `locked`, and any other refusal (a wrong code,
+ * or none live) is `failed`.
+ *
+ * @param result - The answer of a verification.
+ * @returns The event.
+ */
+export function otpEventOf(result: OtpVerifyResult): 'verified' | 'failed' | 'locked' {
+  if (result.valid) {
+    return 'verified'
+  }
+  return result.reason === 'max_attempts' ? 'locked' : 'failed'
 }

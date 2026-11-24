@@ -33,8 +33,12 @@ the entries that carry one, is the compatibility contract — read it, not the n
   prototype while the last await is pending answered for it. `verify` and `getStatus` now check the root as the last
   statement before they return, and the internal verdicts have no prototype. The built-ins the decision awaits sit
   behind are covered by one row per replaceable built-in.
-- Known limits: a refusal raised while a forged `then` is already planted crosses the library's own awaits, which that
-  `then` can drop: the call ends as an invalid verdict and an unhandled rejection, never as `valid: true`; code running concurrently in the same process that plants a `then` after the check and erases it before
+- **A refusal no longer ends as an unhandled rejection when a hooked built-in planted the forgery.** Every promise the
+  library awaits, and the one `verify` hands back, carries an own `constructor`, so awaiting it takes the native path
+  and a planted `then` can neither answer for it nor drop its rejection; the error constructor reads its catalog
+  through `Map.prototype.get` taken at load. A hooked `Date.now` or `Map.prototype.get` now ends as a refusal and zero
+  unhandled rejections.
+- Known limits: code running concurrently in the same process that plants a `then` after the check and erases it before
   the store's own promise settles cannot be seen afterwards; a store or SDK that reads a `Promise` static internally is
   its own code and is not covered; the send paths of the providers still use `then` and are not verdicts.
 

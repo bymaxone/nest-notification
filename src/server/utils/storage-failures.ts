@@ -17,7 +17,7 @@ import { isUnavailableError } from './availability'
 import { readHostName } from './host-name'
 import { isLibraryError } from './is-library-error'
 import { nullProto, readName } from './read-options'
-import { assertStandardRealmRoot, silence } from './realm-root'
+import { assertStandardRealmRoot, own, silence } from './realm-root'
 import { checkConfigured, checkStoreResult } from './store-results'
 
 /** The operations of an `IOtpStorage` that return a promise, required and optional alike. */
@@ -112,7 +112,7 @@ function guardedCall(
       throw translate(name, error)
     }
   }
-  const promise = run()
+  const promise = own(run())
   try {
     assertStandardRealmRoot('OtpService')
   } catch (error) {
