@@ -30,6 +30,24 @@ describe('runInSpan', () => {
     expect(run).toHaveBeenCalledTimes(1)
   })
 
+  it('should start the operation inside a span that awaits before it calls the operation', async () => {
+    const order: string[] = []
+    const observer: INotificationObserver = {
+      span: async (_name, _attributes, inner) => {
+        await Promise.resolve()
+        order.push('span-calls-run')
+        return inner()
+      }
+    }
+
+    await runInSpan(observer, SPAN[0], SPAN[1], async () => {
+      order.push('run')
+      return 'done'
+    })
+
+    expect(order).toStrictEqual(['span-calls-run', 'run'])
+  })
+
   it('should run the operation itself when the span fails before running it', async () => {
     const run = jest.fn(async () => 'done')
     const observer: INotificationObserver = {

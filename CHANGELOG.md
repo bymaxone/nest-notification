@@ -15,6 +15,99 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 ### Fixed
 
+- **A wrong code could be accepted when something in the process replaced the promises the verdict is awaited through.**
+  `await` reads the `constructor` of a promise and, when it is not the intrinsic one, calls the promise's `then`; a
+  `then` on `Promise.prototype` together with a `constructor` that answers once, or a `then` planted on
+  `Object.prototype` that erases itself when read, could hand `verify` a forged answer from the store, and the wrong
+  code returned `valid: true`. The realm check now also holds `Promise`, `Promise.prototype.then` and
+  `Promise.prototype.constructor`, and refuses a `then` on `Array.prototype` or `Function.prototype`; every store call
+  is checked right after the store's method was called and again right before the caller's `await`, with nothing between;
+  the answers of the store reach the service as primitives or objects with no prototype, so resolving with them reads no
+  `then`; `getStatus` no longer uses `Promise.all`; and the readiness check no longer uses `Promise.race` and answers
+  `down` when the promises were replaced. A refusal gives the resend cooldown back when the store had taken it.
+- **A promise the library started and does not await no longer ends unhandled** when `Promise.prototype.constructor`
+  throws or is replaced: the handler is attached through an own `constructor` on that promise, not through the slot
+  the realm controls. The scan of the sources now also counts every `new Promise`, each listed with its reason.
+- **The verdicts are returned without a prototype, and the realm is checked right before each return.** An async
+  function that returns an object makes the engine read its `then`, and a self-erasing `then` planted on a root
+  prototype while the last await is pending answered for it. `verify` and `getStatus` now check the root as the last
+  statement before they return, and the internal verdicts have no prototype. The built-ins the decision awaits sit
+  behind are covered by one row per replaceable built-in.
+- **A refusal no longer ends as an unhandled rejection when a hooked built-in planted the forgery.** Every promise the
+  library makes on the `verify` path, and the one `verify` hands back, carries an own `constructor`, so awaiting it
+  takes the native path and a planted `then` can neither answer for it nor drop its rejection; the error constructor reads its catalog
+  through `Map.prototype.get` taken at load. A hooked `Date.now` or `Map.prototype.get` now ends as a refusal and zero
+  unhandled rejections.
+- **The store's method is reached through built-ins taken at load, and the handler of an abandoned promise no longer
+  reads `Promise[Symbol.species]`.** A hooked `util.types.isProxy` could plant a `Function.prototype.apply` that
+  restored itself and answered for the store, and a wrong code returned `valid: true`; a throwing species getter kept
+  the handler from being attached and left rejections unhandled. The host's audit promise is now awaited only after
+  the realm was checked, with nothing between the check and the `await`.
+- **`generate` and `resend` are pinned like `verify`, and the promise the library awaits is sealed.** Each await in
+  `generate` is on a promise with its own `constructor`, the realm is checked after the last host call and before the
+  result is built, and the result is a plain object. That constructor is now neither writable nor configurable, a
+  promise that cannot take it is refused instead of awaited, and a pinned promise that is abandoned is drained through
+  a native `await`, which reads no `Promise[Symbol.species]`. The audit write moved to `utils/audit-write.ts`; its
+  refusal stays outside the code that absorbs host failures, so `audit.swallowErrors` keeps its meaning.
+  The branches that audit a refused generate (cooldown active, failed delivery) are pinned the same way, and
+  `util.types.isPromise` is taken at load so a replaced one cannot decide that a rejection needs no handler.
+- **A host promise could still forge a verdict through the audit sink, the observer or the renderer behind
+  `sendTemplate`.** Every promise a host call returns (store, audit sink, provider, renderer) is pinned with an own
+  `constructor` before the library awaits it, and the realm is checked again after the audit write has settled; the
+  copies the library builds read `Object.assign` and `Object.create` taken at load; the verdict an observer's span is
+  handed is a frozen copy with no prototype; the hops of `send` and `sendTemplate` await
+  with `return await own(...)`. An operation whose span settles late no longer leaves its rejection unhandled, a
+  readiness answer that was given on a changed realm is not kept for the next call, and a final check runs right
+  before `check()` returns. `Promise.prototype.constructor` must be the engine's own `Promise` when the module loads,
+  or the load fails.
+- **What a host controller awaits is pinned and checked as it is handed over.** `generate`, `verify`, `consume`,
+  `send`, `sendTemplate` and `dispatch` return a promise with an own `constructor`, after a check of the realm root;
+  on a refusal the promise is a rejection with an own `then` taken at load, so a controller that returns it from an
+  async function reads the real one. A failed send no longer answers sent when the audit sink or `onSend` plants a
+  `then`: the realm is checked after the observer was told, and the refusal of the audit write is no longer swallowed.
+  The observer's span, the readiness check's verification and the sync-throw path of the audit write are awaited or
+  heard through the `then` taken at load, and a verification promise that carries its own `then` or `constructor`
+  cannot answer `up` for a failed verification.
+- **`Promise[Symbol.species]` is part of the realm baseline, and the SMTP and Resend providers no longer chain
+  through it.** `then`, `catch` and `finally` build the promise they return through that accessor, so a getter left
+  in place by a host call could answer a verification the relay refused (`up` against a closed port) or end a failed
+  send with no handler and its timer armed. The accessor is now checked at load and by the realm guard and the health
+  check; `SmtpEmailProvider.verify` awaits the transport build and `transport.verify` pinned inside a `try`;
+  `settleOrTimeout` and `settleOrAbort` await the send in an async `try`/`finally` instead of `.finally`; and the
+  cached transport build is dropped by a handler that awaits it, not by `.catch`. The load check reads `constructor`
+  as an own data property only, so an accessor planted before the load is refused, never called, and `pinOnce`
+  reads the descriptor's fields own-only, so `Object.prototype.value` cannot make an accessor look like the pin.
+  `testing/` and `react/` are now inside the promise scan.
+- **The SMTP and Resend providers no longer let a host object or a swapped `Promise` answer for the relay.** Resolving a
+  promise with an object, or returning one from an async function, reads its `then`; the SDK result, the nodemailer
+  transport (whose chain holds `EventEmitter.prototype`) and the Resend client are now carried in a prototype-less
+  box, so no `then` of theirs or of a prototype above them is read, and a persistent `EventEmitter.prototype.then`
+  can no longer make `verify` resolve, the health check report `up` or a send succeed against a dead relay. The send
+  waits are pinned and followed by a realm check, the two bounded waits are built from the `Promise` taken at load
+  (a one-call swap of `globalThis.Promise` forged a message id), and the sources of both providers are inside the
+  sealed-return scan, with no exemption left that said otherwise. A `clearTimeout` or `removeEventListener` that
+  throws while a send settles no longer ends as an unhandled rejection.
+- **The span grace is 5 seconds.** When an observer's span never calls the operation, or never settles, the
+  operation's answer waits at most `SPAN_GRACE_MS` (5000 ms) for the span's promise before the operation runs; a span
+  that settles sooner is not waited on any longer.
+- **A polyfilled global `Promise` no longer fails the load.** The load-time baseline is the prototype of an async
+  function's promise, not `globalThis.Promise.prototype`, so a preloaded polyfill is accepted, while a replaced
+  `Promise.prototype.constructor` of the engine's own prototype is still refused.
+- Known limits: code running concurrently in the same process that plants a `then` after the check and erases it before
+  the store's own promise settles cannot be seen afterwards; a store or SDK that reads a `Promise` static internally is
+  its own code and is not covered, and neither is what a provider does with its own promises; a frozen promise
+  returned by a host call is refused and its rejection absorbed, but when the realm's
+  `Promise.prototype.constructor` throws on every read, a frozen rejecting promise cannot be given a handler by any
+  means and its rejection ends unhandled, and the same holds for a promise whose own non-configurable `constructor`
+  has a `Symbol.species` that throws; `Promise[Symbol.species]` is covered only as the accessor of the engine's own
+  `Promise`: a species read by code that is not this library's (a store, an SDK, the host's own chains) is not seen, nor
+  is a species installed on a subclass or on one promise's own `constructor`; a hook installed
+  before this module loads is not detected, since the intrinsics are the ones found at load, and a bound function
+  that imitates the engine's `Promise` with a copied prototype passes the load check; `Date.now` is read live
+  for `expiresAt` (`otp.service.ts`) and for the readiness cache, and a replaced clock moves those times; a refusal
+  raised while the store took the resend cooldown releases it without knowing the store's answer, so an earlier
+  legitimate cooldown can be cleared once.
+
 - **A store whose `recordFailure` answered anything but a whole number let the failure budget go unenforced.** An
   `undefined`, `NaN`, an object, `0`, `-1`, `true` or a string compared false against the ceiling, so after several
   wrong guesses and a re-issue the right code returned `valid: true`. The count must now be an integer of at least `1`,

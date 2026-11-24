@@ -11,6 +11,9 @@ import type { EmailSendOptions } from '../interfaces/email-provider.interface'
 import { copyByName } from './bounded-list'
 import { ATTACHMENT_KEYS, TAG_KEYS } from './email-send-input'
 
+// Taken when the module loads: a host that replaces `Object.assign` later does not run in the copy.
+const assignTo = Object.assign
+
 /** Every field of {@link EmailSendOptions}, by name. */
 const SEND_OPTION_KEYS = [
   'to',
@@ -50,7 +53,7 @@ export function readSendOptions(options: EmailSendOptions): EmailSendOptions {
     list: readonly object[] | null,
     keys: readonly string[]
   ): unknown[] | undefined => list?.map((entry) => copyByName(entry, keys))
-  return Object.assign(copy, {
+  return assignTo(copy, {
     ...(copy.attachments === undefined
       ? {}
       : { attachments: entries(copy.attachments as readonly object[] | null, ATTACHMENT_KEYS) }),

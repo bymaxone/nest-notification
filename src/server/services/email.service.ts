@@ -31,6 +31,7 @@ import type {
   NotificationLogEntry
 } from '../interfaces/notification-log-repository.interface'
 import type { INotificationObserver } from '../interfaces/notification-observer.interface'
+import { writeAudit } from '../utils/audit-write'
 import { AuditWriteWarning } from '../utils/audit-write-warning'
 import { isUnavailableProviderError } from '../utils/availability'
 import type { DeliveryStatus } from '../utils/delivery-status'
@@ -48,6 +49,7 @@ import { maskAddressTokens } from '../utils/mask-in-text'
 import { reportSend, runInSpan } from '../utils/observe'
 import { rethrowRefusal } from '../utils/provider-refusal'
 import { nullProto } from '../utils/read-options'
+import { assertStandardRealmRoot, checkedAwait, own, ownChecked } from '../utils/realm-root'
 import { countRecipients } from '../utils/recipient-list'
 import {
   collectEchoedExcerpts,
@@ -299,8 +301,11 @@ export class EmailService {
    * `EMAIL_INVALID_RECIPIENT` (more recipients than `maxRecipients`), `EMAIL_MISSING_BODY` (an html
    * or text part that is not a string), `EMAIL_SEND_FAILED`, or `AUDIT_LOG_FAILED` (only when `audit.swallowErrors` is `false`).
    */
-  async send(input: EmailSendInput): Promise<{ messageId: string }> {
-    return this.observed((progress) => this.sendUnobserved(input, progress))
+  send(input: EmailSendInput): Promise<{ messageId: string }> {
+    return ownChecked(
+      this.observed((progress) => this.sendUnobserved(input, progress)),
+      'EmailService'
+    )
   }
 
   /**
@@ -313,12 +318,18 @@ export class EmailService {
     const progress: SendProgress = { stage: 'before-provider' }
     const started = process.hrtime.bigint()
     const seconds = (): number => Number(process.hrtime.bigint() - started) / NANOSECONDS_PER_SECOND
+    let result: T
     try {
-      const result = await runInSpan(this.observer, 'notification.send', { channel: 'email' }, () =>
-        run(progress)
+      result = await own(
+        runInSpan(
+          this.observer,
+          'notification.send',
+          { channel: 'email' },
+          () => run(progress),
+          'EmailService'
+        ),
+        'EmailService'
       )
-      reportSend(this.observer, { channel: 'email', outcome: 'sent', seconds: seconds() })
-      return result
     } catch (error) {
       reportSend(this.observer, {
         channel: 'email',
@@ -327,6 +338,10 @@ export class EmailService {
       })
       throw error
     }
+    reportSend(this.observer, { channel: 'email', outcome: 'sent', seconds: seconds() })
+    // The observer's call ran after the awaits: a `then` it planted must not answer for the result.
+    assertStandardRealmRoot('EmailService')
+    return result
   }
 
   /**
@@ -352,20 +367,24 @@ export class EmailService {
     this.guardRecipientCount(input, email.maxRecipients)
     const sendOptions = this.buildSendOptions(input, email)
     const recipient = this.maskRecipients(input.to)
-    const result = await this.deliver(sendOptions, input, recipient, progress)
-    await this.audit(
-      this.auditEntry(
-        'sent',
-        providerNameOf(this.provider),
-        input.tenantId,
-        recipient,
-        input.userId,
-        {
-          messageId: result.messageId
-        }
-      )
+    const result = await own(this.deliver(sendOptions, input, recipient, progress), 'EmailService')
+    const { messageId } = result // once, before the host's audit sink
+    await own(
+      this.audit(
+        this.auditEntry(
+          'sent',
+          providerNameOf(this.provider),
+          input.tenantId,
+          recipient,
+          input.userId,
+          { messageId }
+        )
+      ),
+      'EmailService'
     )
-    return { messageId: result.messageId }
+    // Last before the return: the host's audit sink ran since the awaits.
+    assertStandardRealmRoot('EmailService')
+    return { messageId }
   }
 
   /**
@@ -394,14 +413,14 @@ export class EmailService {
     progress: SendProgress
   ): Promise<{ messageId: string }> {
     try {
-      const result = await this.provider.send(sendOptions)
+      const result = await checkedAwait(this.provider.send(sendOptions), 'EmailService')
       progress.stage = 'accepted'
       return result
     } catch (error) {
       // The provider refused the message as given: nothing was sent, so it is not a failed delivery.
       rethrowRefusal(error)
       progress.stage = 'failed'
-      return this.failDelivery(error, sendOptions, input, recipient)
+      return await own(this.failDelivery(error, sendOptions, input, recipient), 'EmailService')
     }
   }
 
@@ -420,7 +439,7 @@ export class EmailService {
     // A chain too large to examine, like a send that asked for it, publishes none of the provider's text.
     const chain = inspectErrorChain(error)
     if (input.publishProviderText === false || chain.withheld) {
-      await this.failWithoutProviderText(error, input, recipient)
+      await own(this.failWithoutProviderText(error, input, recipient), 'EmailService')
     }
     // Declared secrets plus detected body echoes: a relay that quotes the rejected content back.
     const secretValues = this.gatherRedactionValues(
@@ -431,10 +450,13 @@ export class EmailService {
     // Read once, like the text: the audit row, the error and the cause all carry these.
     const providerName = providerNameOf(this.provider)
     const text = this.auditText(error, secretValues)
-    await this.audit(
-      this.auditEntry('failed', providerName, input.tenantId, recipient, input.userId, {
-        errorMessage: text
-      })
+    await own(
+      this.audit(
+        this.auditEntry('failed', providerName, input.tenantId, recipient, input.userId, {
+          errorMessage: text
+        })
+      ),
+      'EmailService'
     )
     throw new NotificationException(
       'EMAIL_SEND_FAILED',
@@ -462,8 +484,11 @@ export class EmailService {
    * @throws NotificationException `TEMPLATE_NOT_FOUND` (no template for the locale nor `en`),
    * `TEMPLATE_RENDER_FAILED` (the renderer threw), plus anything {@link EmailService.send} throws.
    */
-  async sendTemplate(input: EmailSendTemplateInput): Promise<{ messageId: string }> {
-    return this.observed((progress) => this.sendTemplateUnobserved(input, progress))
+  sendTemplate(input: EmailSendTemplateInput): Promise<{ messageId: string }> {
+    return ownChecked(
+      this.observed((progress) => this.sendTemplateUnobserved(input, progress)),
+      'EmailService'
+    )
   }
 
   /**
@@ -485,15 +510,19 @@ export class EmailService {
       this.guardRecipientCount(input, this.options.email.maxRecipients)
     }
     const requestedLocale = input.locale ?? this.options.global.defaultLocale
-    const locale = await this.resolveTemplateLocale(input.template, requestedLocale)
-    const rendered = await this.renderTemplate(
-      input.template,
-      input.data,
-      locale,
-      input.auditRedactValues
+    const locale = await own(
+      this.resolveTemplateLocale(input.template, requestedLocale),
+      'EmailService'
+    )
+    const rendered = await own(
+      this.renderTemplate(input.template, input.data, locale, input.auditRedactValues),
+      'EmailService'
     )
     const tags: EmailTag[] = [...(input.tags ?? []), { name: 'template', value: input.template }]
-    return this.sendUnobserved(templateSendInput(input, rendered, tags), progress, true)
+    return await own(
+      this.sendUnobserved(templateSendInput(input, rendered, tags), progress, true),
+      'EmailService'
+    )
   }
 
   /** Returns the resolved email options or throws when the channel is not configured. */
@@ -600,10 +629,10 @@ export class EmailService {
    * @internal
    */
   private async findTemplateLocale(template: string, locale: string): Promise<string | undefined> {
-    if (await this.renderer.hasTemplate(template, locale)) {
+    if (await checkedAwait(this.renderer.hasTemplate(template, locale), 'EmailService')) {
       return locale
     }
-    if (await this.renderer.hasTemplate(template, FALLBACK_LOCALE)) {
+    if (await checkedAwait(this.renderer.hasTemplate(template, FALLBACK_LOCALE), 'EmailService')) {
       return FALLBACK_LOCALE
     }
     return undefined
@@ -619,12 +648,12 @@ export class EmailService {
    * @internal
    */
   async resolvesTemplate(template: string, locale: string): Promise<boolean> {
-    return (await this.findTemplateLocale(template, locale)) !== undefined
+    return (await own(this.findTemplateLocale(template, locale), 'EmailService')) !== undefined
   }
 
   /** Picks the locale that has a template, falling back to `en`, else throws `TEMPLATE_NOT_FOUND`. */
   private async resolveTemplateLocale(template: string, locale: string): Promise<string> {
-    const found = await this.findTemplateLocale(template, locale)
+    const found = await own(this.findTemplateLocale(template, locale), 'EmailService')
     if (found !== undefined) {
       return found
     }
@@ -644,7 +673,7 @@ export class EmailService {
     redactValues?: readonly string[]
   ): Promise<{ subject: string; html: string; text?: string }> {
     try {
-      return await this.renderer.render(template, data, locale)
+      return await checkedAwait(this.renderer.render(template, data, locale), 'EmailService')
     } catch (error) {
       // A renderer error can echo the template data (which carries the
       // caller's secrets); declared values are scrubbed from the cause.
@@ -683,17 +712,17 @@ export class EmailService {
   }
 
   /** Writes an audit entry, swallowing failures unless `audit.swallowErrors` is `false`. */
-  private async audit(entry: NotificationLogEntry): Promise<void> {
-    try {
-      await this.auditLog.create(entry)
-    } catch (error) {
-      if (!this.options.audit.swallowErrors) {
-        // The underlying error rides only on `Error.cause` — `details` is serialized
-        // into the HTTP response body, so internal error text must never land there.
-        throw new NotificationException('AUDIT_LOG_FAILED', undefined, { cause: error })
-      }
-      this.auditWarning.warn(error)
-    }
+  private audit(entry: NotificationLogEntry): Promise<void> {
+    return ownChecked(
+      writeAudit(
+        () => this.auditLog.create(entry),
+        this.options.audit.swallowErrors,
+        (error) => {
+          this.auditWarning.warn(error)
+        },
+        'EmailService'
+      )
+    )
   }
 
   /** Masks the recipient(s) per `audit.maskRecipient`, joining an array with `', '`. */
@@ -726,11 +755,14 @@ export class EmailService {
       input.auditRedactValues
     )
     const providerName = providerNameOf(this.provider)
-    await this.audit(
-      this.auditEntry('failed', providerName, input.tenantId, recipient, input.userId, {
-        errorMessage: WITHHELD_PROVIDER_TEXT,
-        ...status
-      })
+    await own(
+      this.audit(
+        this.auditEntry('failed', providerName, input.tenantId, recipient, input.userId, {
+          errorMessage: WITHHELD_PROVIDER_TEXT,
+          ...status
+        })
+      ),
+      'EmailService'
     )
     throw new NotificationException(
       'EMAIL_SEND_FAILED',

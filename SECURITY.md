@@ -74,6 +74,19 @@ The following classes are explicitly in scope:
 - **CodeQL `security-extended` alerts** — anything the automated scan surfaces in the
   Security tab.
 
+## Threat model: same-process code
+
+Code that runs in the same process as this library is trusted, as it is in Node itself. The
+realm guards around the OTP verdict, the email providers and the readiness check (the baseline
+of built-ins, the pinned awaits, the boxed host values) are best-effort hardening against
+accidental or hostile objects handed in by a consumer's own adapters. They are not a security
+boundary against code that can already patch built-ins, and a report that needs such code is
+out of scope.
+
+Known limits: the first `import()` of an optional peer is awaited unpinned; `Date.now`
+(OTP expiry, the readiness TTL) is read live; and a throwing `setTimeout` or `addEventListener`
+planted by same-process code can end a send in an unhandled rejection.
+
 ## Out of scope
 
 These are not vulnerabilities in `@bymax-one/nest-notification` itself:

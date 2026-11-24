@@ -11,7 +11,9 @@
 
 import { NotificationException } from '../errors/notification-exception'
 import type { ConsumeAttemptResult, OtpEntry } from '../interfaces/otp-storage.interface'
+import { copyByName } from './bounded-list'
 import { assertFailureCount } from './failure-count'
+import { nullProto } from './read-options'
 
 /** A whole number of at least zero. */
 function isCount(value: unknown): value is number {
@@ -50,14 +52,15 @@ function entryOf(raw: unknown, providerName: string): OtpEntry {
   ) {
     return refuse(providerName)
   }
-  return {
+  // No prototype: an object with none has no `then` to read when a promise resolves with it.
+  return nullProto({
     code,
     expiresAt,
     attempts,
     maxAttempts,
     ...(validated !== undefined ? { validated } : {}),
     ...(metadata !== undefined ? { metadata: metadata as Record<string, unknown> } : {})
-  }
+  })
 }
 
 /** The answer of `consumeAttempt`: one of the three statuses, and an entry with `ok`. */
@@ -67,12 +70,19 @@ function consumeResultOf(raw: unknown, providerName: string): ConsumeAttemptResu
   }
   const status: unknown = (raw as { status?: unknown }).status
   if (status === 'not_found' || status === 'max_attempts') {
-    return { status }
+    return nullProto({ status })
   }
   if (status !== 'ok') {
     return refuse(providerName)
   }
-  return { status, entry: entryOf((raw as { entry?: unknown }).entry, providerName) }
+  return nullProto({ status, entry: entryOf((raw as { entry?: unknown }).entry, providerName) })
+}
+
+/** The entry `get` answers with, copied by name; anything else as it is. */
+function entryAnswer(value: unknown): unknown {
+  return typeof value === 'object' && value !== null
+    ? copyByName(value, ['code', 'expiresAt', 'attempts', 'maxAttempts', 'validated', 'metadata'])
+    : value
 }
 
 /** The operations whose answer is checked, and how. The others answer nothing the library reads. */
@@ -82,6 +92,7 @@ const CHECKS: ReadonlyMap<string, (value: unknown, providerName: string) => unkn
 >([
   ['tryAcquireCooldown', strictBoolean],
   ['deleteIfCode', strictBoolean],
+  ['get', entryAnswer],
   ['consumeAttempt', consumeResultOf],
   ['recordFailure', assertFailureCount]
 ])

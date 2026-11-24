@@ -144,6 +144,41 @@ describe('what a refusal and an accepted entry carry', () => {
   })
 })
 
+describe('the entry a get answers with', () => {
+  /** An entry whose fields live behind getters and a non-enumerable slot, as a class instance's can. */
+  class ClassEntry {
+    readonly #attempts = 2
+    code = '123456'
+    constructor() {
+      Object.defineProperty(this, 'expiresAt', { value: 5_000, enumerable: false })
+    }
+    get attempts(): number {
+      return this.#attempts
+    }
+    get maxAttempts(): number {
+      return 5
+    }
+    get validated(): boolean {
+      return true
+    }
+  }
+
+  it('should keep every declared field of a class instance, and carry no prototype', () => {
+    const result = checkStoreResult('get', new ClassEntry(), 's') as Record<string, unknown>
+
+    expect(result).toStrictEqual(
+      Object.assign(Object.create(null), {
+        code: '123456',
+        expiresAt: 5_000,
+        attempts: 2,
+        maxAttempts: 5,
+        validated: true
+      })
+    )
+    expect(Object.getPrototypeOf(result)).toBeNull()
+  })
+})
+
 describe('an operation whose answer is not read', () => {
   it('should pass anything through, whatever the name inherits', () => {
     expect(checkStoreResult('get', 'x', 's')).toBe('x')

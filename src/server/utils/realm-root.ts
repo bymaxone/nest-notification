@@ -144,6 +144,19 @@ function wrongAtLoad(index: number): boolean {
 /** How many standard keys were not what they must be at load; counted on every use, never thrown. */
 const POLLUTED_AT_LOAD = KEYS.filter((_name, index) => wrongAtLoad(index)).length
 
+/**
+ * The prototype every async function's promise has: the engine's %Promise.prototype%, which an `await`
+ * reads, wherever a polyfill put the global `Promise`.
+ */
+const NATIVE_PROMISE_PROTOTYPE = Object.getPrototypeOf(
+  (async (): Promise<void> => undefined)()
+) as {
+  then: typeof Promise.prototype.then
+}
+
+// The engine's %Promise%; a slot that is not its own is refused here, before anything is read off it.
+const PROMISE_CONSTRUCTOR = intrinsicPromise() as object
+
 /** The members of the intrinsics that hold the next-methods of the iterators of arrays, strings, sets and maps. */
 const ARRAY_ITERATOR = Object.getPrototypeOf([][Symbol.iterator]()) as object
 const STRING_ITERATOR = Object.getPrototypeOf(''[Symbol.iterator]()) as object
@@ -159,7 +172,19 @@ const MAP_ITERATOR = Object.getPrototypeOf(new Map()[Symbol.iterator]()) as obje
 const BASELINE: ReadonlyArray<readonly [object, readonly PropertyKey[]]> = [
   [
     globalThis,
-    ['Object', 'Reflect', 'Array', 'Math', 'Number', 'String', 'RegExp', 'Set', 'Map', 'Symbol']
+    [
+      'Object',
+      'Reflect',
+      'Array',
+      'Math',
+      'Number',
+      'String',
+      'RegExp',
+      'Set',
+      'Map',
+      'Symbol',
+      'Promise'
+    ]
   ],
   [
     Object,
@@ -297,6 +322,9 @@ const BASELINE: ReadonlyArray<readonly [object, readonly PropertyKey[]]> = [
       Symbol.iterator
     ]
   ],
+  // An `await` reads the `constructor` of what it awaits and calls its `then` when that is not %Promise%.
+  [NATIVE_PROMISE_PROTOTYPE, ['constructor', 'then']],
+  [PROMISE_CONSTRUCTOR, [Symbol.species]],
   [Date.prototype, [Symbol.toPrimitive]],
   // `crypto.randomInt` reads its random bytes with it, so a replaced one decides the code.
   [Buffer.prototype, ['readUIntBE']],
@@ -402,6 +430,24 @@ function changed(index: number): boolean {
   return false
 }
 
+/** The prototypes that must never own a `then`: it would answer for every array or function resolved. */
+const THEN_FREE: readonly object[] = [Array.prototype, Function.prototype]
+
+/**
+ * How many of {@link THEN_FREE} own a `then`. `Object.prototype` is covered by the key check.
+ *
+ * @returns The count.
+ */
+function plantedThens(): number {
+  let planted = 0
+  for (let index = 0; index < THEN_FREE.length; index += 1) {
+    if (hasOwn(nth(THEN_FREE, index) as object, 'then')) {
+      planted += 1
+    }
+  }
+  return planted
+}
+
 /**
  * Whether a symbol key of the root is the one jest puts there: that registered symbol, not enumerable.
  *
@@ -423,7 +469,7 @@ function isProtection(symbol: symbol): boolean {
  */
 export function assertStandardRealmRoot(owner: string): void {
   const names = namesOf(ROOT)
-  let count = POLLUTED_AT_LOAD + replacedBuiltins()
+  let count = POLLUTED_AT_LOAD + replacedBuiltins() + plantedThens()
   for (let at = 0; at < names.length; at += 1) {
     if (!setHas(STANDARD_ROOT_KEYS, nth(names, at) as string)) {
       count += 1
@@ -447,4 +493,227 @@ export function assertStandardRealmRoot(owner: string): void {
       `holds ${count} key(s) or built-in(s) that are not the standard ones, so the operation is refused`
     )
   }
+}
+
+const intrinsicThen = uncurry(NATIVE_PROMISE_PROTOTYPE.then) as (
+  promise: Promise<unknown>,
+  onFulfilled: () => void,
+  onRejected: () => void
+) => unknown
+const noop = (): void => undefined
+
+/**
+ * The %Promise% this module pins and compares against, taken from the `constructor` slot at load. A slot
+ * that was replaced before the load would otherwise become the baseline, so it must be a native
+ * function whose `prototype` is the prototype of an async function's promise, which no assignment to
+ * the slot reaches. A realm that fails this is refused at load rather than trusted.
+ *
+ * @throws TypeError when the slot does not hold the engine's own %Promise%.
+ */
+function intrinsicPromise(): unknown {
+  // A data property only: an accessor planted before the load is refused, never called.
+  const slot = readField(
+    descriptorOf(NATIVE_PROMISE_PROTOTYPE, 'constructor') as PropertyDescriptor,
+    'value'
+  ) as { prototype: unknown } | undefined
+  if (!isNative(slot) || slot?.prototype !== NATIVE_PROMISE_PROTOTYPE) {
+    throw new TypeError('Promise.prototype.constructor is not the engine Promise at load')
+  }
+  return slot
+}
+
+// Taken at load: an `isPromise` replaced later cannot decide that a rejection needs no handler.
+const isPromise = types.isPromise
+const defineOwn = Object.defineProperty
+const LOADED_THEN = NATIVE_PROMISE_PROTOTYPE.then
+const INTRINSIC_PROMISE = PROMISE_CONSTRUCTOR
+const createBare = Object.create
+
+/** The descriptor of an own `constructor` holding `value`, with no prototype to inherit from. */
+function ownConstructor(value: unknown, pinned: boolean): PropertyDescriptor {
+  const descriptor = createBare(null) as {
+    value: unknown
+    configurable: boolean
+    writable: boolean
+  }
+  descriptor.value = value
+  descriptor.configurable = !pinned
+  descriptor.writable = !pinned
+  return descriptor
+}
+
+/**
+ * Gives a promise the library made an own `constructor`, so awaiting it takes the native path: no
+ * `constructor` read off the realm, no `then` called, whatever was planted on `Promise.prototype`.
+ *
+ * The property is pinned (neither writable nor configurable), so a host holding the promise cannot
+ * change what its await reads.
+ *
+ * @param promise - A promise the library itself made, or one a host call returned.
+ * @param owner - The boundary named in a refusal.
+ * @returns The same promise.
+ * @throws NotificationException `INVALID_SCOPE_IDENTIFIER` when the property cannot be attached: a
+ * promise whose await cannot be pinned is never awaited.
+ */
+export function own<T>(promise: Promise<T>, owner = 'OtpService'): Promise<T> {
+  try {
+    defineOwn(promise, 'constructor', ownConstructor(INTRINSIC_PROMISE, true))
+  } catch {
+    silence(promise)
+    throw refuseInput(owner, 'promise', 'cannot be pinned, so the operation is refused')
+  }
+  return promise
+}
+
+/** Awaits a promise pinned by `own` and discards how it ended. Never rejects. */
+async function absorbRejection(promise: Promise<unknown>): Promise<void> {
+  try {
+    await promise
+  } catch {
+    // The promise ended in a rejection nobody else will observe.
+  }
+}
+
+/**
+ * Attaches a handler that does nothing to a promise, with the `then` captured at load, so a promise
+ * the caller will not await never ends as an unhandled rejection. Never throws.
+ *
+ * @param promise - Whatever a call returned; anything that is not a promise is left alone.
+ */
+export function silence(promise: unknown): void {
+  try {
+    if (isPromise(promise)) {
+      // `then` reads `constructor` of the promise it is called on: an own one answers for it, so a
+      // `constructor` planted or made to throw on `Promise.prototype` cannot decide whether the
+      // handler is attached. It is `undefined`, not %Promise%: that makes the species lookup skip
+      // `Promise[Symbol.species]`, a getter the realm could make throw.
+      try {
+        defineOwn(promise, 'constructor', ownConstructor(undefined, false))
+      } catch {
+        // Not changeable: pinned by `own`, whose %Promise% makes an await native and reads no
+        // species, or frozen by its holder, whose await still reads the realm's `constructor`: a
+        // realm that makes that read throw leaves such a promise without a handler (Known limits).
+        try {
+          // The promise's own `constructor` answers for the species lookup, so the load-time `then`
+          // still attaches the handler without an await that would follow a forged `then`.
+          intrinsicThen(promise, noop, noop)
+        } catch {
+          void absorbRejection(promise)
+        }
+        return
+      }
+      intrinsicThen(promise, noop, noop)
+    }
+  } catch {
+    // A realm that refuses even this is already refused by the check that called it.
+  }
+}
+
+/**
+ * Checks the realm and hands back the promise the caller awaits on the very next token: a host's
+ * promise is never awaited on a realm whose promises the call that made it replaced.
+ *
+ * @param pending - A promise a host call returned; a native one is pinned before it is returned.
+ * @param owner - The boundary named in the refusal.
+ * @returns `pending`, with its `constructor` pinned.
+ * @throws NotificationException `INVALID_SCOPE_IDENTIFIER` when the realm was changed or the promise
+ * cannot be pinned; `pending` is then given a handler, since nobody will await it.
+ */
+export function checkedAwait<T>(pending: Promise<T>, owner: string): Promise<T> {
+  try {
+    assertStandardRealmRoot(owner)
+  } catch (refusal) {
+    silence(pending)
+    throw refusal
+  }
+  // The check passes while accessors a host installed inside the call are still in place: they fire
+  // when the engine reads `constructor` and `then` during the await. The own, pinned `constructor`
+  // makes that await native, so nothing is read off the realm.
+  if (isPromise(pending)) {
+    own(pending, owner)
+  }
+  return pending
+}
+
+/**
+ * Pins a promise the library is about to hand to its caller and checks the realm after the host calls
+ * that made it: the caller's own `await` follows a check with nothing between.
+ *
+ * @param promise - What a public method of the library returns.
+ * @param owner - The boundary named in a refusal.
+ * @returns `promise`, pinned; on a changed realm a pinned promise that rejects with
+ * `INVALID_SCOPE_IDENTIFIER`, `promise` having been given a handler since nobody will await it.
+ */
+export function ownChecked<T>(promise: Promise<T>, owner = 'OtpService'): Promise<T> {
+  const pinned = own(promise, owner)
+  try {
+    assertStandardRealmRoot(owner)
+  } catch (error) {
+    silence(pinned)
+    // The refusal reaches the caller as the rejection every other failure of the method is, from an
+    // async function (no `Promise.reject` to look up). Its own `then` is the one taken at load: a
+    // host that returns it from an async function reads that, not what the realm now holds.
+    const refusal = own(
+      (async (): Promise<T> => {
+        throw error
+      })(),
+      owner
+    )
+    defineOwn(refusal, 'then', ownConstructor(LOADED_THEN, true))
+    return refusal
+  }
+  return pinned
+}
+
+/**
+ * Pins a promise, accepting one the library pinned already: a method that awaits what another public
+ * method of the library returned.
+ *
+ * @param promise - A promise of the library.
+ * @param owner - The boundary named in a refusal.
+ * @returns `promise`, pinned.
+ */
+export function pinOnce<T>(promise: Promise<T>, owner: string): Promise<T> {
+  const held = descriptorOf(promise, 'constructor')
+  if (
+    held !== undefined &&
+    readField(held, 'value') === INTRINSIC_PROMISE &&
+    readField(held, 'writable') === false &&
+    readField(held, 'configurable') === false
+  ) {
+    return promise
+  }
+  return own(promise, owner)
+}
+
+/** A value of the host, held by a null-prototype object so resolving or returning it reads no `then`. */
+export interface Boxed<T> {
+  readonly value: T
+}
+
+/**
+ * Holds a host's value in an object with no prototype. A promise resolved with the value itself reads
+ * its `then`, and a host object has prototypes the realm check does not cover (an event emitter's, an
+ * SDK class's); the box has none, so nothing is read off it.
+ *
+ * @param value - What a host call returned.
+ * @returns A box with the value in `value`.
+ */
+export function boxed<T>(value: T): Boxed<T> {
+  const box = createBare(null) as { value: T }
+  box.value = value
+  return box
+}
+
+/**
+ * Makes a promise from the engine's own `Promise`, never from the global one a host call can swap for
+ * the length of a call.
+ *
+ * @param executor - The promise executor.
+ * @returns The promise.
+ */
+export function newPromise<T>(
+  executor: (resolve: (value: T) => void, reject: (reason?: unknown) => void) => void
+): Promise<T> {
+  return new (INTRINSIC_PROMISE as PromiseConstructor)<T>(executor)
 }

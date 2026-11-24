@@ -91,6 +91,7 @@ export function deleteIfCodeAtomicCase({
         const { deleteIfCode } = storage
         await storage.set(scope.tenantA, scope.recipient, scope.purpose, entryOf(STORED))
 
+        // Concurrent calls to the store under test, for its atomicity: this support code reaches no production bundle and decides no verdict of the library.
         const results = await Promise.all(
           Array.from({ length: RACERS }, () =>
             deleteIfCode.call(storage, scope.tenantA, scope.recipient, scope.purpose, STORED)

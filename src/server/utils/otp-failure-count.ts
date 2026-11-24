@@ -45,5 +45,12 @@ export async function countAttempt(
   if (live === null) {
     return null
   }
-  return storage.recordFailure(scope.tenantId, scope.recipient, scope.purpose, ttlSeconds)
+  // Awaited here, not returned: returning a promise from an async function reads its `then`.
+  const count = await storage.recordFailure(
+    scope.tenantId,
+    scope.recipient,
+    scope.purpose,
+    ttlSeconds
+  )
+  return count
 }

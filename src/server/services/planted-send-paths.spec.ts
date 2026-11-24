@@ -19,7 +19,13 @@ import { EmailService } from './email.service'
 import { NotificationService } from './notification.service'
 import { OtpService } from './otp.service'
 
-jest.mock('../utils/realm-root', () => ({ assertStandardRealmRoot: jest.fn() }))
+jest.mock('../utils/realm-root', () => ({
+  ...jest.requireActual<object>('../utils/realm-root'),
+  assertStandardRealmRoot: jest.fn(),
+  checkedAwait: (pending: unknown) => pending,
+  // The check is off for these rows, so the hand-over does not look at the realm either.
+  ownChecked: (promise: unknown) => promise
+}))
 
 const NAMES: ReadonlyArray<readonly [string, unknown]> = [
   ['bcc', 'planted-bcc@evil.test'],

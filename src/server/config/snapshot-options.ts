@@ -118,15 +118,19 @@ const AUDIT_KEYS = [
   'maskRecipient'
 ] as const satisfies readonly (keyof AuditOptions)[]
 
-/** The `perPurpose` container, and each entry in it, read once; anything else as it is. */
+/**
+ * The `perPurpose` container, and each entry in it, read once. A built-in is refused here, on the
+ * one walk that decides it: a copy is always what validation and resolution see, never the live
+ * object, whatever a second walk of the host's prototype chain would answer.
+ */
 function readPerPurpose<T>(perPurpose: T): T {
-  if (
-    typeof perPurpose !== 'object' ||
-    perPurpose === null ||
-    Array.isArray(perPurpose) ||
-    !isPlainOrClassInstance(perPurpose)
-  ) {
+  if (typeof perPurpose !== 'object' || perPurpose === null || Array.isArray(perPurpose)) {
     return perPurpose
+  }
+  if (!isPlainOrClassInstance(perPurpose)) {
+    throw new Error(
+      '[BymaxNotificationModule] options.otp.perPurpose must be a plain object or a class instance, got a built-in'
+    )
   }
   const entries = namesOf(perPurpose).map(
     (key) =>

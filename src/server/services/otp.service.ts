@@ -39,18 +39,21 @@ import type {
 import type { OtpPurposeConfig } from '../interfaces/notification-module-options.interface'
 import type { INotificationObserver } from '../interfaces/notification-observer.interface'
 import type { IOtpStorage, OtpEntry, OtpVerifyResult } from '../interfaces/otp-storage.interface'
+import { writeAudit } from '../utils/audit-write'
 import { AuditWriteWarning } from '../utils/audit-write-warning'
 import { generateOtpCode } from '../utils/code-generator'
 import { cooldownExpiresAt, toRetryAfterHeader } from '../utils/cooldown-helpers'
+import { releaseCooldownAfterRefusal } from '../utils/cooldown-release'
 import { readHostName, textOfHostName } from '../utils/host-name'
 import { logEvent } from '../utils/log-event'
 import { loggableError } from '../utils/loggable-error'
 import { maskAddressTokens, maskExact } from '../utils/mask-in-text'
 import { matchesStoredCode } from '../utils/matches-stored-code'
-import { reportOtp, runInSpan } from '../utils/observe'
+import { frozenCopy, otpEventOf, reportOtp, runInSpan } from '../utils/observe'
 import { carriesFailures, countAttempt } from '../utils/otp-failure-count'
 import { outgoingError } from '../utils/outgoing-error'
-import { assertStandardRealmRoot } from '../utils/realm-root'
+import { nullProto } from '../utils/read-options'
+import { assertStandardRealmRoot, checkedAwait, own, ownChecked } from '../utils/realm-root'
 import { normalizeRecipient } from '../utils/recipient'
 import { assertSingleMailbox } from '../utils/recipient-list'
 import { attachCauseIfAbsent, readRedactedMessage } from '../utils/redact'
@@ -122,21 +125,6 @@ export interface OtpStatusResult {
   validated?: boolean
 }
 
-/**
- * What a verification result is, as the observer counts it: an accepted code is `verified`, a
- * recipient that has run into the attempt ceiling is `locked`, and any other refusal (a wrong code,
- * or none live) is `failed`.
- *
- * @param result - The answer of a verification.
- * @returns The event.
- */
-function otpEventOf(result: OtpVerifyResult): 'verified' | 'failed' | 'locked' {
-  if (result.valid) {
-    return 'verified'
-  }
-  return result.reason === 'max_attempts' ? 'locked' : 'failed'
-}
-
 /** OTP generation, verification, consumption, and status. */
 @Injectable()
 export class OtpService implements OnModuleInit {
@@ -196,10 +184,13 @@ export class OtpService implements OnModuleInit {
    * @param input - The recipient, purpose, and delivery options.
    * @returns The expiry timestamp and the resend cooldown length.
    * @throws NotificationException `OTP_STORAGE_NOT_CONFIGURED`, `OTP_COOLDOWN_ACTIVE`,
-   * `OTP_EMAIL_DELIVERY_NOT_CONFIGURED`, or rethrows a persistence/delivery error after
-   * releasing the cooldown lock.
+   * `OTP_EMAIL_DELIVERY_NOT_CONFIGURED`, or a persistence/delivery error, after releasing the lock.
    */
-  async generate(raw: OtpGenerateInput): Promise<OtpGenerateResult> {
+  generate(raw: OtpGenerateInput): Promise<OtpGenerateResult> {
+    return ownChecked(this.generateChecked(raw))
+  }
+
+  private async generateChecked(raw: OtpGenerateInput): Promise<OtpGenerateResult> {
     assertStandardRealmRoot('OtpService')
     const input = readGenerateInput(raw)
     const otp = this.requireOtpOptions()
@@ -208,8 +199,8 @@ export class OtpService implements OnModuleInit {
     this.assertDeliverable(input, otp.digestCode)
     this.assertMailbox(input)
     const cfg = otp.resolveForPurpose(input.purpose)
-    await this.acquireCooldownOrThrow(scope, cfg.resendCooldownSeconds)
-    await this.assertRealmOrRelease(scope)
+    await own(this.acquireCooldownOrThrow(scope, cfg.resendCooldownSeconds))
+    await own(this.assertRealmOrRelease(scope))
     const code = generateOtpCode(cfg.length, cfg.codeType)
     const expiresAt = Date.now() + cfg.ttlSeconds * MS_PER_SECOND
     const entry: OtpEntry = {
@@ -220,9 +211,10 @@ export class OtpService implements OnModuleInit {
       attempts: 0,
       maxAttempts: cfg.maxAttempts
     }
-    await this.persistAndDeliver(input, scope, code, entry, cfg)
+    await own(this.persistAndDeliver(input, scope, code, entry, cfg))
     reportOtp(this.observer, { event: 'issued' })
-    await this.audit(this.otpAuditEntry('generated', scope, undefined))
+    await own(this.audit(this.otpAuditEntry('generated', scope, undefined)))
+    assertStandardRealmRoot('OtpService')
     return { expiresAt, cooldownSeconds: cfg.resendCooldownSeconds }
   }
 
@@ -233,15 +225,20 @@ export class OtpService implements OnModuleInit {
    * @returns The discriminated verification result.
    * @throws NotificationException `OTP_STORAGE_NOT_CONFIGURED` when the channel is absent.
    */
-  async verify(input: OtpVerifyInput): Promise<OtpVerifyResult> {
-    const result = await runInSpan(
-      this.observer,
-      'notification.otp.verify',
-      { channel: 'otp' },
-      () => this.verifyUnobserved(input)
+  verify(input: OtpVerifyInput): Promise<OtpVerifyResult> {
+    return ownChecked(this.verifyObserved(input))
+  }
+
+  /** The verification inside the observer's span, reported, with the realm checked before the return. */
+  private async verifyObserved(input: OtpVerifyInput): Promise<OtpVerifyResult> {
+    const result = await own(
+      runInSpan(this.observer, 'notification.otp.verify', { channel: 'otp' }, () =>
+        this.verifyUnobserved(input)
+      )
     )
     reportOtp(this.observer, { event: otpEventOf(result) })
-    return result
+    assertStandardRealmRoot('OtpService')
+    return { ...result }
   }
 
   /**
@@ -254,7 +251,7 @@ export class OtpService implements OnModuleInit {
     assertStandardRealmRoot('OtpService')
     const input = readVerifyInput(raw)
     try {
-      return await this.verifyChecked(input)
+      return frozenCopy(await own(this.verifyChecked(input)))
     } catch (error) {
       // Whatever the store raised leaves the way a failed generate's does, with the guess removed.
       throw outgoingError(error, [input.code], true)
@@ -272,37 +269,37 @@ export class OtpService implements OnModuleInit {
     // counted before the code is compared: the increment is atomic, so guesses that arrive
     // together each get their own number and only those within the ceiling are compared. An
     // attempt is counted only while a code is live.
-    const attempt = await countAttempt(this.storage, scope, cfg.ttlSeconds)
+    const attempt = await own(countAttempt(this.storage, scope, cfg.ttlSeconds))
     assertStandardRealmRoot('OtpService')
     if (attempt === null) {
-      return this.rejectNotFound(scope)
+      return await own(this.rejectNotFound(scope))
     }
     if (attempt !== undefined && !(attempt <= cfg.maxAttempts)) {
-      return this.rejectMaxAttempts(scope)
+      return await own(this.rejectMaxAttempts(scope))
     }
     const result = await this.storage.consumeAttempt(scope.tenantId, scope.recipient, scope.purpose)
     assertStandardRealmRoot('OtpService')
     if (result.status === 'not_found') {
-      return this.rejectNotFound(scope)
+      return await own(this.rejectNotFound(scope))
     }
     if (result.status === 'max_attempts') {
-      return this.rejectMaxAttempts(scope)
+      return await own(this.rejectMaxAttempts(scope))
     }
     const { entry } = result
     if (!(entry.attempts <= entry.maxAttempts)) {
-      return this.rejectMaxAttempts(scope)
+      return await own(this.rejectMaxAttempts(scope))
     }
     if (!matchesStoredCode(entry.code, scope.code, otp.digestCode)) {
-      return this.rejectInvalidCode(scope, entry, attempt, cfg.maxAttempts)
+      return await own(this.rejectInvalidCode(scope, entry, attempt, cfg.maxAttempts))
     }
-    const lost = await this.lostConsume(scope, entry.code, otp.consumeOnVerify)
+    const lost = await own(this.lostConsume(scope, entry.code, otp.consumeOnVerify))
     assertStandardRealmRoot('OtpService')
     if (lost) {
-      return this.rejectNotFound(scope)
+      return await own(this.rejectNotFound(scope))
     }
     await this.storage.clearFailures?.(scope.tenantId, scope.recipient, scope.purpose)
-    await this.finalizeVerifySuccess(scope, entry, otp.consumeOnVerify)
-    return { valid: true }
+    await own(this.finalizeVerifySuccess(scope, entry, otp.consumeOnVerify))
+    return nullProto<OtpVerifyResult>({ valid: true })
   }
 
   /**
@@ -311,7 +308,11 @@ export class OtpService implements OnModuleInit {
    * @param input - The recipient and purpose.
    * @throws NotificationException `OTP_STORAGE_NOT_CONFIGURED` when the channel is absent.
    */
-  async consume(raw: OtpConsumeInput): Promise<void> {
+  consume(raw: OtpConsumeInput): Promise<void> {
+    return ownChecked(this.consumeChecked(raw))
+  }
+
+  private async consumeChecked(raw: OtpConsumeInput): Promise<void> {
     const input = readRefInput(raw)
     this.requireOtpOptions()
     this.assertScope(input)
@@ -327,7 +328,7 @@ export class OtpService implements OnModuleInit {
    * @param input - The recipient, purpose, and delivery options.
    * @returns The expiry timestamp and the resend cooldown length.
    */
-  async resend(input: OtpGenerateInput): Promise<OtpGenerateResult> {
+  resend(input: OtpGenerateInput): Promise<OtpGenerateResult> {
     return this.generate(input)
   }
 
@@ -335,16 +336,24 @@ export class OtpService implements OnModuleInit {
    * Returns the current OTP status without ever exposing the plaintext code.
    *
    * @param input - The recipient and purpose.
-   * @returns Existence, expiry, attempt counters, validation flag, and cooldown.
+   * @returns Existence, expiry, attempt counters, validated flag, and cooldown.
    */
-  async getStatus(raw: OtpStatusInput): Promise<OtpStatusResult> {
+  getStatus(raw: OtpStatusInput): Promise<OtpStatusResult> {
+    return ownChecked(this.statusChecked(raw))
+  }
+
+  private async statusChecked(raw: OtpStatusInput): Promise<OtpStatusResult> {
     const input = readRefInput(raw)
     this.assertScope(input)
     const scope = this.keyed(input)
-    const [entry, cooldownSeconds] = await Promise.all([
-      this.storage.get(scope.tenantId, scope.recipient, scope.purpose),
-      this.storage.getCooldown(scope.tenantId, scope.recipient, scope.purpose)
-    ])
+    // One await at a time, each checked by the wrapper: `Promise.all` reads `then` of the realm.
+    const entry = await this.storage.get(scope.tenantId, scope.recipient, scope.purpose)
+    const cooldownSeconds = await this.storage.getCooldown(
+      scope.tenantId,
+      scope.recipient,
+      scope.purpose
+    )
+    assertStandardRealmRoot('OtpService')
     if (!entry) {
       return { exists: false, cooldownSeconds }
     }
@@ -363,12 +372,20 @@ export class OtpService implements OnModuleInit {
     ref: OtpRecipientRef,
     cooldownSeconds: number
   ): Promise<void> {
-    const hasCooldownLock = await this.storage.tryAcquireCooldown(
-      ref.tenantId,
-      ref.recipient,
-      ref.purpose,
-      cooldownSeconds
-    )
+    let hasCooldownLock: boolean
+    try {
+      hasCooldownLock = await this.storage.tryAcquireCooldown(
+        ref.tenantId,
+        ref.recipient,
+        ref.purpose,
+        cooldownSeconds
+      )
+    } catch (error) {
+      // A refusal of the realm comes after the store took the lock: give it back, as the check that
+      // follows a successful acquire does, so the recipient is not locked out of generating.
+      await own(releaseCooldownAfterRefusal(this.storage, ref, error))
+      throw error
+    }
     if (hasCooldownLock) {
       return
     }
@@ -377,7 +394,7 @@ export class OtpService implements OnModuleInit {
       ref.recipient,
       ref.purpose
     )
-    await this.audit(this.otpAuditEntry('cooldown_blocked', ref, { remainingSeconds }))
+    await own(this.audit(this.otpAuditEntry('cooldown_blocked', ref, { remainingSeconds })))
     throw new NotificationException('OTP_COOLDOWN_ACTIVE', {
       remainingSeconds,
       retryAfter: toRetryAfterHeader(remainingSeconds),
@@ -401,36 +418,30 @@ export class OtpService implements OnModuleInit {
   ): Promise<void> {
     try {
       await this.storage.set(scope.tenantId, scope.recipient, scope.purpose, entry)
-      await this.deliverOtp(input, code, cfg)
+      await own(this.deliverOtp(input, code, cfg))
     } catch (error) {
-      throw await this.failedOutgoing(scope, error, code)
+      await own(this.failedOutgoing(scope, error, code))
     }
   }
 
   /**
    * Releases the cooldown and the orphan entry after a failed persist or delivery, audits the
-   * failure, and returns what the caller must throw.
+   * failure, and rejects with what the caller must see (never resolves with the `Error`: an object
+   * result reads a `then` its prototype chain could hold).
    *
-   * A failed cleanup supersedes the delivery error — the cooldown/OTP may now be orphaned,
-   * which the caller must see — and it must NOT bypass the scrub below. The delivery error is
-   * preserved as its cause when the cleanup error can verifiably carry one; a hostile trap
-   * inside the attachment is contained by the helper.
-   *
-   * The scrub runs BEFORE the audit write and the rethrow, so neither the entry's
-   * `errorMessage` nor the outgoing chain can carry the plaintext code. An Error chain is
-   * scrubbed (in place, or via redacted copies when a node resists mutation); ANY other
-   * rejection (string, object from a custom storage, number) is flattened to a redacted
-   * string, because a raw object could carry the code in its properties and a primitive
-   * cannot be mutated.
+   * A failed cleanup supersedes the delivery error (kept as its cause when it can carry one) and
+   * must NOT bypass the scrub. The scrub runs BEFORE the audit write and the rethrow, so neither
+   * `errorMessage` nor the outgoing chain carries the plaintext code: an Error chain is scrubbed,
+   * ANY other rejection is flattened to a redacted string.
    */
   private async failedOutgoing(
     scope: OtpGenerateInput,
     error: unknown,
     code: string
-  ): Promise<unknown> {
+  ): Promise<never> {
     let failure: unknown = error
     try {
-      await this.releaseOtp(scope)
+      await own(this.releaseOtp(scope))
     } catch (cleanupError) {
       // A failed store method arrives as `OTP_STORAGE_FAILED` or `_UNAVAILABLE` already carrying the
       // store's own error as its cause, so the delivery error goes onto that cause.
@@ -440,21 +451,23 @@ export class OtpService implements OnModuleInit {
       failure = cleanupError
     }
     const outgoing = outgoingError(failure, [code])
-    await this.audit(
-      this.otpAuditEntry('failed', scope, {
-        // `outgoing` is already fully redacted by the scrub above; this read
-        // only needs the fail-closed guard, not a second redaction pass.
-        errorMessage: maskExact(
-          maskAddressTokens(
-            readRedactedMessage(storageCauseOf(outgoing) ?? outgoing),
+    await own(
+      this.audit(
+        this.otpAuditEntry('failed', scope, {
+          // `outgoing` is already fully redacted by the scrub above; this read
+          // only needs the fail-closed guard, not a second redaction pass.
+          errorMessage: maskExact(
+            maskAddressTokens(
+              readRedactedMessage(storageCauseOf(outgoing) ?? outgoing),
+              this.options.audit.maskRecipient
+            ),
+            scope.recipient,
             this.options.audit.maskRecipient
-          ),
-          scope.recipient,
-          this.options.audit.maskRecipient
-        )
-      })
+          )
+        })
+      )
     )
-    return outgoing
+    throw outgoing
   }
 
   /**
@@ -586,7 +599,10 @@ export class OtpService implements OnModuleInit {
     if (!this.emailService) {
       throw new NotificationException('OTP_EMAIL_DELIVERY_NOT_CONFIGURED')
     }
-    await this.emailService.sendTemplate(this.buildOtpEmail(input, code, cfg))
+    await checkedAwait(
+      this.emailService.sendTemplate(this.buildOtpEmail(input, code, cfg)),
+      'OtpService'
+    )
   }
 
   /**
@@ -598,14 +614,14 @@ export class OtpService implements OnModuleInit {
     try {
       assertStandardRealmRoot('OtpService')
     } catch (error) {
-      await this.storage.clearCooldown(ref.tenantId, ref.recipient, ref.purpose)
+      await own(releaseCooldownAfterRefusal(this.storage, ref, error))
       throw error
     }
   }
 
   /** Clears the cooldown and deletes the OTP — used to undo a failed delivery. */
   private async releaseOtp(ref: OtpRecipientRef): Promise<void> {
-    await releaseStored(this.storage, ref)
+    await own(releaseStored(this.storage, ref))
   }
 
   /** Builds the OTP email payload with the auto-injected `{ code, expiresInMinutes, purpose }`. */
@@ -633,8 +649,8 @@ export class OtpService implements OnModuleInit {
 
   /** Audits and returns the `not_found` verdict: no live code, or it was consumed by another call. */
   private async rejectNotFound(scope: OtpVerifyInput): Promise<OtpVerifyResult> {
-    await this.audit(this.otpAuditEntry('failed', scope, { reason: 'not_found' }))
-    return { valid: false, reason: 'not_found' }
+    await own(this.audit(this.otpAuditEntry('failed', scope, { reason: 'not_found' })))
+    return nullProto<OtpVerifyResult>({ valid: false, reason: 'not_found' })
   }
 
   /**
@@ -649,20 +665,22 @@ export class OtpService implements OnModuleInit {
     attempt: number | undefined,
     ceiling: number
   ): Promise<OtpVerifyResult> {
-    await this.audit(this.otpAuditEntry('failed', scope, { reason: 'invalid_code' }))
+    await own(this.audit(this.otpAuditEntry('failed', scope, { reason: 'invalid_code' })))
     const ofCode = entry.maxAttempts - entry.attempts
-    return {
+    return nullProto<OtpVerifyResult>({
       valid: false,
       reason: 'invalid_code',
       // The code's own budget and the recipient's failure budget both run out; the nearer wins.
       remainingAttempts: attempt === undefined ? ofCode : Math.min(ofCode, ceiling - attempt)
-    }
+    })
   }
 
   /** Audits and returns the `max_attempts` verdict. */
   private async rejectMaxAttempts(scope: OtpVerifyInput): Promise<OtpVerifyResult> {
-    await this.audit(this.otpAuditEntry('max_attempts_exceeded', scope, { reason: 'max_attempts' }))
-    return { valid: false, reason: 'max_attempts' }
+    await own(
+      this.audit(this.otpAuditEntry('max_attempts_exceeded', scope, { reason: 'max_attempts' }))
+    )
+    return nullProto<OtpVerifyResult>({ valid: false, reason: 'max_attempts' })
   }
 
   /**
@@ -708,7 +726,7 @@ export class OtpService implements OnModuleInit {
         validated: true
       })
     }
-    await this.audit(this.otpAuditEntry('verified', input, undefined))
+    await own(this.audit(this.otpAuditEntry('verified', input, undefined)))
   }
 
   /**
@@ -769,16 +787,12 @@ export class OtpService implements OnModuleInit {
   }
 
   /** Writes an audit entry, swallowing failures unless `audit.swallowErrors` is `false`. */
-  private async audit(entry: NotificationLogEntry): Promise<void> {
-    try {
-      await this.auditLog.create(entry)
-    } catch (error) {
-      if (!this.options.audit.swallowErrors) {
-        // The underlying error rides only on `Error.cause` — `details` is serialized
-        // into the HTTP response body, so internal error text must never land there.
-        throw new NotificationException('AUDIT_LOG_FAILED', undefined, { cause: error })
-      }
-      this.auditWarning.warn(error)
-    }
+  private audit(entry: NotificationLogEntry): Promise<void> {
+    return writeAudit(
+      () => this.auditLog.create(entry),
+      this.options.audit.swallowErrors,
+      (error) => this.auditWarning.warn(error),
+      'OtpService'
+    )
   }
 }

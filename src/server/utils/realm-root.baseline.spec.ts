@@ -41,11 +41,9 @@ const GLOBALS = [
 /** What is called and left out of the baseline on purpose, and why. */
 const EXEMPT: Readonly<Record<string, string>> = {
   'Date.now':
-    'The clock. A host that fakes it in a test (jest or sinon fake timers replace Date after the import) must still send; OTP expiry and cooldown use the live clock, stated in the README.',
-  'Promise.all':
-    'A flow primitive: no recipient, scope, mask or code decision depends on it, and a test may spy on it.',
+    'The clock. A host that fakes it in a test (jest or sinon fake timers replace Date after the import) must still send; OTP expiry, the cooldown and the health TTL read the live clock and do not guard it: a clock replaced by same-process code is a known limit (SECURITY.md, threat model).',
   'Promise.resolve':
-    'A flow primitive: no recipient, scope, mask or code decision depends on it, and a test may spy on it.'
+    'Only in the React hook that defers a UI update by a microtask (src/react): no verdict, recipient, scope or code decision depends on it, and the hook never runs on the server.'
 }
 
 const PROTOTYPES: ReadonlyArray<readonly [string, object]> = [
@@ -160,5 +158,83 @@ describe('the load baseline of built-ins', () => {
   it('should read the sources: more than a handful of calls, so an empty read cannot pass', () => {
     expect(calls.statics.size).toBeGreaterThan(20)
     expect(calls.methods.size).toBeGreaterThan(30)
+  })
+})
+
+/**
+ * The places that touch a promise through something the realm can replace: a static of `Promise`
+ * (`all`, `race`, `resolve`, `try`, `withResolvers`...), by name, bracket or destructuring, and a call
+ * of `then`, `catch` or `finally`. A decision never goes through any of them: each await of a verdict
+ * is checked by the realm guard right before it. The sources that remain are listed with their count
+ * and a reason, and a new one fails here until somebody states why it is not a decision.
+ */
+const PROMISE_PATTERN =
+  /\bPromise\s*(?:\.\s*(?!prototype\b)[A-Za-z_]+|\[)|=\s*Promise\b(?!\s*\.)|\.\s*(?:then|catch|finally)\s*\(|\bthen\s*\.\s*call|\[\s*['"`](?:then|catch|finally)['"`]\s*\]|\bnew\s+Promise\b/gu
+
+/** The reads that stay: the file, how many, and why none of them decides anything. */
+const PROMISE_EXEMPT: Readonly<Record<string, { count: number; reason: string }>> = {
+  'src/react/useOtpInput.ts': {
+    count: 2,
+    reason:
+      'A hook of the browser bundle, with no library promise, no storage and no verdict to forge.'
+  },
+  'src/testing/otp-storage-contract.consume.ts': {
+    count: 1,
+    reason:
+      'The executable contract of a consumer storage, run by the consumer in a spec; it reaches no production bundle and decides no verdict of the library.'
+  },
+  'src/testing/otp-storage-contract.failures.ts': {
+    count: 1,
+    reason:
+      'The executable contract of a consumer storage, run by the consumer in a spec; it reaches no production bundle and decides no verdict of the library.'
+  },
+  'src/testing/otp-storage-contract.shared.ts': {
+    count: 1,
+    reason:
+      'The executable contract of a consumer storage, run by the consumer in a spec; it reaches no production bundle and decides no verdict of the library.'
+  },
+  'src/testing/otp-storage-contract.ts': {
+    count: 2,
+    reason:
+      'The executable contract of a consumer storage, run by the consumer in a spec; it reaches no production bundle and decides no verdict of the library.'
+  },
+  'src/server/utils/observe.ts': {
+    count: 1,
+    reason:
+      'The one `new Promise` that bounds the wait for a span promise; it settles with no value, so it decides nothing, and the realm is asserted before the answer is returned.'
+  }
+}
+
+describe('the promises the library reads', () => {
+  const found = (): Map<string, number> => {
+    const hits = new Map<string, number>()
+    for (const folder of ['src']) {
+      for (const file of readdirSync(folder, { recursive: true, encoding: 'utf8' })) {
+        const path = join(folder, file)
+        if (!path.endsWith('.ts') || /\.spec\.ts$|__tests__|\.d\.ts$/u.test(path)) {
+          continue
+        }
+        const code = readFileSync(path, 'utf8')
+          .replace(/\/\*[\s\S]*?\*\//gu, '')
+          .replace(/^\s*\/\/.*$/gmu, '')
+        const count = [...code.matchAll(PROMISE_PATTERN)].length
+        if (count > 0) {
+          hits.set(path, count)
+        }
+      }
+    }
+    return hits
+  }
+
+  it('should read no promise static and call no then, catch or finally outside the listed sources', () => {
+    const unexpected = [...found()].filter(([file, count]) => PROMISE_EXEMPT[file]?.count !== count)
+
+    expect(unexpected).toStrictEqual([])
+  })
+
+  it('should keep no listed source that no longer reads one', () => {
+    const stale = Object.keys(PROMISE_EXEMPT).filter((file) => !found().has(file))
+
+    expect(stale).toStrictEqual([])
   })
 })

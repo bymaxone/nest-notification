@@ -33,6 +33,8 @@ const HOLDERS: ReadonlyArray<readonly [string, object]> = [
   ['RegExp.prototype', RegExp.prototype],
   ['Set.prototype', Set.prototype],
   ['Map.prototype', Map.prototype],
+  ['Promise.prototype', Promise.prototype],
+  ['Promise', Object.getPrototypeOf((async () => undefined)()).constructor],
   ['Date.prototype', Date.prototype],
   ['Buffer.prototype', Buffer.prototype],
   ['Hash.prototype', HASH_PROTOTYPE],
@@ -59,7 +61,8 @@ const EXPECTED: readonly string[] = [
     'RegExp',
     'Set',
     'Map',
-    'Symbol'
+    'Symbol',
+    'Promise'
   ]),
   ...named('Object', [
     'assign',
@@ -196,6 +199,8 @@ const EXPECTED: readonly string[] = [
     'values',
     ITERATOR
   ]),
+  ...named('Promise.prototype', ['constructor', 'then']),
+  ...named('Promise', ['Symbol(Symbol.species)']),
   ...named('Date.prototype', ['Symbol(Symbol.toPrimitive)']),
   ...named('Buffer.prototype', ['readUIntBE']),
   ...named('Hash.prototype', ['update', 'digest']),
