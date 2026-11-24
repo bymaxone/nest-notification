@@ -277,10 +277,13 @@ export class PushService {
 
   /** The error a caller receives for a failed provider call: classified, with no provider text or cause. */
   private failure(error: unknown): NotificationException {
+    const status = unavailableStatus(error)
+    // Nothing was sent (a send that may have been acted on returns results instead of throwing), so
+    // `retryable` says only whether a retry can be expected to succeed: true for a 503, false for a 502.
     return new NotificationException(
       'PUSH_SEND_FAILED',
-      { providerName: this.providerName() },
-      unavailableStatus(error)
+      { providerName: this.providerName(), retryable: status.status !== undefined },
+      status
     )
   }
 

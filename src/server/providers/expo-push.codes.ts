@@ -74,8 +74,9 @@ export function classifyDeviceError(code: unknown): ExpoFailure {
  *
  * @param status - The HTTP status.
  * @param code - The `errors[0].code` of the body, when it had one.
- * @returns The failure. A 429 and a 5xx are the retryable classes the service documents; any other
- *   refusal is not known to change on a retry.
+ * @returns The failure. A 429, and a 5xx that carries an Expo errors envelope, are refused before
+ *   processing and retryable; a bare 5xx may follow a delivery and is not. Any other refusal is not
+ *   known to change on a retry.
  */
 export function classifyRequestFailure(status: number, code: unknown): ExpoFailure {
   const named = typeof code === 'string' ? REQUEST_ERRORS.get(code) : undefined
@@ -89,7 +90,9 @@ export function classifyRequestFailure(status: number, code: unknown): ExpoFailu
     return REJECTED_CREDENTIALS
   }
   if (status >= 500) {
-    return UNREACHABLE
+    // An errors envelope is the service refusing the call itself. A bare 502, 503 or 504 can be a
+    // gateway answering after the service took the batch, so it is read like a timeout.
+    return typeof code === 'string' ? UNREACHABLE : OUTCOME_UNKNOWN
   }
   return UNKNOWN_FAILURE
 }

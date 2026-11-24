@@ -5,6 +5,8 @@
  * @layer application
  */
 
+import type { HttpException } from '@nestjs/common'
+
 import type { PushReceiptResult } from '../../shared/types/push.types'
 import type { ResolvedNotificationOptions } from '../config/resolved-options'
 import type {
@@ -213,6 +215,12 @@ describe('PushService.send', () => {
 
       expect(down).toMatchObject({ status: 503 })
       expect(refused).toMatchObject({ status: 502 })
+      expect((down as HttpException).getResponse()).toMatchObject({
+        error: { details: { retryable: true } }
+      })
+      expect((refused as HttpException).getResponse()).toMatchObject({
+        error: { details: { retryable: false } }
+      })
     })
 
     it('should pass a refusal of the message on as a refusal and audit no failed delivery', async () => {

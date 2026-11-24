@@ -756,16 +756,16 @@ A one-time password is a credential, so every behavior is pinned so that a regre
 - ✅ **Invariants asserted, not assumed** — the never-log-codes rule is a test (`JSON.stringify(entry).includes(code) === false` on every audit entry, and the thrown exception serialized recursively at every depth), not a review convention
 - ✅ **Published shape verified** — `attw` resolves every entrypoint against the packed tarball, and a dogfood smoke test installs the package into a scratch consumer before any tag is cut
 
-| Gate           | Standard                                                                                                           |
-| -------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Type safety    | TypeScript `strict`, zero `any`                                                                                    |
-| Coverage       | **100%** line/branch/function/statement per file (`pnpm test:cov:all`)                                             |
-| Mutation       | Stryker score **100%** (`break: 100`), no survivors                                                                |
-| Lint           | ESLint flat config + `eslint-plugin-security`, zero warnings                                                       |
-| Bundle budgets | server < 55.57 KB · shared < 4 KB · react < 8 KB · testing < 4.5 KB · observability < 2.69 KB brotli (`pnpm size`) |
-| Prisma-free    | `pnpm check:no-prisma` — the library never imports `@prisma/client`                                                |
-| Export map     | `pnpm check:exports` — `attw` against the packed tarball, ESM and CJS                                              |
-| Supply chain   | published with npm provenance (OIDC), CodeQL + OpenSSF Scorecard                                                   |
+| Gate           | Standard                                                                      |
+| -------------- | ----------------------------------------------------------------------------- |
+| Type safety    | TypeScript `strict`, zero `any`                                               |
+| Coverage       | **100%** line/branch/function/statement per file (`pnpm test:cov:all`)        |
+| Mutation       | Stryker score **100%** (`break: 100`), no survivors                           |
+| Lint           | ESLint flat config + `eslint-plugin-security`, zero warnings                  |
+| Bundle budgets | brotli budget per entry point, held in `scripts/check-size.mjs` (`pnpm size`) |
+| Prisma-free    | `pnpm check:no-prisma` — the library never imports `@prisma/client`           |
+| Export map     | `pnpm check:exports` — `attw` against the packed tarball, ESM and CJS         |
+| Supply chain   | published with npm provenance (OIDC), CodeQL + OpenSSF Scorecard              |
 
 ```bash
 pnpm test          # unit suite
@@ -1083,7 +1083,8 @@ async function notifyOrderShipped(
 ```
 
 - **One bad token does not fail its batch.** A refused token is a result with a `reason`; `send` throws `PUSH_SEND_FAILED` only when nothing was sent, so retrying a thrown send cannot deliver twice. A partial outage keeps the tickets of the chunks that were accepted.
-- **Retry rules.** `retryable` is `true` for a rate limit and for an outage proven to precede any delivery. A timeout or a reset after the request left is `retryable: false` with `reason: 'provider_unavailable'`, because Expo does not deduplicate and the message may have been delivered.
+- **Retry rules.** `retryable` is `true` only when Expo refused the call before processing it: a rate limit, or a 5xx that carries an Expo errors envelope, or a connection that was never made. A timeout, a reset, or a bare gateway 502, 503 or 504 is `retryable: false` with `reason: 'provider_unavailable'`, because Expo does not deduplicate and the message may have been delivered.
+- **When `send` throws.** It throws `PUSH_SEND_FAILED` only when no token was sent and none may have been: a retry cannot duplicate. `error.details.retryable` (and the status, 503 against 502) says whether a retry is expected to succeed. An outcome that may have been acted on is a result with `retryable: false`, never a throw.
 - **Receipts.** Expo accepts a message first and reports delivery later. `fetchReceipts(ticketIds)` takes the `messageId` values of earlier results and returns one `{ ticketId, status, reason?, retryable? }` each; an id Expo has no receipt for yet is `pending`. Check about 15 minutes after the send; Expo drops receipts after 24 hours. Your backend keeps the ticket-id-to-token mapping. A provider without receipts makes `fetchReceipts` throw `CHANNEL_DISABLED`.
 - **Bounds.** A call takes 1 to 1000 tokens (or ticket ids). A token that is not shaped like an Expo token is answered `token_invalid` locally, with no call.
 - **Nothing sensitive leaves.** No device token, access token, title, body or data value appears in a log, an audit entry or an error: the audit entry names the tenant, the provider and counts (`recipient: 'devices:N'`), and a provider's own error text is dropped, not wrapped. Treat the title, body and `data` as visible to Expo and to the push services behind it, and keep secrets out of them.
@@ -1216,7 +1217,7 @@ Codes never change once published; default messages are English, so localize on 
 | `notification.sms_send_failed`                   | 502    | reserved — the SMS channel is not implemented                                                                                                                                                       |
 | `notification.sms_invalid_recipient`             | 400    | reserved — the SMS channel is not implemented                                                                                                                                                       |
 | `notification.push_provider_not_configured`      | 500    | `isConfigured()` of the push provider threw or did not answer a boolean                                                                                                                             |
-| `notification.push_send_failed`                  | 502    | the push provider failed and nothing was sent (503 when it was unreachable); carries no provider text                                                                                               |
+| `notification.push_send_failed`                  | 502    | the push provider failed and nothing was sent or maybe sent (503 with `details.retryable: true` when a retry can succeed); carries no provider text                                                 |
 | `notification.audit_log_failed`                  | 500    | `EmailService`, `OtpService` and `NotificationAuditInterceptor` — only with `audit.swallowErrors: false`                                                                                            |
 | `notification.channel_disabled`                  | 501    | `NotificationService` — the channel is absent, or its provider or storage is not usable                                                                                                             |
 | `notification.invalid_scope_identifier`          | 400    | `OtpService`, `EmailService` and `NotificationAuditInterceptor` — a blank or control-character tenant or recipient, or any send or OTP call made while `Object.prototype` holds a key it should not |

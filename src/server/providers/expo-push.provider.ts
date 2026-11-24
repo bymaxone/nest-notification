@@ -62,14 +62,14 @@ const EXPO_OPTION_KEYS = [
 const OWNER = 'ExpoPushProvider'
 const DEFAULT_TIMEOUT_MS = 10_000
 
-/** An error that names a reason and nothing the service said; `code` lets the 503 mapping see an outage. */
+/** An error that names a reason and nothing the service said; `code` lets the 503 mapping see a retryable refusal. */
 class ExpoPushError extends Error {
   readonly code: string | undefined
 
   constructor(failure: ExpoFailure) {
     super(`${OWNER}: the push was not sent (${failure.reason})`)
     this.name = 'ExpoPushError'
-    this.code = failure.reason === 'provider_unavailable' ? 'EUNAVAILABLE' : undefined
+    this.code = failure.retryable ? 'EUNAVAILABLE' : undefined
   }
 }
 

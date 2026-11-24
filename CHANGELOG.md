@@ -34,8 +34,9 @@ the entries that carry one, is the compatibility contract — read it, not the n
   label. The push audit entry records `recipient: 'devices:N'` and counts. A provider's own error text is dropped, not
   wrapped, and `PUSH_SEND_FAILED` carries no `cause`.
 - A send throws only when nothing was sent, so a caller that retries a thrown send cannot deliver twice. An outcome
-  Expo may have acted on (a timeout or a reset after the request left) is `retryable: false`, because Expo does not
-  deduplicate.
+  Expo may have acted on (a timeout, a reset, or a bare gateway 502, 503 or 504) is `retryable: false`, because Expo does
+  not deduplicate; only a refusal before processing (a 429, a 5xx with an Expo errors envelope, a connection never made)
+  is retryable. The thrown `PUSH_SEND_FAILED` carries `details.retryable`.
 - `NotificationAuditInterceptor` now audits push dispatches; its recipient is a device count, never a token.
 
 ### Changed
@@ -48,7 +49,7 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 #### Apply to a derived backend
 
-Declarations only grow: `PushSendOptions` gains seven optional fields, `PushSendResult` entries gain `reason?` and
+Declarations only grow: `PushSendOptions` gains optional fields, `PushSendResult` entries gain `reason?` and
 `retryable?`, `IPushProvider` gains the optional `fetchReceipts`, `NotificationChannel` handling now includes `'push'`
 in `getEnabledChannels()`, `DispatchInput` and `DispatchResult` gain a `'push'` variant, and `NotificationObservedChannel`
 and the audit channel union accept `'push'`. A `switch` over `DispatchInput['channel']` or over

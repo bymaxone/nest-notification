@@ -271,7 +271,7 @@ describe('ExpoPushProvider', () => {
       )
       const { fetch } = scripted([
         { body: { data: Array.from({ length: 100 }, () => ({ status: 'ok', id: 'X' })) } },
-        { status: 503, body: {} }
+        { status: 503, body: { errors: [{ code: 'SERVICE_UNAVAILABLE' }] } }
       ])
       /* Act */
       const result = await new ExpoPushProvider({ fetch }).send({ ...base, tokens })
@@ -299,6 +299,28 @@ describe('ExpoPushProvider', () => {
       expect(failure.code).toBe('EUNAVAILABLE')
     })
 
+    it('answers a bare gateway 502 as maybe-sent instead of throwing, so a caller cannot retry it into a duplicate', async () => {
+      /* Arrange */
+      const { fetch } = scripted([{ status: 502, body: {} }])
+      /* Act */
+      const result = await new ExpoPushProvider({ fetch }).send({ ...base, tokens: TOKEN_A })
+      /* Assert */
+      expect(result.results).toEqual([
+        { token: TOKEN_A, reason: 'provider_unavailable', retryable: false }
+      ])
+    })
+
+    it('marks a thrown rate limit retryable through the code the 503 mapping reads', async () => {
+      /* Arrange */
+      const { fetch } = scripted([{ status: 429, body: {} }])
+      /* Act */
+      const failure = await failureOf(
+        new ExpoPushProvider({ fetch }).send({ ...base, tokens: TOKEN_A })
+      )
+      /* Assert */
+      expect(failure.code).toBe('EUNAVAILABLE')
+    })
+
     it('carries no code on a thrown refusal that is not an outage', async () => {
       /* Arrange */
       const { fetch } = scripted([{ status: 401, body: { errors: [{ code: 'UNAUTHORIZED' }] } }])
@@ -316,7 +338,10 @@ describe('ExpoPushProvider', () => {
       [400, 'TOO_MANY_REQUESTS', 'rate_limited', true],
       [403, undefined, 'credentials', false],
       [400, 'PUSH_TOO_MANY_NOTIFICATIONS', 'unknown', false],
-      [500, undefined, 'provider_unavailable', true]
+      [500, 'INTERNAL_SERVER_ERROR', 'provider_unavailable', true],
+      [500, undefined, 'provider_unavailable', false],
+      [502, undefined, 'provider_unavailable', false],
+      [504, undefined, 'provider_unavailable', false]
     ])(
       'classifies a whole-call refusal (status %s, code %s) as %s',
       async (status, code, reason, retryable) => {
