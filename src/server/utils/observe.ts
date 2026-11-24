@@ -70,12 +70,12 @@ export async function runInSpan<T>(
   // Outside the absorbing catch: a refusal of the realm, or of a span promise that cannot be pinned,
   // is the operation's outcome, and a rejection of that promise is never left without a handler.
   const pinned = spanned === undefined ? undefined : checkedAwait(spanned, owner)
-  // The operation does not wait on a span that never settles.
-  const pending = once()
+  // A span that calls the operation starts it inside itself; one that never does, or never settles, is
+  // waited on for a bounded time and the operation then runs here.
   if (pinned !== undefined) {
     await own(settledWithin(pinned, SPAN_GRACE_MS), owner)
   }
-  const result = await own(pending, owner)
+  const result = await own(once(), owner)
   // The span's `end()` and the rest of the host's code ran while it was awaited: the realm is
   // checked again right before the return, which reads `then` of the result.
   assertStandardRealmRoot(owner)
