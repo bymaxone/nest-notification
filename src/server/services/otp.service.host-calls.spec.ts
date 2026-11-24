@@ -7,6 +7,7 @@
  */
 
 import { types } from 'node:util'
+import { NotificationException } from '../errors/notification-exception'
 import { InMemoryOtpStorage } from '../providers/in-memory-otp.storage'
 import { OtpService } from './otp.service'
 import { makeAudit, makeOptions, ref } from './__tests__/otp-service.fixtures'
@@ -18,6 +19,7 @@ const REAL_THEN = Object.getOwnPropertyDescriptor(PROTO, 'then') as PropertyDesc
 const REAL_SPECIES = Object.getOwnPropertyDescriptor(Promise, Symbol.species) as PropertyDescriptor
 const REAL_APPLY = Function.prototype.apply
 const REAL_IS_PROXY = types.isProxy
+const REAL_IS_PROMISE = types.isPromise
 
 function restore(): void {
   Object.defineProperty(PROTO, 'constructor', REAL_CONSTRUCTOR)
@@ -25,6 +27,7 @@ function restore(): void {
   Object.defineProperty(Promise, Symbol.species, REAL_SPECIES)
   Function.prototype.apply = REAL_APPLY
   ;(types as { isProxy: unknown }).isProxy = REAL_IS_PROXY
+  ;(types as { isPromise: unknown }).isPromise = REAL_IS_PROMISE
   delete (Array.prototype as unknown as Record<string, unknown>).then
 }
 
@@ -115,6 +118,33 @@ describe('OtpService.verify when Promise[Symbol.species] throws on a refused sto
   })
 })
 
+describe('OtpService.verify when isPromise is replaced while a refused store call rejects', () => {
+  afterEach(restore)
+
+  it('should leave no rejection unhandled', async () => {
+    const storage = new InMemoryOtpStorage()
+    const service = await liveService(storage)
+    storage.consumeAttempt = (() => {
+      ;(types as { isPromise: unknown }).isPromise = () => false
+      Object.defineProperty(PROTO, 'then', {
+        value: function then() {
+          /* planted */
+        },
+        writable: true,
+        configurable: true
+      })
+      return Promise.reject(new Error('store-rejection'))
+    }) as never
+
+    const unhandled = await recordingUnhandled(async () => {
+      await service.verify({ ...ref, code: WRONG }).catch(() => undefined)
+      restore()
+    })
+
+    expect(unhandled).toStrictEqual([])
+  })
+})
+
 describe('OtpService when the host audit call replaces the promises its own await goes through', () => {
   afterEach(restore)
 
@@ -149,5 +179,33 @@ describe('OtpService when the host audit call replaces the promises its own awai
     restore()
 
     expect(outcome).toBe('refused')
+  })
+})
+
+describe('OtpService when the host audit repository throws a library error', () => {
+  it('should absorb it under swallowErrors, as it absorbs any other audit failure', async () => {
+    const audit = makeAudit()
+    audit.create.mockRejectedValue(new NotificationException('AUDIT_LOG_FAILED'))
+    const service = new OtpService(makeOptions(), new InMemoryOtpStorage(), audit)
+
+    await expect(service.generate({ ...ref, deliverVia: 'manual' })).resolves.toBeDefined()
+    await expect(service.verify({ ...ref, code: WRONG })).resolves.toMatchObject({ valid: false })
+  })
+
+  it('should throw a synchronous audit failure as AUDIT_LOG_FAILED when swallowErrors is off', async () => {
+    const audit = makeAudit()
+    audit.create.mockImplementation(() => {
+      throw new Error('sync failure')
+    })
+    const options = makeOptions()
+    const service = new OtpService(
+      { ...options, audit: { ...options.audit, swallowErrors: false } },
+      new InMemoryOtpStorage(),
+      audit
+    )
+
+    await expect(service.generate({ ...ref, deliverVia: 'manual' })).rejects.toMatchObject({
+      code: 'notification.audit_log_failed'
+    })
   })
 })

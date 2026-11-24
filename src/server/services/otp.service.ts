@@ -44,7 +44,6 @@ import { generateOtpCode } from '../utils/code-generator'
 import { cooldownExpiresAt, toRetryAfterHeader } from '../utils/cooldown-helpers'
 import { releaseCooldownAfterRefusal } from '../utils/cooldown-release'
 import { readHostName, textOfHostName } from '../utils/host-name'
-import { isLibraryError } from '../utils/is-library-error'
 import { logEvent } from '../utils/log-event'
 import { loggableError } from '../utils/loggable-error'
 import { maskAddressTokens, maskExact } from '../utils/mask-in-text'
@@ -776,20 +775,26 @@ export class OtpService implements OnModuleInit {
     }
   }
 
-  /** Writes an audit entry, swallowing failures unless `audit.swallowErrors` is `false`. */
+  /** Writes an audit entry, swallowing failures unless `audit.swallowErrors` is `false`; the cause stays off `details`. */
   private async audit(entry: NotificationLogEntry): Promise<void> {
+    let pending: Promise<void>
     try {
-      await checkedAwait(this.auditLog.create(entry), 'OtpService')
+      pending = this.auditLog.create(entry)
     } catch (error) {
-      if (isLibraryError(error)) {
-        throw error
-      }
-      if (!this.options.audit.swallowErrors) {
-        // The underlying error rides only on `Error.cause` — `details` is serialized
-        // into the HTTP response body, so internal error text must never land there.
-        throw new NotificationException('AUDIT_LOG_FAILED', undefined, { cause: error })
-      }
-      this.auditWarning.warn(error)
+      return this.absorbAuditFailure(error)
     }
+    const checked = checkedAwait(pending, 'OtpService')
+    try {
+      await checked
+    } catch (error) {
+      this.absorbAuditFailure(error)
+    }
+  }
+
+  private absorbAuditFailure(error: unknown): void {
+    if (!this.options.audit.swallowErrors) {
+      throw new NotificationException('AUDIT_LOG_FAILED', undefined, { cause: error })
+    }
+    this.auditWarning.warn(error)
   }
 }

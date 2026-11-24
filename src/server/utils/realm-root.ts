@@ -487,6 +487,9 @@ const intrinsicThen = uncurry(Promise.prototype.then) as (
   onRejected: () => void
 ) => unknown
 const noop = (): void => undefined
+
+// Taken at load: an `isPromise` replaced later cannot decide that a rejection needs no handler.
+const isPromise = types.isPromise
 const defineOwn = Object.defineProperty
 const INTRINSIC_PROMISE = Promise.prototype.constructor
 const createBare = Object.create
@@ -528,7 +531,7 @@ export function own<T>(promise: Promise<T>): Promise<T> {
  */
 export function silence(promise: unknown): void {
   try {
-    if (types.isPromise(promise)) {
+    if (isPromise(promise)) {
       // `then` reads `constructor` of the promise it is called on: an own one answers for it, so a
       // `constructor` planted or made to throw on `Promise.prototype` cannot decide whether the
       // handler is attached. It is `undefined`, not %Promise%: that makes the species lookup skip
