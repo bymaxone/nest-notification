@@ -45,10 +45,10 @@
   },
   {
     "file": "src/server/utils/realm-root.process.spec.ts",
-    "reason": "Bundles realm-root.ts with esbuild and runs the bundle in a child process, one real runtime per case, and imports nothing under src/ itself. No mutant is active in a child process, so it can judge none; the mutants of that file are judged by realm-root.spec.ts in the test worker. `pnpm test` and `pnpm test:cov` still run it."
+    "reason": "Bundles realm-root.ts with esbuild and runs the bundle in a child process, one real runtime per case. It imports no module that is mutated, only the fixture under src/**/__tests__, which the mutate list excludes, so the related-test lookup and the per-test coverage never select it and it judges no mutant. The mutants of realm-root.ts are judged by realm-root.spec.ts in the test worker. `pnpm test` and `pnpm test:cov` still run it."
   },
   {
     "file": "src/server/__tests__/real-process.fixture.spec.ts",
-    "reason": "Checks in a plain node child process that the bundler the real-process fixture uses resolves without the test runner, and imports no module from src/. No mutant is active in a child process, so it can judge none. `pnpm test` and `pnpm test:cov` still run it."
+    "reason": "Checks in a plain node child process that the bundler the real-process fixture uses resolves without the test runner. It bundles nothing and imports no module that is mutated, only the fixture under src/**/__tests__, which the mutate list excludes, so the related-test lookup and the per-test coverage never select it and it judges no mutant. `pnpm test` and `pnpm test:cov` still run it."
   }
 ]
