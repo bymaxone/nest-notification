@@ -9,6 +9,7 @@
 import { types } from 'node:util'
 import { NotificationException } from '../errors/notification-exception'
 import { InMemoryOtpStorage } from '../providers/in-memory-otp.storage'
+import { own } from '../utils/realm-root'
 import { OtpService } from './otp.service'
 import { makeAudit, makeOptions, ref } from './__tests__/otp-service.fixtures'
 
@@ -215,5 +216,112 @@ describe('OtpService when the host audit repository throws a library error', () 
     await expect(service.generate({ ...ref, deliverVia: 'manual' })).rejects.toMatchObject({
       code: 'notification.audit_log_failed'
     })
+  })
+})
+
+describe('OtpService.generate when a host call plants a forgery while it runs', () => {
+  afterEach(restore)
+
+  it('should end refused, with nothing unhandled, when a throwing species rides a refused store call', async () => {
+    const storage = new InMemoryOtpStorage()
+    const service = new OtpService(makeOptions(), storage, makeAudit())
+    storage.tryAcquireCooldown = (() => {
+      Object.defineProperty(Promise, Symbol.species, {
+        configurable: true,
+        get() {
+          throw new Error('hostile species')
+        }
+      })
+      return Promise.reject(new Error('store-rejection'))
+    }) as never
+
+    let code: string | undefined
+    const unhandled = await recordingUnhandled(async () => {
+      // The runner attaches to the test's promise at its first suspension; plant after it.
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      try {
+        await service.generate({ ...ref, deliverVia: 'manual' })
+        code = 'resolved'
+      } catch (error) {
+        code = (error as { code?: string }).code
+      } finally {
+        restore()
+      }
+    })
+
+    expect(unhandled).toStrictEqual([])
+    expect(code).not.toBe('resolved')
+  })
+
+  it('should not resolve when the audit call plants a then that answers for the await', async () => {
+    const audit = makeAudit()
+    const service = new OtpService(makeOptions(), new InMemoryOtpStorage(), audit)
+    audit.create.mockImplementation((() => {
+      Object.defineProperty(PROTO, 'constructor', {
+        value: function Fake() {
+          /* never constructed */
+        },
+        writable: true,
+        configurable: true
+      })
+      Object.defineProperty(PROTO, 'then', {
+        value: function then(onFulfilled: (value: unknown) => unknown) {
+          restore()
+          onFulfilled(undefined)
+        },
+        writable: true,
+        configurable: true
+      })
+      return Promise.resolve()
+    }) as never)
+
+    const outcome = await service
+      .generate({ ...ref, deliverVia: 'manual' })
+      .then(() => 'resolved')
+      .catch((error: { code?: string }) => error.code)
+
+    expect(outcome).toBe('notification.invalid_scope_identifier')
+  })
+})
+
+describe('a promise the library pins for its own await', () => {
+  it('should refuse a promise whose constructor cannot be attached, never hand it back', () => {
+    const frozen = Object.freeze(Promise.resolve(1))
+
+    expect(() => own(frozen)).toThrow(
+      expect.objectContaining({ code: 'notification.invalid_scope_identifier' })
+    )
+  })
+
+  it('should keep its own constructor against a host that holds the promise', async () => {
+    const pinned = own(Promise.resolve(1))
+
+    expect(() =>
+      Object.defineProperty(pinned, 'constructor', {
+        value: function Fake() {},
+        configurable: true
+      })
+    ).toThrow(TypeError)
+    expect(() => {
+      ;(pinned as unknown as { constructor: unknown }).constructor = undefined
+    }).toThrow(TypeError)
+    await expect(pinned).resolves.toBe(1)
+  })
+
+  it('should still absorb the rejection of a pinned promise when species throws', async () => {
+    const pinned = own(Promise.reject(new Error('late')))
+    const { silence } = await import('../utils/realm-root')
+    Object.defineProperty(Promise, Symbol.species, {
+      configurable: true,
+      get() {
+        throw new Error('hostile species')
+      }
+    })
+    const unhandled = await recordingUnhandled(async () => {
+      silence(pinned)
+      restore()
+    })
+
+    expect(unhandled).toStrictEqual([])
   })
 })

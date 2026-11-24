@@ -43,6 +43,12 @@ the entries that carry one, is the compatibility contract — read it, not the n
   restored itself and answered for the store, and a wrong code returned `valid: true`; a throwing species getter kept
   the handler from being attached and left rejections unhandled. The host's audit promise is now awaited only after
   the realm was checked, with nothing between the check and the `await`.
+- **`generate` and `resend` are pinned like `verify`, and the promise the library awaits is sealed.** Each await in
+  `generate` is on a promise with its own `constructor`, the realm is checked after the last host call and before the
+  result is built, and the result is a plain object. That constructor is now neither writable nor configurable, a
+  promise that cannot take it is refused instead of awaited, and a pinned promise that is abandoned is drained through
+  a native `await`, which reads no `Promise[Symbol.species]`. The audit write moved to `utils/audit-write.ts`; its
+  refusal stays outside the code that absorbs host failures, so `audit.swallowErrors` keeps its meaning.
 - Known limits: code running concurrently in the same process that plants a `then` after the check and erases it before
   the store's own promise settles cannot be seen afterwards; a store or SDK that reads a `Promise` static internally is
   its own code and is not covered; the send paths of the providers still use `then` and are not verdicts; a refusal

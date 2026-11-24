@@ -39,6 +39,7 @@ import type {
 import type { OtpPurposeConfig } from '../interfaces/notification-module-options.interface'
 import type { INotificationObserver } from '../interfaces/notification-observer.interface'
 import type { IOtpStorage, OtpEntry, OtpVerifyResult } from '../interfaces/otp-storage.interface'
+import { writeAudit } from '../utils/audit-write'
 import { AuditWriteWarning } from '../utils/audit-write-warning'
 import { generateOtpCode } from '../utils/code-generator'
 import { cooldownExpiresAt, toRetryAfterHeader } from '../utils/cooldown-helpers'
@@ -52,7 +53,7 @@ import { otpEventOf, reportOtp, runInSpan } from '../utils/observe'
 import { carriesFailures, countAttempt } from '../utils/otp-failure-count'
 import { outgoingError } from '../utils/outgoing-error'
 import { nullProto } from '../utils/read-options'
-import { assertStandardRealmRoot, checkedAwait, own } from '../utils/realm-root'
+import { assertStandardRealmRoot, own } from '../utils/realm-root'
 import { normalizeRecipient } from '../utils/recipient'
 import { assertSingleMailbox } from '../utils/recipient-list'
 import { attachCauseIfAbsent, readRedactedMessage } from '../utils/redact'
@@ -186,7 +187,12 @@ export class OtpService implements OnModuleInit {
    * `OTP_EMAIL_DELIVERY_NOT_CONFIGURED`, or rethrows a persistence/delivery error after
    * releasing the cooldown lock.
    */
-  async generate(raw: OtpGenerateInput): Promise<OtpGenerateResult> {
+  generate(raw: OtpGenerateInput): Promise<OtpGenerateResult> {
+    // Native to the caller's `await` too: a planted `constructor` or `then` cannot answer for it.
+    return own(this.generateChecked(raw))
+  }
+
+  private async generateChecked(raw: OtpGenerateInput): Promise<OtpGenerateResult> {
     assertStandardRealmRoot('OtpService')
     const input = readGenerateInput(raw)
     const otp = this.requireOtpOptions()
@@ -195,8 +201,8 @@ export class OtpService implements OnModuleInit {
     this.assertDeliverable(input, otp.digestCode)
     this.assertMailbox(input)
     const cfg = otp.resolveForPurpose(input.purpose)
-    await this.acquireCooldownOrThrow(scope, cfg.resendCooldownSeconds)
-    await this.assertRealmOrRelease(scope)
+    await own(this.acquireCooldownOrThrow(scope, cfg.resendCooldownSeconds))
+    await own(this.assertRealmOrRelease(scope))
     const code = generateOtpCode(cfg.length, cfg.codeType)
     const expiresAt = Date.now() + cfg.ttlSeconds * MS_PER_SECOND
     const entry: OtpEntry = {
@@ -207,9 +213,10 @@ export class OtpService implements OnModuleInit {
       attempts: 0,
       maxAttempts: cfg.maxAttempts
     }
-    await this.persistAndDeliver(input, scope, code, entry, cfg)
+    await own(this.persistAndDeliver(input, scope, code, entry, cfg))
     reportOtp(this.observer, { event: 'issued' })
-    await this.audit(this.otpAuditEntry('generated', scope, undefined))
+    await own(this.audit(this.otpAuditEntry('generated', scope, undefined)))
+    assertStandardRealmRoot('OtpService')
     return { expiresAt, cooldownSeconds: cfg.resendCooldownSeconds }
   }
 
@@ -320,7 +327,7 @@ export class OtpService implements OnModuleInit {
    * @param input - The recipient, purpose, and delivery options.
    * @returns The expiry timestamp and the resend cooldown length.
    */
-  async resend(input: OtpGenerateInput): Promise<OtpGenerateResult> {
+  resend(input: OtpGenerateInput): Promise<OtpGenerateResult> {
     return this.generate(input)
   }
 
@@ -775,26 +782,13 @@ export class OtpService implements OnModuleInit {
     }
   }
 
-  /** Writes an audit entry, swallowing failures unless `audit.swallowErrors` is `false`; the cause stays off `details`. */
-  private async audit(entry: NotificationLogEntry): Promise<void> {
-    let pending: Promise<void>
-    try {
-      pending = this.auditLog.create(entry)
-    } catch (error) {
-      return this.absorbAuditFailure(error)
-    }
-    const checked = checkedAwait(pending, 'OtpService')
-    try {
-      await checked
-    } catch (error) {
-      this.absorbAuditFailure(error)
-    }
-  }
-
-  private absorbAuditFailure(error: unknown): void {
-    if (!this.options.audit.swallowErrors) {
-      throw new NotificationException('AUDIT_LOG_FAILED', undefined, { cause: error })
-    }
-    this.auditWarning.warn(error)
+  /** Writes an audit entry, swallowing failures unless `audit.swallowErrors` is `false`. */
+  private audit(entry: NotificationLogEntry): Promise<void> {
+    return writeAudit(
+      () => this.auditLog.create(entry),
+      this.options.audit.swallowErrors,
+      (error) => this.auditWarning.warn(error),
+      'OtpService'
+    )
   }
 }

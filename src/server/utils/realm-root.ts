@@ -495,15 +495,15 @@ const INTRINSIC_PROMISE = Promise.prototype.constructor
 const createBare = Object.create
 
 /** The descriptor of an own `constructor` holding `value`, with no prototype to inherit from. */
-function ownConstructor(value: unknown): PropertyDescriptor {
+function ownConstructor(value: unknown, pinned: boolean): PropertyDescriptor {
   const descriptor = createBare(null) as {
     value: unknown
     configurable: boolean
     writable: boolean
   }
   descriptor.value = value
-  descriptor.configurable = true
-  descriptor.writable = true
+  descriptor.configurable = !pinned
+  descriptor.writable = !pinned
   return descriptor
 }
 
@@ -511,16 +511,31 @@ function ownConstructor(value: unknown): PropertyDescriptor {
  * Gives a promise the library made an own `constructor`, so awaiting it takes the native path: no
  * `constructor` read off the realm, no `then` called, whatever was planted on `Promise.prototype`.
  *
+ * The property is pinned (neither writable nor configurable), so a host holding the promise cannot
+ * change what its await reads.
+ *
  * @param promise - A promise the library itself made.
  * @returns The same promise.
+ * @throws NotificationException `INVALID_SCOPE_IDENTIFIER` when the property cannot be attached: a
+ * promise whose await cannot be pinned is never awaited.
  */
 export function own<T>(promise: Promise<T>): Promise<T> {
   try {
-    defineOwn(promise, 'constructor', ownConstructor(INTRINSIC_PROMISE))
+    defineOwn(promise, 'constructor', ownConstructor(INTRINSIC_PROMISE, true))
   } catch {
-    // A realm that refuses even this is refused by the check that follows.
+    silence(promise)
+    throw refuseInput('OtpService', 'promise', 'cannot be pinned, so the operation is refused')
   }
   return promise
+}
+
+/** Awaits a promise pinned by `own` and discards how it ended. Never rejects. */
+async function absorbRejection(promise: Promise<unknown>): Promise<void> {
+  try {
+    await promise
+  } catch {
+    // The promise ended in a rejection nobody else will observe.
+  }
 }
 
 /**
@@ -536,7 +551,13 @@ export function silence(promise: unknown): void {
       // `constructor` planted or made to throw on `Promise.prototype` cannot decide whether the
       // handler is attached. It is `undefined`, not %Promise%: that makes the species lookup skip
       // `Promise[Symbol.species]`, a getter the realm could make throw.
-      defineOwn(promise, 'constructor', ownConstructor(undefined))
+      try {
+        defineOwn(promise, 'constructor', ownConstructor(undefined, false))
+      } catch {
+        // Pinned by `own`: its own %Promise% makes an await native, which reads no species.
+        void absorbRejection(promise)
+        return
+      }
       intrinsicThen(promise, noop, noop)
     }
   } catch {
