@@ -50,5 +50,13 @@
   {
     "file": "src/server/__tests__/real-process.fixture.spec.ts",
     "reason": "Checks in a plain node child process that the bundler the real-process fixture uses resolves without the test runner. It bundles nothing and imports no module that is mutated, only the fixture under src/**/__tests__, which the mutate list excludes, so the related-test lookup and the per-test coverage never select it and it judges no mutant. `pnpm test` and `pnpm test:cov` still run it."
+  },
+  {
+    "file": "src/server/guard-family.scan.spec.ts",
+    "reason": "Reads every production file under src as text and parses it with the TypeScript compiler to hold each await to the pinned-await and sealed-return rules; it imports no module from src/, so Stryker's related-test lookup (jest --findRelatedTests) never selects it for any mutant and it judges none. The rule it enforces is checked by `pnpm test` and CI."
+  },
+  {
+    "file": "src/mutation-inventory-parity.spec.ts",
+    "reason": "Reads jest.stryker.config.ts and the exempt list as text and imports no module from src/, so Stryker's related-test lookup (jest --findRelatedTests) never selects it and it judges no mutant. `pnpm test` and CI still run it."
   }
 ]
