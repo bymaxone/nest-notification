@@ -41,7 +41,7 @@ const GLOBALS = [
 /** What is called and left out of the baseline on purpose, and why. */
 const EXEMPT: Readonly<Record<string, string>> = {
   'Date.now':
-    'The clock. A host that fakes it in a test (jest or sinon fake timers replace Date after the import) must still send; OTP expiry and cooldown use the live clock, stated in the README.',
+    'The clock. A host that fakes it in a test (jest or sinon fake timers replace Date after the import) must still send; OTP expiry, the cooldown and the health TTL read the live clock and do not guard it: a clock replaced by same-process code is a known limit (SECURITY.md, threat model).',
   'Promise.resolve':
     'Only in the React hook that defers a UI update by a microtask (src/react): no verdict, recipient, scope or code decision depends on it, and the hook never runs on the server.'
 }

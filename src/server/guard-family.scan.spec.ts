@@ -56,7 +56,7 @@ const EXEMPT: Readonly<Record<string, { count: number; reason: string }>> = {
   'server/utils/load-optional-peer.ts': {
     count: 1,
     reason:
-      'Dynamic import of a peer package at first use; the module namespace is validated by the caller.'
+      'Dynamic import of a peer package at first use, awaited unpinned: the namespace is not validated here, the callers read the members they need and refuse an absent one, and a promise planted by same-process code at that moment is a known limit (SECURITY.md, threat model).'
   },
   'server/utils/observe.ts': {
     count: 1,
@@ -100,7 +100,7 @@ const EXEMPT: Readonly<Record<string, { count: number; reason: string }>> = {
   'observability/notification-health.indicator.ts': {
     count: 6,
     reason:
-      'Each await follows promisesIntact() in the same expression and the answer is checked again before the result is built; absorbRejection awaits a promise no handler could be attached to; the verification promise itself is heard with the load-time then.'
+      'Each await follows promisesIntact() in the same expression and the answer is checked again before the result is built; absorbRejection awaits a promise no handler could be attached to; the verification promise itself is heard with the load-time then. The check is best-effort: a clock or timer replaced by same-process code is outside it (SECURITY.md, threat model).'
   },
   'observability/notification-tracing.ts': {
     count: 1,
