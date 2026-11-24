@@ -141,6 +141,22 @@ describe('NotificationHealthIndicator against a rejected verification the specie
   })
 })
 
+describe('NotificationHealthIndicator when the realm changes while the verification runs', () => {
+  afterEach(() => {
+    delete (Object.prototype as Record<string, unknown>).then
+  })
+
+  it('should report down and leave the relay rejection handled', async () => {
+    const { status, unhandled } = await failedVerification(() => {
+      Object.defineProperty(Object.prototype, 'then', { configurable: true, value: undefined })
+      return Promise.reject(new Error('relay down'))
+    })
+
+    expect(status).toBe('down')
+    expect(unhandled).toStrictEqual([])
+  })
+})
+
 describe('NotificationHealthIndicator against a verification that is not a promise', () => {
   it('should report up when verify returns a plain value', async () => {
     const indicator = new NotificationHealthIndicator(provider(() => undefined))
