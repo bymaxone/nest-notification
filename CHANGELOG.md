@@ -75,9 +75,9 @@ the entries that carry one, is the compatibility contract — read it, not the n
   check; `SmtpEmailProvider.verify` awaits the transport build and `transport.verify` pinned inside a `try`;
   `settleOrTimeout` and `settleOrAbort` await the send in an async `try`/`finally` instead of `.finally`; and the
   cached transport build is dropped by a handler that awaits it, not by `.catch`. The load check reads `constructor`
-  as an own data property only, so an accessor planted before the load is refused with its own message, and `pinOnce`
+  as an own data property only, so an accessor planted before the load is refused, never called, and `pinOnce`
   reads the descriptor's fields own-only, so `Object.prototype.value` cannot make an accessor look like the pin.
-  `testing/` and `react/` are now inside the promise scan, each file exempt with a reason.
+  `testing/` and `react/` are now inside the promise scan.
 - **The span grace is 5 seconds.** When an observer's span never calls the operation, or never settles, the
   operation's answer waits at most `SPAN_GRACE_MS` (5000 ms) for the span's promise before the operation runs; a span
   that settles sooner is not waited on any longer.
