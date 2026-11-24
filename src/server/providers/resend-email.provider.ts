@@ -28,9 +28,11 @@ import { loadOptionalPeer } from '../utils/load-optional-peer'
 import { logEvent } from '../utils/log-event'
 import { codeWithoutSecrets } from '../utils/masked-failure'
 import { publishedFailure } from '../utils/provider-failure'
+import { rethrowRefusal } from '../utils/provider-refusal'
 import { readSendOptions } from '../utils/provider-send-options'
 import { assertOptionsObject, nullProto, readOptionKeys, withOwnKeys } from '../utils/read-options'
-import { assertStandardRealmRoot, own } from '../utils/realm-root'
+import { assertStandardRealmRoot, boxed, checkedAwait, newPromise, own } from '../utils/realm-root'
+import type { Boxed } from '../utils/realm-root'
 import {
   REDACTED_VALUE,
   collectEchoedExcerpts,
@@ -57,6 +59,15 @@ function readSdkMessage(error: { message: string }): string {
   }
 }
 
+/** Removes the abort listener; one that throws must not end the bookkeeping in a rejection nobody handles. */
+function detach(signal: AbortSignal, listener: () => void): void {
+  try {
+    signal.removeEventListener('abort', listener)
+  } catch {
+    // The signal is spent or the listener was `once`: nothing is left to remove.
+  }
+}
+
 /**
  * Settles with `call`, or rejects as soon as `signal` aborts, whichever comes first. The SDK is
  * also handed the signal, but an older SDK ignores it, and this keeps the bound on every supported
@@ -65,10 +76,10 @@ function readSdkMessage(error: { message: string }): string {
  *
  * @param call - The SDK call.
  * @param signal - The signal whose abort ends the wait.
- * @returns What `call` resolves with.
+ * @returns What `call` resolves with, boxed: resolving with the SDK's own object would read its `then`.
  */
-function settleOrAbort<T>(call: Promise<T>, signal: AbortSignal): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
+function settleOrAbort<T>(call: Promise<T>, signal: AbortSignal): Promise<Boxed<T>> {
+  return newPromise<Boxed<T>>((resolve, reject) => {
     const onAbort = (): void => {
       reject(signal.reason)
     }
@@ -76,11 +87,11 @@ function settleOrAbort<T>(call: Promise<T>, signal: AbortSignal): Promise<T> {
     // Awaited pinned, not through then/finally: those read `Promise[Symbol.species]`.
     void (async (): Promise<void> => {
       try {
-        resolve(await own(call, 'ResendEmailProvider'))
+        resolve(boxed(await own(call, 'ResendEmailProvider')))
       } catch (error) {
         reject(error)
       } finally {
-        signal.removeEventListener('abort', onAbort)
+        detach(signal, onAbort)
       }
     })()
   })
@@ -267,7 +278,7 @@ export class ResendEmailProvider implements IEmailProvider {
    * collapses concurrent first sends onto a single dynamic `import()` + instantiation;
    * a failed init resets this back to `null` so a transient error can be retried.
    */
-  #clientPromise: Promise<ResendLike> | null = null
+  #clientPromise: Promise<Boxed<ResendLike>> | null = null
 
   /**
    * @param options - Adapter options; `apiKey` is required to actually send.
@@ -312,7 +323,9 @@ export class ResendEmailProvider implements IEmailProvider {
    * maps any thrown `Error` to `EMAIL_SEND_FAILED`.
    */
   async send(options: EmailSendOptions): Promise<EmailSendResult> {
-    return this.sendRead(readSendOptions(options))
+    const sent = await own(this.sendRead(readSendOptions(options)), 'ResendEmailProvider')
+    assertStandardRealmRoot('ResendEmailProvider')
+    return sent
   }
 
   /** Sends a message already read by name, whose fields no key planted on the realm root can answer for. */
@@ -320,7 +333,7 @@ export class ResendEmailProvider implements IEmailProvider {
     assertBodyParts(options.html, options.text)
     assertStandardRealmRoot('ResendEmailProvider')
     const attachments = toPayloadAttachments(options.attachments)
-    const client = await this.getClient()
+    const client = (await own(this.getClient(), 'ResendEmailProvider')).value
     const from = this.formatFrom(options.from, options.fromName)
     const timeoutMs = this.#options.timeoutMs ?? DEFAULT_TIMEOUT_MS
     const signal = AbortSignal.timeout(timeoutMs)
@@ -328,33 +341,56 @@ export class ResendEmailProvider implements IEmailProvider {
     assertStandardRealmRoot('ResendEmailProvider')
     let result: ResendSendOutcome
     try {
-      result = await settleOrAbort(
-        client.emails.send(toPayload(options, from, attachments), { signal }),
-        signal
-      )
+      // The box of a host's value, awaited pinned and checked: one await the realm cannot answer for.
+      result = (
+        await checkedAwait(
+          settleOrAbort(
+            client.emails.send(toPayload(options, from, attachments), { signal }),
+            signal
+          ),
+          'ResendEmailProvider'
+        )
+      ).value
+      assertStandardRealmRoot('ResendEmailProvider')
     } catch (error) {
-      // The SDK can REJECT instead of resolving `{ error }` — a transport or
-      // fetch failure whose message quotes the request body carries the same
-      // secrets a quoted rejection does, so it takes the identical exit.
-      // Read through the fail-closed helper: coercion runs consumer code, and a
-      // hostile `message` getter would otherwise escape with its own text
-      // before `sendFailure` could withhold anything.
-      // The bound fired: the SDK's own abort error and the race's mean the same thing, and neither
-      // carries anything of the request, so the reason is a fixed sentence.
-      const reason = signal.aborted
-        ? `Resend request timed out after ${String(timeoutMs)} ms`
-        : readRedactedMessage(error)
-      throw this.sendFailure(reason, options, signal.aborted ? 'ETIMEDOUT' : errorCodeOf(error))
+      rethrowRefusal(error)
+      throw this.rejectedSend(error, options, signal, timeoutMs)
     }
     if (result.error) {
       // The SDK's error object is consumer code too, so reading its `message`
       // is guarded rather than dereferenced directly.
       throw this.sendFailure(readSdkMessage(result.error), options, unavailableCodeOf(result.error))
     }
-    if (!result.data?.id) {
+    const messageId = result.data?.id
+    if (!messageId) {
       throw new Error('Resend returned no message ID')
     }
-    return { messageId: result.data.id }
+    // The host's getters ran above: the realm is checked again before the answer is built.
+    assertStandardRealmRoot('ResendEmailProvider')
+    return { messageId }
+  }
+
+  /**
+   * The failure for a send that rejected or timed out.
+   * The SDK can REJECT instead of resolving `{ error }` — a transport or
+   * fetch failure whose message quotes the request body carries the same
+   * secrets a quoted rejection does, so it takes the identical exit.
+   * Read through the fail-closed helper: coercion runs consumer code, and a
+   * hostile `message` getter would otherwise escape with its own text
+   * before `sendFailure` could withhold anything.
+   * The bound fired: the SDK's own abort error and the race's mean the same thing, and neither
+   * carries anything of the request, so the reason is a fixed sentence.
+   */
+  private rejectedSend(
+    error: unknown,
+    options: EmailSendOptions,
+    signal: AbortSignal,
+    timeoutMs: number
+  ): Error {
+    const reason = signal.aborted
+      ? `Resend request timed out after ${String(timeoutMs)} ms`
+      : readRedactedMessage(error)
+    return this.sendFailure(reason, options, signal.aborted ? 'ETIMEDOUT' : errorCodeOf(error))
   }
 
   /**
@@ -438,7 +474,7 @@ export class ResendEmailProvider implements IEmailProvider {
    * @returns The instantiated client.
    * @throws Error When `apiKey` is missing or the `resend` package is not installed.
    */
-  private getClient(): Promise<ResendLike> {
+  private getClient(): Promise<Boxed<ResendLike>> {
     this.#clientPromise ??= this.createClient()
     return this.#clientPromise
   }
@@ -450,14 +486,14 @@ export class ResendEmailProvider implements IEmailProvider {
    * @returns The instantiated client.
    * @throws Error When `apiKey` is missing or the `resend` package is not installed.
    */
-  private async createClient(): Promise<ResendLike> {
+  private async createClient(): Promise<Boxed<ResendLike>> {
     try {
       const apiKey = this.#options.apiKey
       if (!apiKey) {
         throw new Error('ResendEmailProvider: missing API key — pass { apiKey } to the constructor')
       }
-      const ResendCtor = await this.loadResendConstructor()
-      return new ResendCtor(apiKey)
+      const ResendCtor = (await own(this.loadResendConstructor(), 'ResendEmailProvider')).value
+      return boxed(new ResendCtor(apiKey))
     } catch (error) {
       this.#clientPromise = null
       throw error
@@ -471,8 +507,11 @@ export class ResendEmailProvider implements IEmailProvider {
    * @throws Error When the package is not installed, or — reported as itself rather
    * than as a missing package — when the import fails for any other reason.
    */
-  private async loadResendConstructor(): Promise<ResendConstructor> {
-    const mod = await loadOptionalPeer<{ Resend: ResendConstructor }>(RESEND_MODULE)
-    return mod.Resend
+  private async loadResendConstructor(): Promise<Boxed<ResendConstructor>> {
+    const mod = await own(
+      loadOptionalPeer<{ Resend: ResendConstructor }>(RESEND_MODULE),
+      'ResendEmailProvider'
+    )
+    return boxed(mod.Resend)
   }
 }

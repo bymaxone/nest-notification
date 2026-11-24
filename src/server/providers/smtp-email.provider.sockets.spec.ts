@@ -28,7 +28,10 @@ jest.mock('../utils/realm-root', () => {
       if (mockGuard.enabled) {
         actual.assertStandardRealmRoot(owner)
       }
-    }
+    },
+    // The check inside `checkedAwait` is the module's own, so the switch has to cover it too.
+    checkedAwait: <T>(pending: Promise<T>, owner: string): Promise<T> =>
+      mockGuard.enabled ? actual.checkedAwait(pending, owner) : actual.own(pending, owner)
   }
 })
 

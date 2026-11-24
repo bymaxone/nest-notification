@@ -39,16 +39,6 @@ const EXEMPT: Readonly<Record<string, { count: number; reason: string }>> = {
     reason:
       'Awaits of the host Redis client inside the reference store; every call reaches the services through withStorageFailures, whose guardedCall pins and checks the answer.'
   },
-  'server/providers/resend-email.provider.ts': {
-    count: 4,
-    reason:
-      'Provider internals: the promise the service sees is the provider send, which EmailService awaits through own and checks after.'
-  },
-  'server/providers/smtp-email.provider.ts': {
-    count: 7,
-    reason:
-      'Provider internals: the promise the service sees is the provider send, which EmailService awaits through own and checks after. The transport build and the verification are awaited through own and checkedAwait, never through then, catch or finally; what remains is the wait on a send that settleOrTimeout pins.'
-  },
   'server/services/otp.service.ts': {
     count: 14,
     reason:
@@ -183,13 +173,16 @@ describe('the pinned-await rule, second awaits', () => {
  * here with the reason it is not a decision.
  */
 const RETURN_SCOPE = [
+  'server/providers/resend-email.provider.ts',
+  'server/providers/smtp-email.provider.ts',
   'server/services/',
   'server/utils/observe.ts',
   'server/utils/storage-failures.ts',
   'observability/notification-tracing.ts'
 ]
 
-const SEALS = /^(assertStandardRealmRoot|nullProto|assignTo|createBare|frozenCopy|Object\.create)/u
+const SEALS =
+  /^(assertStandardRealmRoot|boxed|nullProto|assignTo|createBare|frozenCopy|Object\.create)/u
 
 const RETURN_EXEMPT: Readonly<Record<string, { count: number; reason: string }>> = {
   'server/services/email.service.ts': {

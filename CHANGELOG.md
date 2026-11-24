@@ -78,6 +78,15 @@ the entries that carry one, is the compatibility contract — read it, not the n
   as an own data property only, so an accessor planted before the load is refused, never called, and `pinOnce`
   reads the descriptor's fields own-only, so `Object.prototype.value` cannot make an accessor look like the pin.
   `testing/` and `react/` are now inside the promise scan.
+- **The SMTP and Resend providers no longer let a host object or a swapped `Promise` answer for the relay.** Resolving a
+  promise with an object, or returning one from an async function, reads its `then`; the SDK result, the nodemailer
+  transport (whose chain holds `EventEmitter.prototype`) and the Resend client are now carried in a prototype-less
+  box, so no `then` of theirs or of a prototype above them is read, and a persistent `EventEmitter.prototype.then`
+  can no longer make `verify` resolve, the health check report `up` or a send succeed against a dead relay. The send
+  waits are pinned and followed by a realm check, the two bounded waits are built from the `Promise` taken at load
+  (a one-call swap of `globalThis.Promise` forged a message id), and the sources of both providers are inside the
+  sealed-return scan, with no exemption left that said otherwise. A `clearTimeout` or `removeEventListener` that
+  throws while a send settles no longer ends as an unhandled rejection.
 - **The span grace is 5 seconds.** When an observer's span never calls the operation, or never settles, the
   operation's answer waits at most `SPAN_GRACE_MS` (5000 ms) for the span's promise before the operation runs; a span
   that settles sooner is not waited on any longer.

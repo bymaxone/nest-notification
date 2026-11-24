@@ -173,16 +173,6 @@ const PROMISE_PATTERN =
 
 /** The reads that stay: the file, how many, and why none of them decides anything. */
 const PROMISE_EXEMPT: Readonly<Record<string, { count: number; reason: string }>> = {
-  'src/server/providers/resend-email.provider.ts': {
-    count: 1,
-    reason:
-      'Bounds a send by an abort signal with `new Promise`; the call it waits on is awaited pinned in an async body, never through then, catch or finally, and the send is not an OTP verdict.'
-  },
-  'src/server/providers/smtp-email.provider.ts': {
-    count: 1,
-    reason:
-      'Bounds a send by a timer with `new Promise`; the call it waits on, the transport build and the verification are awaited pinned, never through then, catch or finally, and none decides a verdict.'
-  },
   'src/react/useOtpInput.ts': {
     count: 2,
     reason:

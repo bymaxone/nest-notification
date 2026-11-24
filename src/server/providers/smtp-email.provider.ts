@@ -40,7 +40,8 @@ import { publishedFailure } from '../utils/provider-failure'
 import { rethrowRefusal } from '../utils/provider-refusal'
 import { readSendOptions } from '../utils/provider-send-options'
 import { nullProto, readName, withOwnKeys } from '../utils/read-options'
-import { assertStandardRealmRoot, checkedAwait, own } from '../utils/realm-root'
+import { assertStandardRealmRoot, boxed, checkedAwait, newPromise, own } from '../utils/realm-root'
+import type { Boxed } from '../utils/realm-root'
 import {
   collectEchoedExcerpts,
   isSafeError,
@@ -76,6 +77,15 @@ export type {
 /** Default bound on one whole send, in milliseconds. */
 const DEFAULT_SEND_TIMEOUT_MS = 60_000
 
+/** Clears the timer; a `clearTimeout` that throws must not end the bookkeeping in a rejection nobody handles. */
+function releaseTimer(timer: NodeJS.Timeout): void {
+  try {
+    clearTimeout(timer)
+  } catch {
+    // The timer fires into a settled promise, which ignores it.
+  }
+}
+
 /**
  * Settles with `call`, or rejects once `timeoutMs` has passed, whichever comes first. Nodemailer
  * cannot abort a send in flight, so only the caller stops waiting: the outcome of `call` after that
@@ -84,10 +94,10 @@ const DEFAULT_SEND_TIMEOUT_MS = 60_000
  *
  * @param call - The transport's send.
  * @param timeoutMs - The longest to wait, in milliseconds.
- * @returns What `call` resolves with.
+ * @returns What `call` resolves with, boxed: resolving with the transport's own object would read its `then`.
  */
-function settleOrTimeout<T>(call: Promise<T>, timeoutMs: number): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
+function settleOrTimeout<T>(call: Promise<T>, timeoutMs: number): Promise<Boxed<T>> {
+  return newPromise<Boxed<T>>((resolve, reject) => {
     const timer = setTimeout(() => {
       reject(
         Object.assign(new Error(`SMTP send timed out after ${String(timeoutMs)} ms`), {
@@ -98,11 +108,11 @@ function settleOrTimeout<T>(call: Promise<T>, timeoutMs: number): Promise<T> {
     // Awaited pinned, not through then/finally: those read `Promise[Symbol.species]`.
     void (async (): Promise<void> => {
       try {
-        resolve(await own(call, 'SmtpEmailProvider'))
+        resolve(boxed(await own(call, 'SmtpEmailProvider')))
       } catch (error) {
         reject(error)
       } finally {
-        clearTimeout(timer)
+        releaseTimer(timer)
       }
     })()
   })
@@ -167,7 +177,7 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
    * collapses concurrent first sends onto a single dynamic `import()` + creation;
    * a failed init resets this back to `null` so a transient error can be retried.
    */
-  #transportPromise: Promise<SmtpTransportLike> | null = null
+  #transportPromise: Promise<Boxed<SmtpTransportLike>> | null = null
 
   /**
    * The adapter options, which carry the SMTP password.
@@ -242,7 +252,9 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
    * comes back. `EmailService` maps any thrown `Error` to `EMAIL_SEND_FAILED`.
    */
   async send(options: EmailSendOptions): Promise<EmailSendResult> {
-    return this.sendRead(readSendOptions(options))
+    const sent = await own(this.sendRead(readSendOptions(options)), 'SmtpEmailProvider')
+    assertStandardRealmRoot('SmtpEmailProvider')
+    return sent
   }
 
   /** Sends a message already read by name, whose fields no key planted on the realm root can answer for. */
@@ -251,8 +263,8 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
     assertStandardRealmRoot('SmtpEmailProvider')
     this.guardHeaderInjection(options)
     const from = this.buildSender(options.from, options.fromName)
-    const transport = await this.getTransport()
-    const info = await this.dispatch(
+    const transport = (await own(this.getTransport(), 'SmtpEmailProvider')).value
+    const dispatched = this.dispatch(
       transport,
       // No prototype: nodemailer reads keys this adapter never sets (`envelope`, `raw`, `list`,
       // `alternatives`...), and a key planted on the realm root must not answer for them.
@@ -276,10 +288,14 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
       options.redactValues,
       options.publishProviderText
     )
-    if (!info.messageId) {
+    const info = await own(dispatched, 'SmtpEmailProvider')
+    const messageId = info.messageId
+    if (!messageId) {
       throw new Error('SMTP transport returned no message ID')
     }
-    return { messageId: info.messageId }
+    // The host's getter ran above: the realm is checked again before the answer is built.
+    assertStandardRealmRoot('SmtpEmailProvider')
+    return { messageId }
   }
 
   /**
@@ -298,7 +314,7 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
     assertStandardRealmRoot('SmtpEmailProvider')
     let transport: SmtpTransportLike
     try {
-      transport = await own(this.getTransport(), 'SmtpEmailProvider')
+      transport = (await own(this.getTransport(), 'SmtpEmailProvider')).value
     } catch {
       relayRefused()
     }
@@ -329,7 +345,7 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
     }
     let transport: SmtpTransportLike
     try {
-      transport = await pending
+      transport = (await own(pending, 'SmtpEmailProvider')).value
     } catch {
       return
     }
@@ -348,7 +364,7 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
 
   /** Nest calls this when the application closes; it closes the transport. */
   async onModuleDestroy(): Promise<void> {
-    await this.close()
+    await own(this.close(), 'SmtpEmailProvider')
   }
 
   /**
@@ -370,10 +386,17 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
     // Checked again where the message is handed over, after the transport was created.
     assertStandardRealmRoot('SmtpEmailProvider')
     try {
-      return await settleOrTimeout(
-        transport.sendMail(payload),
-        this.#options.sendTimeoutMs ?? DEFAULT_SEND_TIMEOUT_MS
+      // Pinned and checked: the box of the transport's answer is awaited on a realm that was checked.
+      const settled = await checkedAwait(
+        settleOrTimeout(
+          transport.sendMail(payload),
+          this.#options.sendTimeoutMs ?? DEFAULT_SEND_TIMEOUT_MS
+        ),
+        'SmtpEmailProvider'
       )
+      // Last before the return, which reads `then` of what it resolves with.
+      assertStandardRealmRoot('SmtpEmailProvider')
+      return settled.value
     } catch (error) {
       // A send that failed while the realm root is polluted failed because of it (the socket destroys
       // the connection on a write then), and is told so: the refusal, not the relay's error.
@@ -625,7 +648,7 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
    * @returns The initialized transport.
    * @throws Error When the configuration is incomplete or `nodemailer` is missing.
    */
-  private getTransport(): Promise<SmtpTransportLike> {
+  private getTransport(): Promise<Boxed<SmtpTransportLike>> {
     const cached = this.#transportPromise
     if (cached !== null) {
       return cached
@@ -637,7 +660,7 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
   }
 
   /** Drops a build that failed from the cache, only while it is still the cached one. */
-  private async dropWhenFailed(build: Promise<SmtpTransportLike>): Promise<void> {
+  private async dropWhenFailed(build: Promise<Boxed<SmtpTransportLike>>): Promise<void> {
     try {
       await own(build, 'SmtpEmailProvider')
     } catch {
@@ -653,10 +676,11 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
    * @returns The initialized transport.
    * @throws Error When the configuration is incomplete or `nodemailer` is missing.
    */
-  private async createTransport(): Promise<SmtpTransportLike> {
+  private async createTransport(): Promise<Boxed<SmtpTransportLike>> {
     const config = this.buildTransportConfig()
-    const nodemailer = await this.loadNodemailer()
-    return this.instantiate(nodemailer, config)
+    const nodemailer = (await own(this.loadNodemailer(), 'SmtpEmailProvider')).value
+    // Boxed: the transport is an event emitter, whose prototype chain the realm check does not cover.
+    return boxed(this.instantiate(nodemailer, config))
   }
 
   /**
@@ -750,14 +774,17 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
    * @throws Error When the package is not installed, or — reported as itself rather
    * than as a missing package — when the import fails for any other reason.
    */
-  private async loadNodemailer(): Promise<NodemailerLike> {
-    const mod = await loadOptionalPeer<
-      Partial<NodemailerLike> & { default?: Partial<NodemailerLike> }
-    >(NODEMAILER_MODULE)
+  private async loadNodemailer(): Promise<Boxed<NodemailerLike>> {
+    const mod = await own(
+      loadOptionalPeer<Partial<NodemailerLike> & { default?: Partial<NodemailerLike> }>(
+        NODEMAILER_MODULE
+      ),
+      'SmtpEmailProvider'
+    )
     const candidate = mod.createTransport ? mod : mod.default
     if (!candidate?.createTransport) {
       throw new Error('`nodemailer` package exposes no createTransport export')
     }
-    return candidate as NodemailerLike
+    return boxed(candidate as NodemailerLike)
   }
 }

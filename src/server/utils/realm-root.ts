@@ -685,3 +685,35 @@ export function pinOnce<T>(promise: Promise<T>, owner: string): Promise<T> {
   }
   return own(promise, owner)
 }
+
+/** A value of the host, held by a null-prototype object so resolving or returning it reads no `then`. */
+export interface Boxed<T> {
+  readonly value: T
+}
+
+/**
+ * Holds a host's value in an object with no prototype. A promise resolved with the value itself reads
+ * its `then`, and a host object has prototypes the realm check does not cover (an event emitter's, an
+ * SDK class's); the box has none, so nothing is read off it.
+ *
+ * @param value - What a host call returned.
+ * @returns A box with the value in `value`.
+ */
+export function boxed<T>(value: T): Boxed<T> {
+  const box = createBare(null) as { value: T }
+  box.value = value
+  return box
+}
+
+/**
+ * Makes a promise from the engine's own `Promise`, never from the global one a host call can swap for
+ * the length of a call.
+ *
+ * @param executor - The promise executor.
+ * @returns The promise.
+ */
+export function newPromise<T>(
+  executor: (resolve: (value: T) => void, reject: (reason?: unknown) => void) => void
+): Promise<T> {
+  return new (INTRINSIC_PROMISE as PromiseConstructor)<T>(executor)
+}
