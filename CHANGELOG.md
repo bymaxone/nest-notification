@@ -55,7 +55,7 @@ the entries that carry one, is the compatibility contract — read it, not the n
   `sendTemplate`.** Every promise a host call returns (store, audit sink, provider, renderer) is pinned with an own
   `constructor` before the library awaits it, and the realm is checked again after the audit write has settled; the
   copies the library builds read `Object.assign` and `Object.create` taken at load; the verdict an observer's span is
-  handed is a frozen copy with no prototype; the hops of `send`, `sendTemplate` and the detached template check await
+  handed is a frozen copy with no prototype; the hops of `send` and `sendTemplate` await
   with `return await own(...)`. An operation whose span settles late no longer leaves its rejection unhandled, a
   readiness answer that was given on a changed realm is not kept for the next call, and a final check runs right
   before `check()` returns. `Promise.prototype.constructor` must be the engine's own `Promise` when the module loads,
