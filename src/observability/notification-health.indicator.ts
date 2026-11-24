@@ -235,8 +235,9 @@ export class NotificationHealthIndicator implements IHealthIndicator {
           resolve(false)
         }, this.#options.timeoutMs)
         void (async (): Promise<void> => {
+          let started: unknown
           try {
-            const started = provider.verify()
+            started = provider.verify()
             if (!promisesIntact()) {
               // Never awaited on this path: a handler keeps a rejection from ending unhandled.
               silence(started)
@@ -252,6 +253,9 @@ export class NotificationHealthIndicator implements IHealthIndicator {
             await started
             resolve(true)
           } catch {
+            // The species lookup of `then` can throw before it attaches its handler; one attached here
+            // keeps the relay's rejection from ending unhandled.
+            silence(started)
             resolve(false)
           }
         })()

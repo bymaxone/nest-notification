@@ -64,6 +64,45 @@ describe('NotificationHealthIndicator against a verification promise with its ow
   })
 })
 
+describe('NotificationHealthIndicator against a rejected verification whose constructor cannot be a species', () => {
+  it.each([1, null])(
+    'should leave no rejection unhandled when the own constructor is %p',
+    async (constructorValue) => {
+      const unhandled: unknown[] = []
+      const record = (reason: unknown): void => {
+        unhandled.push(reason)
+      }
+      const saved = process.listeners('unhandledRejection')
+      process.removeAllListeners('unhandledRejection')
+      process.on('unhandledRejection', record)
+      let status: string
+      try {
+        const indicator = new NotificationHealthIndicator(
+          provider(() => {
+            const failed = Promise.reject(new Error('relay down'))
+            Object.defineProperty(failed, 'constructor', {
+              value: constructorValue,
+              configurable: true
+            })
+            return failed
+          }),
+          { timeoutMs: 50 }
+        )
+        status = (await indicator.check()).status
+        await new Promise((resolve) => setTimeout(resolve, 60))
+      } finally {
+        process.removeListener('unhandledRejection', record)
+        for (const listener of saved) {
+          process.on('unhandledRejection', listener)
+        }
+      }
+
+      expect(status).toBe('down')
+      expect(unhandled).toStrictEqual([])
+    }
+  )
+})
+
 describe('NotificationHealthIndicator against a verification that is not a promise', () => {
   it('should report up when verify returns a plain value', async () => {
     const indicator = new NotificationHealthIndicator(provider(() => undefined))
