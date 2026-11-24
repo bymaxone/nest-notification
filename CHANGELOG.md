@@ -49,6 +49,8 @@ the entries that carry one, is the compatibility contract — read it, not the n
   promise that cannot take it is refused instead of awaited, and a pinned promise that is abandoned is drained through
   a native `await`, which reads no `Promise[Symbol.species]`. The audit write moved to `utils/audit-write.ts`; its
   refusal stays outside the code that absorbs host failures, so `audit.swallowErrors` keeps its meaning.
+  The branches that audit a refused generate (cooldown active, failed delivery) are pinned the same way, and
+  `util.types.isPromise` is taken at load so a replaced one cannot decide that a rejection needs no handler.
 - Known limits: code running concurrently in the same process that plants a `then` after the check and erases it before
   the store's own promise settles cannot be seen afterwards; a store or SDK that reads a `Promise` static internally is
   its own code and is not covered; the send paths of the providers still use `then` and are not verdicts; a refusal

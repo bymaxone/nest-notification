@@ -325,3 +325,67 @@ describe('a promise the library pins for its own await', () => {
     expect(unhandled).toStrictEqual([])
   })
 })
+
+describe('OtpService.generate when the audit call on a refused branch plants a forgery', () => {
+  afterEach(restore)
+
+  function plantOnAudit(audit: ReturnType<typeof makeAudit>): void {
+    audit.create.mockImplementation((() => {
+      Object.defineProperty(PROTO, 'constructor', {
+        value: function Fake() {
+          /* never constructed */
+        },
+        writable: true,
+        configurable: true
+      })
+      Object.defineProperty(PROTO, 'then', {
+        value: function then(onFulfilled: (value: unknown) => unknown) {
+          restore()
+          onFulfilled(undefined)
+        },
+        writable: true,
+        configurable: true
+      })
+      return Promise.resolve()
+    }) as never)
+  }
+
+  it('should end refused with nothing unhandled on the cooldown_blocked branch', async () => {
+    const audit = makeAudit()
+    const service = new OtpService(makeOptions(), new InMemoryOtpStorage(), audit)
+    await service.generate({ ...ref, deliverVia: 'manual' })
+    plantOnAudit(audit)
+
+    let outcome: string | undefined
+    const unhandled = await recordingUnhandled(async () => {
+      outcome = await service.generate({ ...ref, deliverVia: 'manual' }).then(
+        () => 'resolved',
+        (error: { code?: string }) => error.code
+      )
+      restore()
+    })
+
+    expect(unhandled).toStrictEqual([])
+    expect(outcome).toBe('notification.invalid_scope_identifier')
+  })
+
+  it('should end refused with nothing unhandled on the failed delivery branch', async () => {
+    const audit = makeAudit()
+    const service = new OtpService(makeOptions(), new InMemoryOtpStorage(), audit)
+    ;(service as unknown as { deliverOtp: () => Promise<void> }).deliverOtp = () =>
+      Promise.reject(new Error('delivery down'))
+    plantOnAudit(audit)
+
+    let outcome: string | undefined
+    const unhandled = await recordingUnhandled(async () => {
+      outcome = await service.generate({ ...ref, deliverVia: 'email' }).then(
+        () => 'resolved',
+        (error: { code?: string }) => error.code
+      )
+      restore()
+    })
+
+    expect(unhandled).toStrictEqual([])
+    expect(outcome).toBe('notification.invalid_scope_identifier')
+  })
+})

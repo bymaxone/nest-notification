@@ -378,7 +378,7 @@ export class OtpService implements OnModuleInit {
     } catch (error) {
       // A refusal of the realm comes after the store took the lock: give it back, as the check that
       // follows a successful acquire does, so the recipient is not locked out of generating.
-      await releaseCooldownAfterRefusal(this.storage, ref, error)
+      await own(releaseCooldownAfterRefusal(this.storage, ref, error))
       throw error
     }
     if (hasCooldownLock) {
@@ -389,7 +389,7 @@ export class OtpService implements OnModuleInit {
       ref.recipient,
       ref.purpose
     )
-    await this.audit(this.otpAuditEntry('cooldown_blocked', ref, { remainingSeconds }))
+    await own(this.audit(this.otpAuditEntry('cooldown_blocked', ref, { remainingSeconds })))
     throw new NotificationException('OTP_COOLDOWN_ACTIVE', {
       remainingSeconds,
       retryAfter: toRetryAfterHeader(remainingSeconds),
@@ -413,9 +413,9 @@ export class OtpService implements OnModuleInit {
   ): Promise<void> {
     try {
       await this.storage.set(scope.tenantId, scope.recipient, scope.purpose, entry)
-      await this.deliverOtp(input, code, cfg)
+      await own(this.deliverOtp(input, code, cfg))
     } catch (error) {
-      throw await this.failedOutgoing(scope, error, code)
+      throw await own(this.failedOutgoing(scope, error, code))
     }
   }
 
@@ -442,7 +442,7 @@ export class OtpService implements OnModuleInit {
   ): Promise<unknown> {
     let failure: unknown = error
     try {
-      await this.releaseOtp(scope)
+      await own(this.releaseOtp(scope))
     } catch (cleanupError) {
       // A failed store method arrives as `OTP_STORAGE_FAILED` or `_UNAVAILABLE` already carrying the
       // store's own error as its cause, so the delivery error goes onto that cause.
@@ -452,19 +452,21 @@ export class OtpService implements OnModuleInit {
       failure = cleanupError
     }
     const outgoing = outgoingError(failure, [code])
-    await this.audit(
-      this.otpAuditEntry('failed', scope, {
-        // `outgoing` is already fully redacted by the scrub above; this read
-        // only needs the fail-closed guard, not a second redaction pass.
-        errorMessage: maskExact(
-          maskAddressTokens(
-            readRedactedMessage(storageCauseOf(outgoing) ?? outgoing),
+    await own(
+      this.audit(
+        this.otpAuditEntry('failed', scope, {
+          // `outgoing` is already fully redacted by the scrub above; this read
+          // only needs the fail-closed guard, not a second redaction pass.
+          errorMessage: maskExact(
+            maskAddressTokens(
+              readRedactedMessage(storageCauseOf(outgoing) ?? outgoing),
+              this.options.audit.maskRecipient
+            ),
+            scope.recipient,
             this.options.audit.maskRecipient
-          ),
-          scope.recipient,
-          this.options.audit.maskRecipient
-        )
-      })
+          )
+        })
+      )
     )
     return outgoing
   }
@@ -610,7 +612,7 @@ export class OtpService implements OnModuleInit {
     try {
       assertStandardRealmRoot('OtpService')
     } catch (error) {
-      await releaseCooldownAfterRefusal(this.storage, ref, error)
+      await own(releaseCooldownAfterRefusal(this.storage, ref, error))
       throw error
     }
   }
