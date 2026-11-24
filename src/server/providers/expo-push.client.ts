@@ -19,6 +19,10 @@ import {
 import type { ExpoFailure } from './expo-push.codes'
 import { field } from './expo-push.mapping'
 
+// Read from the global once, when the module loads: a later replacement of the built-in changes nothing here.
+const parseJson = JSON.parse
+const stringifyJson = JSON.stringify
+
 /** The only endpoint a send goes to. */
 export const EXPO_SEND_URL = 'https://exp.host/--/api/v2/push/send'
 
@@ -49,7 +53,7 @@ export interface ExpoCallOptions {
 /** Parses JSON, `undefined` when the text is not JSON. */
 function parse(text: string): unknown {
   try {
-    return JSON.parse(text) as unknown
+    return parseJson(text) as unknown
   } catch {
     return undefined
   }
@@ -94,7 +98,7 @@ export async function callExpo(
       options.fetch(url, {
         method: 'POST',
         headers,
-        body: JSON.stringify(payload),
+        body: stringifyJson(payload),
         redirect: 'error',
         signal: AbortSignal.timeout(options.timeoutMs)
       }),

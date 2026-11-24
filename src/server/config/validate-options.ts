@@ -12,7 +12,8 @@ import type {
   BymaxNotificationModuleOptions,
   AuditOptions,
   EmailChannelOptions,
-  OtpChannelOptions
+  OtpChannelOptions,
+  PushChannelOptions
 } from '../interfaces/notification-module-options.interface'
 import { MIN_CODE_SECRET_BYTES } from '../utils/code-digest'
 import { isPlainOrClassInstance } from '../utils/read-options'
@@ -36,7 +37,7 @@ const stringify = JSON.stringify
  *
  * @param options - The consumer-supplied module options.
  * @throws Error When no channel is configured, a channel is malformed, or an
- * unsupported (`sms`/`push`) channel is requested.
+ * unsupported (`sms`) channel is requested.
  * @throws NotificationException With `OTP_INVALID_LENGTH` when `otp.defaultLength` is out of range.
  */
 export function validateOptions(options: BymaxNotificationModuleOptions): void {
@@ -65,12 +66,6 @@ export function validateOptions(options: BymaxNotificationModuleOptions): void {
     )
   }
 
-  if (options.push) {
-    throw new Error(
-      "[BymaxNotificationModule] Push channel is not yet implemented. Remove 'push' from options."
-    )
-  }
-
   const resolver: unknown = options.global?.tenantIdResolver
   if (resolver !== undefined && typeof resolver !== 'function') {
     throw new Error('[BymaxNotificationModule] options.global.tenantIdResolver must be a function')
@@ -78,6 +73,10 @@ export function validateOptions(options: BymaxNotificationModuleOptions): void {
 
   if (options.email) {
     validateEmailOptions(options.email)
+  }
+
+  if (options.push) {
+    validatePushOptions(options.push)
   }
 
   if (options.otp) {
@@ -98,6 +97,23 @@ function validateAuditOptions(audit: AuditOptions): void {
   }
   assertBoolean('audit.swallowErrors', audit.swallowErrors)
   assertFunction('audit.maskRecipient', audit.maskRecipient)
+}
+
+/** Validates the push channel section. */
+function validatePushOptions(push: PushChannelOptions): void {
+  if (!push.provider) {
+    throw new Error(
+      "[BymaxNotificationModule] options.push.provider is required when 'push' is configured"
+    )
+  }
+  if (
+    push.defaultTtlSeconds !== undefined &&
+    (!Number.isSafeInteger(push.defaultTtlSeconds) || push.defaultTtlSeconds < 0)
+  ) {
+    throw new Error(
+      '[BymaxNotificationModule] options.push.defaultTtlSeconds must be a non-negative integer'
+    )
+  }
 }
 
 /** Validates the email channel section. */

@@ -63,7 +63,10 @@ const EXPECTED_SERVER_EXPORTS = [
   'NoOpEmailProvider',
   'SmtpEmailProvider',
   'NoOpNotificationLogRepository',
-  'DefaultTemplateRenderer'
+  'DefaultTemplateRenderer',
+  'PushService',
+  'ExpoPushProvider',
+  'BYMAX_NOTIFICATION_PUSH_PROVIDER'
 ]
 
 const EXPECTED_SHARED_EXPORTS = ['NOTIFICATION_ERROR_CODES', 'DEFAULT_TTLS']
@@ -298,6 +301,31 @@ try {
   wired
     ? pass('forRoot({ email, otp }) returns a wired DynamicModule')
     : fail('forRoot did not return a wired DynamicModule descriptor')
+
+  // The push channel end to end against the built artifact: a stubbed `fetch` stands in for Expo, so
+  // nothing leaves the machine, and a token that is not an Expo token is refused locally.
+  const { ExpoPushProvider } = serverEsm
+  const calls = []
+  const provider = new ExpoPushProvider({
+    fetch: async (url, init) => {
+      calls.push({ url, body: init?.body })
+      return new Response(JSON.stringify({ data: [{ status: 'ok', id: 'ticket-1' }] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' }
+      })
+    }
+  })
+  const pushed = await provider.send({
+    tokens: ['ExponentPushToken[abc]', 'not-a-token'],
+    title: 'T',
+    body: 'B'
+  })
+  pushed.results[0]?.messageId === 'ticket-1' &&
+  pushed.results[1]?.reason === 'token_invalid' &&
+  calls.length === 1 &&
+  calls[0].url === 'https://exp.host/--/api/v2/push/send'
+    ? pass('ExpoPushProvider answers per token and calls only the fixed Expo URL')
+    : fail('ExpoPushProvider did not answer per token against the built artifact')
 
   const testingEsm = await import(resolve(PACKAGE.root, 'dist/testing/index.mjs'))
   const contractCases = testingEsm.otpStorageContract(() => {

@@ -194,11 +194,29 @@ describe('validateOptions', () => {
     )
   })
 
-  // Push is declared but not implemented.
-  it('should reject a push channel', () => {
-    expect(() => validateOptions({ push: { provider: {} as never } })).toThrow(
-      'Push channel is not yet implemented'
+  // A push section must name the provider that will carry it.
+  it('should reject a push channel without a provider', () => {
+    expect(() => validateOptions({ push: {} as never })).toThrow(
+      "options.push.provider is required when 'push' is configured"
     )
+  })
+
+  it.each([-1, 1.5, Number.NaN, '60'])(
+    'should reject a push defaultTtlSeconds of %p',
+    (defaultTtlSeconds) => {
+      expect(() =>
+        validateOptions({
+          push: { provider: {} as never, defaultTtlSeconds: defaultTtlSeconds as never }
+        })
+      ).toThrow('defaultTtlSeconds')
+    }
+  )
+
+  it('should accept a push channel with a provider and a zero or positive default time-to-live', () => {
+    expect(() => validateOptions({ push: { provider: {} as never } })).not.toThrow()
+    expect(() =>
+      validateOptions({ push: { provider: {} as never, defaultTtlSeconds: 0 } })
+    ).not.toThrow()
   })
 
   // Audit, when present, needs a repository to write to.

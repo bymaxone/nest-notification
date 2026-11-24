@@ -152,7 +152,11 @@ export class NotificationAuditInterceptor implements NestInterceptor {
       return false
     }
     const candidate = value as Record<string, unknown>
-    if (candidate.channel !== 'email' && candidate.channel !== 'otp') {
+    if (
+      candidate.channel !== 'email' &&
+      candidate.channel !== 'otp' &&
+      candidate.channel !== 'push'
+    ) {
       return false
     }
     if (typeof candidate.tenantId !== 'string') {
@@ -232,6 +236,11 @@ export class NotificationAuditInterceptor implements NestInterceptor {
     if (input.channel === 'email') {
       return Array.isArray(input.payload.to) ? (input.payload.to[0] ?? '') : input.payload.to
     }
+    if (input.channel === 'push') {
+      // A device token is a credential for one install: the entry holds a count, never a token.
+      const tokens: unknown = input.payload.tokens
+      return `devices:${String(Array.isArray(tokens) ? tokens.length : 1)}`
+    }
     return input.payload.recipient
   }
 
@@ -242,6 +251,9 @@ export class NotificationAuditInterceptor implements NestInterceptor {
    * record and its length is unbounded.
    */
   private extractPurpose(input: DispatchInput): string | undefined {
+    if (input.channel === 'push') {
+      return undefined
+    }
     if (input.channel !== 'otp') {
       return input.payload.template
     }

@@ -15,6 +15,7 @@ import type { NotificationChannel } from '../../shared/types/notification-channe
 import { NOTIFICATION_LOG_EVENTS } from '../constants/log-events.constants'
 import { NotificationException } from '../errors/notification-exception'
 import type { OtpVerifyResult } from '../interfaces/otp-storage.interface'
+import type { PushSendResult } from '../interfaces/push-provider.interface'
 import { copyByName } from '../utils/bounded-list'
 import { logEvent } from '../utils/log-event'
 import { readOtpAction } from '../utils/otp-input'
@@ -24,6 +25,8 @@ import { EmailService } from './email.service'
 import type { EmailSendInput, EmailSendTemplateInput } from './email.service'
 import { OtpService } from './otp.service'
 import type { OtpGenerateResult } from './otp.service'
+import { PushService } from './push.service'
+import type { PushSendInput } from './push.service'
 
 /** An email tag pair. */
 type EmailTag = { name: string; value: string }
@@ -58,6 +61,9 @@ export interface OtpDispatchPayload {
   userId?: string
 }
 
+/** Push dispatch payload — the tokens and the message; the tenant is the request's. */
+export type PushDispatchPayload = Omit<PushSendInput, 'tenantId'>
+
 /** The fields of a dispatch request and of an OTP payload, read by name so the root prototype is never asked. */
 const DISPATCH_KEYS = ['channel', 'tenantId', 'payload'] as const
 const OTP_PAYLOAD_KEYS = [
@@ -76,11 +82,13 @@ const OTP_PAYLOAD_KEYS = [
 export type DispatchInput =
   | { channel: 'email'; tenantId: string; payload: EmailDispatchPayload }
   | { channel: 'otp'; tenantId: string; payload: OtpDispatchPayload }
+  | { channel: 'push'; tenantId: string; payload: PushDispatchPayload }
 
 /** Discriminated dispatch result, one variant per channel. */
 export type DispatchResult =
   | { channel: 'email'; messageId: string }
   | { channel: 'otp'; result: OtpGenerateResult | OtpVerifyResult | void }
+  | { channel: 'push'; result: PushSendResult }
 
 /** Uniform façade over the configured channel services. */
 @Injectable()
@@ -93,7 +101,8 @@ export class NotificationService implements OnModuleInit {
    */
   constructor(
     @Optional() @Inject(EmailService) private readonly emailService?: EmailService,
-    @Optional() @Inject(OtpService) private readonly otpService?: OtpService
+    @Optional() @Inject(OtpService) private readonly otpService?: OtpService,
+    @Optional() @Inject(PushService) private readonly pushService?: PushService
   ) {}
 
   /**
@@ -122,6 +131,12 @@ export class NotificationService implements OnModuleInit {
         messageId: await own(this.dispatchEmail(tenantId, payload), 'NotificationService')
       }
     }
+    if (channel === 'push') {
+      return {
+        channel: 'push',
+        result: await own(this.dispatchPush(tenantId, payload), 'NotificationService')
+      }
+    }
     return {
       channel: 'otp',
       result: await own(this.dispatchOtp(tenantId, payload), 'NotificationService')
@@ -140,6 +155,9 @@ export class NotificationService implements OnModuleInit {
     }
     if (this.otpService?.isConfigured()) {
       channels.push('otp')
+    }
+    if (this.pushService?.isConfigured()) {
+      channels.push('push')
     }
     return channels
   }
@@ -183,6 +201,25 @@ export class NotificationService implements OnModuleInit {
   }
 
   /**
+   * Returns the push service or throws when the push channel is not enabled.
+   *
+   * @returns The push service.
+   * @throws NotificationException `CHANNEL_DISABLED` when push is not configured.
+   */
+  getPush(): PushService {
+    if (!this.pushService) {
+      throw new NotificationException('CHANNEL_DISABLED', { channel: 'push' })
+    }
+    if (!this.pushService.isConfigured()) {
+      throw new NotificationException('CHANNEL_DISABLED', {
+        channel: 'push',
+        reason: 'provider_not_configured'
+      })
+    }
+    return this.pushService
+  }
+
+  /**
    * Warns once per channel that is configured but cannot be used, because its provider or
    * storage reports `isConfigured() === false`. Such a channel is absent from
    * {@link NotificationService.getEnabledChannels} and refused by the accessors; without this
@@ -194,6 +231,9 @@ export class NotificationService implements OnModuleInit {
     }
     if (this.otpService && !this.otpService.isConfigured()) {
       this.warnNotUsable('otp', 'storage')
+    }
+    if (this.pushService && !this.pushService.isConfigured()) {
+      this.warnNotUsable('push', 'provider')
     }
   }
 
@@ -224,6 +264,18 @@ export class NotificationService implements OnModuleInit {
     throw new NotificationException('EMAIL_MISSING_BODY', {
       hint: 'payload requires either `template` OR `{ subject, html }`'
     })
+  }
+
+  /** Routes a push dispatch to `PushService.send`, with the request's tenant. */
+  private async dispatchPush(
+    tenantId: string,
+    payload: PushDispatchPayload
+  ): Promise<PushSendResult> {
+    const push = this.getPush()
+    // `send` reads every field of the payload once; the tenant is the request's, never the payload's.
+    const result = await pinOnce(push.send({ ...payload, tenantId }), 'NotificationService')
+    assertStandardRealmRoot('NotificationService')
+    return result
   }
 
   /** Routes an OTP dispatch by `action`, defaulting to `generate`. */

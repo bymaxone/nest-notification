@@ -191,9 +191,9 @@ const RETURN_EXEMPT: Readonly<Record<string, { count: number; reason: string }>>
       'Returns of the provider result and of strings after awaits whose callee asserts the realm last, or of a promise that always rejects; sendUnobserved and the public methods assert before they resolve with an object.'
   },
   'server/services/notification.service.ts': {
-    count: 4,
+    count: 5,
     reason:
-      'route builds the answer from callees that end with their own check and run no host code after it, and dispatch pins and checks it as it is handed over; the two messageId returns are strings.'
+      'route builds the answer from callees that end with their own check and run no host code after it, and dispatch pins and checks it as it is handed over; the messageId return is a string.'
   },
   'server/services/otp.service.ts': {
     count: 5,

@@ -142,13 +142,13 @@ export const NOTIFICATION_ERROR_DEFINITIONS = {
     status: HttpStatus.BAD_REQUEST,
     message: 'Invalid phone number'
   },
-  /** Reserved: the push channel is not implemented. */
+  /** The push provider reports itself not configured. */
   PUSH_PROVIDER_NOT_CONFIGURED: {
     code: NOTIFICATION_ERROR_CODES.PUSH_PROVIDER_NOT_CONFIGURED,
     status: HttpStatus.INTERNAL_SERVER_ERROR,
     message: 'Push provider not configured'
   },
-  /** Reserved: the push channel is not implemented. */
+  /** Nothing was sent: the provider failed the call. The provider's own text is never carried. */
   PUSH_SEND_FAILED: {
     code: NOTIFICATION_ERROR_CODES.PUSH_SEND_FAILED,
     status: HttpStatus.BAD_GATEWAY,

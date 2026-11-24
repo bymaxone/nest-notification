@@ -7,7 +7,7 @@
  */
 
 /** The channel a send or a code travels on. */
-export type NotificationObservedChannel = 'email' | 'otp'
+export type NotificationObservedChannel = 'email' | 'otp' | 'push'
 
 /**
  * How a send ended: `sent` when the provider accepted the message, `failed` when the provider (or

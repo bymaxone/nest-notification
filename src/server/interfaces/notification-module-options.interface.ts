@@ -147,9 +147,6 @@ export interface SmsChannelOptions {
 
 /**
  * Push channel configuration.
- *
- * Declared so consumers can plan code paths against a stable shape; no service
- * implements the channel and `validateOptions` rejects it at startup.
  */
 export interface PushChannelOptions {
   provider: IPushProvider | Newable<IPushProvider>

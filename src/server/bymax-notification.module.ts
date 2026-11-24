@@ -28,6 +28,7 @@ import {
   BYMAX_NOTIFICATION_OBSERVER,
   BYMAX_NOTIFICATION_OPTIONS,
   BYMAX_NOTIFICATION_OTP_STORAGE,
+  BYMAX_NOTIFICATION_PUSH_PROVIDER,
   BYMAX_NOTIFICATION_TEMPLATE_RENDERER
 } from './bymax-notification.constants'
 import { resolveOptions } from './config/resolved-options'
@@ -44,12 +45,14 @@ import type {
 } from './interfaces/notification-module-options.interface'
 import type { INotificationObserver } from './interfaces/notification-observer.interface'
 import type { IOtpStorage } from './interfaces/otp-storage.interface'
+import type { IPushProvider } from './interfaces/push-provider.interface'
 import { DefaultTemplateRenderer } from './providers/default-template-renderer'
 import { EscapingLogRepository } from './providers/escaping-log-repository'
 import { NoOpNotificationLogRepository } from './providers/no-op-notification-log.repository'
 import { EmailService } from './services/email.service'
 import { NotificationService } from './services/notification.service'
 import { OtpService } from './services/otp.service'
+import { PushService } from './services/push.service'
 import { readHostName } from './utils/host-name'
 import { logEvent } from './utils/log-event'
 
@@ -181,8 +184,10 @@ export class BymaxNotificationModule {
         BYMAX_NOTIFICATION_EMAIL_PROVIDER,
         BYMAX_NOTIFICATION_TEMPLATE_RENDERER,
         BYMAX_NOTIFICATION_OTP_STORAGE,
+        BYMAX_NOTIFICATION_PUSH_PROVIDER,
         EmailService,
         OtpService,
+        PushService,
         NotificationService
       ]
     }
@@ -235,6 +240,7 @@ export class BymaxNotificationModule {
           { token: BYMAX_NOTIFICATION_OBSERVER, optional: true }
         ]
       },
+      pushServiceProvider(),
       NotificationService
     ]
   }
@@ -286,6 +292,12 @@ export class BymaxNotificationModule {
         useFactory: (raw: BymaxNotificationModuleOptions): IOtpStorage | null =>
           raw.otp ? instantiate(raw.otp.storage) : null,
         inject: [RAW_NOTIFICATION_OPTIONS]
+      },
+      {
+        provide: BYMAX_NOTIFICATION_PUSH_PROVIDER,
+        useFactory: (raw: BymaxNotificationModuleOptions): IPushProvider | null =>
+          raw.push ? instantiate(raw.push.provider) : null,
+        inject: [RAW_NOTIFICATION_OPTIONS]
       }
     ]
   }
@@ -309,6 +321,9 @@ export class BymaxNotificationModule {
     if (resolved.otp && options.otp) {
       providers.push(resolveAsProvider(BYMAX_NOTIFICATION_OTP_STORAGE, options.otp.storage))
     }
+    if (resolved.push && options.push) {
+      providers.push(resolveAsProvider(BYMAX_NOTIFICATION_PUSH_PROVIDER, options.push.provider))
+    }
     return providers
   }
 
@@ -327,6 +342,9 @@ export class BymaxNotificationModule {
     if (resolved.otp) {
       services.push(OtpService)
     }
+    if (resolved.push) {
+      services.push(PushService)
+    }
     services.push(NotificationService)
     return services
   }
@@ -344,7 +362,33 @@ function activeChannels(resolved: Readonly<ResolvedNotificationOptions>): string
   if (resolved.otp) {
     channels.push('otp')
   }
+  if (resolved.push) {
+    channels.push('push')
+  }
   return channels
+}
+
+/**
+ * The async provider of {@link PushService}: it resolves to `undefined` when no push provider is
+ * configured, like the other channel services, so `NotificationService` reports the channel disabled.
+ */
+function pushServiceProvider(): FactoryProvider {
+  return {
+    provide: PushService,
+    useFactory: (
+      options: ResolvedNotificationOptions,
+      provider: IPushProvider | null,
+      auditLog: INotificationLogRepository,
+      observer?: INotificationObserver
+    ): PushService | undefined =>
+      provider ? new PushService(options, provider, auditLog, observer) : undefined,
+    inject: [
+      BYMAX_NOTIFICATION_OPTIONS,
+      BYMAX_NOTIFICATION_PUSH_PROVIDER,
+      BYMAX_NOTIFICATION_AUDIT_SINK,
+      { token: BYMAX_NOTIFICATION_OBSERVER, optional: true }
+    ]
+  }
 }
 
 /**

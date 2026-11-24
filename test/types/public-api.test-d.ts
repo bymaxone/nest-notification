@@ -26,7 +26,10 @@ import type {
   NotificationLogEntry,
   BymaxNotificationModuleOptions,
   SmtpEmailProviderOptions,
-  RedisLike
+  RedisLike,
+  IPushProvider,
+  PushSendResult,
+  PushService
 } from '@bymax-one/nest-notification'
 import {
   BymaxNotificationModule,
@@ -35,7 +38,12 @@ import {
   safeCompare,
   toRetryAfterHeader
 } from '@bymax-one/nest-notification'
-import type { NotificationErrorCode, OtpPurpose } from '@bymax-one/nest-notification/shared'
+import type {
+  NotificationErrorCode,
+  OtpPurpose,
+  PushFailureReason,
+  PushTokenResult
+} from '@bymax-one/nest-notification/shared'
 import { NOTIFICATION_ERROR_CODES } from '@bymax-one/nest-notification/shared'
 import type { UseOtpInputState, UseOtpCountdownState } from '@bymax-one/nest-notification/react'
 import type { IHealthIndicator } from '@bymax-one/nest-core/health'
@@ -257,3 +265,31 @@ const _tracingIsAnObserver: INotificationObserver = new NotificationTracing()
 type _RegisterReturns = Expect<
   Equal<ReturnType<typeof NotificationObservabilityModule.register>, DynamicModule>
 >
+
+// ---------------------------------------------------------------------------
+// Push channel — the per-token contract a host acts on
+// ---------------------------------------------------------------------------
+
+declare const pushProvider: IPushProvider
+declare const push: PushService
+
+// The provider surface is closed, and `fetchReceipts` is the only optional member.
+type _PushProviderKeys = Expect<
+  Equal<keyof typeof pushProvider, 'name' | 'isConfigured' | 'send' | 'fetchReceipts'>
+>
+// The reason a token was not served is a closed set: a host's `switch` over it is exhaustive.
+type _PushReasons = Expect<
+  Equal<
+    PushFailureReason,
+    | 'token_unregistered'
+    | 'token_invalid'
+    | 'message_too_big'
+    | 'rate_limited'
+    | 'provider_unavailable'
+    | 'credentials'
+    | 'unknown'
+  >
+>
+// One result per token carries a closed reason, never provider text.
+type _PushResultReason = Expect<Equal<PushTokenResult['reason'], PushFailureReason | undefined>>
+type _PushSendResolves = Expect<Equal<Awaited<ReturnType<typeof push.send>>, PushSendResult>>

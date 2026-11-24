@@ -762,7 +762,7 @@ A one-time password is a credential, so every behavior is pinned so that a regre
 | Coverage       | **100%** line/branch/function/statement per file (`pnpm test:cov:all`)                                             |
 | Mutation       | Stryker score **100%** (`break: 100`), no survivors                                                                |
 | Lint           | ESLint flat config + `eslint-plugin-security`, zero warnings                                                       |
-| Bundle budgets | server < 48.99 KB · shared < 4 KB · react < 8 KB · testing < 4.5 KB · observability < 2.69 KB brotli (`pnpm size`) |
+| Bundle budgets | server < 55.57 KB · shared < 4 KB · react < 8 KB · testing < 4.5 KB · observability < 2.69 KB brotli (`pnpm size`) |
 | Prisma-free    | `pnpm check:no-prisma` — the library never imports `@prisma/client`                                                |
 | Export map     | `pnpm check:exports` — `attw` against the packed tarball, ESM and CJS                                              |
 | Supply chain   | published with npm provenance (OIDC), CodeQL + OpenSSF Scorecard                                                   |
@@ -878,7 +878,7 @@ pnpm mutation      # Stryker mutation testing
 
 ### Injection tokens
 
-Every token is a `Symbol()`, exported for an advanced override or a test that replaces one part of the module: `BYMAX_NOTIFICATION_OPTIONS` (the resolved, frozen options), `BYMAX_NOTIFICATION_EMAIL_PROVIDER`, `BYMAX_NOTIFICATION_OTP_STORAGE`, `BYMAX_NOTIFICATION_TEMPLATE_RENDERER` and `BYMAX_NOTIFICATION_LOG_REPOSITORY`. `BYMAX_NOTIFICATION_SMS_PROVIDER` and `BYMAX_NOTIFICATION_PUSH_PROVIDER` exist for the reserved channels and carry nothing.
+Every token is a `Symbol()`, exported for an advanced override or a test that replaces one part of the module: `BYMAX_NOTIFICATION_OPTIONS` (the resolved, frozen options), `BYMAX_NOTIFICATION_EMAIL_PROVIDER`, `BYMAX_NOTIFICATION_OTP_STORAGE`, `BYMAX_NOTIFICATION_TEMPLATE_RENDERER` and `BYMAX_NOTIFICATION_LOG_REPOSITORY`. `BYMAX_NOTIFICATION_PUSH_PROVIDER` carries the push provider when `push` is configured. `BYMAX_NOTIFICATION_SMS_PROVIDER` exists for the reserved SMS channel and carries nothing.
 
 ### Testing your own storage (`./testing`)
 
@@ -941,7 +941,7 @@ Every service refuses a bad value before it calls a provider or a store. The opt
 | `EmailDispatchPayload` | The email payload of a dispatch.                                              | Required: `to`. Either `template` (with `data`, default `{}`, and optional `locale`) or both `subject` and `html` (with optional `text`). When `template` is set it wins. With neither a template nor both `subject` and `html` the call raises `notification.email_missing_body` (400). Optional on both paths: `from`, `fromName`, `replyTo`, `tags`, `userId`. It has no `cc`, `bcc` or `attachments`.                                            |
 | `OtpDispatchPayload`   | The OTP payload of a dispatch.                                                | Required: `recipient`, `purpose`. `action` is `'generate'` (the default), `'verify'` or `'consume'`; any other value raises `notification.invalid_scope_identifier` (400) and sends no code. `code` is read for `'verify'` and an absent one is checked as an empty string. `deliverVia`, `emailTemplate`, `emailData` and `locale` are read for `'generate'` only. `userId` is optional. Each action fails as `OtpService` does for the same input. |
 | `DispatchResult`       | What `dispatch()` returns, one variant per channel.                           | `{ channel: 'email'; messageId: string }` or `{ channel: 'otp'; result }`, where `result` is the `OtpGenerateResult` of `'generate'`, the `OtpVerifyResult` of `'verify'`, or `undefined` for `'consume'`.                                                                                                                                                                                                                                           |
-| `NotificationChannel`  | The channels a log entry or `getEnabledChannels()` names; also in `./shared`. | `'email'`, `'otp'`, `'sms'` or `'push'`. Only `'email'` and `'otp'` are implemented; `getEnabledChannels()` never returns the other two.                                                                                                                                                                                                                                                                                                             |
+| `NotificationChannel`  | The channels a log entry or `getEnabledChannels()` names; also in `./shared`. | `'email'`, `'otp'`, `'sms'` or `'push'`. `'email'`, `'otp'` and `'push'` are implemented; `getEnabledChannels()` never returns `'sms'`.                                                                                                                                                                                                                                                                                                              |
 
 #### Audit
 
@@ -998,7 +998,7 @@ Defaults and ranges of the most-used options are in the Configuration section; t
 | `OtpChannelOptions`                     | The OTP channel (`otp`).                                                                                        | `storage` is required (an instance or a class). `defaultLength` `6` (integer `1` to `32`, else `OTP_INVALID_LENGTH`), `defaultCodeType` `'numeric'`, `defaultTtlSeconds` `600` (finite, above `0`), `defaultMaxAttempts` `5` (integer of at least `1`), `resendCooldownSeconds` `60` (finite, at least `0`; `0` switches the cooldown off), `consumeOnVerify` `false`, `strictPurposes` `false` (a non-boolean is refused), `codeSecret` (a string of at least 32 UTF-8 bytes, else refused without echoing it), `perPurpose` (see `OtpPurposeConfig`). A `codeType` outside `numeric`, `alpha`, `alphanumeric` is refused. |
 | `OtpPurposeConfig`                      | The settings of one purpose: `length`, `codeType`, `ttlSeconds`, `maxAttempts`, `resendCooldownSeconds`.        | All five are required in this type, which is also what `resolveForPurpose()` returns. In `perPurpose` each entry is a partial of it: a field left out, or `undefined`, takes the channel default. Same ranges as the defaults above. A purpose key must be a valid purpose, the container must be a plain object or an instance of your own class, and an entry that is `null` or `undefined` is refused.                                                                                                                                                                                                                   |
 | `SmsChannelOptions`                     | Shape of an SMS channel: `provider` (`ISmsProvider` or a class), `defaultFrom?`, `resendCooldownSeconds?`.      | Not wired. No service implements it, and passing `sms` throws at startup: `sms` counts as a channel for the at-least-one check and is then refused.                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| `PushChannelOptions`                    | Shape of a push channel: `provider` (`IPushProvider` or a class), `defaultTtlSeconds?`.                         | Not wired. Passing `push` throws at startup, like `sms`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `PushChannelOptions`                    | Shape of a push channel: `provider` (`IPushProvider` or a class), `defaultTtlSeconds?`.                         | `provider` is required. `defaultTtlSeconds` (a non-negative integer) applies to a send that sets no `ttlSeconds`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | `AuditOptions`                          | The audit log (`audit`).                                                                                        | `repository` is required whenever `audit` is set (an instance or a class). `swallowErrors` default `true`; `maskRecipient` default identity, applied to each recipient and joined with `', '`. `null` for `audit`, `swallowErrors` or `maskRecipient` is refused. Without `audit` the no-op repository is used and the same two defaults apply.                                                                                                                                                                                                                                                                             |
 
 #### Resolved options
@@ -1050,18 +1050,68 @@ The renderer options and defaults are in the Templates section; these are the ty
 | `TemplateDefinition`             | One template: `{ subject, html, text? }`.         | Registered under the key `name::locale`. Placeholders are `{{var}}`; values are HTML-escaped in `html` only. A render with no match along the locale chain throws `Template not found`.                                                                                                                                |
 | `MissingVariableMode`            | `'empty' \| 'throw'`.                             | `'empty'` renders a missing or `null` variable as an empty string; `'throw'` raises `Missing template variable: <path>`.                                                                                                                                                                                               |
 
+#### Push
+
+`PushService` sends one message to many device tokens and answers **per token**. The library stores no token: your backend does, and it acts on the closed `PushFailureReason` of each result (`token_unregistered` means delete the token). `ExpoPushProvider` is the shipped adapter: no SDK, no peer dependency, two JSON endpoints called with the platform's `fetch`, every request bounded by `timeoutMs` and sent only to Expo's fixed URLs.
+
+```ts
+import {
+  BymaxNotificationModule,
+  ExpoPushProvider,
+  NotificationService
+} from '@bymax-one/nest-notification'
+
+const accessToken = process.env.EXPO_ACCESS_TOKEN // only when the project enabled "enhanced security"
+BymaxNotificationModule.forRoot({
+  push: { provider: new ExpoPushProvider(accessToken ? { accessToken } : {}) }
+})
+
+async function notifyOrderShipped(
+  notification: NotificationService,
+  tenantId: string,
+  token: string
+) {
+  const { results } = await notification.getPush().send({
+    tenantId,
+    tokens: [token],
+    title: 'Order shipped',
+    body: 'Your order is on its way'
+  })
+  // results[i] is the answer for tokens[i]: { token, messageId } or { token, reason, retryable }
+  return results
+}
+```
+
+- **One bad token does not fail its batch.** A refused token is a result with a `reason`; `send` throws `PUSH_SEND_FAILED` only when nothing was sent, so retrying a thrown send cannot deliver twice. A partial outage keeps the tickets of the chunks that were accepted.
+- **Retry rules.** `retryable` is `true` for a rate limit and for an outage proven to precede any delivery. A timeout or a reset after the request left is `retryable: false` with `reason: 'provider_unavailable'`, because Expo does not deduplicate and the message may have been delivered.
+- **Receipts.** Expo accepts a message first and reports delivery later. `fetchReceipts(ticketIds)` takes the `messageId` values of earlier results and returns one `{ ticketId, status, reason?, retryable? }` each; an id Expo has no receipt for yet is `pending`. Check about 15 minutes after the send; Expo drops receipts after 24 hours. Your backend keeps the ticket-id-to-token mapping. A provider without receipts makes `fetchReceipts` throw `CHANNEL_DISABLED`.
+- **Bounds.** A call takes 1 to 1000 tokens (or ticket ids). A token that is not shaped like an Expo token is answered `token_invalid` locally, with no call.
+- **Nothing sensitive leaves.** No device token, access token, title, body or data value appears in a log, an audit entry or an error: the audit entry names the tenant, the provider and counts (`recipient: 'devices:N'`), and a provider's own error text is dropped, not wrapped. Treat the title, body and `data` as visible to Expo and to the push services behind it, and keep secrets out of them.
+
+| Name                      | What it is                               | Members                                                                                                                                                       |
+| ------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PushService`             | The push channel's service.              | `send(input)`, `fetchReceipts(ticketIds)`, `isConfigured()`.                                                                                                  |
+| `PushSendInput`           | The argument of `PushService.send()`.    | `PushSendOptions` plus `tenantId` and `userId?`.                                                                                                              |
+| `ResolvedPushOptions`     | The push section after validation.       | `provider`, `defaultTtlSeconds?`.                                                                                                                             |
+| `ExpoPushProvider`        | Reference adapter for Expo Push.         | `new ExpoPushProvider(options?)`; `name` is `'expo'`.                                                                                                         |
+| `ExpoPushProviderOptions` | Options of `ExpoPushProvider`.           | `accessToken?` (Expo enhanced security), `timeoutMs?` (default 10 000), `fetch?`.                                                                             |
+| `PushFailureReason`       | Why a token was not served (closed set). | `'token_unregistered' \| 'token_invalid' \| 'message_too_big' \| 'rate_limited' \| 'provider_unavailable' \| 'credentials' \| 'unknown'`; also in `./shared`. |
+| `PushTokenResult`         | The outcome of one token in a send.      | `token`, `messageId?`, `reason?`, `retryable?`; also in `./shared`.                                                                                           |
+| `PushReceiptStatus`       | The state of a receipt.                  | `'ok' \| 'pending' \| 'error'`; also in `./shared`.                                                                                                           |
+| `PushReceiptResult`       | One receipt.                             | `ticketId`, `status`, `reason?`, `retryable?`; also in `./shared`.                                                                                            |
+
 #### SMS and push contracts
 
-`ISmsProvider`, `SmsSendOptions`, `SmsSendResult`, `IPushProvider`, `PushSendOptions` and `PushSendResult` are types only. No service uses them, no injection token carries an implementation, and a module configured with `sms` or `push` throws at startup (see `SmsChannelOptions` and `PushChannelOptions`). A provider that implements one cannot be registered through the module.
+`ISmsProvider`, `SmsSendOptions` and `SmsSendResult` are types only: no service uses them and a module configured with `sms` throws at startup. `IPushProvider`, `PushSendOptions` and `PushSendResult` are the contract `PushService` drives; a host can register its own provider.
 
-| Name              | What it is                  | Members                                                                                                                                                                         |
-| ----------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ISmsProvider`    | Contract for an SMS sender. | `readonly name: string`, `isConfigured(): boolean`, `send(options: SmsSendOptions): Promise<SmsSendResult>`, which throws on failure.                                           |
-| `SmsSendOptions`  | One SMS.                    | `to` (E.164), `body`, `from?` (E.164 or an alphanumeric sender id), `tags?` (`{ name, value }[]`).                                                                              |
-| `SmsSendResult`   | The result of an SMS send.  | `messageId: string`.                                                                                                                                                            |
-| `IPushProvider`   | Contract for a push sender. | `readonly name: string`, `isConfigured(): boolean`, `send(options: PushSendOptions): Promise<PushSendResult>`, which throws when the send fails wholesale.                      |
-| `PushSendOptions` | One push notification.      | `tokens` (a string or a string array), `title`, `body`; `data?` (`Record<string, string>`), `imageUrl?`, `sound?`, `badge?`, `ttlSeconds?`, `priority?` (`'high' \| 'normal'`). |
-| `PushSendResult`  | The result of a push send.  | `results`: an array of `{ token, messageId?, error? }`, one per token.                                                                                                          |
+| Name              | What it is                  | Members                                                                                                                                                                                                                                                                 |
+| ----------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ISmsProvider`    | Contract for an SMS sender. | `readonly name: string`, `isConfigured(): boolean`, `send(options: SmsSendOptions): Promise<SmsSendResult>`, which throws on failure.                                                                                                                                   |
+| `SmsSendOptions`  | One SMS.                    | `to` (E.164), `body`, `from?` (E.164 or an alphanumeric sender id), `tags?` (`{ name, value }[]`).                                                                                                                                                                      |
+| `SmsSendResult`   | The result of an SMS send.  | `messageId: string`.                                                                                                                                                                                                                                                    |
+| `IPushProvider`   | Contract for a push sender. | `readonly name: string`, `isConfigured(): boolean`, `send(options: PushSendOptions): Promise<PushSendResult>`, which throws only when nothing was sent, and the optional `fetchReceipts(ticketIds)`.                                                                    |
+| `PushSendOptions` | One push notification.      | `tokens` (a string or a string array), `title`, `body`; `data?` (`Record<string, string>`), `imageUrl?`, `sound?`, `badge?`, `ttlSeconds?`, `priority?`, `channelId?`, `subtitle?`, `categoryId?`, `collapseKey?`, `threadId?`, `mutableContent?`, `contentAvailable?`. |
+| `PushSendResult`  | The result of a push send.  | `results`: one `PushTokenResult` per token, in order. The `error?` field is deprecated and never set by the shipped adapters.                                                                                                                                           |
 
 #### React types (`./react`)
 
@@ -1138,7 +1188,7 @@ None of the three fields is range-checked. A verification that throws also count
 | `NOTIFICATION_ERROR_CODES`       | The stable `notification.*` codes — branch on these, not on messages       |
 | `NOTIFICATION_ERROR_DEFINITIONS` | Server-side code → HTTP status + default English message                   |
 
-Codes never change once published; default messages are English, so localize on the `code`. A code marked **reserved** is in the catalog but never thrown by the library. The OTP verify codes are reserved: `verify()` returns its failure as a result (`{ valid: false, reason }`) and never throws it, so your controller maps `reason` to the code it answers with. The SMS and push codes stay reserved until those channels exist.
+Codes never change once published; default messages are English, so localize on the `code`. A code marked **reserved** is in the catalog but never thrown by the library. The OTP verify codes are reserved: `verify()` returns its failure as a result (`{ valid: false, reason }`) and never throws it, so your controller maps `reason` to the code it answers with. The SMS codes stay reserved until that channel exists.
 
 **Which status says what.** A caller's mistake is 4xx. A backing service that is unavailable is **503**, and the caller may try again later: `OTP_STORAGE_UNAVAILABLE` when the OTP store cannot be reached, is closed, timed out, or is a Redis replica or still loading, and `EMAIL_SEND_FAILED` with status 503 when the email provider could not be reached, timed out or asked to be tried later: an SMTP relay's 4xx reply, a Resend 429 (the same code answers 502 when the provider answered and refused, and an SMTP 5xx is a refusal). A provider of your own gets the same rule from the error it throws: an error, or one of its causes, with a `responseCode` from `400` to `499`, or with one of the connection codes such as `ECONNREFUSED`, `ETIMEDOUT` or `EUNAVAILABLE`, answers 503, so a provider that wraps Nodemailer needs no mapping. A configuration fault or a defect is 500, and a failure of a store you implemented that is not an outage (a method that throws or rejects, or one that cannot be read) is `OTP_STORAGE_FAILED`, so it is never mistaken for an outage; the store's own error is its `cause` and its text is not in the message. `AUDIT_LOG_FAILED` is 500: the audit repository is yours, and the library cannot tell its outage from a bug.
 
@@ -1165,8 +1215,8 @@ Codes never change once published; default messages are English, so localize on 
 | `notification.sms_provider_not_configured`       | 500    | reserved — the SMS channel is not implemented                                                                                                                                                       |
 | `notification.sms_send_failed`                   | 502    | reserved — the SMS channel is not implemented                                                                                                                                                       |
 | `notification.sms_invalid_recipient`             | 400    | reserved — the SMS channel is not implemented                                                                                                                                                       |
-| `notification.push_provider_not_configured`      | 500    | reserved — the push channel is not implemented                                                                                                                                                      |
-| `notification.push_send_failed`                  | 502    | reserved — the push channel is not implemented                                                                                                                                                      |
+| `notification.push_provider_not_configured`      | 500    | `isConfigured()` of the push provider threw or did not answer a boolean                                                                                                                             |
+| `notification.push_send_failed`                  | 502    | the push provider failed and nothing was sent (503 when it was unreachable); carries no provider text                                                                                               |
 | `notification.audit_log_failed`                  | 500    | `EmailService`, `OtpService` and `NotificationAuditInterceptor` — only with `audit.swallowErrors: false`                                                                                            |
 | `notification.channel_disabled`                  | 501    | `NotificationService` — the channel is absent, or its provider or storage is not usable                                                                                                             |
 | `notification.invalid_scope_identifier`          | 400    | `OtpService`, `EmailService` and `NotificationAuditInterceptor` — a blank or control-character tenant or recipient, or any send or OTP call made while `Object.prototype` holds a key it should not |
@@ -1202,7 +1252,8 @@ await emailService.send({
 
 ## 🚫 What This Library Does NOT Do
 
-- **No SMS or push channel.** Only email and OTP exist; the SMS and push error codes and tokens are reserved.
+- **No SMS channel.** Email, OTP and push exist; the SMS error codes and token are reserved.
+- **No device-token store.** The push channel keeps no token: your backend stores them and deletes the ones a result reports as `token_unregistered`.
 - **No HTTP endpoints.** It ships no controller or route. Your controller resolves the tenant, calls the services, and maps `verify()` results to responses.
 - **No rate limiting by IP.** It bounds failed attempts per recipient and purpose, not requests per client. Rate-limit the OTP endpoints yourself.
 - **No database or ORM.** It never imports `@prisma/client`; persistence is behind `IOtpStorage` and `INotificationLogRepository`, which you implement or take from the bundled adapters.
