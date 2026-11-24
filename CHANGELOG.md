@@ -25,7 +25,16 @@ the entries that carry one, is the compatibility contract — read it, not the n
   the answers of the store reach the service as primitives or objects with no prototype, so resolving with them reads no
   `then`; `getStatus` no longer uses `Promise.all`; and the readiness check no longer uses `Promise.race` and answers
   `down` when the promises were replaced. A refusal gives the resend cooldown back when the store had taken it.
-- Known limits: code running concurrently in the same process that plants a `then` after the check and erases it before
+- **A promise the library started and does not await no longer ends unhandled** when `Promise.prototype.constructor`
+  throws or is replaced: the handler is attached through an own `constructor` on that promise, not through the slot
+  the realm controls. The scan of the sources now also counts every `new Promise`, each listed with its reason.
+- **The verdicts are returned without a prototype, and the realm is checked right before each return.** An async
+  function that returns an object makes the engine read its `then`, and a self-erasing `then` planted on a root
+  prototype while the last await is pending answered for it. `verify` and `getStatus` now check the root as the last
+  statement before they return, and the internal verdicts have no prototype. The built-ins the decision awaits sit
+  behind are covered by one row per replaceable built-in.
+- Known limits: a refusal raised while a forged `then` is already planted crosses the library's own awaits, which that
+  `then` can drop: the call ends as an invalid verdict and an unhandled rejection, never as `valid: true`; code running concurrently in the same process that plants a `then` after the check and erases it before
   the store's own promise settles cannot be seen afterwards; a store or SDK that reads a `Promise` static internally is
   its own code and is not covered; the send paths of the providers still use `then` and are not verdicts.
 

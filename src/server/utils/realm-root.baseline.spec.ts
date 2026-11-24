@@ -169,17 +169,24 @@ describe('the load baseline of built-ins', () => {
  * and a reason, and a new one fails here until somebody states why it is not a decision.
  */
 const PROMISE_PATTERN =
-  /\bPromise\s*(?:\.\s*(?!prototype\b)[A-Za-z_]+|\[)|=\s*Promise\b(?!\s*\.)|\.\s*(?:then|catch|finally)\s*\(|\bthen\s*\.\s*call|\[\s*['"`](?:then|catch|finally)['"`]\s*\]/gu
+  /\bPromise\s*(?:\.\s*(?!prototype\b)[A-Za-z_]+|\[)|=\s*Promise\b(?!\s*\.)|\.\s*(?:then|catch|finally)\s*\(|\bthen\s*\.\s*call|\[\s*['"`](?:then|catch|finally)['"`]\s*\]|\bnew\s+Promise\b/gu
 
 /** The reads that stay: the file, how many, and why none of them decides anything. */
 const PROMISE_EXEMPT: Readonly<Record<string, { count: number; reason: string }>> = {
   'src/server/providers/resend-email.provider.ts': {
-    count: 2,
-    reason: 'Bounds a send by a timer; the send is not an OTP verdict and carries no stored code.'
+    count: 3,
+    reason:
+      'Bounds a send by a timer, and builds that bound with `new Promise`; the send is not an OTP verdict and carries no stored code.'
   },
   'src/server/providers/smtp-email.provider.ts': {
-    count: 4,
-    reason: 'Bounds a send, refuses a relay and settles a transport build; none decides a verdict.'
+    count: 5,
+    reason:
+      'Bounds a send (the `new Promise` among them), refuses a relay and settles a transport build; none decides a verdict.'
+  },
+  'src/observability/notification-health.indicator.ts': {
+    count: 1,
+    reason:
+      'The one `new Promise` of the readiness race; it is awaited only right after the promise check.'
   }
 }
 

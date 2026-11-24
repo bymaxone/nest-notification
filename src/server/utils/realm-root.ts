@@ -487,6 +487,22 @@ const intrinsicThen = uncurry(Promise.prototype.then) as (
   onRejected: () => void
 ) => unknown
 const noop = (): void => undefined
+const defineOwn = Object.defineProperty
+const INTRINSIC_PROMISE = Promise.prototype.constructor
+const createBare = Object.create
+
+/** The descriptor of an own `constructor` holding the intrinsic Promise, with no prototype to inherit from. */
+function ownConstructor(): PropertyDescriptor {
+  const descriptor = createBare(null) as {
+    value: unknown
+    configurable: boolean
+    writable: boolean
+  }
+  descriptor.value = INTRINSIC_PROMISE
+  descriptor.configurable = true
+  descriptor.writable = true
+  return descriptor
+}
 
 /**
  * Attaches a handler that does nothing to a promise, with the `then` captured at load, so a promise
@@ -497,6 +513,10 @@ const noop = (): void => undefined
 export function silence(promise: unknown): void {
   try {
     if (types.isPromise(promise)) {
+      // `then` reads `constructor` of the promise it is called on: an own one answers for it, so a
+      // `constructor` planted or made to throw on `Promise.prototype` cannot decide whether the
+      // handler is attached.
+      defineOwn(promise, 'constructor', ownConstructor())
       intrinsicThen(promise, noop, noop)
     }
   } catch {

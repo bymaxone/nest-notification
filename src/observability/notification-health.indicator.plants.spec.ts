@@ -108,3 +108,53 @@ describe('NotificationHealthIndicator when the realm changes during a verificati
     expect(result).toStrictEqual({ status: 'down' })
   })
 })
+
+describe('NotificationHealthIndicator when a built-in plants the forgery on its first call', () => {
+  afterEach(restore)
+
+  // The timer of the readiness bound and the clock the answer is kept by both run on this path: a
+  // hook on either swaps the constructor and plants a `then` that answers `true`, then restores both.
+  it.each([
+    ['setTimeout', globalThis as unknown as Record<string, unknown>, 'setTimeout'],
+    ['clearTimeout', globalThis as unknown as Record<string, unknown>, 'clearTimeout'],
+    ['Date.now', Date as unknown as Record<string, unknown>, 'now']
+  ])(
+    'should not report up for a failing verification when %s plants it',
+    async (_label, holder, name) => {
+      const original = holder[name] as (...a: unknown[]) => unknown
+      let armed = true
+      holder[name] = function (this: unknown, ...args: unknown[]) {
+        if (armed) {
+          armed = false
+          Object.defineProperty(Promise.prototype, 'constructor', {
+            value: function Fake() {
+              /* never constructed */
+            },
+            writable: true,
+            configurable: true
+          })
+          Promise.prototype.then = function (onFulfilled?: (value: unknown) => unknown) {
+            restore()
+            return onFulfilled ? onFulfilled(true) : undefined
+          } as typeof Promise.prototype.then
+        }
+        return original.apply(this, args)
+      }
+      const indicator = new NotificationHealthIndicator(failing() as never, { timeoutMs: 50 })
+
+      // Restored before the spec awaits: a forgery still planted would answer for the spec's own await.
+      let status: string
+      try {
+        const pending = indicator.check()
+        holder[name] = original
+        restore()
+        status = (await pending).status
+      } finally {
+        holder[name] = original
+        restore()
+      }
+
+      expect(status).toBe('down')
+    }
+  )
+})

@@ -24,6 +24,8 @@ const LOADED_THEN = Promise.prototype.then
 const LOADED_CONSTRUCTOR = Promise.prototype.constructor
 
 const apply = Reflect.apply
+const defineOwn = Object.defineProperty
+const createBare = Object.create
 const noop = (): void => undefined
 const isPromise = types.isPromise
 
@@ -31,6 +33,12 @@ const isPromise = types.isPromise
 function silence(value: unknown): void {
   try {
     if (isPromise(value)) {
+      // An own `constructor` answers for the one `then` reads, so a planted or throwing one on
+      // `Promise.prototype` cannot keep the handler from being attached.
+      const descriptor = createBare(null) as { value: unknown; configurable: boolean }
+      descriptor.value = LOADED_CONSTRUCTOR
+      descriptor.configurable = true
+      defineOwn(value, 'constructor', descriptor)
       apply(LOADED_THEN, value, [noop, noop])
     }
   } catch {

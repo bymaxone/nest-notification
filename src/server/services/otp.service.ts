@@ -51,6 +51,7 @@ import { matchesStoredCode } from '../utils/matches-stored-code'
 import { reportOtp, runInSpan } from '../utils/observe'
 import { carriesFailures, countAttempt } from '../utils/otp-failure-count'
 import { outgoingError } from '../utils/outgoing-error'
+import { nullProto } from '../utils/read-options'
 import { assertStandardRealmRoot } from '../utils/realm-root'
 import { normalizeRecipient } from '../utils/recipient'
 import { assertSingleMailbox } from '../utils/recipient-list'
@@ -242,7 +243,9 @@ export class OtpService implements OnModuleInit {
       () => this.verifyUnobserved(input)
     )
     reportOtp(this.observer, { event: otpEventOf(result) })
-    return result
+    // The verdicts have no prototype, so no layer read a `then` off them; this one is the caller's.
+    assertStandardRealmRoot('OtpService')
+    return { ...result }
   }
 
   /**
@@ -303,7 +306,7 @@ export class OtpService implements OnModuleInit {
     }
     await this.storage.clearFailures?.(scope.tenantId, scope.recipient, scope.purpose)
     await this.finalizeVerifySuccess(scope, entry, otp.consumeOnVerify)
-    return { valid: true }
+    return nullProto<OtpVerifyResult>({ valid: true })
   }
 
   /**
@@ -342,14 +345,14 @@ export class OtpService implements OnModuleInit {
     const input = readRefInput(raw)
     this.assertScope(input)
     const scope = this.keyed(input)
-    // One await at a time: each is checked by the wrapper right before it, and `Promise.all` reads
-    // `Promise.resolve` and `then` of the realm.
+    // One await at a time, each checked by the wrapper: `Promise.all` reads `then` of the realm.
     const entry = await this.storage.get(scope.tenantId, scope.recipient, scope.purpose)
     const cooldownSeconds = await this.storage.getCooldown(
       scope.tenantId,
       scope.recipient,
       scope.purpose
     )
+    assertStandardRealmRoot('OtpService')
     if (!entry) {
       return { exists: false, cooldownSeconds }
     }
@@ -647,7 +650,7 @@ export class OtpService implements OnModuleInit {
   /** Audits and returns the `not_found` verdict: no live code, or it was consumed by another call. */
   private async rejectNotFound(scope: OtpVerifyInput): Promise<OtpVerifyResult> {
     await this.audit(this.otpAuditEntry('failed', scope, { reason: 'not_found' }))
-    return { valid: false, reason: 'not_found' }
+    return nullProto<OtpVerifyResult>({ valid: false, reason: 'not_found' })
   }
 
   /**
@@ -664,18 +667,18 @@ export class OtpService implements OnModuleInit {
   ): Promise<OtpVerifyResult> {
     await this.audit(this.otpAuditEntry('failed', scope, { reason: 'invalid_code' }))
     const ofCode = entry.maxAttempts - entry.attempts
-    return {
+    return nullProto<OtpVerifyResult>({
       valid: false,
       reason: 'invalid_code',
       // The code's own budget and the recipient's failure budget both run out; the nearer wins.
       remainingAttempts: attempt === undefined ? ofCode : Math.min(ofCode, ceiling - attempt)
-    }
+    })
   }
 
   /** Audits and returns the `max_attempts` verdict. */
   private async rejectMaxAttempts(scope: OtpVerifyInput): Promise<OtpVerifyResult> {
     await this.audit(this.otpAuditEntry('max_attempts_exceeded', scope, { reason: 'max_attempts' }))
-    return { valid: false, reason: 'max_attempts' }
+    return nullProto<OtpVerifyResult>({ valid: false, reason: 'max_attempts' })
   }
 
   /**

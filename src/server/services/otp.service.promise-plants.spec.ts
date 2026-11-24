@@ -46,6 +46,56 @@ async function verifyWrong(service: OtpService): Promise<string> {
   }
 }
 
+/** The self-erasing `then` that answers a resolved object with the forged consume answer. */
+function plantErasingThen(): void {
+  Object.defineProperty(Object.prototype, 'then', {
+    configurable: true,
+    get() {
+      delete (Object.prototype as Record<string, unknown>).then
+      return (resolve: (value: unknown) => void) => resolve(FORGED_CONSUME)
+    }
+  })
+}
+
+/** Plants the erasing `then` `ticks` microtasks after the `call`-th storage operation starts. */
+function planAfterStorageCall(storage: InMemoryOtpStorage, call: number, ticks: number): void {
+  let calls = 0
+  for (const name of [
+    'get',
+    'consumeAttempt',
+    'recordFailure',
+    'getFailures',
+    'deleteIfCode',
+    'update',
+    'delete',
+    'clearFailures',
+    'clearCooldown'
+  ] as const) {
+    const original = (storage as unknown as Record<string, (...a: unknown[]) => unknown>)[name]
+    if (typeof original !== 'function') {
+      continue
+    }
+    ;(storage as unknown as Record<string, unknown>)[name] = function (
+      this: unknown,
+      ...args: unknown[]
+    ) {
+      calls += 1
+      if (calls === call) {
+        let hops = ticks
+        const step = (): void => {
+          if (hops-- > 0) {
+            void Promise.resolve().then(step)
+          } else {
+            plantErasingThen()
+          }
+        }
+        step()
+      }
+      return original.apply(storage, args)
+    }
+  }
+}
+
 describe('OtpService.verify against a forged promise', () => {
   afterEach(restore)
 
@@ -132,50 +182,41 @@ describe('OtpService.verify against a forged promise', () => {
       const storage = new InMemoryOtpStorage()
       const service = new OtpService(makeOptions(), storage, makeAudit())
       await service.generate({ ...ref, deliverVia: 'manual' })
-      let calls = 0
-      const plant = (): void => {
-        Object.defineProperty(Object.prototype, 'then', {
-          configurable: true,
-          get() {
-            delete (Object.prototype as Record<string, unknown>).then
-            return (resolve: (value: unknown) => void) => resolve(FORGED_CONSUME)
-          }
-        })
-      }
-      for (const name of [
-        'get',
-        'consumeAttempt',
-        'recordFailure',
-        'getFailures',
-        'deleteIfCode',
-        'update',
-        'delete',
-        'clearFailures',
-        'clearCooldown'
-      ] as const) {
-        const original = (storage as unknown as Record<string, (...a: unknown[]) => unknown>)[name]
-        if (typeof original !== 'function') {
-          continue
-        }
-        ;(storage as unknown as Record<string, unknown>)[name] = function (
-          this: unknown,
-          ...args: unknown[]
-        ) {
-          calls += 1
-          if (calls === call) {
-            let hops = ticks
-            const step = (): void => {
-              if (hops-- > 0) {
-                void Promise.resolve().then(step)
-              } else {
-                plant()
+      planAfterStorageCall(storage, call, ticks)
+
+      const outcome = await verifyWrong(service)
+      restore()
+
+      expect(outcome).not.toBe('FORGED')
+    }
+  )
+
+  // A verdict returned by an async function is resolved by reading its `then`. A self-erasing `then`
+  // planted on the root while the last await (the audit write) is pending answers for the function
+  // unless the verdict has no prototype or the root is checked right before the return.
+  it.each([1, 2, 3, 4, 5, 6].map((ticks) => [ticks] as const))(
+    'should not accept a wrong code when a self-erasing then lands %i ticks into the audit write',
+    async (ticks) => {
+      const audit = makeAudit()
+      const service = new OtpService(makeOptions(), new InMemoryOtpStorage(), audit)
+      await service.generate({ ...ref, deliverVia: 'manual' })
+      audit.create.mockImplementation(async () => {
+        let hops = ticks
+        const step = (): void => {
+          if (hops-- > 0) {
+            void Promise.resolve().then(step)
+          } else {
+            Object.defineProperty(Object.prototype, 'then', {
+              configurable: true,
+              get() {
+                delete (Object.prototype as Record<string, unknown>).then
+                return (resolve: (value: unknown) => void) => resolve({ valid: true })
               }
-            }
-            step()
+            })
           }
-          return original.apply(storage, args)
         }
-      }
+        step()
+      })
 
       const outcome = await verifyWrong(service)
       restore()
