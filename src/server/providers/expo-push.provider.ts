@@ -110,7 +110,7 @@ export class ExpoPushProvider implements IPushProvider {
     const push = readPush(OWNER, options)
     const outcomes = new Map<string, TokenOutcome>()
     const valid: string[] = []
-    for (const token of push.tokens) {
+    for (const token of new Set(push.tokens)) {
       if (isExpoPushToken(token)) {
         valid.push(token)
       } else {
@@ -124,7 +124,7 @@ export class ExpoPushProvider implements IPushProvider {
       }
     }
     // Only when nothing reached the service is a throw safe: a caller that retries it cannot repeat
-    // what an earlier call carried. A token given twice is answered once, in the first place it appeared.
+    // what an earlier call carried. A token given twice is sent once and answered in each place it appeared.
     if (valid.length > 0 && !state.sent && !state.maybeSent) {
       throw new ExpoPushError(state.last)
     }
@@ -191,6 +191,7 @@ export class ExpoPushProvider implements IPushProvider {
         state.sent = true
         readTickets(group, call.body).forEach((outcome) => outcomes.set(outcome.token, outcome))
       } else {
+        state.last = call.failure
         state.maybeSent ||= call.failure === OUTCOME_UNKNOWN
         group.forEach((token) => outcomes.set(token, failedOutcome(token, call.failure)))
       }

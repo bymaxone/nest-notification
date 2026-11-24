@@ -406,26 +406,20 @@ describe('ExpoPushProvider', () => {
       })
     })
 
-    it('answers a token given twice once, in place', async () => {
+    it('sends a token given twice once and answers it in each place it was given', async () => {
       /* Arrange */
-      const { fetch } = scripted([
-        {
-          body: {
-            data: [
-              { status: 'ok', id: 'T1' },
-              { status: 'ok', id: 'T2' }
-            ]
-          }
-        }
-      ])
+      const { fetch, calls } = scripted([{ body: { data: [{ status: 'ok', id: 'T1' }] } }])
       /* Act */
       const result = await new ExpoPushProvider({ fetch }).send({
         ...base,
         tokens: [TOKEN_A, TOKEN_A]
       })
-      /* Assert */
-      expect(result.results).toHaveLength(2)
-      expect(result.results.every((r) => r.token === TOKEN_A)).toBe(true)
+      /* Assert: one message reached Expo, so the device gets one notification and one ticket */
+      expect(messagesOf(calls[0])).toHaveLength(1)
+      expect(result.results).toEqual([
+        { token: TOKEN_A, messageId: 'T1' },
+        { token: TOKEN_A, messageId: 'T1' }
+      ])
     })
 
     it('never puts a token or the access token in a thrown error or the result of a failure', async () => {
@@ -490,6 +484,22 @@ describe('ExpoPushProvider', () => {
     const mixed = (details: unknown): Step => ({
       status: 400,
       body: { errors: [{ code: 'PUSH_TOO_MANY_EXPERIENCE_IDS', message: 'x', details }] }
+    })
+
+    it("throws with the retryable refusal of the regrouped calls, not the first call's", async () => {
+      /* Arrange */
+      const unavailable: Step = { status: 503, body: { errors: [{ code: 'SERVICE_UNAVAILABLE' }] } }
+      const { fetch } = scripted([
+        mixed({ '@a/one': [TOKEN_A], '@a/two': [TOKEN_B] }),
+        unavailable,
+        unavailable
+      ])
+      /* Act */
+      const failure = await failureOf(
+        new ExpoPushProvider({ fetch }).send({ ...base, tokens: [TOKEN_A, TOKEN_B] })
+      )
+      /* Assert: every project was refused before processing, so a retry is safe and useful */
+      expect(failure.code).toBe('EUNAVAILABLE')
     })
 
     it('sends each project on its own and refuses a token the answer does not place', async () => {
