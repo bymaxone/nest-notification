@@ -8,7 +8,7 @@
  * minutes) before anything says so; this spec says so in seconds. It reads the Stryker configuration and
  * the JSON, and runs no other code of the package.
  */
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const ROOT = join(__dirname, '..')
@@ -33,6 +33,23 @@ const ADDED = [...LIST.matchAll(/'((?:\\.|[^'\\])*)'/g)]
   // Jest's rootDir is `src`, so a pattern starting at it is matched against the path under `src`.
   .map((pattern) => pattern.replace('<rootDir>', ''))
 
+/**
+ * Every spec under `src`, as a path from the repository root. Stryker runs Jest with
+ * `--findRelatedTests`, which selects a spec only through the modules it imports, so a spec that
+ * imports no module of the package is never run by the mutation run.
+ */
+const SPECS = readdirSync(join(ROOT, 'src'), { recursive: true, encoding: 'utf8' })
+  .filter((file) => file.endsWith('.spec.ts'))
+  .map((file) => `src/${file}`)
+
+/** Whether the spec names a module of the package: a relative import that is not a spec or a fixture. */
+function importsPackageModule(file: string): boolean {
+  const text = readFileSync(join(ROOT, file), 'utf8')
+  return [...text.matchAll(/(?:from|require\(|jest\.mock\()\s*'(\.[^']*)'/g)].some(
+    (match) => !/(?:__tests__|\.spec$)/.test(match[1] ?? '')
+  )
+}
+
 describe('the Stryker ignore list and the inventory exempt list', () => {
   /*
    * Given the patterns jest.stryker.config.ts adds to testPathIgnorePatterns
@@ -54,5 +71,25 @@ describe('the Stryker ignore list and the inventory exempt list', () => {
    */
   it('reads at least one added pattern', () => {
     expect(ADDED.length).toBeGreaterThan(0)
+  })
+
+  /*
+   * Given every spec under src
+   * When one imports no module of the package, so the related-test lookup can never select it
+   * Then it is named in the exempt list, whether or not the Stryker configuration ignores it
+   */
+  it('exempts every spec that imports no module of the package', () => {
+    const unexempt = SPECS.filter((file) => !importsPackageModule(file) && !EXEMPT.includes(file))
+
+    expect(unexempt).toStrictEqual([])
+  })
+
+  /*
+   * Given the scan of src for specs
+   * When it is read
+   * Then it found the suite, so the row above judges something
+   */
+  it('finds the specs it judges', () => {
+    expect(SPECS.length).toBeGreaterThan(50)
   })
 })
