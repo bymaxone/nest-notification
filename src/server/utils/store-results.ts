@@ -11,6 +11,7 @@
 
 import { NotificationException } from '../errors/notification-exception'
 import type { ConsumeAttemptResult, OtpEntry } from '../interfaces/otp-storage.interface'
+import { copyByName } from './bounded-list'
 import { assertFailureCount } from './failure-count'
 import { nullProto } from './read-options'
 
@@ -77,12 +78,14 @@ function consumeResultOf(raw: unknown, providerName: string): ConsumeAttemptResu
   return nullProto({ status, entry: entryOf((raw as { entry?: unknown }).entry, providerName) })
 }
 
-/** The operations whose answer is checked, and how. The others answer nothing the library reads. */
-/** The entry `get` answers with, copied into an object with no prototype; anything else as it is. */
+/** The entry `get` answers with, copied by name; anything else as it is. */
 function entryAnswer(value: unknown): unknown {
-  return typeof value === 'object' && value !== null ? nullProto({ ...value }) : value
+  return typeof value === 'object' && value !== null
+    ? copyByName(value, ['code', 'expiresAt', 'attempts', 'maxAttempts', 'validated', 'metadata'])
+    : value
 }
 
+/** The operations whose answer is checked, and how. The others answer nothing the library reads. */
 const CHECKS: ReadonlyMap<string, (value: unknown, providerName: string) => unknown> = new Map<
   string,
   (value: unknown, providerName: string) => unknown
