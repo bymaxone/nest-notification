@@ -18,10 +18,7 @@ the entries that carry one, is the compatibility contract — read it, not the n
 - **The refusal while `Object.prototype` holds a planted key is now documented where it is read.** The 1.4.23 entry
   said a value found only on the realm-root prototype was "absent"; the code refuses instead: while such a key is
   present, email and OTP calls fail with `notification.invalid_scope_identifier`. The entry now says so, and the README
-  error table names the case. The comments that explain why three guards of the health indicator cannot be killed, and
-  the reason the guard-family scan lists for that file, now describe the cached path and the one await of a value that
-  is not a promise. The mutation-inventory parity spec also asserts that every spec importing no module of `src` is in
-  the exempt list.
+  error table names the case.
 
 `dist/` is unchanged from 1.4.23.
 
