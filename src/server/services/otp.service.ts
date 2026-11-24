@@ -53,7 +53,7 @@ import { frozenCopy, otpEventOf, reportOtp, runInSpan } from '../utils/observe'
 import { carriesFailures, countAttempt } from '../utils/otp-failure-count'
 import { outgoingError } from '../utils/outgoing-error'
 import { nullProto } from '../utils/read-options'
-import { assertStandardRealmRoot, checkedAwait, own } from '../utils/realm-root'
+import { assertStandardRealmRoot, checkedAwait, own, ownChecked } from '../utils/realm-root'
 import { normalizeRecipient } from '../utils/recipient'
 import { assertSingleMailbox } from '../utils/recipient-list'
 import { attachCauseIfAbsent, readRedactedMessage } from '../utils/redact'
@@ -184,12 +184,10 @@ export class OtpService implements OnModuleInit {
    * @param input - The recipient, purpose, and delivery options.
    * @returns The expiry timestamp and the resend cooldown length.
    * @throws NotificationException `OTP_STORAGE_NOT_CONFIGURED`, `OTP_COOLDOWN_ACTIVE`,
-   * `OTP_EMAIL_DELIVERY_NOT_CONFIGURED`, or rethrows a persistence/delivery error after
-   * releasing the cooldown lock.
+   * `OTP_EMAIL_DELIVERY_NOT_CONFIGURED`, or a persistence/delivery error, after releasing the lock.
    */
   generate(raw: OtpGenerateInput): Promise<OtpGenerateResult> {
-    // Native to the caller's `await` too: a planted `constructor` or `then` cannot answer for it.
-    return own(this.generateChecked(raw))
+    return ownChecked(this.generateChecked(raw))
   }
 
   private async generateChecked(raw: OtpGenerateInput): Promise<OtpGenerateResult> {
@@ -228,8 +226,7 @@ export class OtpService implements OnModuleInit {
    * @throws NotificationException `OTP_STORAGE_NOT_CONFIGURED` when the channel is absent.
    */
   verify(input: OtpVerifyInput): Promise<OtpVerifyResult> {
-    // Native to the caller's `await` too: a planted `constructor` or `then` cannot answer for it.
-    return own(this.verifyObserved(input))
+    return ownChecked(this.verifyObserved(input))
   }
 
   /** The verification inside the observer's span, reported, with the realm checked before the return. */
@@ -311,7 +308,11 @@ export class OtpService implements OnModuleInit {
    * @param input - The recipient and purpose.
    * @throws NotificationException `OTP_STORAGE_NOT_CONFIGURED` when the channel is absent.
    */
-  async consume(raw: OtpConsumeInput): Promise<void> {
+  consume(raw: OtpConsumeInput): Promise<void> {
+    return ownChecked(this.consumeChecked(raw))
+  }
+
+  private async consumeChecked(raw: OtpConsumeInput): Promise<void> {
     const input = readRefInput(raw)
     this.requireOtpOptions()
     this.assertScope(input)

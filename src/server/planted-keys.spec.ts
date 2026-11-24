@@ -29,7 +29,9 @@ import { OtpService } from './services/otp.service'
 jest.mock('./utils/realm-root', () => ({
   ...jest.requireActual<object>('./utils/realm-root'),
   assertStandardRealmRoot: jest.fn(),
-  checkedAwait: (pending: unknown) => pending
+  checkedAwait: (pending: unknown) => pending,
+  // The check is off for these rows, so the hand-over does not look at the realm either.
+  ownChecked: (promise: unknown) => promise
 }))
 
 // `mock`-prefixed names are allowed inside the hoisted jest.mock factory.

@@ -83,10 +83,7 @@ export function nullProto<T extends object>(source: T): T {
  * @returns The object to hand over.
  */
 export function withOwnKeys<T extends object>(value: T, names: readonly string[]): T {
-  return Object.assign(
-    nullProto(Object.fromEntries(names.map((name) => [name, undefined]))),
-    value
-  ) as T
+  return assignTo(nullProto(Object.fromEntries(names.map((name) => [name, undefined]))), value) as T
 }
 
 /**

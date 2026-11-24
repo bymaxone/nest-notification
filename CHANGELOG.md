@@ -60,12 +60,26 @@ the entries that carry one, is the compatibility contract — read it, not the n
   readiness answer that was given on a changed realm is not kept for the next call, and a final check runs right
   before `check()` returns. `Promise.prototype.constructor` must be the engine's own `Promise` when the module loads,
   or the load fails.
+- **What a host controller awaits is pinned and checked as it is handed over.** `generate`, `verify`, `consume`,
+  `send`, `sendTemplate` and `dispatch` return a promise with an own `constructor`, after a check of the realm root;
+  on a refusal the promise is a rejection with an own `then` taken at load, so a controller that returns it from an
+  async function reads the real one. A failed send no longer answers sent when the audit sink or `onSend` plants a
+  `then`: the realm is checked after the observer was told, and the refusal of the audit write is no longer swallowed.
+  The observer's span, the readiness check's verification and the sync-throw path of the audit write are awaited or
+  heard through the `then` taken at load, and a verification promise that carries its own `then` or `constructor`
+  cannot answer `up` for a failed verification. `Object.assign` is read at load in `read-options` and
+  `provider-send-options`.
+- **A polyfilled global `Promise` no longer fails the load.** The load-time baseline is the prototype of an async
+  function's promise, not `globalThis.Promise.prototype`, so a preloaded polyfill is accepted, while a replaced
+  `Promise.prototype.constructor` of the engine's own prototype is still refused. A scan of every server file lists each
+  unpinned `await`, `for await` and `.then` with its reason.
 - Known limits: code running concurrently in the same process that plants a `then` after the check and erases it before
   the store's own promise settles cannot be seen afterwards; a store or SDK that reads a `Promise` static internally is
   its own code and is not covered, and neither is what a provider does with its own promises; a frozen promise
   returned by a host call is refused, but when the realm's `Promise.prototype.constructor` throws, a frozen
   rejecting promise cannot be given a handler by any means and its rejection ends unhandled; a hook installed
-  before this module loads is not detected, since the intrinsics are the ones found at load; `Date.now` is read live
+  before this module loads is not detected, since the intrinsics are the ones found at load, and a bound function
+  that imitates the engine's `Promise` with a copied prototype passes the load check; `Date.now` is read live
   for `expiresAt` (`otp.service.ts`) and for the readiness cache, and a replaced clock moves those times; a refusal
   raised while the store took the resend cooldown releases it without knowing the store's answer, so an earlier
   legitimate cooldown can be cleared once.

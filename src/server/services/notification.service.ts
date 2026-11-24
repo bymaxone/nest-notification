@@ -18,6 +18,7 @@ import type { OtpVerifyResult } from '../interfaces/otp-storage.interface'
 import { copyByName } from '../utils/bounded-list'
 import { logEvent } from '../utils/log-event'
 import { readOtpAction } from '../utils/otp-input'
+import { assertStandardRealmRoot, own, ownChecked, pinOnce } from '../utils/realm-root'
 import { DISPATCH_EMAIL_KEYS } from './dispatch-email-keys'
 import { EmailService } from './email.service'
 import type { EmailSendInput, EmailSendTemplateInput } from './email.service'
@@ -103,16 +104,28 @@ export class NotificationService implements OnModuleInit {
    * @throws NotificationException `CHANNEL_DISABLED` (channel not configured) or
    * `EMAIL_MISSING_BODY` (email payload has neither a template nor subject+html).
    */
-  async dispatch(input: DispatchInput): Promise<DispatchResult> {
+  dispatch(input: DispatchInput): Promise<DispatchResult> {
+    // Pinned and checked as it is handed over: the caller's own `await` reads nothing off the realm.
+    return ownChecked(this.route(input), 'NotificationService')
+  }
+
+  /** Reads the request once and routes it to its channel. */
+  private async route(input: DispatchInput): Promise<DispatchResult> {
     // The request is read once: the channel that routes is the channel whose payload is used.
     const { channel, tenantId, payload } = copyByName(
       input,
       DISPATCH_KEYS
     ) as unknown as DispatchInput
     if (channel === 'email') {
-      return { channel: 'email', messageId: await this.dispatchEmail(tenantId, payload) }
+      return {
+        channel: 'email',
+        messageId: await own(this.dispatchEmail(tenantId, payload), 'NotificationService')
+      }
     }
-    return { channel: 'otp', result: await this.dispatchOtp(tenantId, payload) }
+    return {
+      channel: 'otp',
+      result: await own(this.dispatchOtp(tenantId, payload), 'NotificationService')
+    }
   }
 
   /**
@@ -202,11 +215,11 @@ export class NotificationService implements OnModuleInit {
     const payload = copyByName(raw, DISPATCH_EMAIL_KEYS) as unknown as EmailDispatchPayload
     if (payload.template !== undefined) {
       const input = this.toTemplateInput(tenantId, payload.template, payload)
-      return (await email.sendTemplate(input)).messageId
+      return (await pinOnce(email.sendTemplate(input), 'NotificationService')).messageId
     }
     if (payload.subject !== undefined && payload.html !== undefined) {
       const input = this.toSendInput(tenantId, payload.subject, payload.html, payload)
-      return (await email.send(input)).messageId
+      return (await pinOnce(email.send(input), 'NotificationService')).messageId
     }
     throw new NotificationException('EMAIL_MISSING_BODY', {
       hint: 'payload requires either `template` OR `{ subject, html }`'
@@ -238,19 +251,22 @@ export class NotificationService implements OnModuleInit {
       purpose,
       ...(userId !== undefined ? { userId } : {})
     }
-    if (run === 'verify') {
-      return otp.verify({ ...ref, code: code ?? '' })
-    }
-    if (run === 'consume') {
-      return otp.consume(ref)
-    }
-    return otp.generate({
-      ...ref,
-      ...(deliverVia !== undefined ? { deliverVia } : {}),
-      ...(emailTemplate !== undefined ? { emailTemplate } : {}),
-      ...(emailData !== undefined ? { emailData } : {}),
-      ...(locale !== undefined ? { locale } : {})
-    })
+    const pending: Promise<OtpGenerateResult | OtpVerifyResult | void> =
+      run === 'verify'
+        ? otp.verify({ ...ref, code: code ?? '' })
+        : run === 'consume'
+          ? otp.consume(ref)
+          : otp.generate({
+              ...ref,
+              ...(deliverVia !== undefined ? { deliverVia } : {}),
+              ...(emailTemplate !== undefined ? { emailTemplate } : {}),
+              ...(emailData !== undefined ? { emailData } : {}),
+              ...(locale !== undefined ? { locale } : {})
+            })
+    // Awaited, not returned: returning a promise from an async function reads its `then`.
+    const result = await pinOnce(pending, 'NotificationService')
+    assertStandardRealmRoot('NotificationService')
+    return result
   }
 
   /** Builds the `sendTemplate` input from a resolved template name and payload. */

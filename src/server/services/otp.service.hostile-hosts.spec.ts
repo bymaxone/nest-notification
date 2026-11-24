@@ -170,3 +170,42 @@ describe('own() when a promise cannot be pinned', () => {
     expect(body.error.details.boundary).toBe('EmailService')
   })
 })
+
+describe('OtpService.verify against a span that returns its own rejected promise', () => {
+  it.each(['then', 'constructor'] as const)(
+    'should leave no rejection unhandled when the promise carries its own %s',
+    async (shape) => {
+      const observer = {
+        span: (_name: string, _attributes: object, fn: () => Promise<unknown>) => {
+          void fn()
+          const rejected = Promise.reject(new Error('span failed'))
+          const forged = (ok: (value: unknown) => void): void => ok(undefined)
+          if (shape === 'constructor') {
+            Object.defineProperty(rejected, 'constructor', { value: Object })
+          }
+          Object.defineProperty(rejected, 'then', { value: forged })
+          return rejected
+        }
+      }
+      const service = await live({ observer })
+      const unhandled: unknown[] = []
+      const record = (reason: unknown): void => {
+        unhandled.push(reason)
+      }
+      const saved = process.listeners('unhandledRejection')
+      process.removeAllListeners('unhandledRejection')
+      process.on('unhandledRejection', record)
+      try {
+        await service.verify({ ...ref, code: WRONG }).catch(() => undefined)
+        await new Promise((resolve) => setTimeout(resolve, 40))
+      } finally {
+        process.removeListener('unhandledRejection', record)
+        for (const listener of saved) {
+          process.on('unhandledRejection', listener)
+        }
+      }
+
+      expect(unhandled).toStrictEqual([])
+    }
+  )
+})

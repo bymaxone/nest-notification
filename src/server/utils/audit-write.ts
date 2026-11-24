@@ -31,19 +31,21 @@ export async function writeAudit(
     }
     warn(error)
   }
-  let pending: Promise<void>
+  let pending: Promise<void> | undefined
   try {
     pending = start()
   } catch (error) {
-    return absorb(error)
-  }
-  const checked = checkedAwait(pending, owner)
-  try {
-    await checked
-  } catch (error) {
     absorb(error)
   }
-  // The host's promise settled and its code may have run: the realm is checked again before the
+  if (pending !== undefined) {
+    const checked = checkedAwait(pending, owner)
+    try {
+      await checked
+    } catch (error) {
+      absorb(error)
+    }
+  }
+  // The host's call returned or its promise settled, and its code may have run: the realm is checked again before the
   // caller reads anything.
   assertStandardRealmRoot(owner)
 }

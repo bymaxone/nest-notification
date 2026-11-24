@@ -21,7 +21,15 @@ import { NOTIFICATION_HEALTH_NAME } from './constants'
 const descriptorOf = Object.getOwnPropertyDescriptor
 const hasOwn = Object.hasOwn
 const assignTo = Object.assign
-const LOADED_THEN = Promise.prototype.then
+// The prototype of an async function's promise is what an `await` reads, wherever a polyfill put the global `Promise`.
+const NATIVE_PROTOTYPE = Object.getPrototypeOf((async (): Promise<void> => undefined)()) as {
+  then: typeof Promise.prototype.then
+}
+const isProxy = types.isProxy
+const sourceOf = Function.prototype.call.bind(Function.prototype.toString) as (
+  value: unknown
+) => string
+const LOADED_THEN = NATIVE_PROTOTYPE.then
 const LOADED_CONSTRUCTOR = loadedConstructor()
 
 /**
@@ -30,10 +38,14 @@ const LOADED_CONSTRUCTOR = loadedConstructor()
  * this module loaded would otherwise become the baseline `promisesIntact` compares with.
  */
 function loadedConstructor(): unknown {
-  const slot = Promise.prototype.constructor
-  const nativePrototype = Object.getPrototypeOf((async (): Promise<void> => undefined)()) as unknown
-  const source = Function.prototype.toString.call(slot)
-  if (!source.endsWith('{ [native code] }') || slot.prototype !== nativePrototype) {
+  const slot = descriptorOf(NATIVE_PROTOTYPE, 'constructor')?.value as
+    { prototype: unknown } | undefined
+  if (
+    typeof slot !== 'function' ||
+    isProxy(slot) ||
+    !sourceOf(slot).endsWith('{ [native code] }') ||
+    slot.prototype !== NATIVE_PROTOTYPE
+  ) {
     throw new TypeError('Promise.prototype.constructor is not the engine Promise at load')
   }
   return slot
@@ -66,8 +78,8 @@ function silence(value: unknown): void {
 /** Whether the promise machinery is what it was at load, with no `then` on the root prototypes. */
 function promisesIntact(): boolean {
   return (
-    descriptorOf(Promise.prototype, 'then')?.value === LOADED_THEN &&
-    descriptorOf(Promise.prototype, 'constructor')?.value === LOADED_CONSTRUCTOR &&
+    descriptorOf(NATIVE_PROTOTYPE, 'then')?.value === LOADED_THEN &&
+    descriptorOf(NATIVE_PROTOTYPE, 'constructor')?.value === LOADED_CONSTRUCTOR &&
     !hasOwn(Object.prototype, 'then') &&
     !hasOwn(Array.prototype, 'then') &&
     !hasOwn(Function.prototype, 'then')
@@ -229,6 +241,12 @@ export class NotificationHealthIndicator implements IHealthIndicator {
               // Never awaited on this path: a handler keeps a rejection from ending unhandled.
               silence(started)
               resolve(false)
+              return
+            }
+            if (isPromise(started)) {
+              // Heard with the `then` taken at load, never awaited: an own `then` or `constructor` of the
+              // host's promise cannot answer `up` for a verification that failed.
+              apply(LOADED_THEN, started, [(): void => resolve(true), (): void => resolve(false)])
               return
             }
             await started

@@ -12,7 +12,7 @@ import type {
   NotificationSpanName
 } from '../interfaces/notification-observer.interface'
 import type { OtpVerifyResult } from '../interfaces/otp-storage.interface'
-import { own, silence } from './realm-root'
+import { checkedAwait, own, silence } from './realm-root'
 
 const freezeObject = Object.freeze
 const assignTo = Object.assign
@@ -61,8 +61,17 @@ export async function runInSpan<T>(
     }
     return operation
   }
+  let spanned: Promise<unknown> | undefined
   try {
-    await observer.span(name, attributes, once)
+    spanned = observer.span(name, attributes, once) as Promise<unknown>
+  } catch {
+    // What the span made of the operation is not the operation's outcome.
+  }
+  // Outside the absorbing catch: a refusal of the realm, or of a span promise that cannot be pinned,
+  // is the operation's outcome, and a rejection of that promise is never left without a handler.
+  const pinned = spanned === undefined ? undefined : checkedAwait(spanned, owner)
+  try {
+    await pinned
   } catch {
     // What the span made of the operation is not the operation's outcome.
   }

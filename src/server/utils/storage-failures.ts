@@ -17,7 +17,7 @@ import { isUnavailableError } from './availability'
 import { readHostName } from './host-name'
 import { isLibraryError } from './is-library-error'
 import { nullProto, readName } from './read-options'
-import { assertStandardRealmRoot, checkedAwait, own, silence } from './realm-root'
+import { checkedAwait, ownChecked } from './realm-root'
 import { checkConfigured, checkStoreResult } from './store-results'
 
 // Taken at load: a `Function.prototype.apply` replaced later does not run the store's method.
@@ -113,15 +113,7 @@ function guardedCall(
       throw translate(name, error)
     }
   }
-  const promise = own(run())
-  try {
-    assertStandardRealmRoot('OtpService')
-  } catch (error) {
-    // The refusal is what the caller sees; the promise that was started is not left unhandled.
-    silence(promise)
-    throw error
-  }
-  return promise
+  return ownChecked(run())
 }
 
 /**
