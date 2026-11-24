@@ -430,3 +430,199 @@ describe('OtpService.generate when the store call that undoes a failed delivery 
     expect(outcome).toBe('notification.invalid_scope_identifier')
   })
 })
+
+/**
+ * Installs `constructor` and `then` as accessors that restore the realm on the first read of `then`,
+ * so the realm is clean again once the awaiting engine has been answered, and a check made after the
+ * host call returns still finds the accessors in place.
+ */
+function plantSelfRestoring(answer: unknown): void {
+  Object.defineProperty(PROTO, 'constructor', {
+    get: () =>
+      function Fake() {
+        /* never constructed */
+      },
+    configurable: true
+  })
+  Object.defineProperty(PROTO, 'then', {
+    get: () => {
+      restore()
+      return function then(onFulfilled: (value: unknown) => unknown) {
+        onFulfilled(answer)
+      }
+    },
+    configurable: true
+  })
+}
+
+/** A rejected promise that has a handler of its own, so a forged `then` leaves nothing unhandled. */
+function failing(error: Error): Promise<never> {
+  const promise = Promise.reject(error)
+  promise.catch(() => undefined)
+  return promise
+}
+
+describe('a host promise the library awaits while self-restoring accessors answer for it', () => {
+  afterEach(restore)
+
+  it('should not hand verify a record the store did not return', async () => {
+    const storage = new InMemoryOtpStorage()
+    const service = await liveService(storage)
+    const real = storage.consumeAttempt.bind(storage)
+    storage.consumeAttempt = ((...args: Parameters<typeof real>) => {
+      plantSelfRestoring({
+        status: 'ok',
+        entry: { code: WRONG, attempts: 1, maxAttempts: 5, expiresAt: Date.now() + 1_000_000 }
+      })
+      return real(...args)
+    }) as never
+
+    const result = await service.verify({ ...ref, code: WRONG }).catch(() => ({ valid: false }))
+    restore()
+
+    expect(result.valid).toBe(false)
+  })
+
+  it('should report the audit failure the sink had, not a success the planted then gave', async () => {
+    const audit = makeAudit()
+    const options = makeOptions()
+    const service = new OtpService(
+      { ...options, audit: { ...options.audit, swallowErrors: false } },
+      new InMemoryOtpStorage(),
+      audit
+    )
+    audit.create.mockImplementation((() => {
+      const failed = failing(new Error('sink down'))
+      plantSelfRestoring(undefined)
+      return failed
+    }) as never)
+
+    const outcome = await service
+      .generate({ ...ref, deliverVia: 'manual' })
+      .then(() => 'resolved')
+      .catch((error: { code?: string }) => error.code)
+    restore()
+
+    expect(outcome).not.toBe('resolved')
+  })
+
+  it('should not report a delivery as sent when sendTemplate failed and a then says it did not', async () => {
+    const email = {
+      sendTemplate: jest.fn(() => {
+        const failed = failing(new Error('provider down'))
+        plantSelfRestoring(undefined)
+        return failed
+      })
+    }
+    const service = new OtpService(
+      makeOptions(),
+      new InMemoryOtpStorage(),
+      makeAudit(),
+      email as never
+    )
+
+    const outcome = await service
+      .generate({ ...ref, deliverVia: 'email' })
+      .then(() => 'resolved')
+      .catch((error: { code?: string }) => error.code)
+    restore()
+
+    expect(outcome).not.toBe('resolved')
+  })
+})
+
+type OwnShape = 'own data constructor' | 'own accessor constructor' | 'own then'
+
+/**
+ * Makes `promise` answer for itself: an own `then` that fulfils with `answer`, with an own
+ * `constructor` (data or accessor) that is not %Promise%, so an await that reads it calls that `then`.
+ */
+function forgeOwn(promise: Promise<unknown>, shape: OwnShape, answer: unknown): Promise<unknown> {
+  const Fake = function Fake() {
+    /* never constructed */
+  }
+  Object.defineProperty(promise, 'then', {
+    value: (onFulfilled: (value: unknown) => unknown) => {
+      onFulfilled(answer)
+    },
+    configurable: true
+  })
+  if (shape === 'own data constructor') {
+    Object.defineProperty(promise, 'constructor', {
+      value: Fake,
+      writable: true,
+      configurable: true
+    })
+  } else if (shape === 'own accessor constructor') {
+    Object.defineProperty(promise, 'constructor', { get: () => Fake, configurable: true })
+  }
+  return promise
+}
+
+const OWN_SHAPES: OwnShape[] = ['own data constructor', 'own accessor constructor', 'own then']
+
+describe('a host promise that carries its own constructor or then', () => {
+  afterEach(restore)
+
+  it.each(OWN_SHAPES)(
+    'should not hand verify a record the store did not return (%s)',
+    async (shape) => {
+      const storage = new InMemoryOtpStorage()
+      const service = await liveService(storage)
+      const real = storage.consumeAttempt.bind(storage)
+      storage.consumeAttempt = ((...args: Parameters<typeof real>) =>
+        forgeOwn(real(...args), shape, {
+          status: 'ok',
+          entry: { code: WRONG, attempts: 1, maxAttempts: 5, expiresAt: Date.now() + 1_000_000 }
+        })) as never
+
+      const result = await service.verify({ ...ref, code: WRONG }).catch(() => ({ valid: false }))
+
+      expect(result.valid).toBe(false)
+    }
+  )
+
+  it.each(OWN_SHAPES)(
+    'should not report an audit write as done when the sink failed (%s)',
+    async (shape) => {
+      const audit = makeAudit()
+      const options = makeOptions()
+      const service = new OtpService(
+        { ...options, audit: { ...options.audit, swallowErrors: false } },
+        new InMemoryOtpStorage(),
+        audit
+      )
+      audit.create.mockImplementation((() =>
+        forgeOwn(failing(new Error('sink down')), shape, undefined)) as never)
+
+      const outcome = await service
+        .generate({ ...ref, deliverVia: 'manual' })
+        .then(() => 'resolved')
+        .catch((error: { code?: string }) => error.code)
+
+      expect(outcome).not.toBe('resolved')
+    }
+  )
+
+  it.each(OWN_SHAPES)(
+    'should not report a delivery as sent when sendTemplate failed (%s)',
+    async (shape) => {
+      const email = {
+        sendTemplate: jest.fn(() => forgeOwn(failing(new Error('provider down')), shape, undefined))
+      }
+      const service = new OtpService(
+        makeOptions(),
+        new InMemoryOtpStorage(),
+        makeAudit(),
+        email as never
+      )
+
+      const outcome = await service
+        .generate({ ...ref, deliverVia: 'email' })
+        .then(() => 'resolved')
+        .catch((error: { code?: string }) => error.code)
+
+      expect(outcome).not.toBe('resolved')
+    }
+  )
+})

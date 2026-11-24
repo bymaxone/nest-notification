@@ -38,16 +38,17 @@ const PACKAGE = openPackage(ROOT)
 // The .mjs ships unminified with JSDoc, so every line of runtime code and every contract case
 // counts in full. A budget is re-derived from the artifact of the change that needs it, and not
 // raised ahead of it.
-// Server budget 51_053 B (measured 51_023 + 30): raise approved by the owner on 2026-11-24.
+// Server budget 51_206 B (measured 51_176 + 30) and observability budget 3_206 B (measured 3_176 +
+// 30): raise approved on 2026-11-24 for the audit fixes (DEC-217) and the load-time %Promise% check.
 const BUDGETS = [
-  { name: 'server (NestJS module)', path: 'dist/server/index.mjs', brotli: 51_053 },
+  { name: 'server (NestJS module)', path: 'dist/server/index.mjs', brotli: 51_206 },
   { name: 'shared (types + constants)', path: 'dist/shared/index.mjs', brotli: 4 * 1024 },
   { name: 'react (hooks)', path: 'dist/react/index.mjs', brotli: 8 * 1024 },
   { name: 'testing (storage contract)', path: 'dist/testing/index.mjs', brotli: 4.5 * 1024 },
   {
     name: 'observability (metrics, spans, health)',
     path: 'dist/observability/index.mjs',
-    brotli: 3_060
+    brotli: 3_206
   }
 ]
 

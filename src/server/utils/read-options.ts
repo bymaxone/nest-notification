@@ -57,6 +57,10 @@ export function readName(source: object, key: string | number): unknown {
   return undefined
 }
 
+// Taken at load: a replacement made later cannot decide what the copy holds.
+const assignTo = Object.assign
+const createBare = Object.create
+
 /**
  * A copy with no prototype, for what the library builds from the host's values and reads again
  * later: a key that is not in it is then absent, where an ordinary object would answer for it with
@@ -66,7 +70,7 @@ export function readName(source: object, key: string | number): unknown {
  * @returns A new object with the same own enumerable properties and no prototype.
  */
 export function nullProto<T extends object>(source: T): T {
-  return Object.assign(Object.create(null) as T, source)
+  return assignTo(createBare(null) as T, source)
 }
 
 /**

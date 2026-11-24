@@ -5,7 +5,7 @@
  */
 
 import { NotificationException } from '../errors/notification-exception'
-import { checkedAwait } from './realm-root'
+import { assertStandardRealmRoot, checkedAwait } from './realm-root'
 
 /**
  * Starts the write, checks the realm, then awaits it. A synchronous throw and a rejection both go
@@ -43,4 +43,7 @@ export async function writeAudit(
   } catch (error) {
     absorb(error)
   }
+  // The host's promise settled and its code may have run: the realm is checked again before the
+  // caller reads anything.
+  assertStandardRealmRoot(owner)
 }

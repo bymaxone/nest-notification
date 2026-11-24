@@ -488,10 +488,27 @@ const intrinsicThen = uncurry(Promise.prototype.then) as (
 ) => unknown
 const noop = (): void => undefined
 
+/**
+ * The %Promise% this module pins and compares against, taken from the `constructor` slot at load. A slot
+ * that was replaced before the load would otherwise become the baseline, so it must be a native
+ * function whose `prototype` is the prototype of an async function's promise, which no assignment to
+ * the slot reaches. A realm that fails this is refused at load rather than trusted.
+ *
+ * @throws TypeError when the slot does not hold the engine's own %Promise%.
+ */
+function intrinsicPromise(): unknown {
+  const slot = Promise.prototype.constructor
+  const nativePrototype = Object.getPrototypeOf((async (): Promise<void> => undefined)()) as unknown
+  if (!isNative(slot) || (slot as { prototype: unknown }).prototype !== nativePrototype) {
+    throw new TypeError('Promise.prototype.constructor is not the engine Promise at load')
+  }
+  return slot
+}
+
 // Taken at load: an `isPromise` replaced later cannot decide that a rejection needs no handler.
 const isPromise = types.isPromise
 const defineOwn = Object.defineProperty
-const INTRINSIC_PROMISE = Promise.prototype.constructor
+const INTRINSIC_PROMISE = intrinsicPromise()
 const createBare = Object.create
 
 /** The descriptor of an own `constructor` holding `value`, with no prototype to inherit from. */
@@ -514,17 +531,18 @@ function ownConstructor(value: unknown, pinned: boolean): PropertyDescriptor {
  * The property is pinned (neither writable nor configurable), so a host holding the promise cannot
  * change what its await reads.
  *
- * @param promise - A promise the library itself made.
+ * @param promise - A promise the library itself made, or one a host call returned.
+ * @param owner - The boundary named in a refusal.
  * @returns The same promise.
  * @throws NotificationException `INVALID_SCOPE_IDENTIFIER` when the property cannot be attached: a
  * promise whose await cannot be pinned is never awaited.
  */
-export function own<T>(promise: Promise<T>): Promise<T> {
+export function own<T>(promise: Promise<T>, owner = 'OtpService'): Promise<T> {
   try {
     defineOwn(promise, 'constructor', ownConstructor(INTRINSIC_PROMISE, true))
   } catch {
     silence(promise)
-    throw refuseInput('OtpService', 'promise', 'cannot be pinned, so the operation is refused')
+    throw refuseInput(owner, 'promise', 'cannot be pinned, so the operation is refused')
   }
   return promise
 }
@@ -554,7 +572,9 @@ export function silence(promise: unknown): void {
       try {
         defineOwn(promise, 'constructor', ownConstructor(undefined, false))
       } catch {
-        // Pinned by `own`: its own %Promise% makes an await native, which reads no species.
+        // Not changeable: pinned by `own`, whose %Promise% makes an await native and reads no
+        // species, or frozen by its holder, whose await still reads the realm's `constructor`: a
+        // realm that makes that read throw leaves such a promise without a handler (Known limits).
         void absorbRejection(promise)
         return
       }
@@ -569,11 +589,11 @@ export function silence(promise: unknown): void {
  * Checks the realm and hands back the promise the caller awaits on the very next token: a host's
  * promise is never awaited on a realm whose promises the call that made it replaced.
  *
- * @param pending - A promise a host call returned.
+ * @param pending - A promise a host call returned; a native one is pinned before it is returned.
  * @param owner - The boundary named in the refusal.
- * @returns `pending`, unchanged.
- * @throws NotificationException `INVALID_SCOPE_IDENTIFIER` when the realm was changed; `pending` is
- * then given a handler, since nobody will await it.
+ * @returns `pending`, with its `constructor` pinned.
+ * @throws NotificationException `INVALID_SCOPE_IDENTIFIER` when the realm was changed or the promise
+ * cannot be pinned; `pending` is then given a handler, since nobody will await it.
  */
 export function checkedAwait<T>(pending: Promise<T>, owner: string): Promise<T> {
   try {
@@ -581,6 +601,12 @@ export function checkedAwait<T>(pending: Promise<T>, owner: string): Promise<T> 
   } catch (refusal) {
     silence(pending)
     throw refusal
+  }
+  // The check passes while accessors a host installed inside the call are still in place: they fire
+  // when the engine reads `constructor` and `then` during the await. The own, pinned `constructor`
+  // makes that await native, so nothing is read off the realm.
+  if (isPromise(pending)) {
+    own(pending, owner)
   }
   return pending
 }

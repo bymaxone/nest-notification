@@ -105,7 +105,7 @@ describe('NotificationHealthIndicator when the realm changes during a verificati
     const result = await indicator.check()
     restore()
 
-    expect(result).toStrictEqual({ status: 'down' })
+    expect({ ...result }).toStrictEqual({ status: 'down' })
   })
 })
 

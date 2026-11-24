@@ -12,7 +12,22 @@ import type {
   NotificationSpanName
 } from '../interfaces/notification-observer.interface'
 import type { OtpVerifyResult } from '../interfaces/otp-storage.interface'
-import { own } from './realm-root'
+import { own, silence } from './realm-root'
+
+const freezeObject = Object.freeze
+const assignTo = Object.assign
+const createBare = Object.create
+
+/**
+ * A frozen copy of a result, so an observer that is handed the operation cannot rewrite the answer the
+ * library reads again once the span has ended. The literal and the `freeze` are not looked up at call time.
+ *
+ * @param value - The result of an operation.
+ * @returns A frozen shallow copy.
+ */
+export function frozenCopy<T extends object>(value: T): Readonly<T> {
+  return freezeObject(assignTo(createBare(null) as T, value))
+}
 
 /**
  * Runs `run` inside the observer's span when it has one, and plainly when it has none, and never
@@ -30,15 +45,20 @@ export async function runInSpan<T>(
   observer: INotificationObserver | undefined,
   name: NotificationSpanName,
   attributes: NotificationSpanAttributes,
-  run: () => Promise<T>
+  run: () => Promise<T>,
+  owner = 'OtpService'
 ): Promise<T> {
   if (observer?.span === undefined) {
     // Awaited, not returned: returning a promise from an async function reads its `then`.
-    return await own(run())
+    return await own(run(), owner)
   }
   let operation: Promise<T> | undefined
   const once = (): Promise<T> => {
-    operation ??= run()
+    if (operation === undefined) {
+      operation = run()
+      // A span that waits before it settles must not leave the operation's rejection unhandled.
+      silence(operation)
+    }
     return operation
   }
   try {
@@ -46,7 +66,7 @@ export async function runInSpan<T>(
   } catch {
     // What the span made of the operation is not the operation's outcome.
   }
-  return await own(once())
+  return await own(once(), owner)
 }
 
 /**

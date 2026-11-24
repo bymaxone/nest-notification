@@ -51,9 +51,22 @@ the entries that carry one, is the compatibility contract — read it, not the n
   refusal stays outside the code that absorbs host failures, so `audit.swallowErrors` keeps its meaning.
   The branches that audit a refused generate (cooldown active, failed delivery) are pinned the same way, and
   `util.types.isPromise` is taken at load so a replaced one cannot decide that a rejection needs no handler.
+- **A host promise could still forge a verdict through the audit sink, the observer or the renderer behind
+  `sendTemplate`.** Every promise a host call returns (store, audit sink, provider, renderer) is pinned with an own
+  `constructor` before the library awaits it, and the realm is checked again after the audit write has settled; the
+  copies the library builds read `Object.assign` and `Object.create` taken at load; the verdict an observer's span is
+  handed is a frozen copy with no prototype; the hops of `send`, `sendTemplate` and the detached template check await
+  with `return await own(...)`. An operation whose span settles late no longer leaves its rejection unhandled, a
+  readiness answer that was given on a changed realm is not kept for the next call, and a final check runs right
+  before `check()` returns. `Promise.prototype.constructor` must be the engine's own `Promise` when the module loads,
+  or the load fails.
 - Known limits: code running concurrently in the same process that plants a `then` after the check and erases it before
   the store's own promise settles cannot be seen afterwards; a store or SDK that reads a `Promise` static internally is
-  its own code and is not covered; the send paths of the providers still use `then` and are not verdicts; a refusal
+  its own code and is not covered, and neither is what a provider does with its own promises; a frozen promise
+  returned by a host call is refused, but when the realm's `Promise.prototype.constructor` throws, a frozen
+  rejecting promise cannot be given a handler by any means and its rejection ends unhandled; a hook installed
+  before this module loads is not detected, since the intrinsics are the ones found at load; `Date.now` is read live
+  for `expiresAt` (`otp.service.ts`) and for the readiness cache, and a replaced clock moves those times; a refusal
   raised while the store took the resend cooldown releases it without knowing the store's answer, so an earlier
   legitimate cooldown can be cleared once.
 

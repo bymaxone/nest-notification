@@ -17,7 +17,7 @@ import { isUnavailableError } from './availability'
 import { readHostName } from './host-name'
 import { isLibraryError } from './is-library-error'
 import { nullProto, readName } from './read-options'
-import { assertStandardRealmRoot, own, silence } from './realm-root'
+import { assertStandardRealmRoot, checkedAwait, own, silence } from './realm-root'
 import { checkConfigured, checkStoreResult } from './store-results'
 
 // Taken at load: a `Function.prototype.apply` replaced later does not run the store's method.
@@ -104,14 +104,11 @@ function guardedCall(
         storage,
         args
       )
-      try {
-        assertStandardRealmRoot('OtpService')
-      } catch (refusal) {
-        // The promise the store returned is never awaited on this path: it must not end unhandled.
-        silence(pending)
-        throw refusal
-      }
-      return checkStoreResult(operation, await pending, name)
+      return checkStoreResult(
+        operation,
+        await checkedAwait(pending as Promise<unknown>, 'OtpService'),
+        name
+      )
     } catch (error) {
       throw translate(name, error)
     }

@@ -20,8 +20,24 @@ import { NOTIFICATION_HEALTH_NAME } from './constants'
 // %Promise%, so the check below compares both with what they were then and never calls either.
 const descriptorOf = Object.getOwnPropertyDescriptor
 const hasOwn = Object.hasOwn
+const assignTo = Object.assign
 const LOADED_THEN = Promise.prototype.then
-const LOADED_CONSTRUCTOR = Promise.prototype.constructor
+const LOADED_CONSTRUCTOR = loadedConstructor()
+
+/**
+ * The `constructor` slot of `Promise.prototype`, accepted only as the engine's own %Promise%: a native
+ * function whose `prototype` is the prototype of an async function's promise. A slot replaced before
+ * this module loaded would otherwise become the baseline `promisesIntact` compares with.
+ */
+function loadedConstructor(): unknown {
+  const slot = Promise.prototype.constructor
+  const nativePrototype = Object.getPrototypeOf((async (): Promise<void> => undefined)()) as unknown
+  const source = Function.prototype.toString.call(slot)
+  if (!source.endsWith('{ [native code] }') || slot.prototype !== nativePrototype) {
+    throw new TypeError('Promise.prototype.constructor is not the engine Promise at load')
+  }
+  return slot
+}
 
 const apply = Reflect.apply
 const defineOwn = Object.defineProperty
@@ -149,7 +165,14 @@ export class NotificationHealthIndicator implements IHealthIndicator {
     // the promises is answered with `down`, never with a forged `up`.
     const pending = this.isUp()
     const up = promisesIntact() ? await pending : false
-    return { status: up ? 'up' : 'down' }
+    // The last statement before the return: what ran since the await (a timer cleared, a handler
+    // settled) is covered, and the object returned is built after the check with nothing between.
+    if (promisesIntact()) {
+      return { status: up ? 'up' : 'down' }
+    }
+    // Resolving with an object reads its `then`: one planted on the realm would answer for the
+    // result, so the refusal is an object with no prototype, which has none to find.
+    return assignTo(createBare(null) as HealthIndicatorResult, { status: 'down' })
   }
 
   /** Whether the channel can be used: no provider means there is nothing to check. */
@@ -219,7 +242,10 @@ export class NotificationHealthIndicator implements IHealthIndicator {
     } finally {
       clearTimeout(timer)
     }
-    this.#verified = { at: Date.now(), up }
+    // An answer given while the realm was changed is about the realm, not the relay: it is not kept.
+    if (promisesIntact()) {
+      this.#verified = { at: Date.now(), up }
+    }
     return up
   }
 }

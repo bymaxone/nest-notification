@@ -49,11 +49,11 @@ import { logEvent } from '../utils/log-event'
 import { loggableError } from '../utils/loggable-error'
 import { maskAddressTokens, maskExact } from '../utils/mask-in-text'
 import { matchesStoredCode } from '../utils/matches-stored-code'
-import { otpEventOf, reportOtp, runInSpan } from '../utils/observe'
+import { frozenCopy, otpEventOf, reportOtp, runInSpan } from '../utils/observe'
 import { carriesFailures, countAttempt } from '../utils/otp-failure-count'
 import { outgoingError } from '../utils/outgoing-error'
 import { nullProto } from '../utils/read-options'
-import { assertStandardRealmRoot, own } from '../utils/realm-root'
+import { assertStandardRealmRoot, checkedAwait, own } from '../utils/realm-root'
 import { normalizeRecipient } from '../utils/recipient'
 import { assertSingleMailbox } from '../utils/recipient-list'
 import { attachCauseIfAbsent, readRedactedMessage } from '../utils/redact'
@@ -254,7 +254,7 @@ export class OtpService implements OnModuleInit {
     assertStandardRealmRoot('OtpService')
     const input = readVerifyInput(raw)
     try {
-      return await own(this.verifyChecked(input))
+      return frozenCopy(await own(this.verifyChecked(input)))
     } catch (error) {
       // Whatever the store raised leaves the way a failed generate's does, with the guess removed.
       throw outgoingError(error, [input.code], true)
@@ -600,7 +600,10 @@ export class OtpService implements OnModuleInit {
     if (!this.emailService) {
       throw new NotificationException('OTP_EMAIL_DELIVERY_NOT_CONFIGURED')
     }
-    await this.emailService.sendTemplate(this.buildOtpEmail(input, code, cfg))
+    await checkedAwait(
+      this.emailService.sendTemplate(this.buildOtpEmail(input, code, cfg)),
+      'OtpService'
+    )
   }
 
   /**
