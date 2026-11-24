@@ -38,9 +38,16 @@ the entries that carry one, is the compatibility contract — read it, not the n
   takes the native path and a planted `then` can neither answer for it nor drop its rejection; the error constructor reads its catalog
   through `Map.prototype.get` taken at load. A hooked `Date.now` or `Map.prototype.get` now ends as a refusal and zero
   unhandled rejections.
+- **The store's method is reached through built-ins taken at load, and the handler of an abandoned promise no longer
+  reads `Promise[Symbol.species]`.** A hooked `util.types.isProxy` could plant a `Function.prototype.apply` that
+  restored itself and answered for the store, and a wrong code returned `valid: true`; a throwing species getter kept
+  the handler from being attached and left two rejections unhandled. The host's audit promise is now awaited only after
+  the realm was checked, with nothing between the check and the `await`.
 - Known limits: code running concurrently in the same process that plants a `then` after the check and erases it before
   the store's own promise settles cannot be seen afterwards; a store or SDK that reads a `Promise` static internally is
-  its own code and is not covered; the send paths of the providers still use `then` and are not verdicts.
+  its own code and is not covered; the send paths of the providers still use `then` and are not verdicts; a refusal
+  raised while the store took the resend cooldown releases it without knowing the store's answer, so an earlier
+  legitimate cooldown can be cleared once.
 
 - **A store whose `recordFailure` answered anything but a whole number let the failure budget go unenforced.** An
   `undefined`, `NaN`, an object, `0`, `-1`, `true` or a string compared false against the ceiling, so after several

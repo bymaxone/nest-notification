@@ -34,9 +34,10 @@ function silence(value: unknown): void {
   try {
     if (isPromise(value)) {
       // An own `constructor` answers for the one `then` reads, so a planted or throwing one on
-      // `Promise.prototype` cannot keep the handler from being attached.
+      // `Promise.prototype` cannot keep the handler from being attached; `undefined` also skips
+      // the `Promise[Symbol.species]` lookup.
       const descriptor = createBare(null) as { value: unknown; configurable: boolean }
-      descriptor.value = LOADED_CONSTRUCTOR
+      descriptor.value = undefined
       descriptor.configurable = true
       defineOwn(value, 'constructor', descriptor)
       apply(LOADED_THEN, value, [noop, noop])

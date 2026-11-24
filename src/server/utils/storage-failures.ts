@@ -20,6 +20,9 @@ import { nullProto, readName } from './read-options'
 import { assertStandardRealmRoot, own, silence } from './realm-root'
 import { checkConfigured, checkStoreResult } from './store-results'
 
+// Taken at load: a `Function.prototype.apply` replaced later does not run the store's method.
+const apply = Reflect.apply
+
 /** The operations of an `IOtpStorage` that return a promise, required and optional alike. */
 const OPERATIONS = [
   'set',
@@ -96,7 +99,8 @@ function guardedCall(
 ): Promise<unknown> {
   const run = async (): Promise<unknown> => {
     try {
-      const pending = (readName(storage, operation) as (...a: unknown[]) => unknown).apply(
+      const pending = apply(
+        readName(storage, operation) as (...a: unknown[]) => unknown,
         storage,
         args
       )

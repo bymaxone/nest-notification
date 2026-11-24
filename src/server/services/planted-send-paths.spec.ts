@@ -21,7 +21,8 @@ import { OtpService } from './otp.service'
 
 jest.mock('../utils/realm-root', () => ({
   ...jest.requireActual<object>('../utils/realm-root'),
-  assertStandardRealmRoot: jest.fn()
+  assertStandardRealmRoot: jest.fn(),
+  checkedAwait: (pending: unknown) => pending
 }))
 
 const NAMES: ReadonlyArray<readonly [string, unknown]> = [

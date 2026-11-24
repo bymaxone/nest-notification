@@ -15,8 +15,11 @@
 
 import { types } from 'node:util'
 
-// Captured when the module loads, so a later replacement on `Object` cannot change what is read.
+// Captured when the module loads, so a later replacement of a built-in cannot change what is read.
 const hasOwn = Object.hasOwn
+const isProxy = types.isProxy
+const reflectGet = Reflect.get
+const getPrototypeOf = Object.getPrototypeOf
 
 /**
  * Reads one property by name the way `source[key]` does, getters and prototypes included, except
@@ -39,16 +42,16 @@ const hasOwn = Object.hasOwn
  * @returns The value, or `undefined` when there is none below the root.
  */
 export function readName(source: object, key: string | number): unknown {
-  if (types.isProxy(source) || hasOwn(source, key)) {
-    return Reflect.get(source, key)
+  if (isProxy(source) || hasOwn(source, key)) {
+    return reflectGet(source, key)
   }
   for (
-    let prototype = Object.getPrototypeOf(source) as object | null;
-    prototype !== null && Object.getPrototypeOf(prototype) !== null;
-    prototype = Object.getPrototypeOf(prototype) as object | null
+    let prototype = getPrototypeOf(source) as object | null;
+    prototype !== null && getPrototypeOf(prototype) !== null;
+    prototype = getPrototypeOf(prototype) as object | null
   ) {
     if (hasOwn(prototype, key)) {
-      return Reflect.get(source, key)
+      return reflectGet(source, key)
     }
   }
   return undefined

@@ -29,7 +29,8 @@ import { SmtpEmailProvider } from './smtp-email.provider'
 // has its own spec (`realm-root.spec.ts`).
 jest.mock('../utils/realm-root', () => ({
   ...jest.requireActual<object>('../utils/realm-root'),
-  assertStandardRealmRoot: jest.fn()
+  assertStandardRealmRoot: jest.fn(),
+  checkedAwait: (pending: unknown) => pending
 }))
 
 const MESSAGE = {

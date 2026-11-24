@@ -25,7 +25,8 @@ import { withStorageFailures } from './utils/storage-failures'
 // has its own spec (`realm-root.spec.ts`).
 jest.mock('./utils/realm-root', () => ({
   ...jest.requireActual<object>('./utils/realm-root'),
-  assertStandardRealmRoot: jest.fn()
+  assertStandardRealmRoot: jest.fn(),
+  checkedAwait: (pending: unknown) => pending
 }))
 
 // `mock`-prefixed names are allowed inside the hoisted jest.mock factories.

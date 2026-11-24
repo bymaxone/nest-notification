@@ -491,14 +491,14 @@ const defineOwn = Object.defineProperty
 const INTRINSIC_PROMISE = Promise.prototype.constructor
 const createBare = Object.create
 
-/** The descriptor of an own `constructor` holding the intrinsic Promise, with no prototype to inherit from. */
-function ownConstructor(): PropertyDescriptor {
+/** The descriptor of an own `constructor` holding `value`, with no prototype to inherit from. */
+function ownConstructor(value: unknown): PropertyDescriptor {
   const descriptor = createBare(null) as {
     value: unknown
     configurable: boolean
     writable: boolean
   }
-  descriptor.value = INTRINSIC_PROMISE
+  descriptor.value = value
   descriptor.configurable = true
   descriptor.writable = true
   return descriptor
@@ -513,7 +513,7 @@ function ownConstructor(): PropertyDescriptor {
  */
 export function own<T>(promise: Promise<T>): Promise<T> {
   try {
-    defineOwn(promise, 'constructor', ownConstructor())
+    defineOwn(promise, 'constructor', ownConstructor(INTRINSIC_PROMISE))
   } catch {
     // A realm that refuses even this is refused by the check that follows.
   }
@@ -531,11 +531,32 @@ export function silence(promise: unknown): void {
     if (types.isPromise(promise)) {
       // `then` reads `constructor` of the promise it is called on: an own one answers for it, so a
       // `constructor` planted or made to throw on `Promise.prototype` cannot decide whether the
-      // handler is attached.
-      defineOwn(promise, 'constructor', ownConstructor())
+      // handler is attached. It is `undefined`, not %Promise%: that makes the species lookup skip
+      // `Promise[Symbol.species]`, a getter the realm could make throw.
+      defineOwn(promise, 'constructor', ownConstructor(undefined))
       intrinsicThen(promise, noop, noop)
     }
   } catch {
     // A realm that refuses even this is already refused by the check that called it.
   }
+}
+
+/**
+ * Checks the realm and hands back the promise the caller awaits on the very next token: a host's
+ * promise is never awaited on a realm whose promises the call that made it replaced.
+ *
+ * @param pending - A promise a host call returned.
+ * @param owner - The boundary named in the refusal.
+ * @returns `pending`, unchanged.
+ * @throws NotificationException `INVALID_SCOPE_IDENTIFIER` when the realm was changed; `pending` is
+ * then given a handler, since nobody will await it.
+ */
+export function checkedAwait<T>(pending: Promise<T>, owner: string): Promise<T> {
+  try {
+    assertStandardRealmRoot(owner)
+  } catch (refusal) {
+    silence(pending)
+    throw refusal
+  }
+  return pending
 }
