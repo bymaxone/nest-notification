@@ -389,3 +389,44 @@ describe('OtpService.generate when the audit call on a refused branch plants a f
     expect(outcome).toBe('notification.invalid_scope_identifier')
   })
 })
+
+describe('OtpService.generate when the store call that undoes a failed delivery plants a forgery', () => {
+  afterEach(restore)
+
+  it('should end refused with nothing unhandled', async () => {
+    const storage = new InMemoryOtpStorage()
+    const service = new OtpService(makeOptions(), storage, makeAudit())
+    ;(service as unknown as { deliverOtp: () => Promise<void> }).deliverOtp = () =>
+      Promise.reject(new Error('delivery down'))
+    storage.delete = (() => {
+      Object.defineProperty(PROTO, 'constructor', {
+        value: function Fake() {
+          /* never constructed */
+        },
+        writable: true,
+        configurable: true
+      })
+      Object.defineProperty(PROTO, 'then', {
+        value: function then(onFulfilled: (value: unknown) => unknown) {
+          restore()
+          onFulfilled(undefined)
+        },
+        writable: true,
+        configurable: true
+      })
+      return Promise.resolve(false)
+    }) as never
+
+    let outcome: string | undefined
+    const unhandled = await recordingUnhandled(async () => {
+      outcome = await service.generate({ ...ref, deliverVia: 'email' }).then(
+        () => 'resolved',
+        (error: { code?: string }) => error.code
+      )
+      restore()
+    })
+
+    expect(unhandled).toStrictEqual([])
+    expect(outcome).toBe('notification.invalid_scope_identifier')
+  })
+})
