@@ -42,6 +42,7 @@ import type { IOtpStorage, OtpEntry, OtpVerifyResult } from '../interfaces/otp-s
 import { AuditWriteWarning } from '../utils/audit-write-warning'
 import { generateOtpCode } from '../utils/code-generator'
 import { cooldownExpiresAt, toRetryAfterHeader } from '../utils/cooldown-helpers'
+import { releaseCooldownAfterRefusal } from '../utils/cooldown-release'
 import { readHostName, textOfHostName } from '../utils/host-name'
 import { logEvent } from '../utils/log-event'
 import { loggableError } from '../utils/loggable-error'
@@ -341,10 +342,14 @@ export class OtpService implements OnModuleInit {
     const input = readRefInput(raw)
     this.assertScope(input)
     const scope = this.keyed(input)
-    const [entry, cooldownSeconds] = await Promise.all([
-      this.storage.get(scope.tenantId, scope.recipient, scope.purpose),
-      this.storage.getCooldown(scope.tenantId, scope.recipient, scope.purpose)
-    ])
+    // One await at a time: each is checked by the wrapper right before it, and `Promise.all` reads
+    // `Promise.resolve` and `then` of the realm.
+    const entry = await this.storage.get(scope.tenantId, scope.recipient, scope.purpose)
+    const cooldownSeconds = await this.storage.getCooldown(
+      scope.tenantId,
+      scope.recipient,
+      scope.purpose
+    )
     if (!entry) {
       return { exists: false, cooldownSeconds }
     }
@@ -363,12 +368,20 @@ export class OtpService implements OnModuleInit {
     ref: OtpRecipientRef,
     cooldownSeconds: number
   ): Promise<void> {
-    const hasCooldownLock = await this.storage.tryAcquireCooldown(
-      ref.tenantId,
-      ref.recipient,
-      ref.purpose,
-      cooldownSeconds
-    )
+    let hasCooldownLock: boolean
+    try {
+      hasCooldownLock = await this.storage.tryAcquireCooldown(
+        ref.tenantId,
+        ref.recipient,
+        ref.purpose,
+        cooldownSeconds
+      )
+    } catch (error) {
+      // A refusal of the realm comes after the store took the lock: give it back, as the check that
+      // follows a successful acquire does, so the recipient is not locked out of generating.
+      await releaseCooldownAfterRefusal(this.storage, ref, error)
+      throw error
+    }
     if (hasCooldownLock) {
       return
     }
@@ -598,7 +611,7 @@ export class OtpService implements OnModuleInit {
     try {
       assertStandardRealmRoot('OtpService')
     } catch (error) {
-      await this.storage.clearCooldown(ref.tenantId, ref.recipient, ref.purpose)
+      await releaseCooldownAfterRefusal(this.storage, ref, error)
       throw error
     }
   }

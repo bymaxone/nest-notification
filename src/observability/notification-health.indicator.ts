@@ -5,6 +5,8 @@
  * @layer observability
  */
 
+import { types } from 'node:util'
+
 import { BymaxHealthIndicator } from '@bymax-one/nest-core/health'
 import type { HealthIndicatorResult, IHealthIndicator } from '@bymax-one/nest-core/health'
 import { Inject, Injectable, Optional } from '@nestjs/common'
@@ -13,6 +15,39 @@ import { BYMAX_NOTIFICATION_EMAIL_PROVIDER } from '@bymax-one/nest-notification'
 import type { IEmailProvider } from '@bymax-one/nest-notification'
 
 import { NOTIFICATION_HEALTH_NAME } from './constants'
+
+// Taken when the module loads: an `await` reads `constructor` of the promise and calls `then` unless it is
+// %Promise%, so the check below compares both with what they were then and never calls either.
+const descriptorOf = Object.getOwnPropertyDescriptor
+const hasOwn = Object.hasOwn
+const LOADED_THEN = Promise.prototype.then
+const LOADED_CONSTRUCTOR = Promise.prototype.constructor
+
+const apply = Reflect.apply
+const noop = (): void => undefined
+const isPromise = types.isPromise
+
+/** Gives a promise that will not be awaited a handler, with the `then` taken at load. Never throws. */
+function silence(value: unknown): void {
+  try {
+    if (isPromise(value)) {
+      apply(LOADED_THEN, value, [noop, noop])
+    }
+  } catch {
+    // Nothing more can be done for it.
+  }
+}
+
+/** Whether the promise machinery is what it was at load, with no `then` on the root prototypes. */
+function promisesIntact(): boolean {
+  return (
+    descriptorOf(Promise.prototype, 'then')?.value === LOADED_THEN &&
+    descriptorOf(Promise.prototype, 'constructor')?.value === LOADED_CONSTRUCTOR &&
+    !hasOwn(Object.prototype, 'then') &&
+    !hasOwn(Array.prototype, 'then') &&
+    !hasOwn(Function.prototype, 'then')
+  )
+}
 
 /** Injection token of the options of {@link NotificationHealthIndicator}. */
 export const NOTIFICATION_HEALTH_OPTIONS = Symbol('NOTIFICATION_HEALTH_OPTIONS')
@@ -101,7 +136,11 @@ export class NotificationHealthIndicator implements IHealthIndicator {
    * @returns `{ status }` and nothing else.
    */
   async check(): Promise<HealthIndicatorResult> {
-    return { status: (await this.isUp()) ? 'up' : 'down' }
+    // Checked right before the await, which reads the promise's `constructor`: a realm that changed
+    // the promises is answered with `down`, never with a forged `up`.
+    const pending = this.isUp()
+    const up = promisesIntact() ? await pending : false
+    return { status: up ? 'up' : 'down' }
   }
 
   /** Whether the channel can be used: no provider means there is nothing to check. */
@@ -114,37 +153,60 @@ export class NotificationHealthIndicator implements IHealthIndicator {
     if (!configured(provider)) {
       return false
     }
-    return canVerify(provider) ? this.verified(provider) : true
+    if (!canVerify(provider)) {
+      return true
+    }
+    const pending = this.verified(provider)
+    // Awaited here, not returned: returning a promise from an async function reads its `then`.
+    const up = promisesIntact() ? await pending : false
+    return up
   }
 
   /** The answer of the last verification while it is fresh, else a new one, shared by all callers. */
-  private verified(provider: VerifiableProvider): Promise<boolean> {
+  private async verified(provider: VerifiableProvider): Promise<boolean> {
     const last = this.#verified
     if (last !== undefined) {
       const ttl = last.up ? this.#options.successTtlMs : this.#options.failureTtlMs
       if (Date.now() - last.at < ttl) {
-        return Promise.resolve(last.up)
+        return last.up
       }
     }
-    this.#inFlight ??= this.verifyOnce(provider).finally(() => {
+    this.#inFlight ??= this.verifyOnce(provider)
+    const pending = this.#inFlight
+    const up = promisesIntact() ? await pending : false
+    if (this.#inFlight === pending) {
       this.#inFlight = undefined
-    })
-    return this.#inFlight
+    }
+    return up
   }
 
   /** Verifies once, bounded by the timeout, and keeps the answer. */
   private async verifyOnce(provider: VerifiableProvider): Promise<boolean> {
     let timer: NodeJS.Timeout | undefined
-    const timedOut = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => {
-        reject(new Error())
-      }, this.#options.timeoutMs)
-    })
-    let up = true
+    let up: boolean
     try {
-      await Promise.race([provider.verify(), timedOut])
-    } catch {
-      up = false
+      // The first answer wins and each is a boolean: no `Promise.race`, no `then` to read.
+      const pending = new Promise<boolean>((resolve) => {
+        timer = setTimeout(() => {
+          resolve(false)
+        }, this.#options.timeoutMs)
+        void (async (): Promise<void> => {
+          try {
+            const started = provider.verify()
+            if (!promisesIntact()) {
+              // Never awaited on this path: a handler keeps a rejection from ending unhandled.
+              silence(started)
+              resolve(false)
+              return
+            }
+            await started
+            resolve(true)
+          } catch {
+            resolve(false)
+          }
+        })()
+      })
+      up = promisesIntact() ? await pending : false
     } finally {
       clearTimeout(timer)
     }

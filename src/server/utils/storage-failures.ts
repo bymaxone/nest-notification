@@ -17,6 +17,7 @@ import { isUnavailableError } from './availability'
 import { readHostName } from './host-name'
 import { isLibraryError } from './is-library-error'
 import { nullProto, readName } from './read-options'
+import { assertStandardRealmRoot, silence } from './realm-root'
 import { checkConfigured, checkStoreResult } from './store-results'
 
 /** The operations of an `IOtpStorage` that return a promise, required and optional alike. */
@@ -81,6 +82,48 @@ function translate(name: string, error: unknown): unknown {
 }
 
 /**
+ * Runs one operation of the store and answers with a native promise the caller can await. The realm
+ * root is checked after the store's method was called and before its promise is awaited, and again
+ * before this function returns, so the caller's own `await` follows a check with nothing between: a
+ * `then` or a `constructor` planted on the promises cannot answer for either await. The answer is a
+ * primitive or an object with no prototype, so resolving with it reads no `then`.
+ */
+function guardedCall(
+  operation: string,
+  storage: IOtpStorage,
+  name: string,
+  args: unknown[]
+): Promise<unknown> {
+  const run = async (): Promise<unknown> => {
+    try {
+      const pending = (readName(storage, operation) as (...a: unknown[]) => unknown).apply(
+        storage,
+        args
+      )
+      try {
+        assertStandardRealmRoot('OtpService')
+      } catch (refusal) {
+        // The promise the store returned is never awaited on this path: it must not end unhandled.
+        silence(pending)
+        throw refusal
+      }
+      return checkStoreResult(operation, await pending, name)
+    } catch (error) {
+      throw translate(name, error)
+    }
+  }
+  const promise = run()
+  try {
+    assertStandardRealmRoot('OtpService')
+  } catch (error) {
+    // The refusal is what the caller sees; the promise that was started is not left unhandled.
+    silence(promise)
+    throw error
+  }
+  return promise
+}
+
+/**
  * Wraps a store so a failure of it is reported as `OTP_STORAGE_UNAVAILABLE` or `OTP_STORAGE_FAILED`.
  *
  * The wrapper has exactly the operations the store has: an optional operation the store does not
@@ -116,20 +159,7 @@ export function withStorageFailures(storage: IOtpStorage): IOtpStorage {
       operation,
       nullProto({
         enumerable: true,
-        value: async (...args: unknown[]): Promise<unknown> => {
-          try {
-            return checkStoreResult(
-              operation,
-              await (readName(storage, operation) as (...a: unknown[]) => Promise<unknown>).apply(
-                storage,
-                args
-              ),
-              name
-            )
-          } catch (error) {
-            throw translate(name, error)
-          }
-        }
+        value: (...args: unknown[]): Promise<unknown> => guardedCall(operation, storage, name, args)
       })
     )
   }

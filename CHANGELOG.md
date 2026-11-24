@@ -15,6 +15,20 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 ### Fixed
 
+- **A wrong code could be accepted when something in the process replaced the promises the verdict is awaited through.**
+  `await` reads the `constructor` of a promise and, when it is not the intrinsic one, calls the promise's `then`; a
+  `then` on `Promise.prototype` together with a `constructor` that answers once, or a `then` planted on
+  `Object.prototype` that erases itself when read, could hand `verify` a forged answer from the store, and the wrong
+  code returned `valid: true`. The realm check now also holds `Promise`, `Promise.prototype.then` and
+  `Promise.prototype.constructor`, and refuses a `then` on `Array.prototype` or `Function.prototype`; every store call
+  is checked right after the store's method was called and again right before the caller's `await`, with nothing between;
+  the answers of the store reach the service as primitives or objects with no prototype, so resolving with them reads no
+  `then`; `getStatus` no longer uses `Promise.all`; and the readiness check no longer uses `Promise.race` and answers
+  `down` when the promises were replaced. A refusal gives the resend cooldown back when the store had taken it.
+- Known limits: code running concurrently in the same process that plants a `then` after the check and erases it before
+  the store's own promise settles cannot be seen afterwards; a store or SDK that reads a `Promise` static internally is
+  its own code and is not covered; the send paths of the providers still use `then` and are not verdicts.
+
 - **A store whose `recordFailure` answered anything but a whole number let the failure budget go unenforced.** An
   `undefined`, `NaN`, an object, `0`, `-1`, `true` or a string compared false against the ceiling, so after several
   wrong guesses and a re-issue the right code returned `valid: true`. The count must now be an integer of at least `1`,

@@ -42,10 +42,8 @@ const GLOBALS = [
 const EXEMPT: Readonly<Record<string, string>> = {
   'Date.now':
     'The clock. A host that fakes it in a test (jest or sinon fake timers replace Date after the import) must still send; OTP expiry and cooldown use the live clock, stated in the README.',
-  'Promise.all':
-    'A flow primitive: no recipient, scope, mask or code decision depends on it, and a test may spy on it.',
   'Promise.resolve':
-    'A flow primitive: no recipient, scope, mask or code decision depends on it, and a test may spy on it.'
+    'Only in the React hook that defers a UI update by a microtask (src/react): no verdict, recipient, scope or code decision depends on it, and the hook never runs on the server.'
 }
 
 const PROTOTYPES: ReadonlyArray<readonly [string, object]> = [
@@ -160,5 +158,61 @@ describe('the load baseline of built-ins', () => {
   it('should read the sources: more than a handful of calls, so an empty read cannot pass', () => {
     expect(calls.statics.size).toBeGreaterThan(20)
     expect(calls.methods.size).toBeGreaterThan(30)
+  })
+})
+
+/**
+ * The places that touch a promise through something the realm can replace: a static of `Promise`
+ * (`all`, `race`, `resolve`, `try`, `withResolvers`...), by name, bracket or destructuring, and a call
+ * of `then`, `catch` or `finally`. A decision never goes through any of them: each await of a verdict
+ * is checked by the realm guard right before it. The sources that remain are listed with their count
+ * and a reason, and a new one fails here until somebody states why it is not a decision.
+ */
+const PROMISE_PATTERN =
+  /\bPromise\s*(?:\.\s*(?!prototype\b)[A-Za-z_]+|\[)|=\s*Promise\b(?!\s*\.)|\.\s*(?:then|catch|finally)\s*\(|\bthen\s*\.\s*call|\[\s*['"`](?:then|catch|finally)['"`]\s*\]/gu
+
+/** The reads that stay: the file, how many, and why none of them decides anything. */
+const PROMISE_EXEMPT: Readonly<Record<string, { count: number; reason: string }>> = {
+  'src/server/providers/resend-email.provider.ts': {
+    count: 2,
+    reason: 'Bounds a send by a timer; the send is not an OTP verdict and carries no stored code.'
+  },
+  'src/server/providers/smtp-email.provider.ts': {
+    count: 4,
+    reason: 'Bounds a send, refuses a relay and settles a transport build; none decides a verdict.'
+  }
+}
+
+describe('the promises the library reads', () => {
+  const found = (): Map<string, number> => {
+    const hits = new Map<string, number>()
+    for (const folder of ['src/server', 'src/observability']) {
+      for (const file of readdirSync(folder, { recursive: true, encoding: 'utf8' })) {
+        const path = join(folder, file)
+        if (!path.endsWith('.ts') || /\.spec\.ts$|__tests__|\.d\.ts$/u.test(path)) {
+          continue
+        }
+        const code = readFileSync(path, 'utf8')
+          .replace(/\/\*[\s\S]*?\*\//gu, '')
+          .replace(/^\s*\/\/.*$/gmu, '')
+        const count = [...code.matchAll(PROMISE_PATTERN)].length
+        if (count > 0) {
+          hits.set(path, count)
+        }
+      }
+    }
+    return hits
+  }
+
+  it('should read no promise static and call no then, catch or finally outside the listed sources', () => {
+    const unexpected = [...found()].filter(([file, count]) => PROMISE_EXEMPT[file]?.count !== count)
+
+    expect(unexpected).toStrictEqual([])
+  })
+
+  it('should keep no listed source that no longer reads one', () => {
+    const stale = Object.keys(PROMISE_EXEMPT).filter((file) => !found().has(file))
+
+    expect(stale).toStrictEqual([])
   })
 })

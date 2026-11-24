@@ -159,7 +159,19 @@ const MAP_ITERATOR = Object.getPrototypeOf(new Map()[Symbol.iterator]()) as obje
 const BASELINE: ReadonlyArray<readonly [object, readonly PropertyKey[]]> = [
   [
     globalThis,
-    ['Object', 'Reflect', 'Array', 'Math', 'Number', 'String', 'RegExp', 'Set', 'Map', 'Symbol']
+    [
+      'Object',
+      'Reflect',
+      'Array',
+      'Math',
+      'Number',
+      'String',
+      'RegExp',
+      'Set',
+      'Map',
+      'Symbol',
+      'Promise'
+    ]
   ],
   [
     Object,
@@ -297,6 +309,8 @@ const BASELINE: ReadonlyArray<readonly [object, readonly PropertyKey[]]> = [
       Symbol.iterator
     ]
   ],
+  // An `await` reads the `constructor` of what it awaits and calls its `then` when that is not %Promise%.
+  [Promise.prototype, ['constructor', 'then']],
   [Date.prototype, [Symbol.toPrimitive]],
   // `crypto.randomInt` reads its random bytes with it, so a replaced one decides the code.
   [Buffer.prototype, ['readUIntBE']],
@@ -402,6 +416,24 @@ function changed(index: number): boolean {
   return false
 }
 
+/** The prototypes that must never own a `then`: it would answer for every array or function resolved. */
+const THEN_FREE: readonly object[] = [Array.prototype, Function.prototype]
+
+/**
+ * How many of {@link THEN_FREE} own a `then`. `Object.prototype` is covered by the key check.
+ *
+ * @returns The count.
+ */
+function plantedThens(): number {
+  let planted = 0
+  for (let index = 0; index < THEN_FREE.length; index += 1) {
+    if (hasOwn(nth(THEN_FREE, index) as object, 'then')) {
+      planted += 1
+    }
+  }
+  return planted
+}
+
 /**
  * Whether a symbol key of the root is the one jest puts there: that registered symbol, not enumerable.
  *
@@ -423,7 +455,7 @@ function isProtection(symbol: symbol): boolean {
  */
 export function assertStandardRealmRoot(owner: string): void {
   const names = namesOf(ROOT)
-  let count = POLLUTED_AT_LOAD + replacedBuiltins()
+  let count = POLLUTED_AT_LOAD + replacedBuiltins() + plantedThens()
   for (let at = 0; at < names.length; at += 1) {
     if (!setHas(STANDARD_ROOT_KEYS, nth(names, at) as string)) {
       count += 1
@@ -446,5 +478,28 @@ export function assertStandardRealmRoot(owner: string): void {
       'Object.prototype',
       `holds ${count} key(s) or built-in(s) that are not the standard ones, so the operation is refused`
     )
+  }
+}
+
+const intrinsicThen = uncurry(Promise.prototype.then) as (
+  promise: Promise<unknown>,
+  onFulfilled: () => void,
+  onRejected: () => void
+) => unknown
+const noop = (): void => undefined
+
+/**
+ * Attaches a handler that does nothing to a promise, with the `then` captured at load, so a promise
+ * the caller will not await never ends as an unhandled rejection. Never throws.
+ *
+ * @param promise - Whatever a call returned; anything that is not a promise is left alone.
+ */
+export function silence(promise: unknown): void {
+  try {
+    if (types.isPromise(promise)) {
+      intrinsicThen(promise, noop, noop)
+    }
+  } catch {
+    // A realm that refuses even this is already refused by the check that called it.
   }
 }
