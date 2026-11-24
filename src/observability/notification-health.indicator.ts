@@ -224,7 +224,7 @@ export class NotificationHealthIndicator implements IHealthIndicator {
     // Checked right before the await, which reads the promise's `constructor`: a realm that changed
     // the promises is answered with `down`, never with a forged `up`.
     const pending = this.isUp()
-    // Stryker disable next-line BooleanLiteral: equivalent — this guard is one of three that run in the same synchronous stretch (verdict, isUp, verified) after provider.verify() with no host code between them, and promisesIntact() reads only descriptorOf, hasOwn and reflectGet captured at load, so once it returns false it stays false until verdict's own check refuses; the `true` branch is never read, and no test of the public surface can observe it
+    // Stryker disable next-line BooleanLiteral: equivalent — this guard is one of up to three that run in the same synchronous stretch (verdict, isUp, verified) after provider.verify() was called, or after the fresh cached answer was read, which skips provider.verify() and the guard in verified, with no host code between them, and promisesIntact() reads only descriptorOf, hasOwn and reflectGet captured at load, so once it returns false it stays false until verdict's own check refuses; the `true` branch is never read, and no test of the public surface can observe it
     const up = promisesIntact() ? await pending : false
     // The last statement before the return: what ran since the await (a timer cleared, a handler
     // settled) is covered, and the object returned is built after the check with nothing between.
@@ -251,7 +251,7 @@ export class NotificationHealthIndicator implements IHealthIndicator {
     }
     const pending = this.verified(provider)
     // Awaited here, not returned: returning a promise from an async function reads its `then`.
-    // Stryker disable next-line BooleanLiteral: equivalent — this guard is one of three that run in the same synchronous stretch (verdict, isUp, verified) after provider.verify() with no host code between them, and promisesIntact() reads only descriptorOf, hasOwn and reflectGet captured at load, so once it returns false it stays false until verdict's own check refuses; the `true` branch is never read, and no test of the public surface can observe it
+    // Stryker disable next-line BooleanLiteral: equivalent — this guard is one of up to three that run in the same synchronous stretch (verdict, isUp, verified) after provider.verify() was called, or after the fresh cached answer was read, which skips provider.verify() and the guard in verified, with no host code between them, and promisesIntact() reads only descriptorOf, hasOwn and reflectGet captured at load, so once it returns false it stays false until verdict's own check refuses; the `true` branch is never read, and no test of the public surface can observe it
     const up = promisesIntact() ? await pending : false
     return up
   }
@@ -267,7 +267,7 @@ export class NotificationHealthIndicator implements IHealthIndicator {
     }
     this.#inFlight ??= this.verifyOnce(provider)
     const pending = this.#inFlight
-    // Stryker disable next-line BooleanLiteral: equivalent — this guard is one of three that run in the same synchronous stretch (verdict, isUp, verified) after provider.verify() with no host code between them, and promisesIntact() reads only descriptorOf, hasOwn and reflectGet captured at load, so once it returns false it stays false until verdict's own check refuses; the `true` branch is never read, and no test of the public surface can observe it
+    // Stryker disable next-line BooleanLiteral: equivalent — this guard is one of up to three that run in the same synchronous stretch (verdict, isUp, verified) after provider.verify() was called, or after the fresh cached answer was read, which skips provider.verify() and the guard in verified, with no host code between them, and promisesIntact() reads only descriptorOf, hasOwn and reflectGet captured at load, so once it returns false it stays false until verdict's own check refuses; the `true` branch is never read, and no test of the public surface can observe it
     const up = promisesIntact() ? await pending : false
     if (this.#inFlight === pending) {
       this.#inFlight = undefined

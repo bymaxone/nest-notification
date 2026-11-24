@@ -11,6 +11,20 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 ## [Unreleased]
 
+## [1.4.24] - 2026-11-24
+
+### Documentation
+
+- **The refusal while `Object.prototype` holds a planted key is now documented where it is read.** The 1.4.23 entry
+  said a value found only on the realm-root prototype was "absent"; the code refuses instead: while such a key is
+  present, email and OTP calls fail with `notification.invalid_scope_identifier`. The entry now says so, and the README
+  error table names the case. The comments that explain why three guards of the health indicator cannot be killed, and
+  the reason the guard-family scan lists for that file, now describe the cached path and the one await of a value that
+  is not a promise. The mutation-inventory parity spec also asserts that every spec importing no module of `src` is in
+  the exempt list.
+
+`dist/` is unchanged from 1.4.23.
+
 ## [1.4.23] - 2026-11-22
 
 ### Fixed
@@ -141,8 +155,9 @@ unknown` keeps its brackets). The at-sign is `@`, fullwidth `\uff20`, small `\uf
   follows the prototype chain to the realm root, so code that ran first could set `Object.prototype.bcc` (a copy of every
   message), `maxAttempts`, `resendCooldownSeconds` or `codeSecret` (the limits and the key of the codes), `maskRecipient`,
   `host` or `apiKey` (a provider that is configured and points elsewhere), and any option the host left unset took the
-  value. A value found only on the realm-root prototype is now absent; an own property, a property of a class of yours
-  and a getter on its prototype still count. The options and the message
+  value. A value found only on the realm-root prototype is not read as a value; while such a key is present, email and OTP
+  calls refuse with `notification.invalid_scope_identifier` rather than proceeding as if it were absent. An own
+  property, a property of a class of yours and a getter on its prototype still count. The options and the message
   handed to a provider have no prototype, so a key that is not set is absent for a custom provider too.
   The same holds for what the library hands to a mail transport, an SDK, a renderer or a store: the SMTP message and
   transport configuration (nodemailer reads keys this library never sets, and a planted key must not answer for them),
@@ -2004,7 +2019,8 @@ rejected at startup rather than failing on the first send.
 
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.4.23...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.4.24...HEAD
+[1.4.24]: https://github.com/bymaxone/nest-notification/compare/v1.4.23...v1.4.24
 [1.4.23]: https://github.com/bymaxone/nest-notification/compare/v1.4.22...v1.4.23
 [1.4.22]: https://github.com/bymaxone/nest-notification/compare/v1.4.21...v1.4.22
 [1.4.21]: https://github.com/bymaxone/nest-notification/compare/v1.4.20...v1.4.21

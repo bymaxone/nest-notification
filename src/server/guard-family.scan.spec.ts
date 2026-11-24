@@ -100,7 +100,7 @@ const EXEMPT: Readonly<Record<string, { count: number; reason: string }>> = {
   'observability/notification-health.indicator.ts': {
     count: 6,
     reason:
-      'Each await follows promisesIntact() in the same expression and the answer is checked again before the result is built; absorbRejection awaits a promise no handler could be attached to; the verification promise itself is heard with the load-time then. The check is best-effort: a clock or timer replaced by same-process code is outside it (SECURITY.md, threat model).'
+      'Each await of a promise follows promisesIntact() in the same expression, and the one await of a value the host returned that is not a promise (`await started`) follows the promisesIntact() check made just before it; the answer is checked again before the result is built; absorbRejection awaits a promise no handler could be attached to; the verification promise itself is heard with the load-time then. The check is best-effort: a clock or timer replaced by same-process code is outside it (SECURITY.md, threat model).'
   },
   'observability/notification-tracing.ts': {
     count: 1,
