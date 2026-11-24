@@ -6,6 +6,7 @@
 
 import { NotificationException } from '../errors/notification-exception'
 import { describeError } from './describe-error'
+import { nullProto } from './read-options'
 
 /** Marker substituted for a secret value wherever it is redacted. */
 export const REDACTED_VALUE = '[redacted]'
@@ -531,10 +532,11 @@ function wireCauses(
     if (link.representative === link.node) {
       Reflect.set(link.node, 'cause', childRepresentative)
     } else {
-      Object.defineProperty(link.representative, 'cause', {
-        value: childRepresentative,
-        writable: true
-      })
+      Object.defineProperty(
+        link.representative,
+        'cause',
+        nullProto({ value: childRepresentative, writable: true })
+      )
     }
   }
 }
@@ -643,11 +645,15 @@ function cloneRedacted(root: unknown, values: readonly string[]): unknown {
       // key, and redefining a non-configurable property would throw. An
       // accessor-backed value is never INVOKED — it is withheld outright, so a
       // hostile getter cannot throw a secret-bearing error from mid-clone.
-      Object.defineProperty(entry.target, redactValues(key, values), {
-        value: 'value' in descriptor ? cloneValue(descriptor.value) : REDACTED_VALUE,
-        enumerable: true,
-        configurable: true
-      })
+      Object.defineProperty(
+        entry.target,
+        redactValues(key, values),
+        nullProto({
+          value: 'value' in descriptor ? cloneValue(descriptor.value) : REDACTED_VALUE,
+          enumerable: true,
+          configurable: true
+        })
+      )
     }
   }
   return result
@@ -754,7 +760,7 @@ function stripExtraProperties(node: Error, values: readonly string[]): boolean {
  */
 function buildRedactedCopy(name: string, message: string, stack: string | undefined): Error {
   const copy = new Error(message)
-  Object.defineProperty(copy, 'name', { value: name, writable: true })
+  Object.defineProperty(copy, 'name', nullProto({ value: name, writable: true }))
   if (stack !== undefined) {
     copy.stack = stack
   }

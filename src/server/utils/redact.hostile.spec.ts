@@ -360,3 +360,26 @@ describe('collectErrorChainText — chain-wide echo discovery input', () => {
     expect(collectErrorChainText(error)).toContain('string tail 998877')
   })
 })
+
+describe('scrubValuesFromErrorChain — a key planted under the name of a descriptor field', () => {
+  afterEach(() => {
+    Reflect.deleteProperty(Object.prototype, 'enumerable')
+  })
+
+  it('should keep the name and the cause of the copy out of the keys of the copy', () => {
+    Object.defineProperty(Object.prototype, 'enumerable', {
+      value: true,
+      configurable: true,
+      writable: true
+    })
+    // Frozen, so the scrub cannot rewrite them in place and builds a copy of each.
+    const error = Object.freeze(
+      new Error('token sk_live_1 failed', { cause: Object.freeze(new Error('inner sk_live_1')) })
+    )
+
+    const scrubbed = scrubValuesFromErrorChain(error, ['sk_live_1']) as Error
+
+    expect(Object.keys(scrubbed)).toStrictEqual([])
+    expect(Object.keys(scrubbed.cause as Error)).toStrictEqual([])
+  })
+})

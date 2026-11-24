@@ -45,6 +45,29 @@ function plant(): void {
 }
 
 describe('GuardedConnection', () => {
+  it('should be destroyed when the socket underneath closes', async () => {
+    const connection = new GuardedConnection(inner)
+    const onClose = jest.fn()
+    connection.on('close', onClose)
+
+    inner.destroy()
+    await settle()
+
+    expect(connection.destroyed).toBe(true)
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('should report the idle timeout of the socket underneath as its own', async () => {
+    const connection = new GuardedConnection(inner)
+    const onTimeout = jest.fn()
+    connection.on('timeout', onTimeout)
+
+    inner.setTimeout(10)
+    await settle()
+
+    expect(onTimeout).toHaveBeenCalledTimes(1)
+  })
+
   it('should write what it is given to the socket underneath', async () => {
     const connection = new GuardedConnection(inner)
 

@@ -179,3 +179,21 @@ describe('withStorageFailures', () => {
     expect((caught as Error).message).not.toContain('host')
   })
 })
+
+describe('a key planted on the realm root under the name of a field of a descriptor', () => {
+  afterEach(() => {
+    Reflect.deleteProperty(Object.prototype, 'get')
+  })
+
+  it('should wrap the operations of a store as before when get is planted', () => {
+    Object.defineProperty(Object.prototype, 'get', {
+      value: () => 'planted',
+      configurable: true,
+      writable: true
+    })
+
+    const wrapped = withStorageFailures(new InMemoryOtpStorage())
+
+    expect(typeof Object.getOwnPropertyDescriptor(wrapped, 'set')?.value).toBe('function')
+  })
+})

@@ -507,6 +507,19 @@ describe('a key planted after the checks of a send began and before its first by
     }
   )
 
+  it('should name the SMTP adapter in the refusal, not leave its owner blank', async () => {
+    relay = await startRelay({ onConnect: () => plant('address', 'evil@attacker.test') })
+
+    let caught: { getResponse(): unknown } | undefined
+    try {
+      await new SmtpEmailProvider({ host: '127.0.0.1', port: relay.port }).send(MESSAGE)
+    } catch (error) {
+      caught = error as { getResponse(): unknown }
+    }
+
+    expect(JSON.stringify(caught?.getResponse())).toContain('"boundary":"SmtpEmailProvider"')
+  })
+
   it('should destroy an implicit-TLS connection and refuse the send when a key is planted', async () => {
     const certificate = makeCertificate()
     relay = await startRelay({

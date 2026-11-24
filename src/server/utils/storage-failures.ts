@@ -111,23 +111,27 @@ export function withStorageFailures(storage: IOtpStorage): IOtpStorage {
     if (!hasOperation(storage, operation)) {
       continue
     }
-    Object.defineProperty(wrapped, operation, {
-      enumerable: true,
-      value: async (...args: unknown[]): Promise<unknown> => {
-        try {
-          return checkStoreResult(
-            operation,
-            await (readName(storage, operation) as (...a: unknown[]) => Promise<unknown>).apply(
-              storage,
-              args
-            ),
-            name
-          )
-        } catch (error) {
-          throw translate(name, error)
+    Object.defineProperty(
+      wrapped,
+      operation,
+      nullProto({
+        enumerable: true,
+        value: async (...args: unknown[]): Promise<unknown> => {
+          try {
+            return checkStoreResult(
+              operation,
+              await (readName(storage, operation) as (...a: unknown[]) => Promise<unknown>).apply(
+                storage,
+                args
+              ),
+              name
+            )
+          } catch (error) {
+            throw translate(name, error)
+          }
         }
-      }
-    })
+      })
+    )
   }
   return wrapped as unknown as IOtpStorage
 }
