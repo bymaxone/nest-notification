@@ -269,7 +269,6 @@ export class NotificationHealthIndicator implements IHealthIndicator {
     const pending = this.#inFlight
     // Stryker disable next-line BooleanLiteral: equivalent — this guard is one of three that run in the same synchronous stretch (verdict, isUp, verified) after provider.verify() with no host code between them, and promisesIntact() reads only descriptorOf, hasOwn and reflectGet captured at load, so once it returns false it stays false until verdict's own check refuses; the `true` branch is never read, and no test of the public surface can observe it
     const up = promisesIntact() ? await pending : false
-    // Stryker disable next-line ConditionalExpression: equivalent for `true` only (`false` is killed by the in-flight rows) — the callers that share one verification resume in consecutive microtasks of the same settled promise, so no third caller can start another between them, and clearing an already cleared field is a no-op
     if (this.#inFlight === pending) {
       this.#inFlight = undefined
     }

@@ -120,3 +120,54 @@ describe('NotificationHealthIndicator when the realm changes while the relay is 
     ])
   })
 })
+
+/** Runs `step` once `hops` promise jobs have run, counted from the call. */
+function afterHops(hops: number, step: () => void): void {
+  let chain: Promise<void> = Promise.resolve()
+  for (let hop = 0; hop < hops; hop += 1) {
+    chain = chain.then(() => undefined)
+  }
+  void chain.then(step)
+}
+
+async function settle(): Promise<void> {
+  for (let turn = 0; turn < 40; turn += 1) {
+    await Promise.resolve()
+  }
+}
+
+describe('NotificationHealthIndicator when callers resume around a finished verification', () => {
+  it('should let a caller that arrives while the next verification runs share it', async () => {
+    const answers: Array<() => void> = []
+    let verifications = 0
+    const provider = providerOf(() => {
+      verifications += 1
+      return new Promise<void>((resolve) => answers.push(resolve))
+    })
+    // A zero window: every answer is stale at once, so only the shared promise decides who verifies.
+    const indicator = new NotificationHealthIndicator(provider, {
+      successTtlMs: 0,
+      timeoutMs: 60_000
+    })
+    const checks: Array<Promise<unknown>> = [indicator.check()]
+    await settle()
+
+    // The first verification ends while two more callers arrive, one job apart, around the moment the
+    // callers that shared it resume and clear it: the second verification starts in that gap.
+    answers[0]?.()
+    afterHops(2, () => checks.push(indicator.check()))
+    afterHops(1, () => checks.push(indicator.check()))
+    await settle()
+    const whileSecondRuns = verifications
+    checks.push(indicator.check())
+    await settle()
+    const afterLateCaller = verifications
+    for (let round = 0; round < 5; round += 1) {
+      answers.forEach((resolve) => resolve())
+      await settle()
+    }
+    await Promise.all(checks)
+
+    expect([whileSecondRuns, afterLateCaller]).toStrictEqual([2, 2])
+  })
+})
