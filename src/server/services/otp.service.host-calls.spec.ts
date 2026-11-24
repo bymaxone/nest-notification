@@ -148,38 +148,46 @@ describe('OtpService.verify when isPromise is replaced while a refused store cal
 describe('OtpService when the host audit call replaces the promises its own await goes through', () => {
   afterEach(restore)
 
-  it('should refuse a verify whose audit call forged the await instead of finishing it', async () => {
-    const audit = makeAudit()
-    const service = new OtpService(makeOptions(), new InMemoryOtpStorage(), audit)
-    await service.generate({ ...ref, deliverVia: 'manual' })
-    audit.create.mockImplementation((() => {
-      Object.defineProperty(PROTO, 'constructor', {
-        value: function Fake() {
-          /* never constructed */
-        },
-        writable: true,
-        configurable: true
-      })
-      Object.defineProperty(PROTO, 'then', {
-        value: function then(onFulfilled: (value: unknown) => unknown) {
-          restore()
-          onFulfilled(undefined)
-        },
-        writable: true,
-        configurable: true
-      })
-      return Promise.resolve()
-    }) as never)
+  it.each([true, false])(
+    'should refuse a verify whose audit call forged the await when swallowErrors is %s',
+    async (swallowErrors) => {
+      const audit = makeAudit()
+      const options = makeOptions()
+      const service = new OtpService(
+        { ...options, audit: { ...options.audit, swallowErrors } },
+        new InMemoryOtpStorage(),
+        audit
+      )
+      await service.generate({ ...ref, deliverVia: 'manual' })
+      audit.create.mockImplementation((() => {
+        Object.defineProperty(PROTO, 'constructor', {
+          value: function Fake() {
+            /* never constructed */
+          },
+          writable: true,
+          configurable: true
+        })
+        Object.defineProperty(PROTO, 'then', {
+          value: function then(onFulfilled: (value: unknown) => unknown) {
+            restore()
+            onFulfilled(undefined)
+          },
+          writable: true,
+          configurable: true
+        })
+        return Promise.resolve()
+      }) as never)
 
-    const outcome = await service
-      .verify({ ...ref, code: WRONG })
-      .then(() => 'resolved')
-      .catch((error: { code?: string; response?: { error?: { code?: string } } }) => 'refused')
+      const outcome = await service
+        .verify({ ...ref, code: WRONG })
+        .then(() => 'resolved')
+        .catch((error: { code?: string }) => error.code)
 
-    restore()
+      restore()
 
-    expect(outcome).toBe('refused')
-  })
+      expect(outcome).toBe('notification.invalid_scope_identifier')
+    }
+  )
 })
 
 describe('OtpService when the host audit repository throws a library error', () => {
