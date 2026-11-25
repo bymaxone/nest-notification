@@ -127,3 +127,19 @@ describe('a dispatch that is not of its kind', () => {
     }
   )
 })
+
+describe('a direct email send that is not of its kind', () => {
+  it.each([
+    ['send', (email: EmailService) => email.send(null as never)],
+    ['sendTemplate', (email: EmailService) => email.sendTemplate(null as never)]
+  ] as const)(
+    'should answer %s(null) with the library send failure, not a raw error',
+    async (_label, run) => {
+      const email = new EmailService(makeOptions(), makeProvider(), makeRenderer(), makeAudit())
+
+      const answer = (await refusalOf(() => run(email))) as { error: { code: string } }
+
+      expect(answer.error.code).toBe('notification.email_send_failed')
+    }
+  )
+})
