@@ -305,7 +305,7 @@ export class RedisOtpStorage implements IOtpStorage {
   async getCooldown(tenantId: string, recipient: string, purpose: string): Promise<number> {
     const ttl = await this.#redis.ttl(this.cooldownKey(tenantId, recipient, purpose))
     // Redis answers -2 for no key and -1 for a key without expiry.
-    return Math.max(ttl, 0)
+    return ttl >= 1 ? ttl : 0
   }
 
   /**

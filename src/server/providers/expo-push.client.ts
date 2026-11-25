@@ -32,15 +32,16 @@ export const EXPO_RECEIPTS_URL = 'https://exp.host/--/api/v2/push/getReceipts'
 /** The fetch the adapter calls; the platform's by default, a host's when it needs a proxy agent. */
 export type ExpoFetch = (url: string, init: RequestInit) => Promise<Response>
 
+/** A call that did not succeed. */
+export interface ExpoRefusal {
+  readonly kind: 'failed'
+  readonly failure: ExpoFailure
+  /** The `details` of a mixed-project refusal, the one piece of an error body a caller reads. */
+  readonly mixedProjects?: unknown
+}
+
 /** How one call ended. */
-export type ExpoCall =
-  | { readonly kind: 'ok'; readonly body: unknown }
-  | {
-      readonly kind: 'failed'
-      readonly failure: ExpoFailure
-      /** The `details` of a mixed-project refusal, the one piece of an error body a caller reads. */
-      readonly mixedProjects?: unknown
-    }
+export type ExpoCall = { readonly kind: 'ok'; readonly body: unknown } | ExpoRefusal
 
 /** What a call needs besides its payload. */
 export interface ExpoCallOptions {
@@ -60,7 +61,7 @@ function parse(text: string): unknown {
 }
 
 /** Builds the failure of an answer that was not a success, or that carries an `errors` list instead of data. */
-export function refused(status: number, body: unknown): ExpoCall {
+export function refused(status: number, body: unknown): ExpoRefusal {
   const first: unknown = Array.isArray(field(body, 'errors'))
     ? (field(body, 'errors') as unknown[])[0]
     : undefined

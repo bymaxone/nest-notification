@@ -416,6 +416,12 @@ describe('RedisOtpStorage', () => {
     await expect(storage.getCooldown(T, R, P)).resolves.toBe(0)
   })
 
+  it('should report the last second of a cooldown', async () => {
+    jest.spyOn(redis, 'ttl').mockResolvedValueOnce(1)
+
+    await expect(storage.getCooldown(T, R, P)).resolves.toBe(1)
+  })
+
   // The fake ignores this script's text, so what reaches `eval` is pinned here.
   it('should hand the consumeAttempt script to eval', async () => {
     const spy = jest.spyOn(redis, 'eval')
