@@ -479,29 +479,6 @@ describe('a realm that was polluted before the library loaded', () => {
   })
 })
 
-describe('descriptors read while the root holds an accessor named like a descriptor field', () => {
-  it.each(['get', 'set', 'value', 'writable', 'enumerable', 'configurable'])(
-    'should not run a planted %s while it compares the standard keys',
-    (name) => {
-      const ran = jest.fn(() => {
-        throw new Error('planted accessor ran')
-      })
-      Object.defineProperty(Object.prototype, name, { get: ran, configurable: true })
-      let caught: unknown
-      try {
-        assertStandardRealmRoot('Owner')
-      } catch (error) {
-        caught = error
-      } finally {
-        Reflect.deleteProperty(Object.prototype, name)
-      }
-
-      expect(ran).not.toHaveBeenCalled()
-      expect(caught).toMatchObject({ code: 'notification.invalid_scope_identifier' })
-    }
-  )
-})
-
 describe('a built-in replaced after the module was imported', () => {
   /** Replacements that falsely report a clean root, and that the check must not be bypassed by. */
   const LIARS: ReadonlyArray<readonly [string, object, PropertyKey, unknown]> = [

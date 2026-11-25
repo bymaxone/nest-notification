@@ -1054,6 +1054,8 @@ The renderer options and defaults are in the Templates section; these are the ty
 
 `PushService` sends one message to many device tokens and answers **per token**. The library stores no token: your backend does, and it acts on the closed `PushFailureReason` of each result (`token_unregistered` means delete the token). `ExpoPushProvider` is the shipped adapter, imported from the `@bymax-one/nest-notification/push` subpath so that it stays out of the main bundle of a host that sends no push: no SDK, no peer dependency, two JSON endpoints called with the platform's `fetch`, every request bounded by `timeoutMs` and sent only to Expo's fixed URLs.
 
+Import `@bymax-one/nest-notification/push` at startup, next to the main entry, and not lazily: the subpath carries its own copy of the realm-root check and takes its baseline when it is first imported, so a lazy import would take it at that later moment.
+
 ```ts
 import { BymaxNotificationModule, NotificationService } from '@bymax-one/nest-notification'
 import { ExpoPushProvider } from '@bymax-one/nest-notification/push'

@@ -152,6 +152,23 @@ async function run(format, server, push) {
     bad?.code === 'notification.invalid_scope_identifier'
   )
 
+  // The ordering the docs ask for: the main entry first, then `./push`, then a key planted on the
+  // realm root. The push bundle holds its own snapshot of the root, so the send through the push
+  // provider must refuse; the key is removed again whatever happens.
+  Object.defineProperty(Object.prototype, 'plantedByProbe', { value: 1, configurable: true })
+  let planted
+  try {
+    planted = await failureOf(
+      new push.ExpoPushProvider({ fetch: ok.fetch }).send({ tokens: GOOD, title: 'T', body: 'B' })
+    )
+  } finally {
+    Reflect.deleteProperty(Object.prototype, 'plantedByProbe')
+  }
+  check(
+    label('a key planted on the root after both entries loaded refuses the push send'),
+    planted instanceof server.NotificationException
+  )
+
   // Receipts.
   const receipts = scripted([{ body: { data: { t1: { status: 'ok' } } } }])
   const read = await new push.ExpoPushProvider({ fetch: receipts.fetch }).fetchReceipts([

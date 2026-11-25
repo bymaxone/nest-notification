@@ -26,6 +26,7 @@ the entries that carry one, is the compatibility contract — read it, not the n
   receipt for yet. Your backend keeps the ticket-id-to-token mapping.
 - **A `./push` subpath.** `ExpoPushProvider` and `ExpoPushProviderOptions` are exported from
   `@bymax-one/nest-notification/push`, not from the main entry, so a host that sends no push does not carry the adapter.
+  Import it at startup, next to the main entry: it takes its own realm-root baseline when first imported.
   The subpath shares the main entry's `NotificationException`, so an error it throws is recognized by the module.
 - **Exports.** `PushService`, `PushSendInput`, `ResolvedPushOptions`
   from the server entry point; `PushFailureReason`, `PushTokenResult`, `PushReceiptStatus`, `PushReceiptResult` from
