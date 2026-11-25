@@ -11,6 +11,16 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 ## [Unreleased]
 
+## [1.5.2] - 2026-11-25
+
+### Changed
+
+- **The standard-realm-root check no longer compares the `configurable` flag of a key's descriptor.** A key that was
+  captured without it can never gain it, since it cannot be deleted and `Object.defineProperty` cannot turn the flag back on, and a root that lost it is
+  hardened, which is not a difference the check reports.
+  The published `dist/` differs from 1.5.1 only in the `server` and `push` runtime bundles, which each carry this module;
+  the type declarations and `package.json` (apart from its version) are unchanged.
+
 ## [1.5.1] - 2026-11-25
 
 ### Fixed
@@ -2114,7 +2124,8 @@ rejected at startup rather than failing on the first send.
 
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.5.1...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.5.2...HEAD
+[1.5.2]: https://github.com/bymaxone/nest-notification/compare/v1.5.1...v1.5.2
 [1.5.1]: https://github.com/bymaxone/nest-notification/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/bymaxone/nest-notification/compare/v1.4.24...v1.5.0
 [1.4.24]: https://github.com/bymaxone/nest-notification/compare/v1.4.23...v1.4.24
