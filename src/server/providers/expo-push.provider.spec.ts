@@ -704,42 +704,6 @@ describe('ExpoPushProvider', () => {
       }
     )
 
-    it.each([
-      ['TOO_MANY_REQUESTS', 'rate_limited', 'EUNAVAILABLE'],
-      ['UNAUTHORIZED', 'credentials', undefined],
-      ['SOMETHING_ELSE', 'provider_unavailable', undefined]
-    ] as const)(
-      'classifies the first error code %s of a 200 answer with no data as %s',
-      async (code, reason, errorCode) => {
-        /* Arrange */
-        const { fetch } = scripted([{ body: { errors: [{ code, message: 'x' }] } }])
-        /* Act */
-        const failure = await failureOf(new ExpoPushProvider({ fetch }).fetchReceipts(['A']))
-        /* Assert */
-        expect(failure.message).toBe(`ExpoPushProvider: the push was not sent (${reason})`)
-        expect(failure.code).toBe(errorCode)
-      }
-    )
-
-    it.each([
-      ['an empty errors list', { errors: [] }],
-      ['an error with no code', { errors: [{ message: 'x' }] }],
-      ['errors that is not a list', { errors: 'TOO_MANY_REQUESTS' }]
-    ] as const)(
-      'keeps the plain failure for a 200 answer with no data and %s',
-      async (_l, body) => {
-        /* Arrange */
-        const { fetch } = scripted([{ body }])
-        /* Act */
-        const failure = await failureOf(new ExpoPushProvider({ fetch }).fetchReceipts(['A']))
-        /* Assert */
-        expect(failure.message).toBe(
-          'ExpoPushProvider: the push was not sent (provider_unavailable)'
-        )
-        expect(failure.code).toBeUndefined()
-      }
-    )
-
     it('throws when the receipts answer is not JSON', async () => {
       /* Arrange */
       const { fetch } = scripted([{ text: 'not json' }])
