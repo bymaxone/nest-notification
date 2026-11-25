@@ -15,15 +15,17 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 - **A dispatch that is not of its kind is refused with the library's own error instead of a raw `TypeError` or an OTP call.**
   `NotificationService.dispatch` now answers `notification.invalid_scope_identifier` for a request that is not an
-  object, for a channel that is not `email`, `otp` or `push` (a missing or unknown channel used to fall through to
-  `otp.generate` on the tenant alone), for an email payload that is `null` or `undefined`, and for an OTP payload that
-  is not an object (a number, a string, `true`, a list, or none used to run a generate with no `action`). An email
-  payload that is a number, a string or a list keeps its published answer, `notification.email_missing_body`.
+  object (a function included), for a channel that is not `email`, `otp` or `push` (a missing or unknown channel used
+  to fall through to `otp.generate` on the tenant alone), for an email payload that is `null` or `undefined`, and for
+  an OTP payload that is not an object. An OTP payload that was `null` or `undefined` threw a raw `TypeError`; one that
+  was a number, a string, `true`, a list or a function ran a generate with no `action`. An email payload that is a
+  number, a string or a list keeps its published answer, `notification.email_missing_body`, and a channel that is not
+  configured keeps answering `notification.channel_disabled` whatever the payload.
 
 - **`ExpoPushProvider.fetchReceipts` no longer reads an answer with no receipts map as every id pending.** A parsed
   body whose `data` is missing, `null`, a list or not an object made every ticket id `pending`, so a poller never learned
   that the endpoint was broken, while a body that was not JSON threw. It now throws `notification.push_send_failed`
-  (through `PushService`) in both cases. An id the `data` map omits is still `pending`, as documented.
+  (through `PushService`) in both cases. A `200` that carries an `errors` list instead of data is classified by its first code, as a refused call is (`TOO_MANY_REQUESTS` is retryable, `UNAUTHORIZED` is `credentials`); any other answer with no map stays non-retryable. An id the `data` map omits is still `pending`, as documented.
 
 ### Documentation
 

@@ -146,3 +146,26 @@ describe('a direct email send that is not of its kind', () => {
     }
   )
 })
+
+describe('a channel that is not configured', () => {
+  const email = new EmailService(makeOptions(), makeProvider(), makeRenderer(), makeAudit())
+  const otp = { isConfigured: () => false } as unknown as OtpService
+  const off = { isConfigured: () => false } as unknown as EmailService
+
+  it.each([
+    ['email with no email service', new NotificationService(undefined, undefined), 'email'],
+    ['email that is not configured', new NotificationService(off), 'email'],
+    ['otp with no otp service', new NotificationService(email, undefined), 'otp'],
+    ['otp that is not configured', new NotificationService(email, otp), 'otp']
+  ] as const)(
+    'should still answer CHANNEL_DISABLED for %s, whatever the payload',
+    async (_label, service, channel) => {
+      const answer = (await refusalOf(() =>
+        service.dispatch({ channel, tenantId: 't', payload: null } as never)
+      )) as { error: { code: string; details: { channel: string } } }
+
+      expect(answer.error.code).toBe('notification.channel_disabled')
+      expect(answer.error.details.channel).toBe(channel)
+    }
+  )
+})
