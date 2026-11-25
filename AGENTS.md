@@ -17,7 +17,7 @@ external boundary — email transport, OTP store, template renderer, audit sink 
 cryptography uses `node:crypto` exclusively.
 
 `ISmsProvider` is a declared shape only; no service implements it, and configuring `sms` is
-rejected at startup. `IPushProvider` is implemented by `PushService`; a configured push provider
+rejected at startup. `IPushProvider` is consumed by `PushService`; a configured push provider
 that reports `isConfigured() === false` fails the boot with `PUSH_PROVIDER_NOT_CONFIGURED`.
 
 ## 2. Architecture
