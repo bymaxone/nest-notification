@@ -22,7 +22,7 @@ export const MAX_PUSH_TOKEN_LENGTH = 256
 export const MAX_PUSH_DATA_KEYS = 64
 
 /** Every field of {@link PushSendOptions}, by name. */
-const PUSH_KEYS = [
+export const PUSH_KEYS = [
   'tokens',
   'title',
   'body',

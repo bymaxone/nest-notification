@@ -161,6 +161,36 @@ describe('push channel on NotificationService', () => {
     expect(provider.send).toHaveBeenCalledTimes(1)
   })
 
+  it('should read a payload whose fields are prototype getters, as the service itself does', async () => {
+    class GetterPayload {
+      get tokens(): string[] {
+        return [TOKEN]
+      }
+      get title(): string {
+        return 'T'
+      }
+      get body(): string {
+        return 'B'
+      }
+      get userId(): string {
+        return 'user-1'
+      }
+    }
+    const provider = makeProvider()
+    const notification = await compile(provider)
+
+    const result = await notification.dispatch({
+      channel: 'push',
+      tenantId: 'tenant_real',
+      payload: new GetterPayload() as never
+    })
+
+    expect(result).toStrictEqual({
+      channel: 'push',
+      result: { results: [{ token: TOKEN, messageId: 'ticket-1' }] }
+    })
+  })
+
   it('should audit the request tenant, never a tenant the payload carries', async () => {
     const entries: NotificationLogEntry[] = []
     const audit: INotificationLogRepository = {

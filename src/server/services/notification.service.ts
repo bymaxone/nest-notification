@@ -19,6 +19,7 @@ import type { PushSendResult } from '../interfaces/push-provider.interface'
 import { copyByName } from '../utils/bounded-list'
 import { logEvent } from '../utils/log-event'
 import { readOtpAction } from '../utils/otp-input'
+import { PUSH_KEYS } from '../utils/push-send-input'
 import { assertStandardRealmRoot, own, ownChecked, pinOnce } from '../utils/realm-root'
 import { DISPATCH_EMAIL_KEYS } from './dispatch-email-keys'
 import { EmailService } from './email.service'
@@ -232,8 +233,8 @@ export class NotificationService implements OnModuleInit {
     if (this.otpService && !this.otpService.isConfigured()) {
       this.warnNotUsable('otp', 'storage')
     }
-    // A push channel is new, so a provider that cannot send fails the boot instead of warning: the
-    // host asked for push and would otherwise learn it is off from a missing notification.
+    // A configured push provider must be usable at startup: it fails the boot instead of warning, so
+    // the host does not learn push is off from a missing notification.
     if (this.pushService && !this.pushService.isConfigured()) {
       throw new NotificationException('PUSH_PROVIDER_NOT_CONFIGURED')
     }
@@ -274,8 +275,10 @@ export class NotificationService implements OnModuleInit {
     payload: PushDispatchPayload
   ): Promise<PushSendResult> {
     const push = this.getPush()
-    // `send` reads every field of the payload once; the tenant is the request's, never the payload's.
-    const result = await pinOnce(push.send({ ...payload, tenantId }), 'NotificationService')
+    // Each field is read once, by name, so a getter or a non-enumerable field counts as it does in
+    // `PushService.send`; the tenant is the request's, never the payload's.
+    const copy = copyByName(payload, [...PUSH_KEYS, 'userId']) as unknown as PushDispatchPayload
+    const result = await pinOnce(push.send({ ...copy, tenantId }), 'NotificationService')
     assertStandardRealmRoot('NotificationService')
     return result
   }
