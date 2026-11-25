@@ -2,7 +2,8 @@
  * Pins `scripts/mutate-const-tables.mjs`, the development tool that mutates `as const` tables one
  * entry at a time. It is plain Node, so each case runs it as a child process against a throwaway
  * git repository whose test command is a small checker script, and asserts the exit code, what
- * is printed, the exact text of each mutant, and that the mutated file is restored.
+ * is printed, the exact text of each mutant, and that the mutated file is restored. The script's
+ * own verdict cases run under `node --test`, and one case here runs them.
  *
  * Layer: repository tooling, tests.
  */
@@ -20,6 +21,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 
 const SCRIPT = resolve(__dirname, '..', 'scripts', 'mutate-const-tables.mjs')
+const SELF_TEST = resolve(__dirname, '..', 'scripts', 'mutate-const-tables.test.mjs')
 const REPOSITORY_MODULES = resolve(__dirname, '..', 'node_modules')
 
 interface Result {
@@ -34,6 +36,7 @@ const roots: string[] = []
  * Lays out a git repository holding `files` (path to text), with the repository's own
  * `node_modules` linked in so the script finds `typescript`, and a checker that appends the text
  * of the file it is given to a log and exits 1 unless that text includes every `required` snippet.
+ * The checker prints the test summary a jest run would, which the script reads its verdict from.
  */
 function repo(files: Record<string, string>, required: readonly string[]): string {
   const root = mkdtempSync(join(tmpdir(), 'mutate-const-spec-'))
@@ -52,7 +55,9 @@ function repo(files: Record<string, string>, required: readonly string[]): strin
       "const text = readFileSync(file, 'utf8')",
       "appendFileSync('log.jsonl', JSON.stringify(text) + '\\n')",
       `const required = ${JSON.stringify(required)}`,
-      'process.exit(required.every((snippet) => text.includes(snippet)) ? 0 : 1)'
+      'const ok = required.every((snippet) => text.includes(snippet))',
+      "process.stderr.write(ok ? 'Tests: 1 passed, 1 total\\n' : 'Tests: 1 failed, 1 total\\n')",
+      'process.exit(ok ? 0 : 1)'
     ].join('\n')
   )
   symlinkSync(REPOSITORY_MODULES, join(root, 'node_modules'))
@@ -89,6 +94,15 @@ afterAll(() => {
 const TABLE = 'export const T = { a: 1, b: 2 } as const\n'
 
 describe('mutate-const-tables', () => {
+  // The verdicts (crash, load failure, timeout, rerun) are pinned by the script's `node --test`
+  // file, which no other command of this repository runs.
+  it('should pass its own verdict cases', () => {
+    const result = spawnSync('node', ['--test', SELF_TEST], { encoding: 'utf8' })
+
+    expect(result.stdout).toContain('fail 0')
+    expect(result.status).toBe(0)
+  })
+
   // A checker that pins every entry by exact text kills the removal and the bump of each one.
   it('should kill every mutant of a table the command pins in full', () => {
     const root = repo({ 'src/table.ts': TABLE }, ['a: 1', 'b: 2'])

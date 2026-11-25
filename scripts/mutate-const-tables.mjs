@@ -15,9 +15,17 @@
  *   object is part of the table it sits in;
  * - for each entry it makes one mutant that removes the entry, and, when the entry is a plain
  *   decimal integer, one that adds one to it (other forms of number are only removed);
- * - for each mutant it runs the given test command and counts the mutant as killed when the
- *   command fails, or as a survivor when it passes;
- * - it prints the survivors and exits 1 when there are any.
+ * - for each mutant it runs the given test command and judges it from the command's output, not
+ *   only its exit status: killed when the command fails with a test summary that counts a failed
+ *   test, survived when it passes. A run that crashes, is ended by a signal, has no test summary
+ *   is run once more with `--runInBand` and then listed apart as CRASH-ONLY, and a suite that
+ *   "failed to run" with no failed test as LOAD-FAILURE. A run that outlives
+ *   CONST_TABLES_TIMEOUT_MS (default 300000) has its process group killed and is listed as
+ *   TIMEOUT; it is run again only when the command did not already run in band. Every run gets
+ *   `--forceExit`, so an open handle does not leave jest idle. None of the three is a kill, and
+ *   a load failure the mutant causes is proven by hand;
+ * - it prints the survivors, the crash-only, load-failure and timeout mutants and exits 1 when
+ *   there are any.
  *
  * Before a file is mutated, the command must pass on that file unmutated, with `{file}` and
  * MUTATED_FILE set to it, or the run stops with exit 2 and names the file: a failing command
@@ -25,9 +33,7 @@
  * on that file. A file with no table is not run. The source file is restored after every mutant,
  * and on SIGINT or SIGTERM. Run it on a clean working tree.
  *
- * An interrupt stops the command's own process only. A runner that starts workers of its own,
- * such as `pnpm exec jest`, can leave them finishing after the file is restored; their verdict is
- * discarded.
+ * An interrupt kills the command's process group, so a runner's workers stop with it.
  *
  * Make the command fail on a failed assertion only. A test runner that also type-checks counts a
  * removed property that other code reads as killed, which Stryker would not; turn the type check
@@ -47,15 +53,16 @@
  * Example: node scripts/mutate-const-tables.mjs --only default-ttls -- pnpm exec jest \
  *   --config jest.mutants.config.ts --findRelatedTests {file} --coverage=false --silent
  *
- * Exit codes: 0 every mutant was killed (or there is no table), 1 at least one survived, 2 usage
- * error, a command that fails on an unmutated file, or a run stopped by SIGINT, SIGTERM or a
- * command ended by a signal.
+ * Exit codes: 0 every mutant was killed (or there is no table), 1 at least one survived, crashed,
+ * timed out or failed to load, 2 usage error, a command that fails on an unmutated file, or a run stopped by
+ * SIGINT or SIGTERM.
  */
 
 import { execFileSync, spawn } from 'node:child_process'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join, resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 /** Files that are never mutated: specs, tests, declaration files and barrels. */
 const SKIPPED_FILE = /(?:\.(?:spec|test)\.[cm]?[jt]sx?|\.d\.[cm]?ts|(?:^|\/)index\.[cm]?[jt]sx?)$/
@@ -206,28 +213,136 @@ function mutantsOf(ts, path, text) {
   return mutants
 }
 
+/** A run that outlives this is killed and judged crash-only: a mutant can make a test wait forever. */
+const RUN_TIMEOUT_MS = Number(process.env.CONST_TABLES_TIMEOUT_MS) || 300_000
+
 /** The test command's child process while one runs, so an interrupt can stop it. */
 let running
+
+/**
+ * Kills the running command with every process it started. The command leads its own process
+ * group, so killing the command alone would leave its workers running and its output open.
+ */
+function stopRunning() {
+  if (running === undefined) return
+  try {
+    process.kill(-running.pid, 'SIGKILL')
+  } catch {
+    running.kill('SIGKILL')
+  }
+}
 
 /** Runs the test command once and resolves with how it ended: an exit status or a signal. */
 function runCommand(root, command, file) {
   const [program, ...args] = command.map((part) => part.replaceAll('{file}', file))
+  // A test that leaves a server or a timer open would otherwise keep the runner idle forever.
+  if (!args.includes('--forceExit')) args.push('--forceExit')
   return new Promise((done) => {
     running = spawn(program, args, {
       cwd: root,
       env: { ...process.env, MUTATED_FILE: file },
-      stdio: 'ignore'
+      stdio: ['ignore', 'pipe', 'pipe'],
+      detached: true
     })
-    running.once('error', () => done({ status: null, signal: null }))
+    let output = ''
+    let timedOut = false
+    const timer = setTimeout(() => {
+      timedOut = true
+      stopRunning()
+    }, RUN_TIMEOUT_MS)
+    running.stdout.on('data', (chunk) => (output += chunk))
+    running.stderr.on('data', (chunk) => (output += chunk))
+    running.once('error', () => {
+      clearTimeout(timer)
+      done({ status: null, signal: null, output })
+    })
     running.once('close', (status, signal) => {
+      clearTimeout(timer)
       running = undefined
-      done({ status, signal })
+      done({ status, signal, output, timedOut })
     })
   })
 }
 
 /** Whether a finished command passed: it exited with status 0. */
 const passed = (outcome) => outcome.status === 0
+
+/**
+ * Lines the runner prints when a suite could not run: it failed to load, or a process died. Each
+ * is matched only where a line starts with it, so a test name or an assertion message that
+ * mentions a crash does not turn a failed test into one.
+ */
+const CRASH_MARKER =
+  /^\s*(?:● )?(?:Test suite failed to run|Jest worker (?:encountered|ran out of memory)|A jest worker process .* was terminated|Call retries were exceeded|FATAL ERROR: .*out of memory)/m
+
+/**
+ * The output without the report of each failed test: its `●` title and the indented lines under
+ * it, which hold the test's own message and code frame. The runner's report of a suite that
+ * could not run is kept.
+ */
+function outsideFailedTests(output) {
+  let inTest = false
+  return output
+    .split('\n')
+    .filter((line) => {
+      const title = /^\s*● (.*)/.exec(line)
+      if (title) inTest = !title[1].startsWith('Test suite failed to run')
+      else if (/^\S/.test(line)) inTest = false
+      return !inTest
+    })
+    .join('\n')
+}
+
+/** The test summary counts at least one failed test: an assertion failed, nothing crashed. */
+const failedTests = (output) => /^Tests:.*\b[1-9]\d* failed/m.test(output)
+
+/**
+ * How one run of the command ended, as a verdict on the mutant:
+ * - `survived`: exit status 0;
+ * - `killed`: a non-zero exit whose summary counts a failed test and that shows no crash marker;
+ * - `load-failure`: a suite "failed to run" and no test failed, which the mutant itself can cause
+ *   (a removed entry that is read at import); it is not a kill and is proven by hand;
+ * - `timeout`: the run outlived the time limit and was stopped;
+ * - `crash`: a signal, or no test summary at all.
+ */
+export function verdictOf(outcome) {
+  if (outcome.timedOut) return 'timeout'
+  if (outcome.status === 0 && outcome.signal === null) return 'survived'
+  if (outcome.signal !== null) return 'crash'
+  if (CRASH_MARKER.test(outsideFailedTests(outcome.output))) {
+    return failedTests(outcome.output)
+      ? 'crash'
+      : /Test suite failed to run/.test(outsideFailedTests(outcome.output)) &&
+          /^Tests:/m.test(outcome.output)
+        ? 'load-failure'
+        : 'crash'
+  }
+  return failedTests(outcome.output) ? 'killed' : 'crash'
+}
+
+/** The command with `--runInBand`, without the worker count jest refuses to combine with it. */
+function inBand(command) {
+  const kept = command.filter(
+    (part, index) => !part.startsWith('--maxWorkers') && command[index - 1] !== '--maxWorkers'
+  )
+  return kept.includes('--runInBand') ? kept : [...kept, '--runInBand']
+}
+
+/**
+ * Runs the command for one mutant. A crash or a load failure is run once more in band, so a worker
+ * crash is not taken for the mutant's doing. So is a timeout, unless the command already ran in
+ * band, where a second wait would only repeat the first.
+ */
+export async function judge(root, command, file) {
+  const first = verdictOf(await runCommand(root, command, file))
+  const retry =
+    first === 'crash' ||
+    first === 'load-failure' ||
+    (first === 'timeout' && !command.includes('--runInBand'))
+  if (!retry) return first
+  const again = verdictOf(await runCommand(root, inBand(command), file))
+  return again === 'killed' ? 'killed-after-rerun' : again
+}
 
 /**
  * Stops the run unless the command passes on the unmutated file, so that a failing command does
@@ -248,9 +363,15 @@ async function requirePassing(root, command, file, mutantCount) {
  */
 async function survivorsOf(ts, root, files, command) {
   const survivors = []
-  let restore = () => {}
+  const crashOnly = []
+  const loadFailures = []
+  const timeouts = []
+  survivors.crashOnly = crashOnly
+  survivors.loadFailures = loadFailures
+  survivors.timeouts = timeouts
+  let restore = () => undefined
   const onSignal = () => {
-    running?.kill('SIGKILL')
+    stopRunning()
     restore()
     process.exit(EXIT_USAGE)
   }
@@ -265,13 +386,12 @@ async function survivorsOf(ts, root, files, command) {
       await requirePassing(root, command, file, mutants.length)
       for (const mutant of mutants) {
         writeFileSync(absolute, mutant.text)
-        const outcome = await runCommand(root, command, file)
-        if (outcome.signal !== null)
-          throw new Error(`The test command was stopped by ${outcome.signal}.`)
-        process.stderr.write(
-          `${passed(outcome) ? 'SURVIVED' : 'killed  '} ${mutant.kind} ${mutant.label}\n`
-        )
-        if (passed(outcome)) survivors.push(mutant)
+        const verdict = await judge(root, command, file)
+        process.stderr.write(`${verdict.toUpperCase().padEnd(8)} ${mutant.kind} ${mutant.label}\n`)
+        if (verdict === 'survived') survivors.push(mutant)
+        if (verdict === 'crash') crashOnly.push(mutant)
+        if (verdict === 'load-failure') loadFailures.push(mutant)
+        if (verdict === 'timeout') timeouts.push(mutant)
       }
     } finally {
       restore()
@@ -291,16 +411,25 @@ async function main() {
   }
   const files = candidateFiles(root, src, only)
   const survivors = await survivorsOf(loadTypeScript(root), root, files, command)
-  if (survivors.length === 0) {
+  for (const m of survivors.crashOnly) console.log(`CRASH-ONLY (not a kill)  ${m.kind}  ${m.label}`)
+  for (const m of survivors.loadFailures)
+    console.log(`LOAD-FAILURE (not a kill, prove by hand)  ${m.kind}  ${m.label}`)
+  for (const m of survivors.timeouts) console.log(`TIMEOUT (not a kill)  ${m.kind}  ${m.label}`)
+  const unjudged =
+    survivors.crashOnly.length + survivors.loadFailures.length + survivors.timeouts.length
+  if (survivors.length === 0 && unjudged === 0) {
     console.log('Every mutant of every `as const` table was killed.')
     return
   }
-  console.log(`${survivors.length} mutant(s) survived; no test pins these entries:`)
-  for (const survivor of survivors) console.log(`  ${survivor.kind}  ${survivor.label}`)
+  if (survivors.length > 0) {
+    console.log(`${survivors.length} mutant(s) survived; no test pins these entries:`)
+    for (const survivor of survivors) console.log(`  ${survivor.kind}  ${survivor.label}`)
+  }
   process.exitCode = 1
 }
 
-main().catch((error) => {
-  process.stderr.write(`${error.message}\n`)
-  process.exit(EXIT_USAGE)
-})
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href)
+  main().catch((error) => {
+    process.stderr.write(`${error.message}\n`)
+    process.exit(EXIT_USAGE)
+  })
