@@ -120,6 +120,7 @@ describe('ExpoPushProvider options', () => {
 
   it.each([
     ['a leading space', ' abc'],
+    ['a leading no-break space', '\u00a0abc'],
     ['empty', ''],
     ['a trailing newline', 'abc\n'],
     ['a character above latin1', 'abcĀ'],

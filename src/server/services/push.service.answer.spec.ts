@@ -13,6 +13,7 @@ import type {
 import type { INotificationObserver } from '../interfaces/notification-observer.interface'
 import type { IPushProvider, PushSendOptions } from '../interfaces/push-provider.interface'
 
+import { NotificationException } from '../errors/notification-exception'
 import { PushService } from './push.service'
 import type { PushSendInput } from './push.service'
 
@@ -84,7 +85,10 @@ describe('PushService and the answer of a host provider', () => {
     ],
     ['an entry that names no token', [{ messageId: 'a' }, { token: TOKEN_B, messageId: 'b' }]],
     ['more entries than tokens', [{ token: TOKEN_A }, { token: TOKEN_B }, { token: TOKEN_B }]],
-    ['fewer entries than tokens', [{ token: TOKEN_A, messageId: 'a' }]]
+    ['fewer entries than tokens', [{ token: TOKEN_A, messageId: 'a' }]],
+    ['an extra entry that names no token', [{ token: TOKEN_A }, { token: TOKEN_B }, {}]],
+    ['a list with holes', new Array<unknown>(2)],
+    ['a hole after a good entry', Object.assign(new Array<unknown>(2), [{ token: TOKEN_A }])]
   ])(
     'should refuse %s as a failed send and still write the audit entry',
     async (_label, results) => {
@@ -112,6 +116,29 @@ describe('PushService and the answer of a host provider', () => {
     await new PushService(options, provider, audit).send(input)
 
     expect(entries[0]).toMatchObject({ verb: 'failed', metadata: { tokens: 2, failed: 2 } })
+  })
+
+  it('should count a send as sent when an answer entry pollutes the realm root as it is read', async () => {
+    const { observer, outcomes } = observing()
+    const planting = {
+      get token(): string {
+        Reflect.set(Object.prototype, 'plantedByProvider', 1)
+        return TOKEN_A
+      },
+      messageId: 'a'
+    }
+    const provider = answering({ results: [planting, { token: TOKEN_B, messageId: 'b' }] })
+    const { audit } = recorder()
+
+    try {
+      await expect(new PushService(options, provider, audit, observer).send(input)).rejects.toThrow(
+        NotificationException
+      )
+    } finally {
+      Reflect.deleteProperty(Object.prototype, 'plantedByProvider')
+    }
+
+    expect(outcomes).toStrictEqual(['sent'])
   })
 
   it('should audit a partial failure as sent, with the failed count', async () => {
@@ -157,4 +184,45 @@ describe('PushService and the answer of a host provider', () => {
       expect(error).not.toBeInstanceOf(TypeError)
     }
   )
+
+  it('should name the input and the reason when a send is not an object', async () => {
+    const service = new PushService(options, answering({ results: [] }), recorder().audit)
+
+    const error = (await failureOf(service.send(null as never))) as NotificationException
+
+    expect(error.getResponse()).toMatchObject({
+      error: {
+        details: { boundary: 'PushService', parameter: 'input', reason: 'must be an object' }
+      }
+    })
+  })
+
+  it('should answer a refusal by the provider on a send as PushService refusing the message', async () => {
+    const refusal = new NotificationException('INVALID_SCOPE_IDENTIFIER')
+    const provider = { ...answering({}), send: jest.fn().mockRejectedValue(refusal) }
+
+    const error = (await failureOf(
+      new PushService(options, provider, recorder().audit).send(input)
+    )) as NotificationException
+
+    expect(error.getResponse()).toMatchObject({
+      error: { details: { boundary: 'PushService', parameter: 'message' } }
+    })
+  })
+
+  it('should answer a refusal by the provider on receipts as PushService refusing the message', async () => {
+    const refusal = new NotificationException('INVALID_SCOPE_IDENTIFIER')
+    const provider = {
+      ...answering({}),
+      fetchReceipts: jest.fn().mockRejectedValue(refusal)
+    } as unknown as IPushProvider
+
+    const error = (await failureOf(
+      new PushService(options, provider, recorder().audit).fetchReceipts(['id-1'])
+    )) as NotificationException
+
+    expect(error.getResponse()).toMatchObject({
+      error: { details: { boundary: 'PushService', parameter: 'message' } }
+    })
+  })
 })

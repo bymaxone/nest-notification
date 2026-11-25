@@ -19,6 +19,7 @@ import { makeOptions as otpOptions } from './__tests__/otp-service.fixtures'
 import { EmailService } from './email.service'
 import { NotificationService } from './notification.service'
 import { OtpService } from './otp.service'
+import type { PushService } from './push.service'
 import { loggedEvent, loggedText } from '../__tests__/logged'
 
 /** An email service over a provider that does, or does not, report itself configured. */
@@ -152,6 +153,57 @@ describe('NotificationService channel state', () => {
         payload: { to: 'a@x.com', subject: 's', html: '<p>h</p>' }
       })
     ).rejects.toMatchObject({ code: 'notification.channel_disabled' })
+  })
+
+  describe('a push dispatch', () => {
+    const pushOf = (): { push: PushService; send: jest.Mock } => {
+      const send = jest.fn().mockResolvedValue({ results: [] })
+      return {
+        send,
+        push: { isConfigured: () => true, send } as unknown as PushService
+      }
+    }
+
+    // The user a push is for rides on the payload and is audited by the service.
+    it('should hand the payload user to the push service with the request tenant', async () => {
+      const { push, send } = pushOf()
+
+      await new NotificationService(undefined, undefined, push).dispatch({
+        channel: 'push',
+        tenantId: 'acme',
+        payload: { tokens: ['t'], title: 'T', body: 'B', userId: 'user-1' }
+      })
+
+      expect(send).toHaveBeenCalledWith(
+        expect.objectContaining({ tenantId: 'acme', userId: 'user-1', tokens: ['t'] })
+      )
+    })
+
+    it.each([null, undefined, 'x'])(
+      'should refuse a payload of %j as the library does, not with a TypeError',
+      async (payload) => {
+        const { push } = pushOf()
+
+        const attempt = new NotificationService(undefined, undefined, push).dispatch({
+          channel: 'push',
+          tenantId: 'acme',
+          payload: payload as never
+        })
+
+        await expect(attempt).rejects.toMatchObject({
+          code: 'notification.invalid_scope_identifier',
+          response: {
+            error: {
+              details: {
+                boundary: 'NotificationService',
+                parameter: 'payload',
+                reason: 'must be an object'
+              }
+            }
+          }
+        })
+      }
+    )
   })
 
   describe('onModuleInit', () => {

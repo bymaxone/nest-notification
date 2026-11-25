@@ -7,7 +7,7 @@
  */
 
 import type { CallHandler, ExecutionContext } from '@nestjs/common'
-import { firstValueFrom, of } from 'rxjs'
+import { firstValueFrom, of, throwError } from 'rxjs'
 
 import type { ResolvedNotificationOptions } from '../config/resolved-options'
 import type {
@@ -88,6 +88,10 @@ describe('NotificationAuditInterceptor and a push dispatch', () => {
     ['a full success', { channel: 'push', result: { results: [sentToken, sentToken] } }],
     ['a value that holds no results', { channel: 'push' }],
     ['an empty list of results', { results: [] }],
+    [
+      'a list of holes, which is by design not a failure of every token',
+      { results: new Array<unknown>(2) }
+    ],
     ['results that are not a list', { results: 'x' }]
   ])('should audit %s as sent', async (_label, value) => {
     const entry = await audited('push', value)
@@ -96,9 +100,87 @@ describe('NotificationAuditInterceptor and a push dispatch', () => {
     expect(entry).not.toHaveProperty('errorMessage')
   })
 
-  it('should audit an email dispatch as sent whatever its value holds', async () => {
-    const entry = await audited('otp', { results: [failedToken] })
+  it.each(['email', 'otp'])(
+    'should audit an %s dispatch as sent whatever its value holds',
+    async (channel) => {
+      const entry = await audited(channel, { results: [failedToken] })
 
-    expect(entry.verb).toBe('sent')
+      expect(entry.verb).toBe('sent')
+    }
+  )
+
+  it('should let a handler succeed when an argument has a throwing channel getter', async () => {
+    const hostile = {
+      get channel(): string {
+        throw new Error('hostile')
+      }
+    }
+    const context = {
+      getArgs: <T>(): T => [hostile] as unknown as T,
+      switchToHttp: () => ({ getRequest: <T>(): T => undefined as T })
+    } as unknown as ExecutionContext
+    const repo: INotificationLogRepository = { name: 'capture', create: async () => undefined }
+    const handler: CallHandler = { handle: () => of('done') }
+
+    await expect(
+      firstValueFrom(new NotificationAuditInterceptor(options, repo).intercept(context, handler))
+    ).resolves.toBe('done')
+  })
+
+  it('should audit a push whose result cannot be read as sent, and still return it', async () => {
+    const hostile = {
+      get results(): unknown {
+        throw new Error('hostile')
+      }
+    }
+
+    const entry = await audited('push', hostile)
+
+    expect(entry).toMatchObject({ verb: 'sent', channel: 'push' })
+  })
+
+  it('should audit a rejected push handler as failed and rethrow the same error', async () => {
+    const entries: NotificationLogEntry[] = []
+    const repo: INotificationLogRepository = {
+      name: 'capture',
+      create: async (entry) => {
+        entries.push(entry)
+      }
+    }
+    const boom = new Error('boom')
+    const handler: CallHandler = { handle: () => throwError(() => boom) }
+
+    await expect(
+      firstValueFrom(
+        new NotificationAuditInterceptor(options, repo).intercept(contextOf('push'), handler)
+      )
+    ).rejects.toBe(boom)
+
+    expect(entries[0]).toMatchObject({ verb: 'failed', channel: 'push' })
+  })
+
+  it('should report a hostile argument as AUDIT_LOG_FAILED when write errors are not swallowed', async () => {
+    const hostile = {
+      get channel(): string {
+        throw new Error('hostile')
+      }
+    }
+    const context = {
+      getArgs: <T>(): T => [hostile] as unknown as T,
+      switchToHttp: () => ({ getRequest: <T>(): T => undefined as T })
+    } as unknown as ExecutionContext
+    const repo: INotificationLogRepository = { name: 'capture', create: async () => undefined }
+    const strict: ResolvedNotificationOptions = {
+      ...options,
+      audit: { ...options.audit, swallowErrors: false }
+    }
+
+    await expect(
+      firstValueFrom(
+        new NotificationAuditInterceptor(strict, repo).intercept(context, {
+          handle: () => of('done')
+        })
+      )
+    ).rejects.toMatchObject({ response: { error: { code: 'notification.audit_log_failed' } } })
   })
 })

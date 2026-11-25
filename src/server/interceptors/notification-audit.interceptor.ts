@@ -124,21 +124,27 @@ export class NotificationAuditInterceptor implements NestInterceptor {
    * (`{ channel, result: { results } }`) or a bare send result (`{ results }`).
    */
   private isFailedPush(context: ExecutionContext, value: unknown): boolean {
-    if (this.extractDispatchInput(context)?.channel !== 'push') {
+    try {
+      if (this.extractDispatchInput(context)?.channel !== 'push') {
+        return false
+      }
+      const inner: unknown = Reflect.get(Object(value), 'result') ?? value
+      const results: unknown = Reflect.get(Object(inner), 'results')
+      return (
+        Array.isArray(results) &&
+        results.length > 0 &&
+        Array.from(results as unknown[]).every(
+          (entry: unknown) =>
+            typeof entry === 'object' &&
+            entry !== null &&
+            (Reflect.get(entry, 'reason') !== undefined ||
+              Reflect.get(entry, 'error') !== undefined)
+        )
+      )
+    } catch {
+      // A hostile argument or result is the audit write's to report, inside its own boundary.
       return false
     }
-    const inner: unknown = Reflect.get(Object(value), 'result') ?? value
-    const results: unknown = Reflect.get(Object(inner), 'results')
-    return (
-      Array.isArray(results) &&
-      results.length > 0 &&
-      results.every(
-        (entry: unknown) =>
-          typeof entry === 'object' &&
-          entry !== null &&
-          (Reflect.get(entry, 'reason') !== undefined || Reflect.get(entry, 'error') !== undefined)
-      )
-    )
   }
 
   /**

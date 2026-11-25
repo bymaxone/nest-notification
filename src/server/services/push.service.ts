@@ -104,16 +104,20 @@ function allFailed(results: PushSendResult['results']): boolean {
  */
 function isAnswerFor(answer: unknown, tokens: readonly string[]): answer is PushSendResult {
   const results: unknown = (answer as { results?: unknown } | null | undefined)?.results
-  return (
-    Array.isArray(results) &&
-    results.length === tokens.length &&
-    results.every(
-      (result: unknown, index) =>
-        typeof result === 'object' &&
-        result !== null &&
-        Reflect.get(result, 'token') === tokens.at(index)
-    )
-  )
+  if (!Array.isArray(results) || results.length !== tokens.length) {
+    return false
+  }
+  // By index, so a hole in a sparse list is read as the `undefined` it is and refused, not skipped.
+  for (let index = 0; index < tokens.length; index += 1) {
+    const result: unknown = results.at(index)
+    if (typeof result !== 'object' || result === null) {
+      return false
+    }
+    if (Reflect.get(result, 'token') !== tokens.at(index)) {
+      return false
+    }
+  }
+  return true
 }
 
 /** Push notification service. */

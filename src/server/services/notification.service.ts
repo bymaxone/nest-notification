@@ -16,7 +16,7 @@ import { NOTIFICATION_LOG_EVENTS } from '../constants/log-events.constants'
 import { NotificationException } from '../errors/notification-exception'
 import type { OtpVerifyResult } from '../interfaces/otp-storage.interface'
 import type { PushSendResult } from '../interfaces/push-provider.interface'
-import { copyByName } from '../utils/bounded-list'
+import { copyByName, refuseInput } from '../utils/bounded-list'
 import { logEvent } from '../utils/log-event'
 import { readOtpAction } from '../utils/otp-input'
 import { PUSH_KEYS } from '../utils/push-send-input'
@@ -275,6 +275,9 @@ export class NotificationService implements OnModuleInit {
     payload: PushDispatchPayload
   ): Promise<PushSendResult> {
     const push = this.getPush()
+    if (typeof payload !== 'object' || payload === null) {
+      throw refuseInput('NotificationService', 'payload', 'must be an object')
+    }
     // Each field is read once, by name, so a getter or a non-enumerable field counts as it does in
     // `PushService.send`; the tenant is the request's, never the payload's.
     const copy = copyByName(payload, [...PUSH_KEYS, 'userId']) as unknown as PushDispatchPayload

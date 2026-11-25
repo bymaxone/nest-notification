@@ -19,6 +19,13 @@ describe('groupByProject', () => {
     expect(groupByProject(['a'], details)).toStrictEqual([])
   })
 
+  it.each([['ab'], [7], [{ 0: 'a' }], [null]])(
+    'should read a project whose list is %j as no tokens',
+    (listed) => {
+      expect(groupByProject(['a', 'b'], { p1: listed })).toStrictEqual([])
+    }
+  )
+
   it('should leave out an unknown token and an entry that is not a string', () => {
     expect(groupByProject(['a'], { p1: ['z', 3, 'a'], p2: 'a' })).toStrictEqual([['a']])
   })
