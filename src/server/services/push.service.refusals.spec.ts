@@ -12,6 +12,8 @@ import type {
 import type { INotificationObserver } from '../interfaces/notification-observer.interface'
 import type { IPushProvider } from '../interfaces/push-provider.interface'
 
+import { Logger } from '@nestjs/common'
+
 import { PushService } from './push.service'
 
 const TOKEN = 'ExponentPushToken[device-token-a]'
@@ -259,5 +261,64 @@ describe('what the observer is told of a push', () => {
     }
 
     expect(events).toStrictEqual([{ channel: 'push', outcome: 'sent', seconds: 2.5 }])
+  })
+})
+
+describe('the rest of what PushService refuses and reports', () => {
+  it('should refuse an empty tenant with the owner and the parameter', async () => {
+    const service = new PushService(options, provider(), recorder().audit)
+
+    expect(await errorOf(service.send({ ...send, tenantId: '' }))).toEqual({
+      code: 'notification.invalid_scope_identifier',
+      details: {
+        boundary: 'PushService',
+        parameter: 'tenantId',
+        reason: 'empty or whitespace-only'
+      },
+      message: '[PushService] tenantId empty or whitespace-only'
+    })
+  })
+
+  it('should answer a malformed token whole, not retryable, and never hand it to the provider', async () => {
+    const sendSpy = jest.fn(async () => ({ results: [{ token: TOKEN, messageId: 'm' }] }))
+    const service = new PushService(options, provider({ send: sendSpy }), recorder().audit)
+
+    const answer = await service.send({ ...send, tokens: ['', TOKEN] })
+
+    expect(answer.results).toEqual([
+      { token: '', reason: 'token_invalid', retryable: false },
+      { token: TOKEN, messageId: 'm' }
+    ])
+    expect(sendSpy).toHaveBeenCalledWith(expect.objectContaining({ tokens: [TOKEN] }))
+  })
+
+  it('should say the channel is disabled when the service was built without push options', async () => {
+    const { push: _push, ...withoutPush } = options
+    const service = new PushService(withoutPush, provider(), recorder().audit)
+
+    expect(await errorOf(service.send(send))).toEqual({
+      code: 'notification.channel_disabled',
+      details: { channel: 'push' },
+      message: 'Channel not enabled in module config'
+    })
+  })
+
+  it('should log one warning and let nothing escape when the audit write rejects', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+    try {
+      const audit: INotificationLogRepository = {
+        name: 'audit',
+        create: async (): Promise<void> => {
+          throw new Error('audit down')
+        }
+      }
+
+      const answer = await new PushService(options, provider(), audit).send(send)
+
+      expect(answer.results).toEqual([{ token: TOKEN, messageId: 'm' }])
+      expect(warn).toHaveBeenCalledTimes(1)
+    } finally {
+      warn.mockRestore()
+    }
   })
 })

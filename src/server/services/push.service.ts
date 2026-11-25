@@ -205,7 +205,7 @@ export class PushService {
     try {
       const answer: unknown = await checkedAwait(provider.fetchReceipts(ids), OWNER)
       if (!Array.isArray(answer)) {
-        throw new TypeError('not a list')
+        throw new TypeError()
       }
       assertStandardRealmRoot(OWNER)
       return answer as PushReceiptResult[]
@@ -270,8 +270,8 @@ export class PushService {
       ...(ttlSeconds === undefined ? {} : { ttlSeconds })
     }
     const scope: SendScope = { tenantId, userId, tokenCount: read.tokens.length }
-    const delivered =
-      usable.length === 0 ? [] : (await own(this.deliver(send, scope, progress), OWNER)).results
+    const delivered: readonly unknown[] =
+      usable.length === 0 ? usable : (await own(this.deliver(send, scope, progress), OWNER)).results
     let next = 0
     const answer: PushSendResult = {
       results: read.tokens.map((token) =>
@@ -295,7 +295,7 @@ export class PushService {
     try {
       const answer: unknown = await checkedAwait(this.provider.send(send), OWNER)
       if (!isAnswerFor(answer, [send.tokens].flat())) {
-        throw new TypeError('the provider did not answer once per token')
+        throw new TypeError()
       }
       progress.stage = 'accepted'
       assertStandardRealmRoot(OWNER)
