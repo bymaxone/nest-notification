@@ -58,5 +58,9 @@
   {
     "file": "src/mutation-inventory-parity.spec.ts",
     "reason": "Reads jest.stryker.config.ts and the exempt list as text and imports no module from src/, so Stryker's related-test lookup (jest --findRelatedTests) never selects it and it judges no mutant. `pnpm test` and CI still run it."
+  },
+  {
+    "file": "src/react-types-peer.spec.ts",
+    "reason": "Reads package.json as text and imports no module from src/, so Stryker's related-test lookup (jest --findRelatedTests) never selects it and it judges no mutant. `pnpm test` and CI still run it."
   }
 ]
