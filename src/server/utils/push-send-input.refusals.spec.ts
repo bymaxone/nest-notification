@@ -81,7 +81,7 @@ describe('the refusals of the push input reader', () => {
     'collapseKey',
     'threadId'
   ])('the optional text field %s', (key) => {
-    it('should reach the provider with the text the caller gave', () => {
+    it('should keep the text the caller gave in the message it reads', () => {
       expect(Reflect.get((object({ [key]: 'v' }) as ReadPush).message, key)).toBe('v')
     })
 
