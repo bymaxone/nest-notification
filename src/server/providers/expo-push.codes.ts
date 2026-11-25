@@ -111,7 +111,7 @@ export function classifyTransportFailure(code: string | undefined): ExpoFailure 
   return code !== undefined && NEVER_CONNECTED.has(code) ? UNREACHABLE : OUTCOME_UNKNOWN
 }
 
-/** The shape of an Expo push token. The provider's own check is the same: a prefix, brackets, no spaces. */
+/** The shape of an Expo push token. A prefix, brackets, and no whitespace or bracket inside. */
 const EXPO_TOKEN = /^(?:Exponent|Expo)PushToken\[[^[\]\s]{1,128}\]$/u
 
 /**

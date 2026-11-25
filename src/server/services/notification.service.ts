@@ -232,8 +232,10 @@ export class NotificationService implements OnModuleInit {
     if (this.otpService && !this.otpService.isConfigured()) {
       this.warnNotUsable('otp', 'storage')
     }
+    // A push channel is new, so a provider that cannot send fails the boot instead of warning: the
+    // host asked for push and would otherwise learn it is off from a missing notification.
     if (this.pushService && !this.pushService.isConfigured()) {
-      this.warnNotUsable('push', 'provider')
+      throw new NotificationException('PUSH_PROVIDER_NOT_CONFIGURED')
     }
   }
 

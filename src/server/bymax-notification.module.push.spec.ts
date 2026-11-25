@@ -16,7 +16,10 @@ import {
 import { BymaxNotificationModule } from './bymax-notification.module'
 import { NotificationAuditInterceptor } from './interceptors/notification-audit.interceptor'
 import type { IPushProvider } from './interfaces/push-provider.interface'
-import type { INotificationLogRepository } from './interfaces/notification-log-repository.interface'
+import type {
+  INotificationLogRepository,
+  NotificationLogEntry
+} from './interfaces/notification-log-repository.interface'
 import { NotificationService } from './services/notification.service'
 import { PushService } from './services/push.service'
 import { loggedText } from './__tests__/logged'
@@ -158,24 +161,43 @@ describe('push channel on NotificationService', () => {
     expect(provider.send).toHaveBeenCalledTimes(1)
   })
 
+  it('should audit the request tenant, never a tenant the payload carries', async () => {
+    const entries: NotificationLogEntry[] = []
+    const audit: INotificationLogRepository = {
+      name: 'recording',
+      create: async (entry) => {
+        entries.push(entry)
+      }
+    }
+    const notification = await compile(makeProvider(), audit)
+
+    await notification.dispatch({
+      channel: 'push',
+      tenantId: 'tenant_real',
+      payload: { tokens: [TOKEN], title: 'T', body: 'B', tenantId: 'tenant_forged' } as never
+    })
+
+    expect(entries.map((entry) => entry.tenantId)).toStrictEqual(['tenant_real'])
+  })
+
   it('should return the service when the provider is usable', async () => {
     const notification = await compile(makeProvider())
 
     expect(notification.getPush()).toBeInstanceOf(PushService)
   })
 
-  it('should refuse and warn about a configured push channel whose provider is not usable', async () => {
-    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+  it('should fail at boot, with the reason, when the configured push provider is not usable', async () => {
     const notification = await compile(makeProvider(false))
 
-    notification.onModuleInit()
-
-    expect(notification.getEnabledChannels()).toStrictEqual([])
-    expect(() => notification.getPush()).toThrow(
-      expect.objectContaining({ code: 'notification.channel_disabled' })
+    expect(() => notification.onModuleInit()).toThrow(
+      expect.objectContaining({ code: 'notification.push_provider_not_configured' })
     )
-    expect(loggedText(warn.mock.calls[0])).toContain('push channel is configured')
-    warn.mockRestore()
+  })
+
+  it('should not fail at boot when the push provider is usable', async () => {
+    const notification = await compile(makeProvider(true))
+
+    expect(() => notification.onModuleInit()).not.toThrow()
   })
 })
 

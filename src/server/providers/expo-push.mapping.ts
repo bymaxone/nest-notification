@@ -18,9 +18,6 @@ export type TokenOutcome = PushSendResult['results'][number]
 /** The most messages one send call carries. */
 export const SEND_CHUNK = 100
 
-/** The most ids one receipt call carries. */
-export const RECEIPT_CHUNK = 1000
-
 /** Reads a field of a parsed value without trusting its shape. */
 export function field(value: unknown, key: string): unknown {
   return typeof value === 'object' && value !== null ? Reflect.get(value, key) : undefined
@@ -126,11 +123,6 @@ function readReceipt(ticketId: string, receipt: unknown): PushReceiptResult {
 export function readReceipts(ids: readonly string[], body: unknown): PushReceiptResult[] {
   const data = field(body, 'data')
   return ids.map((id) => readReceipt(id, receiptOf(data, id)))
-}
-
-/** The receipts of ids whose call failed: nothing is known yet, so they are pending. */
-export function pendingReceipts(ids: readonly string[]): PushReceiptResult[] {
-  return ids.map((ticketId) => ({ ticketId, status: 'pending' }))
 }
 
 /**

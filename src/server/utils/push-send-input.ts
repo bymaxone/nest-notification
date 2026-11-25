@@ -79,30 +79,49 @@ function hasControl(value: string): boolean {
   return false
 }
 
+/** Whether an entry can be a token or a ticket id: bounded, not empty, and with no control character. */
+export function isUsableToken(entry: string): boolean {
+  return entry.length > 0 && entry.length <= MAX_PUSH_TOKEN_LENGTH && !hasControl(entry)
+}
+
 /**
- * Reads a token or ticket-id list: one string, or a list of strings.
+ * Reads one string or a bounded, non-empty list of strings. What each string holds is not judged
+ * here: a device token that is empty, too long or holds a control character is answered
+ * `token_invalid` by the caller on its own, so one bad token never fails the batch.
  *
  * @param owner - The component that reads, for the refusal.
  * @param label - The parameter, for the refusal.
  * @param value - What the caller gave.
- * @returns The entries, at least one, each a bounded string without a control character.
- * @throws NotificationException `INVALID_SCOPE_IDENTIFIER` for anything else.
+ * @returns The entries, at least one, in the order given.
+ * @throws NotificationException `INVALID_SCOPE_IDENTIFIER` when the value is not a bounded list of strings.
  */
-export function readIdList(owner: string, label: string, value: unknown): string[] {
+export function readTokenList(owner: string, label: string, value: unknown): string[] {
   const list: string[] =
     typeof value === 'string' ? [value] : boundedList(owner, label, value, isString)
   if (list.length === 0) {
     throw refuseInput(owner, label, 'needs at least one entry')
   }
-  for (const entry of list) {
-    if (entry.length === 0 || entry.length > MAX_PUSH_TOKEN_LENGTH || hasControl(entry)) {
-      throw refuseInput(owner, label, 'holds an entry that is not a bounded, printable string')
-    }
+  return list
+}
+
+/**
+ * Reads a ticket-id list: one string, or a list of strings, each bounded and printable.
+ *
+ * @param owner - The component that reads, for the refusal.
+ * @param label - The parameter, for the refusal.
+ * @param value - What the caller gave.
+ * @returns The ids, at least one.
+ * @throws NotificationException `INVALID_SCOPE_IDENTIFIER` for anything else.
+ */
+export function readIdList(owner: string, label: string, value: unknown): string[] {
+  const list = readTokenList(owner, label, value)
+  if (!list.every(isUsableToken)) {
+    throw refuseInput(owner, label, 'holds an entry that is not a bounded, printable string')
   }
   return list
 }
 
-/** Whether an entry is a string; the length and the characters are checked by {@link readIdList}. */
+/** Whether an entry is a string; its length and characters are judged by the caller. */
 function isString(entry: unknown): entry is string {
   return typeof entry === 'string'
 }
@@ -202,7 +221,7 @@ export function readPush(owner: string, options: PushSendOptions): ReadPush {
     throw refuseInput(owner, 'options', 'must be an object')
   }
   const copy = copyByName(options, PUSH_KEYS)
-  const tokens = readIdList(owner, 'tokens', copy.tokens)
+  const tokens = readTokenList(owner, 'tokens', copy.tokens)
   const message = readOptional(owner, copy)
   message.title = requiredText(owner, 'title', copy.title)
   message.body = requiredText(owner, 'body', copy.body)

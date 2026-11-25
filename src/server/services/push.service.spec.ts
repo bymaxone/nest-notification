@@ -173,6 +173,71 @@ describe('PushService.send', () => {
     expect(audit.create.mock.calls[0]?.[0]).toMatchObject({ verb: 'failed' })
   })
 
+  describe('a token that cannot be one', () => {
+    it.each([
+      ['empty', ''],
+      ['with a control character', 'bad\ntoken'],
+      ['too long', 'x'.repeat(5000)]
+    ])(
+      'should answer a token that is %s as token_invalid and still send the rest',
+      async (_name, bad) => {
+        const provider = makeProvider()
+
+        const result = await build(provider).send({ ...input, tokens: [TOKEN_A, bad, TOKEN_B] })
+
+        expect(result.results.map((entry) => entry.reason)).toStrictEqual([
+          undefined,
+          'token_invalid',
+          undefined
+        ])
+        expect(provider.send.mock.calls[0]?.[0]?.tokens).toStrictEqual([TOKEN_A, TOKEN_B])
+      }
+    )
+
+    it('should not call the provider and should report failed when no token is usable', async () => {
+      const provider = makeProvider()
+      const audit = makeAudit()
+      const observer = {
+        onSend: jest.fn(),
+        span: jest.fn(async (_n: string, _a: unknown, run: () => Promise<unknown>) => run())
+      } as never
+
+      const result = await build(provider, audit, {}, observer).send({
+        ...input,
+        tokens: ['', 'a\nb']
+      })
+
+      expect(result.results.every((entry) => entry.reason === 'token_invalid')).toBe(true)
+      expect(provider.send).not.toHaveBeenCalled()
+      expect(audit.create.mock.calls[0]?.[0]).toMatchObject({ verb: 'failed' })
+      expect((observer as { onSend: jest.Mock }).onSend).toHaveBeenCalledWith(
+        expect.objectContaining({ outcome: 'failed' })
+      )
+    })
+  })
+
+  it('should report failed to the observer when the provider failed every token, as the audit does', async () => {
+    const provider = makeProvider()
+    provider.send.mockImplementation(async (send: PushSendOptions) => ({
+      results: [send.tokens].flat().map((token) => ({
+        token,
+        reason: 'token_unregistered' as const,
+        retryable: false
+      }))
+    }))
+    const audit = makeAudit()
+    const onSend = jest.fn()
+    const observer = {
+      onSend,
+      span: jest.fn(async (_n: string, _a: unknown, run: () => Promise<unknown>) => run())
+    } as never
+
+    await build(provider, audit, {}, observer).send(input)
+
+    expect(audit.create.mock.calls[0]?.[0]).toMatchObject({ verb: 'failed' })
+    expect(onSend).toHaveBeenCalledWith(expect.objectContaining({ outcome: 'failed' }))
+  })
+
   describe('when the provider throws', () => {
     const throwing = (error: unknown): jest.Mocked<IPushProvider> => {
       const provider = makeProvider()

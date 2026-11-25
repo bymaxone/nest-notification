@@ -39,7 +39,7 @@ import { readHostName } from '../utils/host-name'
 import { isLibraryError } from '../utils/is-library-error'
 import { reportSend, runInSpan } from '../utils/observe'
 import { rethrowRefusal } from '../utils/provider-refusal'
-import { readIdList, readPush } from '../utils/push-send-input'
+import { isUsableToken, readIdList, readPush } from '../utils/push-send-input'
 import { assertStandardRealmRoot, checkedAwait, own, ownChecked } from '../utils/realm-root'
 import { assertIdentifies } from '../utils/tenant-scope'
 
@@ -80,6 +80,16 @@ function outcomeOf(progress: SendProgress, error: unknown): 'sent' | 'failed' | 
     return 'failed'
   }
   return isLibraryError(error) ? 'rejected' : 'failed'
+}
+
+/** The result of a token that never reached the provider because it cannot be a token. */
+function invalidToken(token: string): PushSendResult['results'][number] {
+  return { token, reason: 'token_invalid', retryable: false }
+}
+
+/** Whether every token of a send failed: the one reading the audit verb and the observer outcome share. */
+function allFailed(results: PushSendResult['results']): boolean {
+  return results.every((result) => result.reason !== undefined)
 }
 
 /** Whether a provider's answer is one result per token, the only shape the service can count. */
@@ -208,7 +218,11 @@ export class PushService {
       })
       throw error
     }
-    reportSend(this.observer, { channel: 'push', outcome: 'sent', seconds: seconds() })
+    reportSend(this.observer, {
+      channel: 'push',
+      outcome: progress.stage === 'failed' ? 'failed' : 'sent',
+      seconds: seconds()
+    })
     assertStandardRealmRoot(OWNER)
     return result
   }
@@ -223,13 +237,25 @@ export class PushService {
     assertIdentifies(OWNER, 'tenantId', tenantId)
     const read = readPush(OWNER, raw)
     const ttlSeconds = read.message.ttlSeconds ?? push.defaultTtlSeconds
+    // A token that cannot be one is answered here and never reaches the provider: it must not fail its batch.
+    const usable = read.tokens.filter(isUsableToken)
     const send: PushSendOptions = {
       ...read.message,
-      tokens: [...read.tokens],
+      tokens: usable,
       ...(ttlSeconds === undefined ? {} : { ttlSeconds })
     }
     const scope: SendScope = { tenantId, userId, tokenCount: read.tokens.length }
-    const answer = await own(this.deliver(send, scope, progress), OWNER)
+    const delivered =
+      usable.length === 0 ? [] : (await own(this.deliver(send, scope, progress), OWNER)).results
+    let next = 0
+    const answer: PushSendResult = {
+      results: read.tokens.map((token) =>
+        isUsableToken(token)
+          ? (delivered[next++] as PushSendResult['results'][number])
+          : invalidToken(token)
+      )
+    }
+    progress.stage = allFailed(answer.results) ? 'failed' : 'accepted'
     await own(this.audit(this.auditEntry(scope, answer)), OWNER)
     assertStandardRealmRoot(OWNER)
     return answer
@@ -243,7 +269,7 @@ export class PushService {
   ): Promise<PushSendResult> {
     try {
       const answer: unknown = await checkedAwait(this.provider.send(send), OWNER)
-      if (!isAnswerFor(answer, scope.tokenCount)) {
+      if (!isAnswerFor(answer, send.tokens.length)) {
         throw new TypeError('the provider did not answer once per token')
       }
       progress.stage = 'accepted'

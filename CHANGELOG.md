@@ -35,13 +35,27 @@ the entries that carry one, is the compatibility contract — read it, not the n
   wrapped, and `PUSH_SEND_FAILED` carries no `cause`.
 - A send throws only when nothing was sent, so a caller that retries a thrown send cannot deliver twice. An outcome
   Expo may have acted on (a timeout, a reset, or a bare gateway 502, 503 or 504) is `retryable: false`, because Expo does
-  not deduplicate; only a refusal before processing (a 429, a 5xx with an Expo errors envelope, a connection never made)
+  not deduplicate; only a refusal before processing (a 429, a 5xx whose body carries an errors list with a string `code`, a connection never made)
   is retryable. The thrown `PUSH_SEND_FAILED` carries `details.retryable`.
 - `NotificationAuditInterceptor` now audits push dispatches; its recipient is a device count, never a token.
 
 ### Changed
 
 - `PUSH_PROVIDER_NOT_CONFIGURED` and `PUSH_SEND_FAILED` are thrown now and no longer reserved.
+- A configured push provider that reports `isConfigured() === false` fails the boot with
+  `PUSH_PROVIDER_NOT_CONFIGURED`. Email and OTP keep their startup warning.
+- A device token that is empty, longer than 256 characters or holds a control character is answered `token_invalid`
+  in its own result and never reaches the provider; the rest of the batch is sent.
+- The metrics module counts push sends: `channel` accepts `push` next to `email`. Before, a push send event was read as
+  an unknown channel and not counted.
+- A send in which every token failed is reported to the observer as `failed`, as its audit entry already said.
+
+### Known limits
+
+- The size of an Expo response is not capped; the bound is the call's `timeoutMs`.
+- An injected `fetch` that ignores the `AbortSignal` is not interrupted: the call outlasts `timeoutMs` until it settles.
+- `fetchReceipts` answers a timeout as a thrown `PUSH_SEND_FAILED` with `retryable: false`, since a receipt read
+  changes nothing and the caller can simply ask again.
 - `PushSendResult` results are `PushTokenResult`: `reason` and `retryable` are new, and `error?` is deprecated and never
   set by the shipped adapters.
 - `PushSendOptions` gains `channelId?`, `subtitle?`, `categoryId?`, `collapseKey?`, `threadId?`, `mutableContent?` and

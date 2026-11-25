@@ -63,6 +63,8 @@ describe('ExpoPushProvider', () => {
     it.each([
       [{ accessToken: '' }, 'accessToken must be a non-empty string'],
       [{ accessToken: 5 as never }, 'accessToken must be a non-empty string'],
+      [{ accessToken: 'abc\ndef' }, 'accessToken must be a non-empty string'],
+      [{ accessToken: 'abc\u0100' }, 'accessToken must be a non-empty string'],
       [{ timeoutMs: 0 }, 'timeoutMs must be a positive integer'],
       [{ fetch: 'x' as never }, 'fetch must be a function']
     ])('refuses a bad option %#', (options, message) => {
@@ -379,19 +381,38 @@ describe('ExpoPushProvider', () => {
       })
     })
 
-    it('treats a refused connection as retryable and throws since nothing was sent', async () => {
-      /* Arrange */
-      const refused = Object.assign(new TypeError('fetch failed'), {
-        cause: { code: 'ECONNREFUSED' }
-      })
-      const { fetch } = scripted([{ throws: refused }])
-      /* Act */
-      const failure = await failureOf(
-        new ExpoPushProvider({ fetch }).send({ ...base, tokens: TOKEN_A })
-      )
-      /* Assert */
-      expect(failure.message).toContain('(provider_unavailable)')
-    })
+    it.each(['ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN'])(
+      'treats %s as no connection made: retryable, and a throw since nothing was sent',
+      async (code) => {
+        /* Arrange */
+        const refused = Object.assign(new TypeError('fetch failed'), { cause: { code } })
+        const { fetch } = scripted([{ throws: refused }])
+        /* Act */
+        const failure = await failureOf(
+          new ExpoPushProvider({ fetch }).send({ ...base, tokens: TOKEN_A })
+        )
+        /* Assert */
+        expect(failure.message).toContain('(provider_unavailable)')
+        expect((failure as { code?: string }).code).toBe('EUNAVAILABLE')
+      }
+    )
+
+    it.each(['ECONNRESET', 'ETIMEDOUT', 'EPIPE', 'UND_ERR_SOCKET'])(
+      'treats %s as possibly delivered: an answer that is not retryable, never a throw',
+      async (code) => {
+        /* Arrange */
+        const lost = Object.assign(new TypeError('fetch failed'), { cause: { code } })
+        const { fetch } = scripted([{ throws: lost }])
+        /* Act */
+        const result = await new ExpoPushProvider({ fetch }).send({ ...base, tokens: TOKEN_A })
+        /* Assert: Expo does not deduplicate, so a resend could deliver twice */
+        expect(result.results[0]).toEqual({
+          token: TOKEN_A,
+          reason: 'provider_unavailable',
+          retryable: false
+        })
+      }
+    )
 
     it('treats a 2xx whose body is not JSON as outcome-unknown', async () => {
       /* Arrange */
@@ -484,6 +505,25 @@ describe('ExpoPushProvider', () => {
     const mixed = (details: unknown): Step => ({
       status: 400,
       body: { errors: [{ code: 'PUSH_TOO_MANY_EXPERIENCE_IDS', message: 'x', details }] }
+    })
+
+    it('answers instead of throwing when one regrouped call may have been delivered', async () => {
+      /* Arrange: the first project's answer is a bare 503, so it may have been acted on */
+      const { fetch } = scripted([
+        mixed({ '@a/one': [TOKEN_A], '@a/two': [TOKEN_B] }),
+        { status: 503 },
+        { status: 429, body: { errors: [{ code: 'TOO_MANY_REQUESTS' }] } }
+      ])
+      /* Act */
+      const result = await new ExpoPushProvider({ fetch }).send({
+        ...base,
+        tokens: [TOKEN_A, TOKEN_B]
+      })
+      /* Assert: a later refusal before processing does not erase the earlier possible delivery */
+      expect(result.results).toEqual([
+        { token: TOKEN_A, reason: 'provider_unavailable', retryable: false },
+        { token: TOKEN_B, reason: 'rate_limited', retryable: true }
+      ])
     })
 
     it("throws with the retryable refusal of the regrouped calls, not the first call's", async () => {
@@ -626,7 +666,7 @@ describe('ExpoPushProvider', () => {
       })
     })
 
-    it('throws only when no chunk was read', async () => {
+    it('throws when the receipts call failed', async () => {
       /* Arrange */
       const { fetch } = scripted([{ status: 429, body: {} }])
       /* Act */

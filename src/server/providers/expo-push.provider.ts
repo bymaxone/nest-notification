@@ -31,13 +31,11 @@ import type { ExpoCall, ExpoCallOptions, ExpoFetch } from './expo-push.client'
 import { OUTCOME_UNKNOWN, UNKNOWN_FAILURE, isExpoPushToken } from './expo-push.codes'
 import type { ExpoFailure } from './expo-push.codes'
 import {
-  RECEIPT_CHUNK,
   SEND_CHUNK,
   buildMessages,
   chunksOf,
   failedOutcome,
   groupByProject,
-  pendingReceipts,
   readReceipts,
   readTickets
 } from './expo-push.mapping'
@@ -61,6 +59,11 @@ const EXPO_OPTION_KEYS = [
 
 const OWNER = 'ExpoPushProvider'
 const DEFAULT_TIMEOUT_MS = 10_000
+
+/** Whether a value can travel in a header: a non-empty string of printable latin1, which `fetch` accepts. */
+function isHeaderToken(value: unknown): value is string {
+  return typeof value === 'string' && /^[\x21-\x7e\xa1-\xff][\x20-\x7e\xa0-\xff]*$/u.test(value)
+}
 
 /** An error that names a reason and nothing the service said; `code` lets the 503 mapping see a retryable refusal. */
 class ExpoPushError extends Error {
@@ -86,11 +89,10 @@ export class ExpoPushProvider implements IPushProvider {
     assertOptionsObject(OWNER, options)
     const own = readOptionKeys(options, EXPO_OPTION_KEYS)
     assertTimerMs(OWNER, 'timeoutMs', own.timeoutMs)
-    if (
-      own.accessToken !== undefined &&
-      (typeof own.accessToken !== 'string' || own.accessToken === '')
-    ) {
-      throw new Error(`${OWNER}: accessToken must be a non-empty string`)
+    if (own.accessToken !== undefined && !isHeaderToken(own.accessToken)) {
+      throw new Error(
+        `${OWNER}: accessToken must be a non-empty string of printable latin1 characters`
+      )
     }
     if (own.fetch !== undefined && typeof own.fetch !== 'function') {
       throw new Error(`${OWNER}: fetch must be a function`)
@@ -133,24 +135,13 @@ export class ExpoPushProvider implements IPushProvider {
 
   /** @inheritdoc */
   async fetchReceipts(ticketIds: readonly string[]): Promise<PushReceiptResult[]> {
+    // The bound of `readIdList` is the service's own bound for one receipts call, so one call is all it takes.
     const ids = readIdList(OWNER, 'ticketIds', ticketIds)
-    const results: PushReceiptResult[] = []
-    let failed: ExpoFailure | undefined
-    let answered = false
-    for (const chunk of chunksOf(ids, RECEIPT_CHUNK)) {
-      const call = await checkedAwait(this.#call(EXPO_RECEIPTS_URL, { ids: chunk }), OWNER)
-      if (call.kind === 'ok') {
-        answered = true
-        results.push(...readReceipts(chunk, call.body))
-      } else {
-        failed = call.failure
-        results.push(...pendingReceipts(chunk))
-      }
+    const call = await checkedAwait(this.#call(EXPO_RECEIPTS_URL, { ids }), OWNER)
+    if (call.kind === 'failed') {
+      throw new ExpoPushError(call.failure)
     }
-    if (!answered && failed !== undefined) {
-      throw new ExpoPushError(failed)
-    }
-    return results
+    return readReceipts(ids, call.body)
   }
 
   /** Sends one chunk; a refusal of the whole call is answered for each of its tokens. */
