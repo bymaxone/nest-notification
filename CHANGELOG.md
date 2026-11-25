@@ -16,9 +16,9 @@ the entries that carry one, is the compatibility contract — read it, not the n
 ### Changed
 
 - **Internal simplifications, with the same behaviour.** Redundant branches and patterns were removed or rewritten in
-  `useOtpInput`, `useOtpCountdown`, the cooldown helpers, the template renderer, the Redis OTP storage and the Expo
-  push adapter, so that mutation testing can judge those lines instead of skipping them. The comments of the
-  `./testing` storage contract changed with them. No public type changes.
+  `useOtpInput`, `useOtpCountdown`, the cooldown helpers, the template renderer and the Redis OTP storage, so that
+  mutation testing can judge those lines instead of skipping them; type casts were removed from the Expo push adapter.
+  The comments of the `./testing` storage contract changed too. No public type changes.
 
 #### Apply to a derived backend
 
