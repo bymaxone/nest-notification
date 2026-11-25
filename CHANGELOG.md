@@ -15,12 +15,9 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 ### Changed
 
-- **The standard-realm-root check no longer compares the `configurable` flag of a key's descriptor.** The flag can
-  only be turned off, never on, and a key that only lost it was already read as a root that was hardened, not polluted,
-  so the comparison could not change what the check answers. The answer is the same for every state of a standard key:
-  measured on a real `Object.prototype` against 1.5.1 for ten states (untouched; `configurable` lost alone; `configurable`
-  and `writable` lost; the root frozen; `configurable` lost with a new value; `enumerable` set, with and without
-  `configurable` lost; the key made an accessor; the key deleted; a planted key), both versions answered alike in all ten.
+- **The standard-realm-root check no longer compares the `configurable` flag of a key's descriptor.** A key that was
+  captured without it can never gain it, since it can be neither deleted nor redefined, and a key that only lost it was
+  already read as a root that was hardened, not polluted, so the comparison could not change what the check answers. The answer is the same for every state of a standard key.
   The published `dist/` differs from 1.5.1 only in the `server` and `push` runtime bundles, which each carry this module;
   the type declarations and `package.json` (apart from its version) are unchanged.
 

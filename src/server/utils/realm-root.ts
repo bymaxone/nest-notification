@@ -60,8 +60,8 @@ export const STANDARD_ROOT_KEYS: ReadonlySet<string> = new Set(
 
 /**
  * The fields of a property descriptor that are compared, in the order they are kept. `configurable`
- * is left out: a property can only lose it, never gain it, and a root that lost it is hardened, which
- * is not a difference this check reports.
+ * is left out: a property captured without it can never gain it, since it can be neither deleted nor
+ * redefined, and a root that lost it is hardened, which is not a difference this check reports.
  */
 const DESCRIPTOR_FIELDS = ['value', 'get', 'set', 'writable', 'enumerable'] as const
 
