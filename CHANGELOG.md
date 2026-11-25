@@ -2114,7 +2114,8 @@ rejected at startup rather than failing on the first send.
 
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.5.1...HEAD
+[1.5.1]: https://github.com/bymaxone/nest-notification/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/bymaxone/nest-notification/compare/v1.4.24...v1.5.0
 [1.4.24]: https://github.com/bymaxone/nest-notification/compare/v1.4.23...v1.4.24
 [1.4.23]: https://github.com/bymaxone/nest-notification/compare/v1.4.22...v1.4.23
