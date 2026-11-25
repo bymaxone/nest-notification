@@ -114,6 +114,22 @@ describe('NotificationService channel state', () => {
     )
   })
 
+  // A push provider can stop being usable after the boot check passed; the accessor then says why.
+  it('should name the reason when the push provider stops being configured after boot', () => {
+    const push = { isConfigured: jest.fn().mockReturnValue(false) }
+    const notification = new NotificationService(undefined, undefined, push as never)
+
+    expect(() => notification.getPush()).toThrow(
+      expect.objectContaining({
+        response: {
+          error: expect.objectContaining({
+            details: { channel: 'push', reason: 'provider_not_configured' }
+          })
+        }
+      })
+    )
+  })
+
   // An absent channel keeps its plain refusal, with no reason to explain.
   it('should not add a reason when the channel is absent', () => {
     const notification = new NotificationService()

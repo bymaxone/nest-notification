@@ -24,7 +24,10 @@ the entries that carry one, is the compatibility contract — read it, not the n
 - **`fetchReceipts(ticketIds)`.** Expo reports delivery after it accepts a message; the call returns
   `{ ticketId, status: 'ok' | 'pending' | 'error', reason?, retryable? }` per id, `pending` for an id Expo has no
   receipt for yet. Your backend keeps the ticket-id-to-token mapping.
-- **Exports.** `PushService`, `PushSendInput`, `ResolvedPushOptions`, `ExpoPushProvider`, `ExpoPushProviderOptions`
+- **A `./push` subpath.** `ExpoPushProvider` and `ExpoPushProviderOptions` are exported from
+  `@bymax-one/nest-notification/push`, not from the main entry, so a host that sends no push does not carry the adapter.
+  The subpath shares the main entry's `NotificationException`, so an error it throws is recognized by the module.
+- **Exports.** `PushService`, `PushSendInput`, `ResolvedPushOptions`
   from the server entry point; `PushFailureReason`, `PushTokenResult`, `PushReceiptStatus`, `PushReceiptResult` from
   `./shared`.
 

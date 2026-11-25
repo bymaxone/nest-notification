@@ -139,7 +139,6 @@ export {
   type SmtpTlsPfxEntry
 } from './providers/smtp-email.provider'
 export { InMemoryOtpStorage, type InMemoryStorageSize } from './providers/in-memory-otp.storage'
-export { ExpoPushProvider, type ExpoPushProviderOptions } from './providers/expo-push.provider'
 export {
   RedisOtpStorage,
   type RedisOtpStorageOptions,

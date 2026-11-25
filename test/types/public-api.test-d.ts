@@ -54,6 +54,8 @@ import {
   NotificationObservabilityModule,
   NotificationTracing
 } from '@bymax-one/nest-notification/observability'
+import { ExpoPushProvider } from '@bymax-one/nest-notification/push'
+import type { ExpoPushProviderOptions } from '@bymax-one/nest-notification/push'
 import type { OtpStorageContractCase } from '@bymax-one/nest-notification/testing'
 import { otpStorageContract } from '@bymax-one/nest-notification/testing'
 
@@ -293,3 +295,9 @@ type _PushReasons = Expect<
 // One result per token carries a closed reason, never provider text.
 type _PushResultReason = Expect<Equal<PushTokenResult['reason'], PushFailureReason | undefined>>
 type _PushSendResolves = Expect<Equal<Awaited<ReturnType<typeof push.send>>, PushSendResult>>
+
+// The push subpath: the Expo adapter is an `IPushProvider`, and its options are the three documented keys.
+const _expoIsAPushProvider: IPushProvider = new ExpoPushProvider()
+type _ExpoOptionKeys = Expect<
+  Equal<keyof ExpoPushProviderOptions, 'accessToken' | 'timeoutMs' | 'fetch'>
+>

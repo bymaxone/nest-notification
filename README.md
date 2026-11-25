@@ -1052,14 +1052,11 @@ The renderer options and defaults are in the Templates section; these are the ty
 
 #### Push
 
-`PushService` sends one message to many device tokens and answers **per token**. The library stores no token: your backend does, and it acts on the closed `PushFailureReason` of each result (`token_unregistered` means delete the token). `ExpoPushProvider` is the shipped adapter: no SDK, no peer dependency, two JSON endpoints called with the platform's `fetch`, every request bounded by `timeoutMs` and sent only to Expo's fixed URLs.
+`PushService` sends one message to many device tokens and answers **per token**. The library stores no token: your backend does, and it acts on the closed `PushFailureReason` of each result (`token_unregistered` means delete the token). `ExpoPushProvider` is the shipped adapter, imported from the `@bymax-one/nest-notification/push` subpath so that it stays out of the main bundle of a host that sends no push: no SDK, no peer dependency, two JSON endpoints called with the platform's `fetch`, every request bounded by `timeoutMs` and sent only to Expo's fixed URLs.
 
 ```ts
-import {
-  BymaxNotificationModule,
-  ExpoPushProvider,
-  NotificationService
-} from '@bymax-one/nest-notification'
+import { BymaxNotificationModule, NotificationService } from '@bymax-one/nest-notification'
+import { ExpoPushProvider } from '@bymax-one/nest-notification/push'
 
 const accessToken = process.env.EXPO_ACCESS_TOKEN // only when the project enabled "enhanced security"
 BymaxNotificationModule.forRoot({
@@ -1089,17 +1086,17 @@ async function notifyOrderShipped(
 - **Bounds.** A call takes 1 to 1000 tokens (or ticket ids). A token that is not shaped like an Expo token is answered `token_invalid` locally, with no call. A token given twice is sent once and answered in each place it appeared.
 - **Nothing sensitive leaves.** No device token, access token, title, body or data value appears in a log, an audit entry or an error: the audit entry names the tenant, the provider and counts (`recipient: 'devices:N'`), and a provider's own error text is dropped, not wrapped. Treat the title, body and `data` as visible to Expo and to the push services behind it, and keep secrets out of them.
 
-| Name                      | What it is                               | Members                                                                                                                                                       |
-| ------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PushService`             | The push channel's service.              | `send(input)`, `fetchReceipts(ticketIds)`, `isConfigured()`.                                                                                                  |
-| `PushSendInput`           | The argument of `PushService.send()`.    | `PushSendOptions` plus `tenantId` and `userId?`.                                                                                                              |
-| `ResolvedPushOptions`     | The push section after validation.       | `provider`, `defaultTtlSeconds?`.                                                                                                                             |
-| `ExpoPushProvider`        | Reference adapter for Expo Push.         | `new ExpoPushProvider(options?)`; `name` is `'expo'`.                                                                                                         |
-| `ExpoPushProviderOptions` | Options of `ExpoPushProvider`.           | `accessToken?` (Expo enhanced security), `timeoutMs?` (default 10 000), `fetch?`.                                                                             |
-| `PushFailureReason`       | Why a token was not served (closed set). | `'token_unregistered' \| 'token_invalid' \| 'message_too_big' \| 'rate_limited' \| 'provider_unavailable' \| 'credentials' \| 'unknown'`; also in `./shared`. |
-| `PushTokenResult`         | The outcome of one token in a send.      | `token`, `messageId?`, `reason?`, `retryable?`; also in `./shared`.                                                                                           |
-| `PushReceiptStatus`       | The state of a receipt.                  | `'ok' \| 'pending' \| 'error'`; also in `./shared`.                                                                                                           |
-| `PushReceiptResult`       | One receipt.                             | `ticketId`, `status`, `reason?`, `retryable?`; also in `./shared`.                                                                                            |
+| Name                      | What it is                                       | Members                                                                                                                                                       |
+| ------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PushService`             | The push channel's service.                      | `send(input)`, `fetchReceipts(ticketIds)`, `isConfigured()`.                                                                                                  |
+| `PushSendInput`           | The argument of `PushService.send()`.            | `PushSendOptions` plus `tenantId` and `userId?`.                                                                                                              |
+| `ResolvedPushOptions`     | The push section after validation.               | `provider`, `defaultTtlSeconds?`.                                                                                                                             |
+| `ExpoPushProvider`        | Reference adapter for Expo Push (`./push` only). | `new ExpoPushProvider(options?)`; `name` is `'expo'`.                                                                                                         |
+| `ExpoPushProviderOptions` | Options of `ExpoPushProvider` (`./push`).        | `accessToken?` (Expo enhanced security), `timeoutMs?` (default 10 000), `fetch?`.                                                                             |
+| `PushFailureReason`       | Why a token was not served (closed set).         | `'token_unregistered' \| 'token_invalid' \| 'message_too_big' \| 'rate_limited' \| 'provider_unavailable' \| 'credentials' \| 'unknown'`; also in `./shared`. |
+| `PushTokenResult`         | The outcome of one token in a send.              | `token`, `messageId?`, `reason?`, `retryable?`; also in `./shared`.                                                                                           |
+| `PushReceiptStatus`       | The state of a receipt.                          | `'ok' \| 'pending' \| 'error'`; also in `./shared`.                                                                                                           |
+| `PushReceiptResult`       | One receipt.                                     | `ticketId`, `status`, `reason?`, `retryable?`; also in `./shared`.                                                                                            |
 
 #### SMS and push contracts
 

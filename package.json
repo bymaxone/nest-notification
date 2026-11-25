@@ -74,6 +74,16 @@
         "default": "./dist/observability/index.cjs"
       }
     },
+    "./push": {
+      "import": {
+        "types": "./dist/push/index.d.ts",
+        "default": "./dist/push/index.mjs"
+      },
+      "require": {
+        "types": "./dist/push/index.d.cts",
+        "default": "./dist/push/index.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "typesVersions": {
@@ -89,6 +99,9 @@
       ],
       "observability": [
         "./dist/observability/index.d.cts"
+      ],
+      "push": [
+        "./dist/push/index.d.cts"
       ]
     }
   },
