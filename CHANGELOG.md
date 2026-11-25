@@ -11,6 +11,19 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 ## [Unreleased]
 
+## [1.5.2] - 2026-11-25
+
+### Changed
+
+- **The standard-realm-root check no longer compares the `configurable` flag of a key's descriptor.** The flag can
+  only be turned off, never on, and a key that only lost it was already read as a root that was hardened, not polluted,
+  so the comparison could not change what the check answers. The answer is the same for every state of a standard key:
+  measured on a real `Object.prototype` against 1.5.1 for ten states (untouched; `configurable` lost alone; `configurable`
+  and `writable` lost; the root frozen; `configurable` lost with a new value; `enumerable` set, with and without
+  `configurable` lost; the key made an accessor; the key deleted; a planted key), both versions answered alike in all ten.
+  The published `dist/` differs from 1.5.1 only in the `server` and `push` runtime bundles, which each carry this module;
+  the type declarations and `package.json` (apart from its version) are unchanged.
+
 ## [1.5.1] - 2026-11-25
 
 ### Fixed
@@ -2114,7 +2127,8 @@ rejected at startup rather than failing on the first send.
 
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.5.1...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.5.2...HEAD
+[1.5.2]: https://github.com/bymaxone/nest-notification/compare/v1.5.1...v1.5.2
 [1.5.1]: https://github.com/bymaxone/nest-notification/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/bymaxone/nest-notification/compare/v1.4.24...v1.5.0
 [1.4.24]: https://github.com/bymaxone/nest-notification/compare/v1.4.23...v1.4.24
