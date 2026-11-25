@@ -45,35 +45,34 @@ import type {
 } from './otp-storage-contract.shared'
 export type { OtpStorageContractCase } from './otp-storage-contract.shared'
 
-// The identifiers below are arbitrary fixtures: every case reads and writes
-// through the same values, so their SPELLING cannot change an outcome — only
-// their distinctness can, and that is asserted by the cases themselves. No test
-// can distinguish one spelling from another, so mutating them is equivalent.
-// Stryker disable StringLiteral: equivalent — these identifiers are arbitrary fixtures read and written through the same constants, so no test can distinguish one spelling from another; only their distinctness carries meaning and the cases assert that
+// The cases read and write through these constants, so a spelling marked below cannot change an
+// outcome. `TENANT_B` and `ABSENT_LOCAL` are not marked: an empty value there does fail a case.
+// Stryker disable next-line StringLiteral: equivalent — an arbitrary fixture, read and written through this constant
 const KEY_PREFIX = 'nest_notification_contract'
+// Stryker disable next-line StringLiteral: equivalent — an arbitrary fixture, read and written through this constant
 const TENANT_A = 'tenant_a'
 const TENANT_B = 'tenant_b'
+// Stryker disable next-line StringLiteral: equivalent — an arbitrary fixture, read and written through this constant
 const RECIPIENT_LOCAL = 'contract@example.com'
 const ABSENT_LOCAL = 'absent@example.com'
+// Stryker disable next-line StringLiteral: equivalent — an arbitrary fixture, read and written through this constant
 const PURPOSE_MAIN = 'purpose_main'
+// Stryker disable next-line StringLiteral: equivalent — an arbitrary fixture, read and written through this constant
 const PURPOSE_OTHER = 'purpose_other'
 /** Code stored by the cases that assert nothing about the code itself. */
+// Stryker disable next-line StringLiteral: equivalent — an arbitrary fixture, read and written through this constant
 const ANY_CODE = '111111'
 /** A second, distinct code, for the cases that must tell two entries apart. */
+// Stryker disable next-line StringLiteral: equivalent — an arbitrary fixture, read and written through this constant
 const OTHER_CODE = '222222'
-// Stryker restore StringLiteral
 
 /**
  * Builds a fresh, collision-free scope for one `otpStorageContract()` call.
- *
- * The composed strings are arbitrary: only their distinctness and their
- * uniqueness per run carry meaning, so no test can tell one spelling from
- * another and mutating the pieces is equivalent.
  */
-// Stryker disable StringLiteral: equivalent — the composed key strings are arbitrary; only their distinctness and their uniqueness per run carry meaning, neither of which a spelling change alters
 function makeScope(): ContractScope {
   const run = randomUUID()
   // A purpose is at most 64 characters of A-Z a-z 0-9 : _ -, so its run id is the first 12 hex digits.
+  // Stryker disable next-line StringLiteral: equivalent — only the uniqueness of this run id matters, with or without the hyphens
   const purposeRun = run.replaceAll('-', '').slice(0, 12)
   return {
     tenantA: `${KEY_PREFIX}_${run}_${TENANT_A}`,
@@ -91,7 +90,6 @@ function makeScope(): ContractScope {
     ]
   }
 }
-// Stryker restore StringLiteral
 
 /** How the contract obtains a storage to exercise. */
 export type OtpStorageFactory = () => IOtpStorage | Promise<IOtpStorage>

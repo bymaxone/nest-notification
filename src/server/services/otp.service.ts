@@ -551,7 +551,6 @@ export class OtpService implements OnModuleInit {
 
   /** How a generated code reaches the recipient: by email when asked or when an email channel exists. */
   private deliveryOf(input: OtpGenerateInput): 'email' | 'manual' {
-    // Stryker disable next-line StringLiteral: when no email service is present the default is any non-'email' value; both 'manual' and an emptied string fall into the `!== 'email'` early return, so the literal is equivalent.
     return input.deliverVia ?? (this.emailService ? 'email' : 'manual')
   }
 

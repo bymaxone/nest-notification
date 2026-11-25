@@ -43,30 +43,27 @@ interface OtpHandlers {
   onPaste: (event: ClipboardEvent<HTMLInputElement>) => void
 }
 
-/** Single-character validation pattern for the given character class. */
-function charPattern(type: OtpInputType): RegExp {
+const DIGITS = '0123456789'
+const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
+
+/** The accepted characters for the given character class. */
+function charsetFor(type: OtpInputType): string {
   switch (type) {
     case 'alpha':
-      // Stryker disable next-line Regex: equivalent — every caller passes a SINGLE character (`applyChange` returns early on longer input, `filterValid` iterates one at a time), and for one character the anchored and unanchored forms agree. Note the pairing with `applyChange`'s length guard below: each masks the other, so neither can be killed alone while both stand, and removing BOTH would be a real defect
-      return /^[A-Za-z]$/
+      return LETTERS
     case 'alphanumeric':
-      // Stryker disable next-line Regex: equivalent — same as the alpha case above; callers pass one character at a time
-      return /^[A-Za-z0-9]$/
+      return DIGITS + LETTERS
     default:
-      // Stryker disable next-line Regex: equivalent — same as the alpha case above; callers pass one character at a time
-      return /^[0-9]$/
+      return DIGITS
   }
 }
 
-/** Whether `char` is a single accepted character for `type`. */
+/**
+ * Whether `char` is accepted for `type`. Callers pass one character: `includes` would also accept an
+ * empty string or a run of the charset.
+ */
 function isValidChar(char: string, type: OtpInputType): boolean {
-  return charPattern(type).test(char)
-}
-
-/** Upper-cases letters; digits are returned unchanged. */
-function normalizeChar(char: string, type: OtpInputType): string {
-  // Stryker disable next-line ConditionalExpression: equivalent — the numeric branch exists to say digits are left alone, and upper-casing a digit returns the digit; both arms answer the same for every value that reaches here
-  return type === 'numeric' ? char : char.toUpperCase()
+  return charsetFor(type).includes(char)
 }
 
 /** Keeps only valid characters from `input`, normalized for `type`. */
@@ -74,7 +71,7 @@ function filterValid(input: string, type: OtpInputType): string {
   let result = ''
   for (const char of input) {
     if (isValidChar(char, type)) {
-      result += normalizeChar(char, type)
+      result += char.toUpperCase()
     }
   }
   return result
@@ -122,15 +119,13 @@ function deferComplete(ref: RefObject<OnComplete | undefined>, next: readonly st
 function applyChange(ctx: HandlerContext, index: number, rawValue: string): void {
   // Mobile Safari fires `onChange` with the whole pasted string; the paste
   // handler owns that path.
-  // Stryker disable next-line BlockStatement: emptying this guard's body is equivalent — the very next check (`!isValidChar(rawValue)`) rejects every multi-character string anyway, since `isValidChar` matches a single character only, so removing the early return changes no observable outcome.
-  // Stryker disable next-line ConditionalExpression: equivalent while the anchored patterns stand — `isValidChar` matches one character only, so the next check rejects every multi-character value this guard would have returned on. The two mask each other: removing BOTH would let a pasted string through `onChange`, which is why each carries the other's reasoning
   if (rawValue.length > 1) {
     return
   }
   if (rawValue !== '' && !isValidChar(rawValue, ctx.type)) {
     return
   }
-  const char = normalizeChar(rawValue, ctx.type)
+  const char = rawValue.toUpperCase()
   const next = replaceAt(ctx.values, index, char)
   ctx.setValues(next)
   if (char !== '') {
@@ -141,7 +136,6 @@ function applyChange(ctx: HandlerContext, index: number, rawValue: string): void
 
 /** Handles Backspace (clear + focus previous) and Arrow navigation. */
 function applyKeyDown(ctx: HandlerContext, index: number, key: string): void {
-  // Stryker disable next-line ConditionalExpression,EqualityOperator: equivalent — `focusSlot` already ignores a negative index and `replaceAt(-1)` matches no slot, so relaxing the bound produces the same values and the same focus; the bound says the intent rather than enforcing it alone
   if (key === 'Backspace' && ctx.values.at(index) === '' && index > 0) {
     ctx.setValues(replaceAt(ctx.values, index - 1, ''))
     ctx.focus(index - 1)
@@ -158,8 +152,7 @@ function applyKeyDown(ctx: HandlerContext, index: number, key: string): void {
 
 /** Distributes pasted text across slots: sanitize, filter, slice, then focus. */
 function applyPaste(ctx: HandlerContext, text: string): void {
-  // Stryker disable next-line Regex: equivalent — the replacement is the empty string and the match is global, so stripping runs and stripping each character remove exactly the same set
-  const cleaned = ctx.sanitizeOnPaste ? text.replace(/[\s-]+/g, '') : text
+  const cleaned = ctx.sanitizeOnPaste ? text.replace(/[\s-]/g, '') : text
   const filled = filterValid(cleaned, ctx.type).slice(0, ctx.length)
   const next = Array.from({ length: ctx.length }, (_, i) => filled.charAt(i))
   ctx.setValues(next)
@@ -208,7 +201,6 @@ function useSlotValues(
   // slots and pad new ones with empty, so derived `code`/`isComplete` and the
   // handlers never read against a stale slot count.
   useEffect(() => {
-    // Stryker disable next-line ConditionalExpression: equivalent in output — `resizeValues` at the current length returns the same slots, so only the array identity differs, which no consumer of `values`, `code` or `isComplete` can observe
     setValues((prev) => (prev.length === length ? prev : resizeValues(prev, length)))
   }, [length])
 

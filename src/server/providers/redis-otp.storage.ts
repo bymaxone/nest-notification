@@ -97,7 +97,6 @@ export class RedisOtpStorage implements IOtpStorage {
    * runs in this single script, so concurrent calls cannot overshoot `maxAttempts`.
    * `PTTL` is read inside the script to preserve the original expiry on rewrite.
    */
-  // Stryker disable next-line StringLiteral: the Lua body executes only on a real Redis server; unit tests drive a JS fake whose `eval` ignores the script text, so an emptied-string mutant is unkillable without a live Redis integration run.
   private static readonly CONSUME_ATTEMPT_LUA = `
     local raw = redis.call('GET', KEYS[1])
     if not raw then return cjson.encode({ status = 'not_found' }) end
@@ -138,7 +137,6 @@ export class RedisOtpStorage implements IOtpStorage {
    * concurrent failures each receive a distinct count and the counter never outlives its window
    * by a gap between the two commands.
    */
-  // Stryker disable next-line StringLiteral: the Lua body executes only on a real Redis server; unit tests drive a JS fake whose `eval` recognises the script by its command, so an emptied-string mutant is unkillable without a live Redis integration run.
   private static readonly RECORD_FAILURE_LUA = `
     local count = redis.call('INCR', KEYS[1])
     redis.call('EXPIRE', KEYS[1], tonumber(ARGV[1]))
@@ -306,8 +304,8 @@ export class RedisOtpStorage implements IOtpStorage {
    */
   async getCooldown(tenantId: string, recipient: string, purpose: string): Promise<number> {
     const ttl = await this.#redis.ttl(this.cooldownKey(tenantId, recipient, purpose))
-    // Stryker disable next-line EqualityOperator: Redis TTL returns a positive integer (whole seconds remaining), 0 (a key expiring in under a second), -1 (key with no expiry), or -2 (no such key). The `ttl >= 0` mutant is equivalent: it diverges from `ttl > 0` only at ttl === 0, where the then-branch returns `ttl` (which is 0) and the else-branch returns the literal 0 — the same observable value. Every positive value takes the then-branch (returns `ttl`); -1 and -2 take the else-branch (return 0). So the result is identical for every value in {positive, 0, -1, -2}.
-    return ttl > 0 ? ttl : 0
+    // Redis answers -2 for no key and -1 for a key without expiry.
+    return Math.max(ttl, 0)
   }
 
   /**

@@ -45,11 +45,7 @@ export function toRetryAfterHeader(remainingSeconds: number): string {
  * ```
  */
 export function cooldownExpiresAt(remainingSeconds: number): number {
-  // Stryker disable next-line EqualityOperator: at remainingSeconds === 0 the fall-through computes `Date.now() + 0 * MS_PER_SECOND === Date.now()`, so `<= 0` and `< 0` are observationally identical.
-  if (remainingSeconds <= 0) {
-    return Date.now()
-  }
-  return Date.now() + remainingSeconds * MS_PER_SECOND
+  return Date.now() + Math.max(remainingSeconds, 0) * MS_PER_SECOND
 }
 
 /**
@@ -66,11 +62,7 @@ export function cooldownExpiresAt(remainingSeconds: number): number {
  * ```
  */
 export function formatCooldown(remainingSeconds: number): string {
-  // Stryker disable next-line EqualityOperator: at remainingSeconds === 0 the fall-through yields totalSeconds 0, no h/m parts, and the `parts.length === 0` guard appends '0s' — identical output, so `<= 0` and `< 0` are equivalent.
-  if (remainingSeconds <= 0) {
-    return '0s'
-  }
-  const totalSeconds = Math.ceil(remainingSeconds)
+  const totalSeconds = Math.ceil(Math.max(remainingSeconds, 0))
   const hours = Math.floor(totalSeconds / SECONDS_PER_HOUR)
   const minutes = Math.floor((totalSeconds % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE)
   const seconds = totalSeconds % SECONDS_PER_MINUTE
@@ -81,7 +73,6 @@ export function formatCooldown(remainingSeconds: number): string {
   if (minutes > 0) {
     parts.push(`${minutes}m`)
   }
-  // Stryker disable next-line ConditionalExpression: unreachable — a total of zero returns '0s' at the top of this function, so anything arriving here is at least one second and, when `seconds` is 0, has already pushed an hours or minutes part; the empty-parts arm cannot fire
   if (seconds > 0 || parts.length === 0) {
     parts.push(`${seconds}s`)
   }
