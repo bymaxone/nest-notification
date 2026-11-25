@@ -29,8 +29,9 @@
  * - it prints the survivors, the crash-only, load-failure and timeout mutants and exits 1 when
  *   there are any.
  *
- * Before a file is mutated, the command must pass on that file unmutated, with `{file}` and
- * MUTATED_FILE set to it, or the run stops with exit 2 and names the file: a failing command
+ * Before any file is mutated, the command must pass on every file that holds a table, unmutated,
+ * with `{file}` and MUTATED_FILE set to it, both as given and as the in-band rerun spells it, or
+ * the run stops with exit 2 and names the file: a failing command
  * would "kill" every mutant, and the judgement of each file's mutants is the command's verdict
  * on that file. A file with no table is not run. The source file is restored after every mutant,
  * and on SIGINT or SIGTERM. Run it on a clean working tree.
@@ -65,7 +66,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { stripVTControlCharacters } from 'node:util'
+import { isDeepStrictEqual, stripVTControlCharacters } from 'node:util'
 
 /** Files that are never mutated: specs, tests, declaration files and barrels. */
 const SKIPPED_FILE = /(?:\.(?:spec|test)\.[cm]?[jt]sx?|\.d\.[cm]?ts|(?:^|\/)index\.[cm]?[jt]sx?)$/
@@ -340,15 +341,24 @@ export function verdictOf(outcome) {
   return failedTests(output) ? 'killed' : 'crash'
 }
 
-/** The command with `--runInBand`, without the worker count jest refuses to combine with it. */
+/** Jest's worker options that take their value from the next argument. */
+const WORKER_OPTIONS = new Set(['-w', '--maxWorkers', '--max-workers'])
+
+/**
+ * The command with `--runInBand`, without the worker count jest refuses to combine with it. Only
+ * the arguments after the jest binary are filtered: before it, `-w` belongs to a package manager.
+ */
 function inBand(command) {
-  const takesValue = (part) => part === '--maxWorkers' || part === '-w'
+  const runner = command.findIndex((part) => /(^|\/)jest(\.js)?$/.test(part))
+  const jestArgument = (index) => runner !== -1 && index > runner
   const kept = command.filter(
     (part, index) =>
-      !takesValue(part) &&
-      !takesValue(command[index - 1]) &&
-      !part.startsWith('--maxWorkers=') &&
-      !/^-w=?\d/.test(part)
+      !jestArgument(index) ||
+      !(
+        WORKER_OPTIONS.has(part) ||
+        WORKER_OPTIONS.has(command[index - 1]) ||
+        /^(--maxWorkers|--max-workers)=|^-w=?\d/.test(part)
+      )
   )
   return kept.includes('--runInBand') ? kept : [...kept, '--runInBand']
 }
@@ -356,7 +366,8 @@ function inBand(command) {
 /**
  * Runs the command for one mutant. A crash or a load failure is run once more in band, so a worker
  * crash is not taken for the mutant's doing. So is a timeout, unless the command already ran in
- * band, where a second wait would only repeat the first.
+ * band, where a second wait would only repeat the first. The rerun's command has passed on the
+ * unmutated file before any mutant is written, so a failed test there is the mutant's doing.
  */
 export async function judge(root, command, file) {
   const first = verdictOf(await runCommand(root, command, file))
@@ -370,15 +381,23 @@ export async function judge(root, command, file) {
 }
 
 /**
- * Stops the run unless the command passes on the unmutated file, so that a failing command does
- * not "kill" every mutant of it. A file with no mutant is not run.
+ * Stops the run unless the command passes on the unmutated file, both as given and as the in-band
+ * rerun spells it: a command that fails on its own would "kill" every mutant it judges.
  */
-async function requirePassing(root, command, file, mutantCount) {
-  if (mutantCount === 0) return
-  const outcome = await runCommand(root, command, file)
-  if (outcome.signal !== null) throw new Error(`The test command was stopped by ${outcome.signal}.`)
-  if (!passed(outcome)) {
-    throw new Error(`The test command fails on the unmutated file ${file}; fix it first.`)
+async function requirePassing(root, command, file) {
+  const rerun = inBand(command)
+  const same = isDeepStrictEqual(rerun, command)
+  for (const [run, name] of same
+    ? [[command, 'The test command']]
+    : [
+        [command, 'The test command'],
+        [rerun, 'The test command with --runInBand']
+      ]) {
+    const outcome = await runCommand(root, run, file)
+    if (outcome.signal !== null) throw new Error(`${name} was stopped by ${outcome.signal}.`)
+    if (!passed(outcome)) {
+      throw new Error(`${name} fails on the unmutated file ${file}; fix it first.`)
+    }
   }
 }
 
@@ -402,13 +421,18 @@ async function survivorsOf(ts, root, files, command) {
   }
   process.once('SIGINT', onSignal)
   process.once('SIGTERM', onSignal)
-  for (const file of files) {
+  const targets = files
+    .map((file) => {
+      const original = readFileSync(join(root, file), 'utf8')
+      return { file, original, mutants: mutantsOf(ts, file, original) }
+    })
+    .filter(({ mutants }) => mutants.length > 0)
+  // Every file is checked before any is mutated: a run that cannot judge one does not start.
+  for (const { file } of targets) await requirePassing(root, command, file)
+  for (const { file, original, mutants } of targets) {
     const absolute = join(root, file)
-    const original = readFileSync(absolute, 'utf8')
     restore = () => writeFileSync(absolute, original)
-    const mutants = mutantsOf(ts, file, original)
     try {
-      await requirePassing(root, command, file, mutants.length)
       for (const mutant of mutants) {
         writeFileSync(absolute, mutant.text)
         const verdict = await judge(root, command, file)

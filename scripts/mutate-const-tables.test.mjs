@@ -5,8 +5,12 @@
  */
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { pathToFileURL } from 'node:url'
-import { resolve } from 'node:path'
+import { execFileSync, spawnSync } from 'node:child_process'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import { tmpdir } from 'node:os'
+import { fileURLToPath, pathToFileURL } from 'node:url'
+import { join, resolve } from 'node:path'
 
 // Long enough for a slow runner to start a fixture; only the rows that hang wait for it.
 const LIMIT_MS = 5000
@@ -71,7 +75,7 @@ test('every run gets --forceExit, and the in-band rerun drops the worker count',
     process.stderr.write(ok ? 'Tests:       1 failed, 1 total\\n' : '')
     process.exit(1)
   `
-  const command = [process.execPath, '-e', script, '--', '--maxWorkers', '1']
+  const command = [process.execPath, '-e', script, '--', 'jest', '--maxWorkers', '1']
   assert.equal(await verdict(command), 'killed-after-rerun')
 })
 
@@ -118,7 +122,7 @@ test('a coloured summary is read like a plain one', async () => {
 test('a detached descendant that keeps the output open does not extend the limit', async () => {
   const script = `
     const { spawn } = require('node:child_process')
-    spawn(process.execPath, ['-e', 'setTimeout(() => {}, 30000)'], {
+    spawn(process.execPath, ['-e', 'setTimeout(() => {}, 12000)'], {
       detached: true,
       stdio: ['ignore', 'inherit', 'inherit']
     }).unref()
@@ -133,7 +137,7 @@ test('a detached descendant that keeps the output open does not extend the limit
 test('a command that exits while a descendant holds the output is judged by what it said', async () => {
   const script = `
     const { spawn } = require('node:child_process')
-    spawn(process.execPath, ['-e', 'setTimeout(() => {}, 30000)'], {
+    spawn(process.execPath, ['-e', 'setTimeout(() => {}, 7000)'], {
       detached: true,
       stdio: ['ignore', 'inherit', 'inherit']
     }).unref()
@@ -145,16 +149,84 @@ test('a command that exits while a descendant holds the output is judged by what
   assert.ok(Date.now() - started < LIMIT_MS)
 })
 
-test('the in-band rerun drops every spelling of the worker count', async () => {
-  for (const workers of [['-w', '2'], ['-w=2'], ['-w2'], ['--maxWorkers=2']]) {
+test('the in-band rerun drops every spelling of the worker count after the runner', async () => {
+  for (const workers of [
+    ['-w', '2'],
+    ['-w=2'],
+    ['-w2'],
+    ['--maxWorkers=2'],
+    ['--max-workers=2'],
+    ['--max-workers', '2']
+  ]) {
     const script = `
       const args = process.argv.slice(1)
       if (!args.includes('--runInBand')) process.exit(1)
-      const left = args.filter((a) => a.startsWith('-w') || a.startsWith('--maxWorkers') || a === '2')
+      const left = args.filter((a) => /^(-w|--max)/.test(a) || a === '2')
       process.stderr.write(left.length === 0 ? 'Tests:       1 failed, 1 total\\n' : '')
       process.exit(1)
     `
-    const command = [process.execPath, '-e', script, '--', ...workers]
+    const command = [process.execPath, '-e', script, '--', 'node_modules/.bin/jest', ...workers]
     assert.equal(await verdict(command), 'killed-after-rerun', workers.join(' '))
+  }
+})
+
+test("the in-band rerun keeps the package manager's own -w", async () => {
+  const script = `
+    const args = process.argv.slice(1)
+    if (!args.includes('--runInBand')) process.exit(1)
+    const kept = args[0] === '-w' && args[1] === 'pkg'
+    process.stderr.write(kept ? 'Tests:       1 failed, 1 total\\n' : '')
+    process.exit(1)
+  `
+  for (const rest of [
+    ['-w', 'pkg', 'jest'],
+    ['-w', 'pkg']
+  ]) {
+    const command = [process.execPath, '-e', script, '--', ...rest]
+    assert.equal(await verdict(command), 'killed-after-rerun', rest.join(' '))
+  }
+})
+
+/** A repository with one table, whose `typescript` is the one this test file resolves. */
+function repositoryWithTable() {
+  const root = mkdtempSync(join(tmpdir(), 'const-tables-'))
+  const typescript = createRequire(import.meta.url).resolve('typescript')
+  mkdirSync(join(root, 'node_modules', 'typescript'), { recursive: true })
+  writeFileSync(
+    join(root, 'node_modules', 'typescript', 'index.js'),
+    `module.exports = require(${JSON.stringify(typescript)})\n`
+  )
+  mkdirSync(join(root, 'src'))
+  writeFileSync(join(root, 'src', 't.ts'), "export const T = ['a'] as const\n")
+  execFileSync('git', ['init', '--quiet'], { cwd: root })
+  execFileSync('git', ['add', 'src'], { cwd: root })
+  return root
+}
+
+test('the run is refused when the command fails in band on the unmutated file', () => {
+  // Passes as given on the unmutated file and crashes on a mutant; in band it always fails.
+  const script = `
+    if (process.argv.includes('--runInBand')) {
+      process.stderr.write('Tests:       1 failed, 1 total\\n')
+      process.exit(1)
+    }
+    const text = require('node:fs').readFileSync(process.env.MUTATED_FILE, 'utf8')
+    process.exit(text.includes("'a'") ? 0 : 1)
+  `
+  const root = repositoryWithTable()
+  try {
+    const path = process.env.CONST_TABLES_SCRIPT
+      ? resolve(process.env.CONST_TABLES_SCRIPT)
+      : fileURLToPath(new URL('./mutate-const-tables.mjs', import.meta.url))
+    const run = spawnSync(
+      process.execPath,
+      [path, '--root', root, '--', process.execPath, '-e', script, '--'],
+      { encoding: 'utf8' }
+    )
+    assert.equal(run.status, 2, run.stdout + run.stderr)
+    assert.match(run.stderr, /--runInBand.*unmutated file src\/t\.ts/)
+    assert.doesNotMatch(run.stderr, /KILLED/)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
   }
 })

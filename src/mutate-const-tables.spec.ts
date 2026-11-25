@@ -75,8 +75,9 @@ function run(
 }
 
 /**
- * The texts the checker saw, one per run: for each file with a table its unmutated baseline first,
- * then each mutant. Nothing was run when no file holds a table.
+ * The texts the checker saw, one per run: first, for every file with a table, its unmutated
+ * baseline twice (as given, then with `--runInBand`), then each mutant. Nothing was run when no
+ * file holds a table.
  */
 function seen(root: string): string[] {
   const log = join(root, 'log.jsonl')
@@ -121,6 +122,7 @@ describe('mutate-const-tables', () => {
     run(root)
 
     expect(seen(root)).toEqual([
+      TABLE,
       TABLE,
       'export const T = { b: 2 } as const\n',
       'export const T = { a: 2, b: 2 } as const\n',
@@ -169,7 +171,7 @@ describe('mutate-const-tables', () => {
 
     run(root)
 
-    const texts = seen(root).slice(1)
+    const texts = seen(root).slice(2)
     expect(texts).toContain(source.replace("['x', 'y']", "[ 'y']"))
     expect(texts).toContain(source.replace("['x', 'y']", "['x']"))
     expect(texts).toContain(source.replace('1_000', '1001'))
@@ -206,7 +208,7 @@ describe('mutate-const-tables', () => {
 
     run(root, ['--only', 'two', '--', 'node', 'checker.mjs', 'src/two.ts'])
 
-    expect(seen(root)).toHaveLength(5)
+    expect(seen(root)).toHaveLength(6)
   })
 
   // `--src` selects the directory; files outside it are left alone.
@@ -215,7 +217,7 @@ describe('mutate-const-tables', () => {
 
     run(root, ['--src', 'lib', '--', 'node', 'checker.mjs', 'lib/one.ts'])
 
-    expect(seen(root)).toHaveLength(5)
+    expect(seen(root)).toHaveLength(6)
   })
 
   // The command receives the mutated file's path both in `{file}` and in MUTATED_FILE.
@@ -229,7 +231,7 @@ describe('mutate-const-tables', () => {
     run(root, ['--', 'node', 'env.mjs', '{file}'])
 
     const lines = readFileSync(join(root, 'env.log'), 'utf8').split('\n').filter(Boolean)
-    expect(lines).toEqual(Array<string>(5).fill('src/table.ts|src/table.ts'))
+    expect(lines).toEqual(Array<string>(6).fill('src/table.ts|src/table.ts'))
   })
 
   // With no command the tool cannot run anything; it must say how to call it.
@@ -254,8 +256,8 @@ describe('mutate-const-tables', () => {
   })
 
   // The baseline is the command's verdict on each file, run with that file's path: a command that
-  // passes on one file and fails on another stops at the second and names it, after the first has
-  // been mutated and restored.
+  // passes on one file and fails on another stops at the second and names it, before any file has
+  // been mutated.
   it('should name the file the command fails on when it passes on another', () => {
     const root = repo({ 'src/a.ts': TABLE, 'src/b.ts': 'export const U = { c: 3 } as const\n' }, [
       'a: 1',
@@ -266,7 +268,7 @@ describe('mutate-const-tables', () => {
 
     expect(result.status).toBe(2)
     expect(result.stderr).toContain('fails on the unmutated file src/b.ts')
-    expect(seen(root)).toHaveLength(6)
+    expect(seen(root)).toEqual([TABLE, TABLE, 'export const U = { c: 3 } as const\n'])
     expect(readFileSync(join(root, 'src/a.ts'), 'utf8')).toBe(TABLE)
   })
 
@@ -281,7 +283,7 @@ describe('mutate-const-tables', () => {
     const result = run(root)
 
     expect(result.status).toBe(0)
-    expect(seen(root)).toHaveLength(5)
+    expect(seen(root)).toHaveLength(6)
   })
   // An inner object is part of the table it sits in, so its entries are mutated too.
   it('should mutate the entries of a literal nested inside a table', () => {
@@ -290,7 +292,7 @@ describe('mutate-const-tables', () => {
 
     run(root)
 
-    const texts = seen(root).slice(1)
+    const texts = seen(root).slice(2)
     expect(texts).toContain(source.replace('{ inner: 1, other: 2 }', '{ other: 2 }'))
     expect(texts).toContain(source.replace('{ inner: 1, other: 2 }', '{ inner: 1 }'))
     expect(texts).toContain(source.replace('inner: 1', 'inner: 2'))
@@ -317,7 +319,7 @@ describe('mutate-const-tables', () => {
 
     run(root)
 
-    expect(seen(root).slice(1)).toHaveLength(4)
+    expect(seen(root).slice(2)).toHaveLength(4)
   })
 
   // A tracked file that was deleted from the working tree has nothing to mutate.
@@ -331,7 +333,7 @@ describe('mutate-const-tables', () => {
     const result = run(root)
 
     expect(result.status).toBe(0)
-    expect(seen(root)).toHaveLength(5)
+    expect(seen(root)).toHaveLength(6)
   })
 
   // An interrupt must leave the source as it was: the mutant that was written is taken back, and
@@ -373,6 +375,6 @@ describe('mutate-const-tables', () => {
 
     expect(result.status).toBe(1)
     expect(result.stdout).toContain('2 mutant(s) survived')
-    expect(seen(root)).toHaveLength(3)
+    expect(seen(root)).toHaveLength(4)
   })
 })
