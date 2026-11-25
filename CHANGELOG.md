@@ -11,7 +11,7 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 ## [Unreleased]
 
-## [1.5.0] - 2026-11-24
+## [1.5.0] - 2026-11-25
 
 ### Added
 
