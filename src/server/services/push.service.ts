@@ -35,6 +35,7 @@ import type {
 import { writeAudit } from '../utils/audit-write'
 import { AuditWriteWarning } from '../utils/audit-write-warning'
 import { isUnavailableProviderError } from '../utils/availability'
+import { refuseInput } from '../utils/bounded-list'
 import { readHostName } from '../utils/host-name'
 import { isLibraryError } from '../utils/is-library-error'
 import { reportSend, runInSpan } from '../utils/observe'
@@ -87,15 +88,32 @@ function invalidToken(token: string): PushSendResult['results'][number] {
   return { token, reason: 'token_invalid', retryable: false }
 }
 
-/** Whether every token of a send failed: the one reading the audit verb and the observer outcome share. */
-function allFailed(results: PushSendResult['results']): boolean {
-  return results.every((result) => result.reason !== undefined)
+/** Whether a result is a failure: it names a `reason`, or the host's provider reported an `error`. */
+function hasFailed(result: PushSendResult['results'][number]): boolean {
+  return result.reason !== undefined || Reflect.get(result, 'error') !== undefined
 }
 
-/** Whether a provider's answer is one result per token, the only shape the service can count. */
-function isAnswerFor(answer: unknown, tokenCount: number): answer is PushSendResult {
+/** Whether every token of a send failed: the one reading the audit verb and the observer outcome share. */
+function allFailed(results: PushSendResult['results']): boolean {
+  return results.every(hasFailed)
+}
+
+/**
+ * Whether a provider's answer is one result per token, in the order the tokens were given, each an
+ * object naming its own token: the only shape the service can match to tokens and count.
+ */
+function isAnswerFor(answer: unknown, tokens: readonly string[]): answer is PushSendResult {
   const results: unknown = (answer as { results?: unknown } | null | undefined)?.results
-  return Array.isArray(results) && results.length === tokenCount
+  return (
+    Array.isArray(results) &&
+    results.length === tokens.length &&
+    results.every(
+      (result: unknown, index) =>
+        typeof result === 'object' &&
+        result !== null &&
+        Reflect.get(result, 'token') === tokens.at(index)
+    )
+  )
 }
 
 /** Push notification service. */
@@ -188,7 +206,7 @@ export class PushService {
       assertStandardRealmRoot(OWNER)
       return answer as PushReceiptResult[]
     } catch (error) {
-      rethrowRefusal(error)
+      rethrowRefusal(error, OWNER)
       throw this.failure(error)
     }
   }
@@ -232,6 +250,9 @@ export class PushService {
     progress: SendProgress
   ): Promise<PushSendResult> {
     const push = this.requireOptions()
+    if (typeof raw !== 'object' || raw === null) {
+      throw refuseInput(OWNER, 'input', 'must be an object')
+    }
     // The envelope is read once: what is validated is what is sent and what is audited.
     const { tenantId, userId } = raw
     assertIdentifies(OWNER, 'tenantId', tenantId)
@@ -269,14 +290,14 @@ export class PushService {
   ): Promise<PushSendResult> {
     try {
       const answer: unknown = await checkedAwait(this.provider.send(send), OWNER)
-      if (!isAnswerFor(answer, send.tokens.length)) {
+      if (!isAnswerFor(answer, [send.tokens].flat())) {
         throw new TypeError('the provider did not answer once per token')
       }
       progress.stage = 'accepted'
       assertStandardRealmRoot(OWNER)
       return answer
     } catch (error) {
-      rethrowRefusal(error)
+      rethrowRefusal(error, OWNER)
       progress.stage = 'failed'
       await own(this.auditFailure(scope), OWNER)
       throw this.failure(error)
@@ -327,7 +348,7 @@ export class PushService {
   /** The audit entry of a send the provider answered. */
   private auditEntry(scope: SendScope, answer: PushSendResult): NotificationLogEntry {
     const { tenantId, userId, tokenCount } = scope
-    const failed = answer.results.filter((result) => result.reason !== undefined).length
+    const failed = answer.results.filter(hasFailed).length
     return {
       timestamp: Date.now(),
       tenantId,

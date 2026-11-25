@@ -130,8 +130,9 @@ export function readReceipts(ids: readonly string[], body: unknown): PushReceipt
  *
  * @param tokens - The tokens of the refused call.
  * @param details - The `details` of the refusal: `{ [experienceId]: token[] }`.
- * @returns The groups, each a subset of `tokens` with no repeats; a token the details do not name,
- *   or name twice, is left out so the caller refuses it.
+ * @returns The groups, each a subset of `tokens`; a token is in one group once, the first list that
+ *   names it, even when a list repeats it. A token the details do not name is left out so the caller
+ *   refuses it.
  */
 export function groupByProject(tokens: readonly string[], details: unknown): string[][] {
   if (typeof details !== 'object' || details === null) {
@@ -141,11 +142,13 @@ export function groupByProject(tokens: readonly string[], details: unknown): str
   const placed = new Set<string>()
   const groups: string[][] = []
   for (const listed of Object.values(details)) {
-    const group = (Array.isArray(listed) ? (listed as unknown[]) : []).filter(
-      (token): token is string =>
-        typeof token === 'string' && known.has(token) && !placed.has(token)
-    )
-    group.forEach((token) => placed.add(token))
+    const group: string[] = []
+    for (const token of Array.isArray(listed) ? (listed as unknown[]) : []) {
+      if (typeof token === 'string' && known.has(token) && !placed.has(token)) {
+        placed.add(token)
+        group.push(token)
+      }
+    }
     if (group.length > 0) {
       groups.push(group)
     }

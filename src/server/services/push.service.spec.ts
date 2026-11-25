@@ -437,7 +437,13 @@ describe('PushService observer', () => {
     const observer = recorder()
     const service = build(makeProvider(), makeAudit(), {}, observer)
 
-    await failureOf(service.send(null as never))
+    const hostile = {
+      ...input,
+      get tenantId(): string {
+        throw new Error('host getter failed')
+      }
+    }
+    await failureOf(service.send(hostile))
 
     expect(observer.onSend).toHaveBeenCalledWith(
       expect.objectContaining({ channel: 'push', outcome: 'failed' })

@@ -105,7 +105,37 @@ export class NotificationAuditInterceptor implements NestInterceptor {
           )
         ).pipe(concatMap(() => throwError(() => error)))
       ),
-      concatMap((value) => from(this.recordMeta(context, 'sent')).pipe(map(() => value)))
+      concatMap((value) => {
+        const failed = this.isFailedPush(context, value)
+        return from(
+          this.recordMeta(
+            context,
+            failed ? 'failed' : 'sent',
+            failed ? 'push provider failed' : undefined
+          )
+        ).pipe(map(() => value))
+      })
+    )
+  }
+
+  /**
+   * Whether a push dispatch returned and yet delivered to no token: every per-token result names a
+   * failure, which is how the service itself audits it. The handler value is the dispatch result
+   * (`{ channel, result: { results } }`) or a bare send result (`{ results }`).
+   */
+  private isFailedPush(context: ExecutionContext, value: unknown): boolean {
+    if (this.extractDispatchInput(context)?.channel !== 'push') {
+      return false
+    }
+    const inner: unknown = Reflect.get(Object(value), 'result') ?? value
+    const results: unknown = Reflect.get(Object(inner), 'results')
+    return (
+      Array.isArray(results) &&
+      results.length > 0 &&
+      results.every(
+        (entry: unknown) =>
+          typeof entry === 'object' && entry !== null && Reflect.get(entry, 'reason') !== undefined
+      )
     )
   }
 
