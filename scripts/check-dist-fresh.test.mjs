@@ -34,11 +34,7 @@ function pkg(files) {
 }
 
 const cli = (root, args = [], env = {}) =>
-  spawnSync(process.execPath, [SCRIPT, ...args], {
-    cwd: root,
-    encoding: 'utf8',
-    env: { PATH: process.env.PATH, ...env }
-  })
+  spawnSync(process.execPath, [SCRIPT, ...args], { cwd: root, encoding: 'utf8', env: { PATH: process.env.PATH, ...env } })
 
 describe('judge', () => {
   const at = (path, mtimeMs) => ({ path, mtimeMs })
@@ -65,17 +61,12 @@ describe('judge', () => {
 
 describe('parseOptions', () => {
   it('defaults to src, dist, tsup.config.ts and package.json, and repeats --src and --also', () => {
-    assert.deepEqual(parseOptions([]), {
-      src: ['src'],
-      dist: 'dist',
-      also: ['tsup.config.ts', 'package.json'],
-      tarballOk: false
-    })
+    assert.deepEqual(parseOptions([]), { src: ['src'], dist: 'dist', also: ['tsup.config.ts', 'package.json'], tarballOk: false })
     assert.deepEqual(parseOptions(['--src', 'a', '--src', 'b', '--also', 'x', '--dist', 'out']), {
       src: ['a', 'b'],
       dist: 'out',
       also: ['x'],
-      tarballOk: false
+      tarballOk: false,
     })
   })
 
@@ -119,12 +110,7 @@ describe('the command', () => {
   })
 
   it('does not count a spec or a test file as a source', () => {
-    const root = pkg({
-      'src/a.ts': 100,
-      'src/a.spec.ts': 900,
-      'src/b.test.mjs': 900,
-      'dist/a.mjs': 200
-    })
+    const root = pkg({ 'src/a.ts': 100, 'src/a.spec.ts': 900, 'src/b.test.mjs': 900, 'dist/a.mjs': 200 })
     assert.equal(cli(root).status, 0)
   })
 
