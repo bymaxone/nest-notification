@@ -26,7 +26,7 @@ import type { ReadPush } from '../utils/push-send-input'
 import { assertOptionsObject, readOptionKeys } from '../utils/read-options'
 import { checkedAwait } from '../utils/realm-root'
 import { assertTimerMs } from '../utils/timer-option'
-import { EXPO_RECEIPTS_URL, EXPO_SEND_URL, callExpo } from './expo-push.client'
+import { EXPO_RECEIPTS_URL, EXPO_SEND_URL, callExpo, refused } from './expo-push.client'
 import type { ExpoCall, ExpoCallOptions, ExpoFetch } from './expo-push.client'
 import { OUTCOME_UNKNOWN, UNKNOWN_FAILURE, isExpoPushToken } from './expo-push.codes'
 import type { ExpoFailure } from './expo-push.codes'
@@ -35,6 +35,7 @@ import {
   buildMessages,
   chunksOf,
   failedOutcome,
+  field,
   groupByProject,
   readReceipts,
   readTickets
@@ -140,6 +141,16 @@ export class ExpoPushProvider implements IPushProvider {
     const call = await checkedAwait(this.#call(EXPO_RECEIPTS_URL, { ids }), OWNER)
     if (call.kind === 'failed') {
       throw new ExpoPushError(call.failure)
+    }
+    // An answer with no `data` map says nothing about any ticket: reading it as all pending would
+    // keep a poller waiting on an endpoint that is broken, so it is a failure, like a body that is
+    // not JSON. When it carries an `errors` list, the first code is classified as on a refused call;
+    // a code the table does not name stays the plain, non-retryable failure. A map that merely omits
+    // an id leaves that id pending.
+    const data = field(call.body, 'data')
+    if (typeof data !== 'object' || data === null || Array.isArray(data)) {
+      const named = (refused(200, call.body) as Extract<ExpoCall, { kind: 'failed' }>).failure
+      throw new ExpoPushError(named === UNKNOWN_FAILURE ? OUTCOME_UNKNOWN : named)
     }
     return readReceipts(ids, call.body)
   }

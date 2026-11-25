@@ -111,8 +111,12 @@ export class NotificationService implements OnModuleInit {
    *
    * @param input - The channel-discriminated dispatch request.
    * @returns The channel-discriminated result.
-   * @throws NotificationException `CHANNEL_DISABLED` (channel not configured) or
-   * `EMAIL_MISSING_BODY` (email payload has neither a template nor subject+html).
+   * @throws NotificationException `CHANNEL_DISABLED` (channel not configured),
+   * `EMAIL_MISSING_BODY` (email payload has neither a template nor subject+html) or
+   * `INVALID_SCOPE_IDENTIFIER` (the request is not an object, its channel is not email, otp or
+   * push, an email payload is null or undefined, or an otp or push payload is not an object). A
+   * push payload that is a list is refused by `PushService`, as `tokens` expecting a list, because
+   * it carries none. A channel that is not configured answers `CHANNEL_DISABLED` first.
    */
   dispatch(input: DispatchInput): Promise<DispatchResult> {
     // Pinned and checked as it is handed over: the caller's own `await` reads nothing off the realm.
@@ -121,11 +125,17 @@ export class NotificationService implements OnModuleInit {
 
   /** Reads the request once and routes it to its channel. */
   private async route(input: DispatchInput): Promise<DispatchResult> {
+    if (typeof input !== 'object' || input === null) {
+      throw refuseInput('NotificationService', 'input', 'must be an object')
+    }
     // The request is read once: the channel that routes is the channel whose payload is used.
     const { channel, tenantId, payload } = copyByName(
       input,
       DISPATCH_KEYS
     ) as unknown as DispatchInput
+    if (channel !== 'email' && channel !== 'push' && channel !== 'otp') {
+      throw refuseInput('NotificationService', 'channel', 'expected email, otp or push')
+    }
     if (channel === 'email') {
       return {
         channel: 'email',
@@ -254,6 +264,11 @@ export class NotificationService implements OnModuleInit {
   /** Routes an email dispatch to `sendTemplate` (template) or `send` (raw body). */
   private async dispatchEmail(tenantId: string, raw: EmailDispatchPayload): Promise<string> {
     const email = this.getEmail()
+    // A payload that is not a value at all is refused here; any other kind is answered below as a
+    // payload with no body, the answer an existing caller already gets.
+    if (raw === undefined || raw === null) {
+      throw refuseInput('NotificationService', 'payload', 'must be an object')
+    }
     // Each field of the payload is read once, here, and only the copy is used below.
     const payload = copyByName(raw, DISPATCH_EMAIL_KEYS) as unknown as EmailDispatchPayload
     if (payload.template !== undefined) {
@@ -292,6 +307,10 @@ export class NotificationService implements OnModuleInit {
     payload: OtpDispatchPayload
   ): Promise<OtpGenerateResult | OtpVerifyResult | void> {
     const otp = this.getOtp()
+    // A list is no payload either: with no `action` it would run a generate on the tenant alone.
+    if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
+      throw refuseInput('NotificationService', 'payload', 'must be an object')
+    }
     // Each field of the payload is read once, here, and only these values are used below.
     const {
       action,

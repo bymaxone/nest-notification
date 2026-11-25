@@ -59,8 +59,8 @@ function parse(text: string): unknown {
   }
 }
 
-/** Builds the failure of an answer that was not a success. */
-function refused(status: number, body: unknown): ExpoCall {
+/** Builds the failure of an answer that was not a success, or that carries an `errors` list instead of data. */
+export function refused(status: number, body: unknown): ExpoCall {
   const first: unknown = Array.isArray(field(body, 'errors'))
     ? (field(body, 'errors') as unknown[])[0]
     : undefined

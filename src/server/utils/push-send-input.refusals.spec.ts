@@ -7,6 +7,7 @@
 import { NotificationException } from '../errors/notification-exception'
 
 import { readIdList, readPush, readTokenList } from './push-send-input'
+import type { ReadPush } from './push-send-input'
 
 const OWNER = 'Owner'
 const base = { tokens: ['t'], title: 'x', body: 'y' }
@@ -70,6 +71,27 @@ describe('the refusals of the push input reader', () => {
       })
     }
   )
+
+  describe.each([
+    'imageUrl',
+    'sound',
+    'channelId',
+    'subtitle',
+    'categoryId',
+    'collapseKey',
+    'threadId'
+  ])('the optional text field %s', (key) => {
+    it('should keep the text the caller gave in the message it reads', () => {
+      expect(Reflect.get((object({ [key]: 'v' }) as ReadPush).message, key)).toBe('v')
+    })
+
+    it('should be refused when it is not text', () => {
+      expect(detailsOf(() => object({ [key]: 5 }))).toStrictEqual({
+        code: 'notification.invalid_scope_identifier',
+        details: { boundary: OWNER, parameter: key, reason: text }
+      })
+    })
+  })
 
   it('should name more than the data key limit', () => {
     const keys = Object.fromEntries(

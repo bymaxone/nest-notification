@@ -11,6 +11,41 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-11-25
+
+### Fixed
+
+- **A dispatch that is not of its kind is refused with the library's own error instead of a raw `TypeError` or an OTP call.**
+  `NotificationService.dispatch` now answers `notification.invalid_scope_identifier` for a request that is not an
+  object (a function included), for a channel that is not `email`, `otp` or `push` (a missing or unknown channel used
+  to fall through to `otp.generate` on the tenant alone), for an email payload that is `null` or `undefined`, and for
+  an OTP payload that is not an object. An OTP payload that was `null` or `undefined` threw a raw `TypeError`; one that
+  was a number, a string, `true`, a list or a function ran a generate with no `action`. An email payload that is a
+  number, a string or a list keeps its published answer, `notification.email_missing_body`, and a channel that is not
+  configured keeps answering `notification.channel_disabled` whatever the payload.
+
+- **`ExpoPushProvider.fetchReceipts` no longer reads an answer with no receipts map as every id pending.** A parsed
+  body whose `data` is missing, `null`, a list or not an object made every ticket id `pending`, so a poller never learned
+  that the endpoint was broken, while a body that was not JSON threw. It now throws `notification.push_send_failed`
+  (through `PushService`) in both cases. A `200` that carries an `errors` list instead of data is classified by its first code, as a refused call is. An id the `data` map omits is still `pending`, as documented.
+
+### Documentation
+
+- **The README no longer says the push types are exported from the main entry.** `PushFailureReason`, `PushTokenResult`,
+  `PushReceiptStatus` and `PushReceiptResult` are exported from `@bymax-one/nest-notification/shared` only; importing
+  them from the main entry failed with TS2459. The table now says where to import them from. No export was added.
+
+The published `dist/` differs from 1.5.0 in the `server` and `push` runtime bundles; the type declarations differ
+only in the JSDoc of `NotificationService.dispatch`, and `package.json` only in its version.
+
+#### Apply to a derived backend
+
+No change is needed for a caller that passed a well-formed request; one that passed a malformed request now gets a
+`notification.invalid_scope_identifier` refusal where it got a raw error or an OTP call. One answer changes for a
+poller of `fetchReceipts`: an Expo answer with no `data` map used to come back as every id `pending`, so a poller kept
+waiting; it now throws `notification.push_send_failed`. A poller that treats a throw as "try again later" needs nothing;
+one that treated an all-`pending` list as "nothing to do" will now see the error.
+
 ## [1.5.0] - 2026-11-25
 
 ### Added
@@ -2079,7 +2114,8 @@ rejected at startup rather than failing on the first send.
 
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.5.1...HEAD
+[1.5.1]: https://github.com/bymaxone/nest-notification/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/bymaxone/nest-notification/compare/v1.4.24...v1.5.0
 [1.4.24]: https://github.com/bymaxone/nest-notification/compare/v1.4.23...v1.4.24
 [1.4.23]: https://github.com/bymaxone/nest-notification/compare/v1.4.22...v1.4.23
