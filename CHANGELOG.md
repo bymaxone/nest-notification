@@ -33,8 +33,11 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 #### Apply to a derived backend
 
-No change is needed. A caller that already passed a well-formed request sees no difference; one that passed a
-malformed request now gets a `notification.invalid_scope_identifier` refusal where it got a raw error or an OTP call.
+No change is needed for a caller that passed a well-formed request; one that passed a malformed request now gets a
+`notification.invalid_scope_identifier` refusal where it got a raw error or an OTP call. One answer changes for a
+poller of `fetchReceipts`: an Expo answer with no `data` map used to come back as every id `pending`, so a poller kept
+waiting; it now throws `notification.push_send_failed`. A poller that treats a throw as "try again later" needs nothing;
+one that treated an all-`pending` list as "nothing to do" will now see the error.
 
 ## [1.5.0] - 2026-11-25
 

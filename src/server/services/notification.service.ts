@@ -114,7 +114,8 @@ export class NotificationService implements OnModuleInit {
    * @throws NotificationException `CHANNEL_DISABLED` (channel not configured),
    * `EMAIL_MISSING_BODY` (email payload has neither a template nor subject+html) or
    * `INVALID_SCOPE_IDENTIFIER` (the request is not an object, its channel is not email, otp or
-   * push, or an otp or push payload is not an object).
+   * push, or an otp or push payload is not an object). A push payload that is a list is refused
+   * by `PushService`, as `tokens` expecting a list, because it carries none.
    */
   dispatch(input: DispatchInput): Promise<DispatchResult> {
     // Pinned and checked as it is handed over: the caller's own `await` reads nothing off the realm.
