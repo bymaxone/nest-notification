@@ -16,7 +16,7 @@ the entries that carry one, is the compatibility contract — read it, not the n
 ### Changed
 
 - **The standard-realm-root check no longer compares the `configurable` flag of a key's descriptor.** A key that was
-  captured without it can never gain it, since it can be neither deleted nor redefined, and a root that lost it is
+  captured without it can never gain it, since it cannot be deleted and `Object.defineProperty` cannot turn the flag back on, and a root that lost it is
   hardened, which is not a difference the check reports.
   The published `dist/` differs from 1.5.1 only in the `server` and `push` runtime bundles, which each carry this module;
   the type declarations and `package.json` (apart from its version) are unchanged.
