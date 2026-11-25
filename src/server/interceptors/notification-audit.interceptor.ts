@@ -120,7 +120,7 @@ export class NotificationAuditInterceptor implements NestInterceptor {
 
   /**
    * Whether a push dispatch returned and yet delivered to no token: every per-token result names a
-   * failure, which is how the service itself audits it. The handler value is the dispatch result
+   * failure (a `reason`, or the deprecated `error`), which is how the service itself audits it. The handler value is the dispatch result
    * (`{ channel, result: { results } }`) or a bare send result (`{ results }`).
    */
   private isFailedPush(context: ExecutionContext, value: unknown): boolean {
@@ -134,7 +134,9 @@ export class NotificationAuditInterceptor implements NestInterceptor {
       results.length > 0 &&
       results.every(
         (entry: unknown) =>
-          typeof entry === 'object' && entry !== null && Reflect.get(entry, 'reason') !== undefined
+          typeof entry === 'object' &&
+          entry !== null &&
+          (Reflect.get(entry, 'reason') !== undefined || Reflect.get(entry, 'error') !== undefined)
       )
     )
   }

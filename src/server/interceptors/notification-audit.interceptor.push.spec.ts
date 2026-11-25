@@ -67,6 +67,23 @@ describe('NotificationAuditInterceptor and a push dispatch', () => {
   })
 
   it.each([
+    [
+      'an error entry for every token',
+      {
+        results: [
+          { token: 't', error: 'x' },
+          { token: 't', error: 'x' }
+        ]
+      }
+    ],
+    ['a reason or an error for every token', { results: [failedToken, { token: 't', error: 'x' }] }]
+  ])('should audit %s as failed, as the service counts it', async (_label, value) => {
+    const entry = await audited('push', value)
+
+    expect(entry.verb).toBe('failed')
+  })
+
+  it.each([
     ['a partial failure', { channel: 'push', result: { results: [failedToken, sentToken] } }],
     ['a full success', { channel: 'push', result: { results: [sentToken, sentToken] } }],
     ['a value that holds no results', { channel: 'push' }],
