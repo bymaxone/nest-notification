@@ -11,6 +11,8 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-11-25
+
 ### Fixed
 
 - **A dispatch that is not of its kind is refused with the library's own error instead of a raw `TypeError` or an OTP call.**
@@ -32,6 +34,9 @@ the entries that carry one, is the compatibility contract — read it, not the n
 - **The README no longer says the push types are exported from the main entry.** `PushFailureReason`, `PushTokenResult`,
   `PushReceiptStatus` and `PushReceiptResult` are exported from `@bymax-one/nest-notification/shared` only; importing
   them from the main entry failed with TS2459. The table now says where to import them from. No export was added.
+
+The published `dist/` differs from 1.5.0 in the `server` and `push` runtime bundles; the type declarations differ
+only in the JSDoc of `NotificationService.dispatch`, and `package.json` only in its version.
 
 #### Apply to a derived backend
 
