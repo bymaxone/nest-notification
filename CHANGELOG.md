@@ -11,6 +11,26 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 ## [Unreleased]
 
+### Fixed
+
+- **A dispatch that is not of its kind is refused with the library's own error instead of a raw `TypeError` or an OTP call.**
+  `NotificationService.dispatch` now answers `notification.invalid_scope_identifier` for a request that is not an
+  object, for a channel that is not `email`, `otp` or `push` (a missing or unknown channel used to fall through to
+  `otp.generate` on the tenant alone), for an email payload that is `null` or `undefined`, and for an OTP payload that
+  is not an object (a number, a string, `true`, a list, or none used to run a generate with no `action`). An email
+  payload that is a number, a string or a list keeps its published answer, `notification.email_missing_body`.
+
+### Documentation
+
+- **The README no longer says the push types are exported from the main entry.** `PushFailureReason`, `PushTokenResult`,
+  `PushReceiptStatus` and `PushReceiptResult` are exported from `@bymax-one/nest-notification/shared` only; importing
+  them from the main entry failed with TS2459. The table now says where to import them from. No export was added.
+
+#### Apply to a derived backend
+
+No change is needed. A caller that already passed a well-formed request sees no difference; one that passed a
+malformed request now gets a `notification.invalid_scope_identifier` refusal where it got a raw error or an OTP call.
+
 ## [1.5.0] - 2026-11-25
 
 ### Added
