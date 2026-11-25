@@ -2,7 +2,8 @@
  * Pins `scripts/mutate-const-tables.mjs`, the development tool that mutates `as const` tables one
  * entry at a time. It is plain Node, so each case runs it as a child process against a throwaway
  * git repository whose test command is a small checker script, and asserts the exit code, what
- * is printed, the exact text of each mutant, and that the mutated file is restored.
+ * is printed, the exact text of each mutant, and that the mutated file is restored. The script's
+ * own verdict cases run under `node --test`, and one case here runs them.
  *
  * Layer: repository tooling, tests.
  */
@@ -20,6 +21,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 
 const SCRIPT = resolve(__dirname, '..', 'scripts', 'mutate-const-tables.mjs')
+const SELF_TEST = resolve(__dirname, '..', 'scripts', 'mutate-const-tables.test.mjs')
 const REPOSITORY_MODULES = resolve(__dirname, '..', 'node_modules')
 
 interface Result {
@@ -34,6 +36,7 @@ const roots: string[] = []
  * Lays out a git repository holding `files` (path to text), with the repository's own
  * `node_modules` linked in so the script finds `typescript`, and a checker that appends the text
  * of the file it is given to a log and exits 1 unless that text includes every `required` snippet.
+ * The checker prints the test summary a jest run would, which the script reads its verdict from.
  */
 function repo(files: Record<string, string>, required: readonly string[]): string {
   const root = mkdtempSync(join(tmpdir(), 'mutate-const-spec-'))
@@ -52,7 +55,9 @@ function repo(files: Record<string, string>, required: readonly string[]): strin
       "const text = readFileSync(file, 'utf8')",
       "appendFileSync('log.jsonl', JSON.stringify(text) + '\\n')",
       `const required = ${JSON.stringify(required)}`,
-      'process.exit(required.every((snippet) => text.includes(snippet)) ? 0 : 1)'
+      'const ok = required.every((snippet) => text.includes(snippet))',
+      "process.stderr.write(ok ? 'Tests: 1 passed, 1 total\\n' : 'Tests: 1 failed, 1 total\\n')",
+      'process.exit(ok ? 0 : 1)'
     ].join('\n')
   )
   symlinkSync(REPOSITORY_MODULES, join(root, 'node_modules'))
@@ -70,8 +75,9 @@ function run(
 }
 
 /**
- * The texts the checker saw, one per run: for each file with a table its unmutated baseline first,
- * then each mutant. Nothing was run when no file holds a table.
+ * The texts the checker saw, one per run: first, for every file with a table, its unmutated
+ * baseline twice (as given, then with `--runInBand`), then each mutant. Nothing was run when no
+ * file holds a table.
  */
 function seen(root: string): string[] {
   const log = join(root, 'log.jsonl')
@@ -89,6 +95,15 @@ afterAll(() => {
 const TABLE = 'export const T = { a: 1, b: 2 } as const\n'
 
 describe('mutate-const-tables', () => {
+  // The verdicts (crash, load failure, timeout, rerun) are pinned by the script's `node --test`
+  // file, which no other command of this repository runs.
+  it('should pass its own verdict cases', () => {
+    const result = spawnSync('node', ['--test', SELF_TEST], { encoding: 'utf8' })
+
+    expect(result.stdout).toContain('fail 0')
+    expect(result.status).toBe(0)
+  })
+
   // A checker that pins every entry by exact text kills the removal and the bump of each one.
   it('should kill every mutant of a table the command pins in full', () => {
     const root = repo({ 'src/table.ts': TABLE }, ['a: 1', 'b: 2'])
@@ -107,6 +122,7 @@ describe('mutate-const-tables', () => {
     run(root)
 
     expect(seen(root)).toEqual([
+      TABLE,
       TABLE,
       'export const T = { b: 2 } as const\n',
       'export const T = { a: 2, b: 2 } as const\n',
@@ -155,7 +171,7 @@ describe('mutate-const-tables', () => {
 
     run(root)
 
-    const texts = seen(root).slice(1)
+    const texts = seen(root).slice(2)
     expect(texts).toContain(source.replace("['x', 'y']", "[ 'y']"))
     expect(texts).toContain(source.replace("['x', 'y']", "['x']"))
     expect(texts).toContain(source.replace('1_000', '1001'))
@@ -192,7 +208,7 @@ describe('mutate-const-tables', () => {
 
     run(root, ['--only', 'two', '--', 'node', 'checker.mjs', 'src/two.ts'])
 
-    expect(seen(root)).toHaveLength(5)
+    expect(seen(root)).toHaveLength(6)
   })
 
   // `--src` selects the directory; files outside it are left alone.
@@ -201,7 +217,7 @@ describe('mutate-const-tables', () => {
 
     run(root, ['--src', 'lib', '--', 'node', 'checker.mjs', 'lib/one.ts'])
 
-    expect(seen(root)).toHaveLength(5)
+    expect(seen(root)).toHaveLength(6)
   })
 
   // The command receives the mutated file's path both in `{file}` and in MUTATED_FILE.
@@ -215,7 +231,7 @@ describe('mutate-const-tables', () => {
     run(root, ['--', 'node', 'env.mjs', '{file}'])
 
     const lines = readFileSync(join(root, 'env.log'), 'utf8').split('\n').filter(Boolean)
-    expect(lines).toEqual(Array<string>(5).fill('src/table.ts|src/table.ts'))
+    expect(lines).toEqual(Array<string>(6).fill('src/table.ts|src/table.ts'))
   })
 
   // With no command the tool cannot run anything; it must say how to call it.
@@ -240,8 +256,8 @@ describe('mutate-const-tables', () => {
   })
 
   // The baseline is the command's verdict on each file, run with that file's path: a command that
-  // passes on one file and fails on another stops at the second and names it, after the first has
-  // been mutated and restored.
+  // passes on one file and fails on another stops at the second and names it, before any file has
+  // been mutated.
   it('should name the file the command fails on when it passes on another', () => {
     const root = repo({ 'src/a.ts': TABLE, 'src/b.ts': 'export const U = { c: 3 } as const\n' }, [
       'a: 1',
@@ -252,7 +268,7 @@ describe('mutate-const-tables', () => {
 
     expect(result.status).toBe(2)
     expect(result.stderr).toContain('fails on the unmutated file src/b.ts')
-    expect(seen(root)).toHaveLength(6)
+    expect(seen(root)).toEqual([TABLE, TABLE, 'export const U = { c: 3 } as const\n'])
     expect(readFileSync(join(root, 'src/a.ts'), 'utf8')).toBe(TABLE)
   })
 
@@ -267,7 +283,7 @@ describe('mutate-const-tables', () => {
     const result = run(root)
 
     expect(result.status).toBe(0)
-    expect(seen(root)).toHaveLength(5)
+    expect(seen(root)).toHaveLength(6)
   })
   // An inner object is part of the table it sits in, so its entries are mutated too.
   it('should mutate the entries of a literal nested inside a table', () => {
@@ -276,7 +292,7 @@ describe('mutate-const-tables', () => {
 
     run(root)
 
-    const texts = seen(root).slice(1)
+    const texts = seen(root).slice(2)
     expect(texts).toContain(source.replace('{ inner: 1, other: 2 }', '{ other: 2 }'))
     expect(texts).toContain(source.replace('{ inner: 1, other: 2 }', '{ inner: 1 }'))
     expect(texts).toContain(source.replace('inner: 1', 'inner: 2'))
@@ -303,7 +319,7 @@ describe('mutate-const-tables', () => {
 
     run(root)
 
-    expect(seen(root).slice(1)).toHaveLength(4)
+    expect(seen(root).slice(2)).toHaveLength(4)
   })
 
   // A tracked file that was deleted from the working tree has nothing to mutate.
@@ -317,7 +333,7 @@ describe('mutate-const-tables', () => {
     const result = run(root)
 
     expect(result.status).toBe(0)
-    expect(seen(root)).toHaveLength(5)
+    expect(seen(root)).toHaveLength(6)
   })
 
   // An interrupt must leave the source as it was: the mutant that was written is taken back, and
@@ -359,6 +375,6 @@ describe('mutate-const-tables', () => {
 
     expect(result.status).toBe(1)
     expect(result.stdout).toContain('2 mutant(s) survived')
-    expect(seen(root)).toHaveLength(3)
+    expect(seen(root)).toHaveLength(4)
   })
 })
