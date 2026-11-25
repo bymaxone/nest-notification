@@ -98,6 +98,18 @@ describe('snapshotOptions', () => {
     expect(copy.global?.defaultLocale).toBe('en')
   })
 
+  it('should snapshot the push options too, and leave an absent push section absent', () => {
+    const push = { provider, defaultTtlSeconds: 60 }
+    const options = { push } as unknown as BymaxNotificationModuleOptions
+
+    const copy = snapshotOptions(options)
+    push.defaultTtlSeconds = 99
+
+    expect(copy.push).not.toBe(push)
+    expect(copy.push?.defaultTtlSeconds).toBe(60)
+    expect('push' in snapshotOptions({} as BymaxNotificationModuleOptions)).toBe(false)
+  })
+
   // Providers, stores and repositories are the host's objects: they are not copied.
   it('should keep the host objects by reference', () => {
     const repository = { create: jest.fn() }

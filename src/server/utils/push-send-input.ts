@@ -70,8 +70,8 @@ function isText(value: unknown, limit: number): value is string {
 
 /** Whether a string holds a control character, which no token, id or key legitimately has. */
 function hasControl(value: string): boolean {
-  for (let index = 0; index < value.length; index += 1) {
-    const code = value.charCodeAt(index)
+  for (const character of value) {
+    const code = character.charCodeAt(0)
     if (code < 0x20 || code === 0x7f) {
       return true
     }

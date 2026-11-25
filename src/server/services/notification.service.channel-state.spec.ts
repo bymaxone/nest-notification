@@ -206,6 +206,39 @@ describe('NotificationService channel state', () => {
     )
   })
 
+  describe('a push channel that cannot be used', () => {
+    it('should say the channel is not enabled when there is no push service', () => {
+      let thrown: unknown
+      try {
+        new NotificationService().getPush()
+      } catch (error) {
+        thrown = error
+      }
+
+      expect((thrown as { getResponse(): { error: unknown } }).getResponse().error).toEqual({
+        code: 'notification.channel_disabled',
+        details: { channel: 'push' },
+        message: 'Channel not enabled in module config'
+      })
+    })
+
+    it('should say the provider is not configured when it is not', () => {
+      const push = { isConfigured: () => false } as unknown as PushService
+      let thrown: unknown
+      try {
+        new NotificationService(undefined, undefined, push).getPush()
+      } catch (error) {
+        thrown = error
+      }
+
+      expect((thrown as { getResponse(): { error: unknown } }).getResponse().error).toEqual({
+        code: 'notification.channel_disabled',
+        details: { channel: 'push', reason: 'provider_not_configured' },
+        message: 'Channel not enabled in module config'
+      })
+    })
+  })
+
   describe('onModuleInit', () => {
     const warnings = (spy: jest.SpyInstance): string[] =>
       spy.mock.calls.map((call) => loggedText(call))

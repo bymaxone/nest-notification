@@ -46,20 +46,22 @@ export function failedOutcome(token: string, failure: ExpoFailure): TokenOutcome
  */
 export function buildMessages(push: ReadPush, tokens: readonly string[]): object[] {
   const m = push.message
+  // A field the caller left out is `undefined` here and is dropped by `JSON.stringify`, so the body
+  // carries only what was set.
   const common = {
     title: m.title,
     body: m.body,
-    ...(m.data === undefined ? {} : { data: m.data }),
-    ...(m.sound === undefined ? {} : { sound: m.sound }),
-    ...(m.badge === undefined ? {} : { badge: m.badge }),
-    ...(m.ttlSeconds === undefined ? {} : { ttl: m.ttlSeconds }),
-    ...(m.priority === undefined ? {} : { priority: m.priority }),
-    ...(m.channelId === undefined ? {} : { channelId: m.channelId }),
-    ...(m.subtitle === undefined ? {} : { subtitle: m.subtitle }),
-    ...(m.categoryId === undefined ? {} : { categoryId: m.categoryId }),
-    ...(m.mutableContent === undefined ? {} : { mutableContent: m.mutableContent }),
-    ...(m.contentAvailable === undefined ? {} : { _contentAvailable: m.contentAvailable }),
-    ...(m.imageUrl === undefined ? {} : { richContent: { image: m.imageUrl } })
+    data: m.data,
+    sound: m.sound,
+    badge: m.badge,
+    ttl: m.ttlSeconds,
+    priority: m.priority,
+    channelId: m.channelId,
+    subtitle: m.subtitle,
+    categoryId: m.categoryId,
+    mutableContent: m.mutableContent,
+    _contentAvailable: m.contentAvailable,
+    richContent: m.imageUrl === undefined ? undefined : { image: m.imageUrl }
   }
   return tokens.map((to) => ({ to, ...common }))
 }
@@ -142,8 +144,11 @@ export function groupByProject(tokens: readonly string[], details: unknown): str
   const placed = new Set<string>()
   const groups: string[][] = []
   for (const listed of Object.values(details)) {
+    if (!Array.isArray(listed)) {
+      continue
+    }
     const group: string[] = []
-    for (const token of Array.isArray(listed) ? (listed as unknown[]) : []) {
+    for (const token of listed as unknown[]) {
       if (typeof token === 'string' && known.has(token) && !placed.has(token)) {
         placed.add(token)
         group.push(token)

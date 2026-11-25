@@ -146,7 +146,19 @@ const DISPATCH_ROWS: ReadonlyArray<readonly [string, () => Promise<unknown>]> = 
     () => notified('email', { to: 'a@x.com', subject: 'S', html: '<p>B</p>' })
   ],
   ['dispatch otp generate', () => notified('otp', { ...ref, deliverVia: 'manual' })],
-  ['dispatch otp verify', () => notified('otp', { ...ref, action: 'verify', code: '000000' })]
+  ['dispatch otp verify', () => notified('otp', { ...ref, action: 'verify', code: '000000' })],
+  [
+    'dispatch push',
+    () =>
+      new NotificationService(undefined, undefined, {
+        isConfigured: () => true,
+        send: async () => ({ results: [] })
+      } as never).dispatch({
+        channel: 'push',
+        tenantId: 't',
+        payload: { tokens: ['x'], title: 'T', body: 'B' }
+      } as never)
+  ]
 ]
 
 /** The owners the flow named, one per helper call, in call order. */
