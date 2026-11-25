@@ -1,6 +1,6 @@
 {
   "name": "@bymax-one/nest-notification",
-  "version": "1.5.2",
+  "version": "1.5.3",
   "description": "Multi-channel notification library for NestJS — email, OTP, SMS, push — with pluggable providers and storage, multi-tenant by design, zero runtime dependencies.",
   "author": "Bymax One <support@bymax.one>",
   "license": "MIT",
@@ -145,6 +145,7 @@
     "resend": "^4.0.0 || ^5.0.0 || ^6.0.0",
     "nodemailer": "^10.1.4",
     "react": "^19.0.0",
+    "@types/react": "*",
     "@bymax-one/nest-core": "^1.1.0",
     "@opentelemetry/api": "^1.9.0",
     "prom-client": "^15.0.0"
@@ -160,6 +161,9 @@
       "optional": true
     },
     "react": {
+      "optional": true
+    },
+    "@types/react": {
       "optional": true
     },
     "@bymax-one/nest-core": {

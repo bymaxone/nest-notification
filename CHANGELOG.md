@@ -11,6 +11,18 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 ## [Unreleased]
 
+## [1.5.3] - 2026-11-25
+
+### Fixed
+
+- **`@types/react` is declared as an optional peer dependency, with range `*`.** The declarations of the `./react`
+  subpath import from `react`, and the package did not say so. Any version of the types is accepted, so npm does not
+  refuse the install beside `@types/react` 18 or 19. `dist/` is byte-identical to 1.5.2.
+
+#### Apply to a derived backend
+
+- Nothing to change. A TypeScript project that imports `./react` keeps `@types/react` in its own dependencies.
+
 ## [1.5.2] - 2026-11-25
 
 ### Changed
@@ -2124,7 +2136,8 @@ rejected at startup rather than failing on the first send.
 
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.5.2...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.5.3...HEAD
+[1.5.3]: https://github.com/bymaxone/nest-notification/compare/v1.5.2...v1.5.3
 [1.5.2]: https://github.com/bymaxone/nest-notification/compare/v1.5.1...v1.5.2
 [1.5.1]: https://github.com/bymaxone/nest-notification/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/bymaxone/nest-notification/compare/v1.4.24...v1.5.0

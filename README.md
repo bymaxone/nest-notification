@@ -119,6 +119,7 @@ pnpm add resend ioredis        # …or: pnpm add nodemailer ioredis
 
 # React subpath (optional)
 pnpm add react
+pnpm add -D @types/react     # TypeScript projects: the hooks' declarations import React's types
 ```
 
 > [!NOTE]
