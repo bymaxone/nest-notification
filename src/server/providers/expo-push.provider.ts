@@ -35,6 +35,7 @@ import {
   buildMessages,
   chunksOf,
   failedOutcome,
+  field,
   groupByProject,
   readReceipts,
   readTickets
@@ -140,6 +141,13 @@ export class ExpoPushProvider implements IPushProvider {
     const call = await checkedAwait(this.#call(EXPO_RECEIPTS_URL, { ids }), OWNER)
     if (call.kind === 'failed') {
       throw new ExpoPushError(call.failure)
+    }
+    // An answer with no `data` map says nothing about any ticket: reading it as all pending would
+    // keep a poller waiting on an endpoint that is broken, so it is a failure, like a body that is
+    // not JSON. A map that merely omits an id leaves that id pending.
+    const data = field(call.body, 'data')
+    if (typeof data !== 'object' || data === null || Array.isArray(data)) {
+      throw new ExpoPushError(OUTCOME_UNKNOWN)
     }
     return readReceipts(ids, call.body)
   }

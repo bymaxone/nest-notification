@@ -20,6 +20,11 @@ the entries that carry one, is the compatibility contract — read it, not the n
   is not an object (a number, a string, `true`, a list, or none used to run a generate with no `action`). An email
   payload that is a number, a string or a list keeps its published answer, `notification.email_missing_body`.
 
+- **`ExpoPushProvider.fetchReceipts` no longer reads an answer with no receipts map as every id pending.** A parsed
+  body whose `data` is missing, `null`, a list or not an object made every ticket id `pending`, so a poller never learned
+  that the endpoint was broken, while a body that was not JSON threw. It now throws `notification.push_send_failed`
+  (through `PushService`) in both cases. An id the `data` map omits is still `pending`, as documented.
+
 ### Documentation
 
 - **The README no longer says the push types are exported from the main entry.** `PushFailureReason`, `PushTokenResult`,

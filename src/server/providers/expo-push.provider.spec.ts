@@ -672,13 +672,45 @@ describe('ExpoPushProvider', () => {
       expect(result).toEqual([{ ticketId: 'constructor', status: 'pending' }])
     })
 
-    it('reads a body with no data as all pending', async () => {
+    it('keeps an id the data omits pending, and an empty data all pending', async () => {
       /* Arrange */
-      const { fetch } = scripted([{ body: {} }])
+      const { fetch } = scripted([{ body: { data: {} } }])
       /* Act */
       const result = await new ExpoPushProvider({ fetch }).fetchReceipts(['A'])
       /* Assert */
       expect(result).toEqual([{ ticketId: 'A', status: 'pending' }])
+    })
+
+    it.each([
+      ['no data', '{}'],
+      ['a null data', '{"data":null}'],
+      ['a string data', '{"data":"x"}'],
+      ['a number data', '{"data":5}'],
+      ['a list as data', '{"data":[]}'],
+      ['a body that is null', 'null'],
+      ['a body that is a list', '[]']
+    ] as const)(
+      'throws, as for a body that is not JSON, when the answer has %s',
+      async (_label, text) => {
+        /* Arrange */
+        const { fetch } = scripted([{ text }])
+        /* Act */
+        const failure = await failureOf(new ExpoPushProvider({ fetch }).fetchReceipts(['A']))
+        /* Assert */
+        expect(failure.message).toBe(
+          'ExpoPushProvider: the push was not sent (provider_unavailable)'
+        )
+        expect(failure.code).toBeUndefined()
+      }
+    )
+
+    it('throws when the receipts answer is not JSON', async () => {
+      /* Arrange */
+      const { fetch } = scripted([{ text: 'not json' }])
+      /* Act */
+      const failure = await failureOf(new ExpoPushProvider({ fetch }).fetchReceipts(['A']))
+      /* Assert */
+      expect(failure.message).toBe('ExpoPushProvider: the push was not sent (provider_unavailable)')
     })
 
     it('reads 1000 ids in one call and refuses 1001', async () => {
