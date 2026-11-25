@@ -58,12 +58,15 @@ export const STANDARD_ROOT_KEYS: ReadonlySet<string> = new Set(
   )
 )
 
-/** The fields of a property descriptor, in the order they are kept. */
-const DESCRIPTOR_FIELDS = ['value', 'get', 'set', 'writable', 'enumerable', 'configurable'] as const
+/**
+ * The fields of a property descriptor that are compared, in the order they are kept. `configurable`
+ * is left out: a property can only lose it, never gain it, and a root that lost it is hardened, which
+ * is not a difference this check reports.
+ */
+const DESCRIPTOR_FIELDS = ['value', 'get', 'set', 'writable', 'enumerable'] as const
 
-/** The positions of the flags that freezing the root turns off, in {@link DESCRIPTOR_FIELDS}. */
+/** The position of the flag that freezing the root turns off, in {@link DESCRIPTOR_FIELDS}. */
 const WRITABLE = 3
-const CONFIGURABLE = 5
 
 /** The standard keys as a list, so the check walks them by index. */
 const KEYS: readonly string[] = [...STANDARD_ROOT_KEYS]
@@ -419,10 +422,10 @@ function changed(index: number): boolean {
   for (let field = 0; nth(DESCRIPTOR_FIELDS, field) !== undefined; field += 1) {
     const was = nth(before, field)
     const is = readField(now, nth(DESCRIPTOR_FIELDS, field) as string)
-    // A key that only became non-writable or non-configurable, with the same value or accessors, is a
-    // root that was hardened (`Object.freeze(Object.prototype)`), and not one that was polluted. A flag
-    // that was on and differs is off, or the key is an accessor now and its accessors differ.
-    const hardened = (field === WRITABLE || field === CONFIGURABLE) && was === true
+    // A key that only became non-writable, with the same value, is a root that was hardened
+    // (`Object.freeze(Object.prototype)`), and not one that was polluted. A flag that was on and
+    // differs is off, or the key is an accessor now and its accessors differ.
+    const hardened = field === WRITABLE && was === true
     if (!same(was, is) && !hardened) {
       return true
     }
