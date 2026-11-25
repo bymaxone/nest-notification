@@ -159,6 +159,31 @@ describe('a send the provider failed', () => {
     expect(JSON.stringify(entries)).not.toContain(TOKEN)
   })
 
+  it('should keep the token of a returned failure out of the audit entry and the log', async () => {
+    const { entries, audit } = recorder()
+    const logged = jest.spyOn(console, 'log').mockImplementation(() => undefined)
+    try {
+      const service = new PushService(
+        options,
+        provider({
+          send: async () => ({
+            results: [{ token: TOKEN, reason: 'token_unregistered', retryable: false }]
+          })
+        }),
+        audit
+      )
+
+      const result = await service.send({ ...send, userId: 'u1' })
+
+      expect(result.results[0]?.token).toBe(TOKEN)
+      expect(JSON.stringify(entries)).not.toContain(TOKEN)
+      expect(entries[0]).toMatchObject({ verb: 'failed', metadata: { tokens: 1, failed: 1 } })
+      expect(JSON.stringify(logged.mock.calls)).not.toContain(TOKEN)
+    } finally {
+      logged.mockRestore()
+    }
+  })
+
   it('should audit a send that accepted with the counts of devices and failures', async () => {
     const { entries, audit } = recorder()
     const two = [TOKEN, 'ExponentPushToken[device-token-b]']

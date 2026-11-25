@@ -443,7 +443,7 @@ describe('ExpoPushProvider', () => {
       ])
     })
 
-    it('never puts a token or the access token in a thrown error or the result of a failure', async () => {
+    it('never puts a token or the access token in the error a failed send throws', async () => {
       /* Arrange */
       const { fetch } = scripted([
         { status: 500, body: { errors: [{ code: 'X', message: `${SECRET} ${TOKEN_A}` }] } }
@@ -457,6 +457,36 @@ describe('ExpoPushProvider', () => {
         SECRET
       )
       expect(failure.message).not.toContain(TOKEN_A)
+    })
+
+    it('carries a token only in its own token field in a failure it returns', async () => {
+      /* Arrange: a 200 whose ticket errors repeat the secret, the token and a message */
+      const { fetch } = scripted([
+        {
+          body: {
+            data: [
+              {
+                status: 'error',
+                message: `${SECRET} ${TOKEN_A}`,
+                details: { error: 'DeviceNotRegistered', extra: `${SECRET} ${TOKEN_A}` }
+              }
+            ]
+          }
+        }
+      ])
+      /* Act */
+      const result = await new ExpoPushProvider({ fetch, accessToken: SECRET }).send({
+        ...base,
+        tokens: TOKEN_A
+      })
+      /* Assert: the required `token` identifies the device; nothing else holds it or the secret */
+      expect(result.results).toEqual([
+        { token: TOKEN_A, reason: 'token_unregistered', retryable: false }
+      ])
+      const { token, ...rest } = result.results[0] as { token: string }
+      expect(token).toBe(TOKEN_A)
+      expect(JSON.stringify(rest)).not.toContain(TOKEN_A)
+      expect(JSON.stringify(result)).not.toContain(SECRET)
     })
   })
 
