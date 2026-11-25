@@ -17,13 +17,15 @@
  *   decimal integer, one that adds one to it (other forms of number are only removed);
  * - for each mutant it runs the given test command and judges it from the command's output, not
  *   only its exit status: killed when the command fails with a test summary that counts a failed
- *   test, survived when it passes. A run that crashes, is ended by a signal, has no test summary
- *   is run once more with `--runInBand` and then listed apart as CRASH-ONLY, and a suite that
+ *   test, survived when it passes. A run that crashes, is ended by a signal, has no test summary is
+ *   run once more with `--runInBand` and then listed apart as CRASH-ONLY, and a suite that
  *   "failed to run" with no failed test as LOAD-FAILURE. A run that outlives
  *   CONST_TABLES_TIMEOUT_MS (default 300000) has its process group killed and is listed as
- *   TIMEOUT; it is run again only when the command did not already run in band. Every run gets
- *   `--forceExit`, so an open handle does not leave jest idle. None of the three is a kill, and
- *   a load failure the mutant causes is proven by hand;
+ *   TIMEOUT: run again only when the command did not already run in band. The limit is per run,
+ *   and a mutant runs at most twice. A failed test beside a suite that failed to run, or beside
+ *   a dead runner process, is CRASH-ONLY too. Every run gets `--forceExit`, so an open handle
+ *   does not leave jest idle. None of the three is a kill, and a load failure the mutant causes
+ *   is proven by hand;
  * - it prints the survivors, the crash-only, load-failure and timeout mutants and exits 1 when
  *   there are any.
  *
@@ -63,6 +65,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { stripVTControlCharacters } from 'node:util'
 
 /** Files that are never mutated: specs, tests, declaration files and barrels. */
 const SKIPPED_FILE = /(?:\.(?:spec|test)\.[cm]?[jt]sx?|\.d\.[cm]?ts|(?:^|\/)index\.[cm]?[jt]sx?)$/
@@ -213,8 +216,11 @@ function mutantsOf(ts, path, text) {
   return mutants
 }
 
-/** A run that outlives this is killed and judged crash-only: a mutant can make a test wait forever. */
+/** A run that outlives this is killed and judged a timeout: a mutant can make a test wait forever. */
 const RUN_TIMEOUT_MS = Number(process.env.CONST_TABLES_TIMEOUT_MS) || 300_000
+
+/** How long the output of a command that exited may stay open before it is closed. */
+const DRAIN_MS = 1000
 
 /** The test command's child process while one runs, so an interrupt can stop it. */
 let running
@@ -250,6 +256,18 @@ function runCommand(root, command, file) {
       timedOut = true
       stopRunning()
     }, RUN_TIMEOUT_MS)
+    let drain
+    // A descendant that left the process group keeps the output open after the command is gone.
+    // What the command itself wrote is already in the pipe, so the wait for the rest is bounded.
+    running.once('exit', () => {
+      clearTimeout(timer)
+      const { stdout, stderr } = running
+      drain = setTimeout(() => {
+        stopRunning()
+        stdout.destroy()
+        stderr.destroy()
+      }, DRAIN_MS)
+    })
     running.stdout.on('data', (chunk) => (output += chunk))
     running.stderr.on('data', (chunk) => (output += chunk))
     running.once('error', () => {
@@ -258,6 +276,7 @@ function runCommand(root, command, file) {
     })
     running.once('close', (status, signal) => {
       clearTimeout(timer)
+      clearTimeout(drain)
       running = undefined
       done({ status, signal, output, timedOut })
     })
@@ -306,24 +325,30 @@ const failedTests = (output) => /^Tests:.*\b[1-9]\d* failed/m.test(output)
  * - `crash`: a signal, or no test summary at all.
  */
 export function verdictOf(outcome) {
+  // A runner told to colour its output would otherwise hide the summary behind escape codes.
+  const output = stripVTControlCharacters(outcome.output ?? '')
   if (outcome.timedOut) return 'timeout'
   if (outcome.status === 0 && outcome.signal === null) return 'survived'
   if (outcome.signal !== null) return 'crash'
-  if (CRASH_MARKER.test(outsideFailedTests(outcome.output))) {
-    return failedTests(outcome.output)
+  if (CRASH_MARKER.test(outsideFailedTests(output))) {
+    return failedTests(output)
       ? 'crash'
-      : /Test suite failed to run/.test(outsideFailedTests(outcome.output)) &&
-          /^Tests:/m.test(outcome.output)
+      : /Test suite failed to run/.test(outsideFailedTests(output)) && /^Tests:/m.test(output)
         ? 'load-failure'
         : 'crash'
   }
-  return failedTests(outcome.output) ? 'killed' : 'crash'
+  return failedTests(output) ? 'killed' : 'crash'
 }
 
 /** The command with `--runInBand`, without the worker count jest refuses to combine with it. */
 function inBand(command) {
+  const takesValue = (part) => part === '--maxWorkers' || part === '-w'
   const kept = command.filter(
-    (part, index) => !part.startsWith('--maxWorkers') && command[index - 1] !== '--maxWorkers'
+    (part, index) =>
+      !takesValue(part) &&
+      !takesValue(command[index - 1]) &&
+      !part.startsWith('--maxWorkers=') &&
+      !/^-w=?\d/.test(part)
   )
   return kept.includes('--runInBand') ? kept : [...kept, '--runInBand']
 }
@@ -358,8 +383,8 @@ async function requirePassing(root, command, file, mutantCount) {
 }
 
 /**
- * Mutates the files one entry at a time and returns the mutants the command did not kill. A
- * command stopped by a signal is not a verdict on the mutant, so the run stops instead.
+ * Mutates the files one entry at a time and returns the mutants the command did not kill. SIGINT
+ * or SIGTERM to this script stops the command, restores the file and ends the run.
  */
 async function survivorsOf(ts, root, files, command) {
   const survivors = []

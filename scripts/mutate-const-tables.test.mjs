@@ -8,7 +8,9 @@ import { test } from 'node:test'
 import { pathToFileURL } from 'node:url'
 import { resolve } from 'node:path'
 
-process.env.CONST_TABLES_TIMEOUT_MS = '1000'
+// Long enough for a slow runner to start a fixture; only the rows that hang wait for it.
+const LIMIT_MS = 5000
+process.env.CONST_TABLES_TIMEOUT_MS = String(LIMIT_MS)
 
 const target = process.env.CONST_TABLES_SCRIPT
   ? pathToFileURL(resolve(process.env.CONST_TABLES_SCRIPT)).href
@@ -41,7 +43,7 @@ test('a suite that failed to run is a load failure, not a kill', async () => {
 })
 
 test('a run killed by a signal is crash-only', async () => {
-  assert.equal(await verdict(fixture('', { signal: 'SIGSEGV' })), 'crash')
+  assert.equal(await verdict(fixture('', { signal: 'SIGKILL' })), 'crash')
 })
 
 test('a failure with no test summary is crash-only', async () => {
@@ -56,7 +58,7 @@ test('a command that hangs, with a child that holds the output open, is stopped 
   const hang = ['sh', '-c', 'sleep 600 & wait', '--']
   const started = Date.now()
   assert.equal(await verdict(hang), 'timeout')
-  assert.ok(Date.now() - started < 10_000)
+  assert.ok(Date.now() - started < 3 * LIMIT_MS)
 })
 
 test('every run gets --forceExit, and the in-band rerun drops the worker count', async () => {
@@ -106,4 +108,53 @@ test('the report of a failed test is not searched for crash markers', async () =
     ''
   ].join('\n')
   assert.equal(await verdict(fixture(output, { code: 1 })), 'killed')
+})
+
+test('a coloured summary is read like a plain one', async () => {
+  const out = 'Tests:       \u001b[1m\u001b[31m1 failed\u001b[39m\u001b[22m, 1 total\n'
+  assert.equal(await verdict(fixture(out, { code: 1 })), 'killed')
+})
+
+test('a detached descendant that keeps the output open does not extend the limit', async () => {
+  const script = `
+    const { spawn } = require('node:child_process')
+    spawn(process.execPath, ['-e', 'setTimeout(() => {}, 30000)'], {
+      detached: true,
+      stdio: ['ignore', 'inherit', 'inherit']
+    }).unref()
+    setTimeout(() => {}, 600000)
+  `
+  const started = Date.now()
+  const command = [process.execPath, '-e', script, '--', '--runInBand']
+  assert.equal(await verdict(command), 'timeout')
+  assert.ok(Date.now() - started < 2 * LIMIT_MS)
+})
+
+test('a command that exits while a descendant holds the output is judged by what it said', async () => {
+  const script = `
+    const { spawn } = require('node:child_process')
+    spawn(process.execPath, ['-e', 'setTimeout(() => {}, 30000)'], {
+      detached: true,
+      stdio: ['ignore', 'inherit', 'inherit']
+    }).unref()
+    process.stderr.write('Tests:       1 failed, 1 total\\n')
+    process.exitCode = 1
+  `
+  const started = Date.now()
+  assert.equal(await verdict([process.execPath, '-e', script, '--']), 'killed')
+  assert.ok(Date.now() - started < LIMIT_MS)
+})
+
+test('the in-band rerun drops every spelling of the worker count', async () => {
+  for (const workers of [['-w', '2'], ['-w=2'], ['-w2'], ['--maxWorkers=2']]) {
+    const script = `
+      const args = process.argv.slice(1)
+      if (!args.includes('--runInBand')) process.exit(1)
+      const left = args.filter((a) => a.startsWith('-w') || a.startsWith('--maxWorkers') || a === '2')
+      process.stderr.write(left.length === 0 ? 'Tests:       1 failed, 1 total\\n' : '')
+      process.exit(1)
+    `
+    const command = [process.execPath, '-e', script, '--', ...workers]
+    assert.equal(await verdict(command), 'killed-after-rerun', workers.join(' '))
+  }
 })
