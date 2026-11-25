@@ -111,8 +111,10 @@ export class NotificationService implements OnModuleInit {
    *
    * @param input - The channel-discriminated dispatch request.
    * @returns The channel-discriminated result.
-   * @throws NotificationException `CHANNEL_DISABLED` (channel not configured) or
-   * `EMAIL_MISSING_BODY` (email payload has neither a template nor subject+html).
+   * @throws NotificationException `CHANNEL_DISABLED` (channel not configured),
+   * `EMAIL_MISSING_BODY` (email payload has neither a template nor subject+html) or
+   * `INVALID_SCOPE_IDENTIFIER` (the request is not an object, its channel is not email, otp or
+   * push, or an otp or push payload is not an object).
    */
   dispatch(input: DispatchInput): Promise<DispatchResult> {
     // Pinned and checked as it is handed over: the caller's own `await` reads nothing off the realm.
@@ -303,7 +305,8 @@ export class NotificationService implements OnModuleInit {
     payload: OtpDispatchPayload
   ): Promise<OtpGenerateResult | OtpVerifyResult | void> {
     const otp = this.getOtp()
-    if (typeof payload !== 'object' || payload === null) {
+    // A list is no payload either: with no `action` it would run a generate on the tenant alone.
+    if (typeof payload !== 'object' || payload === null || Array.isArray(payload)) {
       throw refuseInput('NotificationService', 'payload', 'must be an object')
     }
     // Each field of the payload is read once, here, and only these values are used below.

@@ -60,7 +60,8 @@ describe('a dispatch that is not of its kind', () => {
 
   it.each([
     ['an unknown channel', { channel: 'sms', tenantId: 't', payload: {} }],
-    ['no channel', { tenantId: 't', payload: {} }]
+    ['no channel', { tenantId: 't', payload: {} }],
+    ['a list as the request', []]
   ] as const)('should refuse %s and send nothing', async (_label, input) => {
     const { service, otpCalls } = build()
 
@@ -84,7 +85,8 @@ describe('a dispatch that is not of its kind', () => {
 
   it.each([
     ['a number', 7],
-    ['a string', 'x']
+    ['a string', 'x'],
+    ['a list', []]
   ] as const)(
     'should keep answering an email payload that is %s as missing its body',
     async (_label, payload) => {
@@ -110,7 +112,8 @@ describe('a dispatch that is not of its kind', () => {
     ['absent', 'absent'],
     ['a number', 7],
     ['a string', 'x'],
-    ['true', true]
+    ['true', true],
+    ['a list', []]
   ] as const)(
     'should refuse an otp payload that is %s and call nothing',
     async (_label, payload) => {
