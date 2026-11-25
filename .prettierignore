@@ -16,3 +16,7 @@ scripts/check-function-length.mjs
 
 # Copied byte for byte from the shared template; Prettier would rewrite it.
 scripts/commitlint-no-ai-attribution.cjs
+
+# Copied byte for byte from the shared template (script-templates/check-dist-fresh); Prettier would rewrite them.
+scripts/check-dist-fresh.mjs
+scripts/check-dist-fresh.test.mjs

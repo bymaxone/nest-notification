@@ -19,6 +19,7 @@ import { makeOptions as otpOptions } from './__tests__/otp-service.fixtures'
 import { EmailService } from './email.service'
 import { NotificationService } from './notification.service'
 import { OtpService } from './otp.service'
+import type { PushService } from './push.service'
 import { loggedEvent, loggedText } from '../__tests__/logged'
 
 /** An email service over a provider that does, or does not, report itself configured. */
@@ -114,6 +115,22 @@ describe('NotificationService channel state', () => {
     )
   })
 
+  // A push provider can stop being usable after the boot check passed; the accessor then says why.
+  it('should name the reason when the push provider stops being configured after boot', () => {
+    const push = { isConfigured: jest.fn().mockReturnValue(false) }
+    const notification = new NotificationService(undefined, undefined, push as never)
+
+    expect(() => notification.getPush()).toThrow(
+      expect.objectContaining({
+        response: {
+          error: expect.objectContaining({
+            details: { channel: 'push', reason: 'provider_not_configured' }
+          })
+        }
+      })
+    )
+  })
+
   // An absent channel keeps its plain refusal, with no reason to explain.
   it('should not add a reason when the channel is absent', () => {
     const notification = new NotificationService()
@@ -136,6 +153,90 @@ describe('NotificationService channel state', () => {
         payload: { to: 'a@x.com', subject: 's', html: '<p>h</p>' }
       })
     ).rejects.toMatchObject({ code: 'notification.channel_disabled' })
+  })
+
+  describe('a push dispatch', () => {
+    const pushOf = (): { push: PushService; send: jest.Mock } => {
+      const send = jest.fn().mockResolvedValue({ results: [] })
+      return {
+        send,
+        push: { isConfigured: () => true, send } as unknown as PushService
+      }
+    }
+
+    // The user a push is for rides on the payload and is audited by the service.
+    it('should hand the payload user to the push service with the request tenant', async () => {
+      const { push, send } = pushOf()
+
+      await new NotificationService(undefined, undefined, push).dispatch({
+        channel: 'push',
+        tenantId: 'acme',
+        payload: { tokens: ['t'], title: 'T', body: 'B', userId: 'user-1' }
+      })
+
+      expect(send).toHaveBeenCalledWith(
+        expect.objectContaining({ tenantId: 'acme', userId: 'user-1', tokens: ['t'] })
+      )
+    })
+
+    it.each([null, undefined, 'x'])(
+      'should refuse a payload of %j as the library does, not with a TypeError',
+      async (payload) => {
+        const { push } = pushOf()
+
+        const attempt = new NotificationService(undefined, undefined, push).dispatch({
+          channel: 'push',
+          tenantId: 'acme',
+          payload: payload as never
+        })
+
+        await expect(attempt).rejects.toMatchObject({
+          code: 'notification.invalid_scope_identifier',
+          response: {
+            error: {
+              details: {
+                boundary: 'NotificationService',
+                parameter: 'payload',
+                reason: 'must be an object'
+              }
+            }
+          }
+        })
+      }
+    )
+  })
+
+  describe('a push channel that cannot be used', () => {
+    it('should say the channel is not enabled when there is no push service', () => {
+      let thrown: unknown
+      try {
+        new NotificationService().getPush()
+      } catch (error) {
+        thrown = error
+      }
+
+      expect((thrown as { getResponse(): { error: unknown } }).getResponse().error).toEqual({
+        code: 'notification.channel_disabled',
+        details: { channel: 'push' },
+        message: 'Channel not enabled in module config'
+      })
+    })
+
+    it('should say the provider is not configured when it is not', () => {
+      const push = { isConfigured: () => false } as unknown as PushService
+      let thrown: unknown
+      try {
+        new NotificationService(undefined, undefined, push).getPush()
+      } catch (error) {
+        thrown = error
+      }
+
+      expect((thrown as { getResponse(): { error: unknown } }).getResponse().error).toEqual({
+        code: 'notification.channel_disabled',
+        details: { channel: 'push', reason: 'provider_not_configured' },
+        message: 'Channel not enabled in module config'
+      })
+    })
   })
 
   describe('onModuleInit', () => {

@@ -21,7 +21,7 @@ import { logEvent } from './log-event'
 export const AUDIT_WARNING_INTERVAL_MS = 60_000
 
 /** The place that swallowed the failure. */
-export type AuditChannel = 'otp' | 'email' | 'interceptor'
+export type AuditChannel = 'otp' | 'email' | 'push' | 'interceptor'
 
 const WARNING_CODE = 'BYMAX_NOTIFICATION_AUDIT_WRITE_FAILED'
 

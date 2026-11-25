@@ -25,7 +25,8 @@ import type {
   GlobalOptions,
   NotificationRequest,
   OtpChannelOptions,
-  OtpPurposeConfig
+  OtpPurposeConfig,
+  PushChannelOptions
 } from '../interfaces/notification-module-options.interface'
 import { createCodeDigester } from '../utils/code-digest'
 import { nullProto } from '../utils/read-options'
@@ -71,6 +72,12 @@ export interface ResolvedOtpOptions {
   isRegisteredPurpose(purpose: string): boolean
 }
 
+/** Resolved push section — present only when the push channel is configured. */
+export interface ResolvedPushOptions {
+  /** Time-to-live applied to a push that sets none, in seconds. Absent: the provider's own default. */
+  defaultTtlSeconds?: number
+}
+
 /** Resolved audit section — always present; the no-op sink obeys these settings too. */
 export interface ResolvedAuditOptions {
   swallowErrors: boolean
@@ -82,6 +89,7 @@ export interface ResolvedNotificationOptions {
   global: ResolvedGlobalOptions
   email?: ResolvedEmailOptions
   otp?: ResolvedOtpOptions
+  push?: ResolvedPushOptions
   audit: ResolvedAuditOptions
 }
 
@@ -100,7 +108,8 @@ export function resolveOptions(
     global: nullProto(resolveGlobal(options.global)),
     audit: nullProto(resolveAudit(options)),
     ...(options.email ? { email: nullProto(resolveEmail(options.email)) } : {}),
-    ...(options.otp ? { otp: nullProto(resolveOtp(options.otp)) } : {})
+    ...(options.otp ? { otp: nullProto(resolveOtp(options.otp)) } : {}),
+    ...(options.push ? { push: nullProto(resolvePush(options.push)) } : {})
   })
   return deepFreeze(resolved)
 }
@@ -124,6 +133,11 @@ function resolveEmail(email: EmailChannelOptions): ResolvedEmailOptions {
     ...(email.defaultFromName !== undefined ? { defaultFromName: email.defaultFromName } : {}),
     ...(email.defaultReplyTo !== undefined ? { defaultReplyTo: email.defaultReplyTo } : {})
   }
+}
+
+/** Builds the push section from the configured push options. */
+function resolvePush(push: PushChannelOptions): ResolvedPushOptions {
+  return push.defaultTtlSeconds === undefined ? {} : { defaultTtlSeconds: push.defaultTtlSeconds }
 }
 
 /** Builds the OTP section, including the per-purpose resolver. */

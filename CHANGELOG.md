@@ -11,6 +11,69 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-11-24
+
+### Added
+
+- **A push channel, with Expo Push as its first provider.** `push: { provider, defaultTtlSeconds? }` is now accepted by
+  `forRoot` and `forRootAsync` instead of refused at startup. `PushService` (also `NotificationService.getPush()` and
+  `dispatch({ channel: 'push', ... })`) sends one message to one or many device tokens and answers **per token**:
+  `{ token, messageId }` or `{ token, reason, retryable }`, with `reason` a closed `PushFailureReason`. One bad token
+  never fails its batch. `ExpoPushProvider` is the shipped adapter: no SDK and no peer dependency, two JSON endpoints
+  called with `fetch` (or one you inject), every request bounded by `timeoutMs` and sent only to Expo's fixed URLs.
+- **`fetchReceipts(ticketIds)`.** Expo reports delivery after it accepts a message; the call returns
+  `{ ticketId, status: 'ok' | 'pending' | 'error', reason?, retryable? }` per id, `pending` for an id Expo has no
+  receipt for yet. Your backend keeps the ticket-id-to-token mapping.
+- **A `./push` subpath.** `ExpoPushProvider` and `ExpoPushProviderOptions` are exported from
+  `@bymax-one/nest-notification/push`, not from the main entry, so a host that sends no push does not carry the adapter.
+  Import it at startup, next to the main entry: it takes its own realm-root baseline when first imported.
+  The subpath shares the main entry's `NotificationException`, so an error it throws is recognized by the module.
+- **Exports.** `PushService`, `PushSendInput`, `ResolvedPushOptions`
+  from the server entry point; `PushFailureReason`, `PushTokenResult`, `PushReceiptStatus`, `PushReceiptResult` from
+  `./shared`.
+
+### Security
+
+- No device token, Expo access token, title, body or data value appears in a log, an audit entry, an error or a metric
+  label. The push audit entry records `recipient: 'devices:N'` and counts. A provider's own error text is dropped, not
+  wrapped, and `PUSH_SEND_FAILED` carries no `cause`.
+- A send throws only when nothing was sent, so a caller that retries a thrown send cannot deliver twice. An outcome
+  Expo may have acted on (a timeout, a reset, or a bare gateway 502, 503 or 504) is `retryable: false`, because Expo does
+  not deduplicate; only a refusal before processing (a 429, a 5xx whose body carries an errors list with a string `code`, a connection never made)
+  is retryable. The thrown `PUSH_SEND_FAILED` carries `details.retryable`.
+- `NotificationAuditInterceptor` now audits push dispatches; its recipient is a device count, never a token.
+
+### Changed
+
+- `PUSH_PROVIDER_NOT_CONFIGURED` and `PUSH_SEND_FAILED` are thrown now and no longer reserved.
+- A configured push provider that reports `isConfigured() === false` fails the boot with
+  `PUSH_PROVIDER_NOT_CONFIGURED`. Email and OTP keep their startup warning.
+- A device token that is empty, longer than 256 characters or holds a control character is answered `token_invalid`
+  in its own result and never reaches the provider; the rest of the batch is sent.
+- The metrics module counts push sends: `channel` accepts `push` next to `email`. Before, a push send event was read as
+  an unknown channel and not counted.
+- A send in which every token failed is reported to the observer as `failed`, as its audit entry already said.
+
+### Known limits
+
+- The size of an Expo response is not capped; the bound is the call's `timeoutMs`.
+- An injected `fetch` that ignores the `AbortSignal` is not interrupted: the call outlasts `timeoutMs` until it settles.
+- `fetchReceipts` answers a timeout as a thrown `PUSH_SEND_FAILED` with `retryable: false`, since a receipt read
+  changes nothing and the caller can simply ask again.
+- `PushSendResult` results are `PushTokenResult`: `reason` and `retryable` are new, and `error?` is deprecated and never
+  set by the shipped adapters.
+- `PushSendOptions` gains `channelId?`, `subtitle?`, `categoryId?`, `collapseKey?`, `threadId?`, `mutableContent?` and
+  `contentAvailable?`, all optional.
+
+#### Apply to a derived backend
+
+Declarations only grow: `PushSendOptions` gains optional fields, `PushSendResult` entries gain `reason?` and
+`retryable?`, `IPushProvider` gains the optional `fetchReceipts`, `NotificationChannel` handling now includes `'push'`
+in `getEnabledChannels()`, `DispatchInput` and `DispatchResult` gain a `'push'` variant, and `NotificationObservedChannel`
+and the audit channel union accept `'push'`. A `switch` over `DispatchInput['channel']` or over
+`NotificationObservedChannel` that has no default now needs a `'push'` case to compile. A configuration with `push` was
+refused before and is accepted now. Nothing an email or OTP caller sees changes.
+
 ## [1.4.24] - 2026-11-24
 
 ### Documentation
@@ -2016,7 +2079,8 @@ rejected at startup rather than failing on the first send.
 
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.4.24...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/bymaxone/nest-notification/compare/v1.4.24...v1.5.0
 [1.4.24]: https://github.com/bymaxone/nest-notification/compare/v1.4.23...v1.4.24
 [1.4.23]: https://github.com/bymaxone/nest-notification/compare/v1.4.22...v1.4.23
 [1.4.22]: https://github.com/bymaxone/nest-notification/compare/v1.4.21...v1.4.22

@@ -23,7 +23,8 @@ const config: Config = {
   moduleNameMapper: {
     '^@bymax-one/nest-notification$': '<rootDir>/server/index.ts',
     '^@bymax-one/nest-notification/shared$': '<rootDir>/shared/index.ts',
-    '^@bymax-one/nest-notification/react$': '<rootDir>/react/index.ts'
+    '^@bymax-one/nest-notification/react$': '<rootDir>/react/index.ts',
+    '^@bymax-one/nest-notification/push$': '<rootDir>/push/index.ts'
   },
   transform: {
     '^.+\\.tsx?$': [

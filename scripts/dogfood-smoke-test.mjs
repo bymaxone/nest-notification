@@ -3,11 +3,12 @@
  * Dogfood smoke test — validates the published package shape before tagging.
  *
  * Validates:
- *   1. Build artifacts exist for all five subpaths (ESM, CJS, .d.ts)
+ *   1. Build artifacts exist for all six subpaths (ESM, CJS, .d.ts)
  *   2. ESM import resolves the expected named exports (server + shared)
  *   3. CJS require resolves the expected named exports (server + shared)
  *   4. The react subpath resolves; the testing subpath exposes otpStorageContract
  *   4b. The built observability entry, wired beside the built server, records real samples
+ *   4c. The built push entry, wired beside the built server, in CJS and ESM
  *   5. Tarball contents (npm pack --dry-run) contain only dist/ + meta files
  *   6. A minimal consumer (file: link in an OS temp dir) resolves every subpath
  *      through the published `exports` map
@@ -48,7 +49,10 @@ const EXPECTED_DIST_FILES = [
   'dist/testing/index.d.ts',
   'dist/observability/index.mjs',
   'dist/observability/index.cjs',
-  'dist/observability/index.d.ts'
+  'dist/observability/index.d.ts',
+  'dist/push/index.mjs',
+  'dist/push/index.cjs',
+  'dist/push/index.d.ts'
 ]
 
 const EXPECTED_SERVER_EXPORTS = [
@@ -63,7 +67,9 @@ const EXPECTED_SERVER_EXPORTS = [
   'NoOpEmailProvider',
   'SmtpEmailProvider',
   'NoOpNotificationLogRepository',
-  'DefaultTemplateRenderer'
+  'DefaultTemplateRenderer',
+  'PushService',
+  'BYMAX_NOTIFICATION_PUSH_PROVIDER'
 ]
 
 const EXPECTED_SHARED_EXPORTS = ['NOTIFICATION_ERROR_CODES', 'DEFAULT_TTLS']
@@ -179,6 +185,25 @@ try {
   rmSync(probeFile, { force: true })
 }
 
+// The built push entry beside the built server entry, in both module formats: one copy of the error
+// class, the adapter plugged into the module, and the retry decisions read through the built service.
+section('4c. Push adapter wired against the built server')
+const pushProbeFile = join(PACKAGE.root, '.push-dist-probe.cjs')
+copyFileSync(join(ROOT, 'scripts', 'push-dist-probe.cjs'), pushProbeFile)
+try {
+  const probe = spawnSync('node', [pushProbeFile], {
+    cwd: PACKAGE.root,
+    encoding: 'utf8',
+    env: { ...process.env, NODE_PATH: join(ROOT, 'node_modules') },
+    timeout: 60_000
+  })
+  probe.status === 0
+    ? pass('the push adapter works through the built server, in CJS and ESM')
+    : fail(`Push dist probe failed (code ${probe.status}): ${probe.stderr || probe.stdout}`)
+} finally {
+  rmSync(pushProbeFile, { force: true })
+}
+
 // -- 5. Tarball contents -----------------------------------------------------
 section(
   PACKAGE.tarball ? '5. Tarball contents (tar -tzf)' : '5. Tarball contents (npm pack --dry-run)'
@@ -251,6 +276,8 @@ try {
       ".then((m) => { if (!('BymaxNotificationModule' in m)) process.exit(3) })",
       ".then(() => import('@bymax-one/nest-notification/shared'))",
       ".then((s) => { if (!('DEFAULT_TTLS' in s)) process.exit(4) })",
+      ".then(() => import('@bymax-one/nest-notification/push'))",
+      ".then((p) => { if (typeof p.ExpoPushProvider !== 'function') process.exit(7) })",
       ".then(() => import('@bymax-one/nest-notification/react'))",
       ".then(() => import('@bymax-one/nest-notification/testing'))",
       ".then((t) => { if (typeof t.otpStorageContract !== 'function') process.exit(6) })",
@@ -298,6 +325,31 @@ try {
   wired
     ? pass('forRoot({ email, otp }) returns a wired DynamicModule')
     : fail('forRoot did not return a wired DynamicModule descriptor')
+
+  // The push channel end to end against the built artifact: a stubbed `fetch` stands in for Expo, so
+  // nothing leaves the machine, and a token that is not an Expo token is refused locally.
+  const { ExpoPushProvider } = await import(resolve(PACKAGE.root, 'dist/push/index.mjs'))
+  const calls = []
+  const provider = new ExpoPushProvider({
+    fetch: async (url, init) => {
+      calls.push({ url, body: init?.body })
+      return new Response(JSON.stringify({ data: [{ status: 'ok', id: 'ticket-1' }] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' }
+      })
+    }
+  })
+  const pushed = await provider.send({
+    tokens: ['ExponentPushToken[abc]', 'not-a-token'],
+    title: 'T',
+    body: 'B'
+  })
+  pushed.results[0]?.messageId === 'ticket-1' &&
+  pushed.results[1]?.reason === 'token_invalid' &&
+  calls.length === 1 &&
+  calls[0].url === 'https://exp.host/--/api/v2/push/send'
+    ? pass('ExpoPushProvider answers per token and calls only the fixed Expo URL')
+    : fail('ExpoPushProvider did not answer per token against the built artifact')
 
   const testingEsm = await import(resolve(PACKAGE.root, 'dist/testing/index.mjs'))
   const contractCases = testingEsm.otpStorageContract(() => {

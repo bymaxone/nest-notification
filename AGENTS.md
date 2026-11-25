@@ -16,8 +16,9 @@ external boundary — email transport, OTP store, template renderer, audit sink 
 `"dependencies": {}` (NestJS, the email SDK, the Redis client and React are peers); OTP
 cryptography uses `node:crypto` exclusively.
 
-`ISmsProvider` and `IPushProvider` are declared shapes only; no service implements them, and
-configuring `sms` / `push` is rejected at startup.
+`ISmsProvider` is a declared shape only; no service implements it, and configuring `sms` is
+rejected at startup. `IPushProvider` is consumed by `PushService`; a configured push provider
+that reports `isConfigured() === false` fails the boot with `PUSH_PROVIDER_NOT_CONFIGURED`.
 
 ## 2. Architecture
 
@@ -52,7 +53,7 @@ Injection tokens are `Symbol()`, exported for override: `BYMAX_NOTIFICATION_OPTI
 ### Options validation and resolution
 
 `validateOptions` runs first and rejects an empty config, a missing required field, an
-out-of-range OTP length and `sms` / `push`. `resolveOptions` then merges consumer
+out-of-range OTP length and `sms`. `resolveOptions` then merges consumer
 values over defaults, attaches `resolveForPurpose(purpose)` to the OTP section and **deep-freezes**
 the result.
 

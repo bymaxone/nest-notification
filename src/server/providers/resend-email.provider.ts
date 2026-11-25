@@ -353,7 +353,7 @@ export class ResendEmailProvider implements IEmailProvider {
       ).value
       assertStandardRealmRoot('ResendEmailProvider')
     } catch (error) {
-      rethrowRefusal(error)
+      rethrowRefusal(error, 'EmailService')
       throw this.rejectedSend(error, options, signal, timeoutMs)
     }
     if (result.error) {

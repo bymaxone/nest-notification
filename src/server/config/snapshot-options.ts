@@ -19,7 +19,8 @@ import type {
   EmailChannelOptions,
   GlobalOptions,
   OtpChannelOptions,
-  OtpPurposeConfig
+  OtpPurposeConfig,
+  PushChannelOptions
 } from '../interfaces/notification-module-options.interface'
 import {
   isPlainOrClassInstance,
@@ -68,6 +69,12 @@ const EMAIL_KEYS = [
   'maxAttachmentBytes',
   'maxRecipients'
 ] as const satisfies readonly (keyof EmailChannelOptions)[]
+
+/** Every key of the `push` section. */
+const PUSH_KEYS = [
+  'provider',
+  'defaultTtlSeconds'
+] as const satisfies readonly (keyof PushChannelOptions)[]
 
 /** Every key of the `otp` section. */
 const OTP_KEYS = [
@@ -164,6 +171,9 @@ export function snapshotOptions(
       email.defaultTags = email.defaultTags.map((tag: DefaultTag) => readOptionKeys(tag, TAG_KEYS))
     }
     read.email = email
+  }
+  if (read.push !== undefined) {
+    read.push = readOptionKeys(read.push, PUSH_KEYS)
   }
   if (read.audit !== undefined) {
     read.audit = readOptionKeys(read.audit, AUDIT_KEYS, AUDIT_WEAKER_WHEN_UNSET)

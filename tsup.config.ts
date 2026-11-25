@@ -1,4 +1,7 @@
 import { defineConfig } from 'tsup'
+import type { Options } from 'tsup'
+
+type EsbuildPlugin = NonNullable<Options['esbuildPlugins']>[number]
 
 // All optional/required peer dependencies are marked external so none of them is
 // ever bundled into the published artifact — the library ships `dependencies: {}`
@@ -20,6 +23,20 @@ const PEER_EXTERNALS = [
   'prom-client',
   /^@opentelemetry\//
 ]
+
+// The push entry bundles the adapter and the helpers it reads input with, but not the library's
+// error class: a second copy of `NotificationException` would make the services' `instanceof`
+// answer `false` for an error the adapter throws. This plugin sends that one import to the main
+// entry, through the package's own name (external, like the observability entry's imports).
+const SHARED_ERROR_CLASS: EsbuildPlugin = {
+  name: 'shared-error-class',
+  setup(build) {
+    build.onResolve({ filter: /(^|\/)errors\/notification-exception$/ }, () => ({
+      path: '@bymax-one/nest-notification',
+      external: true
+    }))
+  }
+}
 
 export default defineConfig([
   // Server entry (main) — the NestJS dynamic module + reference providers.
@@ -98,6 +115,24 @@ export default defineConfig([
     outDir: 'dist',
     outExtension: ({ format }) => ({ js: format === 'esm' ? '.mjs' : '.cjs' }),
     external: PEER_EXTERNALS,
+    target: 'node24',
+    clean: false,
+    splitting: false,
+    treeshake: true,
+    sourcemap: false
+  },
+
+  // Push entry — the reference push adapters, for a host that wants one. The channel is in the
+  // server entry; an adapter a host does not use costs it nothing.
+  {
+    entry: { 'push/index': 'src/push/index.ts' },
+    format: ['esm', 'cjs'],
+    dts: true,
+    tsconfig: 'tsconfig.build.json',
+    outDir: 'dist',
+    outExtension: ({ format }) => ({ js: format === 'esm' ? '.mjs' : '.cjs' }),
+    external: PEER_EXTERNALS,
+    esbuildPlugins: [SHARED_ERROR_CLASS],
     target: 'node24',
     clean: false,
     splitting: false,

@@ -12,6 +12,6 @@
  * - `email` — transactional email.
  * - `otp` — one-time-passcode lifecycle (generate / verify / consume).
  * - `sms` — text message (declared; no service behind it).
- * - `push` — device push notification (declared; no service behind it).
+ * - `push` — device push notification.
  */
 export type NotificationChannel = 'email' | 'otp' | 'sms' | 'push'

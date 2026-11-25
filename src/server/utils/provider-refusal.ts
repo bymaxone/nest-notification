@@ -27,10 +27,11 @@ function libraryCode(error: unknown): string | undefined {
  * otherwise.
  *
  * @param error - What the provider raised.
+ * @param owner - The component that refuses, named in the refusal.
  * @throws NotificationException `INVALID_SCOPE_IDENTIFIER`, with fixed details.
  */
-export function rethrowRefusal(error: unknown): void {
+export function rethrowRefusal(error: unknown, owner: string): void {
   if (libraryCode(error) === NOTIFICATION_ERROR_CODES.INVALID_SCOPE_IDENTIFIER) {
-    throw refuseInput('EmailService', 'message', 'the provider refused the message as given')
+    throw refuseInput(owner, 'message', 'the provider refused the message as given')
   }
 }

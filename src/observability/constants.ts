@@ -13,7 +13,7 @@ export const NOTIFICATION_METRIC_NAMES = {
 } as const
 
 /** The channels a send is counted on. */
-export const NOTIFICATION_SEND_CHANNELS = ['email'] as const
+export const NOTIFICATION_SEND_CHANNELS = ['email', 'push'] as const
 
 /** How a send ends. */
 export const NOTIFICATION_SEND_OUTCOMES = ['sent', 'failed', 'rejected'] as const

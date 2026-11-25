@@ -17,6 +17,7 @@ export {
   type EmailSendInput,
   type EmailSendTemplateInput
 } from './services/email.service'
+export { PushService, type PushSendInput } from './services/push.service'
 export {
   OtpService,
   type OtpGenerateInput,
@@ -111,6 +112,7 @@ export type {
   ResolvedGlobalOptions,
   ResolvedEmailOptions,
   ResolvedOtpOptions,
+  ResolvedPushOptions,
   ResolvedAuditOptions
 } from './config/resolved-options'
 

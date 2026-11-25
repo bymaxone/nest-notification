@@ -418,7 +418,7 @@ export class EmailService {
       return result
     } catch (error) {
       // The provider refused the message as given: nothing was sent, so it is not a failed delivery.
-      rethrowRefusal(error)
+      rethrowRefusal(error, 'EmailService')
       progress.stage = 'failed'
       return await own(this.failDelivery(error, sendOptions, input, recipient), 'EmailService')
     }

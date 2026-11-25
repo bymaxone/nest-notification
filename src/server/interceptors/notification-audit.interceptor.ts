@@ -105,8 +105,46 @@ export class NotificationAuditInterceptor implements NestInterceptor {
           )
         ).pipe(concatMap(() => throwError(() => error)))
       ),
-      concatMap((value) => from(this.recordMeta(context, 'sent')).pipe(map(() => value)))
+      concatMap((value) => {
+        const failed = this.isFailedPush(context, value)
+        return from(
+          this.recordMeta(
+            context,
+            failed ? 'failed' : 'sent',
+            failed ? 'push provider failed' : undefined
+          )
+        ).pipe(map(() => value))
+      })
     )
+  }
+
+  /**
+   * Whether a push dispatch returned and yet delivered to no token: every per-token result names a
+   * failure (a `reason`, or the deprecated `error`), which is how the service itself audits it. The handler value is the dispatch result
+   * (`{ channel, result: { results } }`) or a bare send result (`{ results }`).
+   */
+  private isFailedPush(context: ExecutionContext, value: unknown): boolean {
+    try {
+      if (this.extractDispatchInput(context)?.channel !== 'push') {
+        return false
+      }
+      const inner: unknown = Reflect.get(Object(value), 'result') ?? value
+      const results: unknown = Reflect.get(Object(inner), 'results')
+      return (
+        Array.isArray(results) &&
+        results.length > 0 &&
+        Array.from(results as unknown[]).every(
+          (entry: unknown) =>
+            typeof entry === 'object' &&
+            entry !== null &&
+            (Reflect.get(entry, 'reason') !== undefined ||
+              Reflect.get(entry, 'error') !== undefined)
+        )
+      )
+    } catch {
+      // A hostile argument or result is the audit write's to report, inside its own boundary.
+      return false
+    }
   }
 
   /**
@@ -152,7 +190,11 @@ export class NotificationAuditInterceptor implements NestInterceptor {
       return false
     }
     const candidate = value as Record<string, unknown>
-    if (candidate.channel !== 'email' && candidate.channel !== 'otp') {
+    if (
+      candidate.channel !== 'email' &&
+      candidate.channel !== 'otp' &&
+      candidate.channel !== 'push'
+    ) {
       return false
     }
     if (typeof candidate.tenantId !== 'string') {
@@ -232,6 +274,11 @@ export class NotificationAuditInterceptor implements NestInterceptor {
     if (input.channel === 'email') {
       return Array.isArray(input.payload.to) ? (input.payload.to[0] ?? '') : input.payload.to
     }
+    if (input.channel === 'push') {
+      // A device token is a credential for one install: the entry holds a count, never a token.
+      const tokens: unknown = input.payload.tokens
+      return `devices:${String(Array.isArray(tokens) ? tokens.length : 1)}`
+    }
     return input.payload.recipient
   }
 
@@ -242,6 +289,9 @@ export class NotificationAuditInterceptor implements NestInterceptor {
    * record and its length is unbounded.
    */
   private extractPurpose(input: DispatchInput): string | undefined {
+    if (input.channel === 'push') {
+      return undefined
+    }
     if (input.channel !== 'otp') {
       return input.payload.template
     }
