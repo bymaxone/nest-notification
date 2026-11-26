@@ -18,7 +18,13 @@ import type {
   PushSendOptions,
   PushSendResult
 } from '../interfaces/push-provider.interface'
-import { MESSAGE_TOO_BIG, TOKEN_INVALID, UNREACHABLE, failedOutcome } from '../utils/push-outcome'
+import {
+  MESSAGE_TOO_BIG,
+  TOKEN_INVALID,
+  UNREACHABLE,
+  failedOutcome,
+  UNKNOWN_FAILURE
+} from '../utils/push-outcome'
 import type { PushFailure, PushOutcome } from '../utils/push-outcome'
 import { readPush } from '../utils/push-send-input'
 import { assertOptionsObject, readOptionKeys } from '../utils/read-options'
@@ -119,8 +125,11 @@ function readDelivery(token: string, call: ApnsCall): Delivery {
     return call.neverConnected ? { ...delivery, stops: UNREACHABLE } : delivery
   }
   if (call.status === 200) {
+    // APNs names every notification it accepts, so a 200 without that name is not its acceptance.
     return {
-      outcome: call.apnsId === undefined ? { token } : { token, messageId: call.apnsId }
+      outcome: call.apnsId
+        ? { token, messageId: call.apnsId }
+        : failedOutcome(token, UNKNOWN_FAILURE)
     }
   }
   const failure = classifyApnsRefusal(call.status, call.reason)
@@ -303,7 +312,9 @@ export class ApnsPushProvider implements IPushProvider, OnModuleDestroy {
       ...batch.message.headers
     }
     const call = await checkedAwait(this.#session.post(headers, batch.message.body), OWNER)
-    const expired = call.kind === 'answer' && call.reason === EXPIRED_PROVIDER_TOKEN
+    // Only a refusal is repeated: the same words on an accepted request would send it twice.
+    const expired =
+      call.kind === 'answer' && call.status === 403 && call.reason === EXPIRED_PROVIDER_TOKEN
     if (expired && !retried && this.#token.renew(jwt)) {
       return checkedAwait(this.#deliver(batch, token, true), OWNER)
     }

@@ -9,6 +9,10 @@
  *
  * A request that got no status says whether APNs can have seen it: not when its stream never had an
  * id, was refused with `REFUSED_STREAM`, or is above the last stream a `GOAWAY` names.
+ *
+ * A NAT or a firewall can forget a quiet connection without either end hearing of it, and a request
+ * written to it is lost with no way to tell whether APNs saw it. So a connection that has had no request
+ * open for {@link IDLE_LIMIT_MS} is replaced before anything is written to it.
  */
 
 import { connect, constants } from 'node:http2'
@@ -26,6 +30,9 @@ const { NGHTTP2_CANCEL, NGHTTP2_REFUSED_STREAM } = constants
 
 /** The most bytes of an answer that are accepted. */
 const ANSWER_LIMIT = 65_536
+
+/** How long a session may have no request open and still be used. */
+const IDLE_LIMIT_MS = 60_000
 
 /** Opens a session to an origin; `http2.connect` by default, a host's own to go through a proxy. */
 export type ApnsConnect = (authority: string) => ClientHttp2Session
@@ -55,6 +62,8 @@ interface Link {
   answered: boolean
   /** How many requests on it are not yet over. */
   open: number
+  /** When the session was opened or its last request ended, by `Date.now`. */
+  quietSince: number
   /** Set once it takes no more requests; it is ended when none is left open. */
   retired: boolean
   /** The request the others wait for, while none has had a status. */
@@ -130,6 +139,7 @@ function follow(session: ClientHttp2Session): Link {
     proven: false,
     answered: false,
     open: 0,
+    quietSince: Date.now(),
     retired: false
   }
   session.on('connect', () => {
@@ -154,6 +164,12 @@ function retire(link: Link): void {
   }
 }
 
+/** Whether a link has been quiet too long to be written to. */
+function stale(link: Link): boolean {
+  // The wall clock, which also counts the time a frozen process did not run.
+  return link.open === 0 && Date.now() - link.quietSince >= IDLE_LIMIT_MS
+}
+
 /** The connection of one provider to one APNs origin. */
 export class ApnsSession {
   readonly #authority: string
@@ -171,7 +187,8 @@ export class ApnsSession {
 
   /** Whether the session in use has had a request accepted. */
   get proven(): boolean {
-    return this.#link?.proven === true && !this.#link.session.closed
+    const link = this.#link
+    return link?.proven === true && !link.session.closed && !stale(link)
   }
 
   /** Ends the session once the requests on it are done; the next request opens another. */
@@ -238,7 +255,10 @@ export class ApnsSession {
       !held.session.destroyed &&
       held.lastStreamId === undefined
     ) {
-      return held
+      if (!stale(held)) {
+        return held
+      }
+      retire(held)
     }
     this.#link = follow(this.#connect(this.#authority))
     return this.#link
@@ -256,6 +276,7 @@ export class ApnsSession {
         }
         over = true
         link.open -= 1
+        link.quietSince = Date.now()
         link.lead = undefined
         resolve(ended(link, stream, answer))
         if (link.retired) {

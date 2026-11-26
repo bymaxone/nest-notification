@@ -18,7 +18,8 @@ the entries that carry one, is the compatibility contract — read it, not the n
 - **`ApnsPushProvider`, from the new `@bymax-one/nest-notification/push/apns` subpath.** An `IPushProvider` for Apple
   Push Notification service over `node:http2`, signed with the `.p8` key of the account: no SDK and no peer dependency.
   Every token gets its own classified result, and `PUSH_SEND_FAILED` is thrown only when no request got as far as the
-  message. `contentAvailable` sends a background push and requires an empty `title` and `body`, as with
+  message. A connection with no request open for 60 seconds is replaced before it is used again, and a 200 without an
+  `apns-id` is `unknown`. `contentAvailable` sends a background push and requires an empty `title` and `body`, as with
   `FcmPushProvider`. There are no receipts.
 
 #### Apply to a derived backend

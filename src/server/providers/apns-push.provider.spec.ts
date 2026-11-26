@@ -536,13 +536,15 @@ describe('ApnsPushProvider', () => {
           held.forEach((one) => answer(one, { status: 403, reason: 'ExpiredProviderToken' }))
         }
       }
-      server.steps.push(together, together)
       clock.mockReturnValue(30 * 60_000)
+      // The idle connection is replaced, and its first request goes alone: this one opens the new one.
+      await provider.send({ ...base, tokens: TOKEN })
+      server.steps.push(together, together)
       /* Act */
       const result = await provider.send({ ...base, tokens: [OTHER, THIRD] })
       /* Assert */
       expect(result.results.map((r) => r.messageId)).toEqual(['id-cd', 'id-ef'])
-      expect(server.requests.map((r) => claimsOf(r).claims.iat)).toEqual([0, 0, 0, 1800, 1800])
+      expect(server.requests.map((r) => claimsOf(r).claims.iat)).toEqual([0, 0, 0, 0, 1800, 1800])
     })
   })
 

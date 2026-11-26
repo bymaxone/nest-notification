@@ -303,14 +303,39 @@ describe('ApnsPushProvider messages', () => {
       }
     )
 
-    it('counts a 200 as accepted, with or without an apns-id', async () => {
+    it('answers a 200 without an apns-id as unknown and not worth a retry', async () => {
       /* Arrange */
       const server = await fake()
       server.steps.push({ status: 200, apnsId: null })
       /* Act */
       const result = await providerOn(server).send({ ...base, tokens: TOKEN })
       /* Assert */
-      expect(result.results).toEqual([{ token: TOKEN }])
+      expect(result.results).toEqual([{ token: TOKEN, reason: 'unknown', retryable: false }])
+    })
+
+    it('answers a 200 with an empty apns-id as unknown', async () => {
+      /* Arrange */
+      const server = await fake()
+      server.steps.push({ status: 200, apnsId: '' })
+      const provider = providerOn(server)
+      /* Act */
+      const result = await provider.send({ ...base, tokens: TOKEN })
+      /* Assert */
+      expect(result.results).toEqual([{ token: TOKEN, reason: 'unknown', retryable: false }])
+    })
+
+    it('does not send again on a 200 that names ExpiredProviderToken', async () => {
+      /* Arrange */
+      const clock = jest.spyOn(Date, 'now').mockReturnValue(1_000_000)
+      const server = await fake()
+      const provider = providerOn(server)
+      await provider.send({ ...base, tokens: TOKEN })
+      clock.mockReturnValue(1_000_000 + 30 * 60_000)
+      server.steps.push({ status: 200, reason: 'ExpiredProviderToken' })
+      /* Act */
+      await provider.send({ ...base, tokens: TOKEN })
+      /* Assert */
+      expect(server.requests).toHaveLength(2)
     })
 
     it('keeps the token, the credentials and the words of APNs out of results and errors', async () => {
