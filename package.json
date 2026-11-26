@@ -1,6 +1,6 @@
 {
   "name": "@bymax-one/nest-notification",
-  "version": "1.5.7",
+  "version": "1.5.8",
   "description": "Multi-channel notification library for NestJS — email, OTP, SMS, push — with pluggable providers and storage, multi-tenant by design, zero runtime dependencies.",
   "author": "Bymax One <support@bymax.one>",
   "license": "MIT",
@@ -94,6 +94,16 @@
         "default": "./dist/push/fcm/index.cjs"
       }
     },
+    "./push/apns": {
+      "import": {
+        "types": "./dist/push/apns/index.d.ts",
+        "default": "./dist/push/apns/index.mjs"
+      },
+      "require": {
+        "types": "./dist/push/apns/index.d.cts",
+        "default": "./dist/push/apns/index.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "typesVersions": {
@@ -115,6 +125,9 @@
       ],
       "push/fcm": [
         "./dist/push/fcm/index.d.cts"
+      ],
+      "push/apns": [
+        "./dist/push/apns/index.d.cts"
       ]
     }
   },
@@ -246,6 +259,7 @@
     "ses",
     "twilio",
     "fcm",
+    "apns",
     "multi-tenant",
     "redis",
     "transactional",

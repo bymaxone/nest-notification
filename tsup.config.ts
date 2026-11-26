@@ -156,5 +156,22 @@ export default defineConfig([
     splitting: false,
     treeshake: true,
     sourcemap: false
+  },
+
+  // APNs entry — its own, for the same reason and built the same way.
+  {
+    entry: { 'push/apns/index': 'src/push/apns/index.ts' },
+    format: ['esm', 'cjs'],
+    dts: true,
+    tsconfig: 'tsconfig.build.json',
+    outDir: 'dist',
+    outExtension: ({ format }) => ({ js: format === 'esm' ? '.mjs' : '.cjs' }),
+    external: PEER_EXTERNALS,
+    esbuildPlugins: [SHARED_ERROR_CLASS],
+    target: 'node24',
+    clean: false,
+    splitting: false,
+    treeshake: true,
+    sourcemap: false
   }
 ])

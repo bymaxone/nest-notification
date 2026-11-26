@@ -65,8 +65,9 @@ export interface PushSendResult {
 /**
  * Push notification provider.
  *
- * Shipped implementations: Expo Push Service (`ExpoPushProvider`, from `./push`) and Firebase Cloud
- * Messaging (`FcmPushProvider`, from `./push/fcm`). A host can implement its own. Import an adapter's
+ * Shipped implementations: Expo Push Service (`ExpoPushProvider`, from `./push`), Firebase Cloud
+ * Messaging (`FcmPushProvider`, from `./push/fcm`) and Apple Push Notification service
+ * (`ApnsPushProvider`, from `./push/apns`). A host can implement its own. Import an adapter's
  * subpath at startup, next to the main entry: it checks the realm root against a snapshot it takes when
  * it is first imported, so a lazy import takes its baseline at that moment.
  */

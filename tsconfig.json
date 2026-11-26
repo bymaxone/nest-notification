@@ -30,7 +30,8 @@
       "@bymax-one/nest-notification/testing": ["./src/testing/index.ts"],
       "@bymax-one/nest-notification/observability": ["./src/observability/index.ts"],
       "@bymax-one/nest-notification/push": ["./src/push/index.ts"],
-      "@bymax-one/nest-notification/push/fcm": ["./src/push/fcm/index.ts"]
+      "@bymax-one/nest-notification/push/fcm": ["./src/push/fcm/index.ts"],
+      "@bymax-one/nest-notification/push/apns": ["./src/push/apns/index.ts"]
     }
   },
   "include": ["src/**/*"],

@@ -94,6 +94,7 @@ One package — import only what your app needs:
 | **Observability** | `@bymax-one/nest-notification/observability` | Metrics, spans and a readiness check                   | `@bymax-one/nest-core`, `prom-client`, `@opentelemetry/api` (all optional) |
 | **Push (Expo)**   | `@bymax-one/nest-notification/push`          | `ExpoPushProvider`                                     |                                    None                                    |
 | **Push (FCM)**    | `@bymax-one/nest-notification/push/fcm`      | `FcmPushProvider`                                      |                                    None                                    |
+| **Push (APNs)**   | `@bymax-one/nest-notification/push/apns`     | `ApnsPushProvider`                                     |                                    None                                    |
 
 ```
 shared (zero deps) ← server        react
@@ -1055,7 +1056,7 @@ The renderer options and defaults are in the Templates section; these are the ty
 
 #### Push
 
-`PushService` sends one message to many device tokens and answers **per token**. The library stores no token: your backend does, and it acts on the closed `PushFailureReason` of each result (`token_unregistered` means delete the token). The adapters are `ExpoPushProvider` and `FcmPushProvider` (see [Firebase Cloud Messaging](#firebase-cloud-messaging)). `ExpoPushProvider` is imported from the `@bymax-one/nest-notification/push` subpath so that it stays out of the main bundle of a host that sends no push: no SDK, no peer dependency, two JSON endpoints called with the platform's `fetch`, every request bounded by `timeoutMs` and sent only to Expo's fixed URLs, and at most 1 MiB of each answer accepted.
+`PushService` sends one message to many device tokens and answers **per token**. The library stores no token: your backend does, and it acts on the closed `PushFailureReason` of each result (`token_unregistered` means delete the token). The adapters are `ExpoPushProvider`, `FcmPushProvider` (see [Firebase Cloud Messaging](#firebase-cloud-messaging)) and `ApnsPushProvider` (see [Apple Push Notification service](#apple-push-notification-service)). `ExpoPushProvider` is imported from the `@bymax-one/nest-notification/push` subpath so that it stays out of the main bundle of a host that sends no push: no SDK, no peer dependency, two JSON endpoints called with the platform's `fetch`, every request bounded by `timeoutMs` and sent only to Expo's fixed URLs, and at most 1 MiB of each answer accepted.
 
 Import `@bymax-one/nest-notification/push` at startup, next to the main entry, and not lazily: the subpath carries its own copy of the realm-root check and takes its baseline when it is first imported, so a lazy import would take it at that later moment.
 
@@ -1126,20 +1127,53 @@ BymaxNotificationModule.forRoot({
 - **When `send` throws.** `PUSH_SEND_FAILED` is thrown only when no request got as far as the message: the token exchange failed, no connection was made, or the account was refused. Otherwise every token has its own result. A refusal of the APNs key (`THIRD_PARTY_AUTH_ERROR`) concerns iOS tokens only and is a result.
 - **Quotas.** Firebase documents 600 000 messages a minute per project, and for one Android device 240 a minute and 5 000 an hour. After a 429, wait for `Retry-After` or else 60 seconds, and back off at least 10 seconds between retries of a 5xx. The adapter does not read `Retry-After`; the waiting is the host's.
 
-| Name                      | What it is                                       | Members                                                                                                                                                                                                 |
-| ------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PushService`             | The push channel's service.                      | `send(input)`, `fetchReceipts(ticketIds)`, `isConfigured()`.                                                                                                                                            |
-| `PushSendInput`           | The argument of `PushService.send()`.            | `PushSendOptions` plus `tenantId` and `userId?`.                                                                                                                                                        |
-| `ResolvedPushOptions`     | The push section after validation.               | `provider`, `defaultTtlSeconds?`.                                                                                                                                                                       |
-| `ExpoPushProvider`        | Reference adapter for Expo Push (`./push` only). | `new ExpoPushProvider(options?)`; `name` is `'expo'`.                                                                                                                                                   |
-| `ExpoPushProviderOptions` | Options of `ExpoPushProvider` (`./push`).        | `accessToken?` (Expo enhanced security), `timeoutMs?` (default 10 000), `fetch?`.                                                                                                                       |
-| `FcmPushProvider`         | Adapter for FCM HTTP v1 (`./push/fcm` only).     | `new FcmPushProvider(options)`; `name` is `'fcm'`.                                                                                                                                                      |
-| `FcmPushProviderOptions`  | Options of `FcmPushProvider` (`./push/fcm`).     | `projectId`, `clientEmail`, `privateKey`, `timeoutMs?`, `concurrency?`, `fetch?`.                                                                                                                       |
-| `FcmFetch`                | The `fetch` the adapter calls (`./push/fcm`).    | `(url, init) => Promise<Response>`.                                                                                                                                                                     |
-| `PushFailureReason`       | Why a token was not served (closed set).         | `'token_unregistered' \| 'token_invalid' \| 'message_too_big' \| 'rate_limited' \| 'provider_unavailable' \| 'credentials' \| 'unknown'`; import it from `./shared`; the main entry does not export it. |
-| `PushTokenResult`         | The outcome of one token in a send.              | `token`, `messageId?`, `reason?`, `retryable?`; import it from `./shared`; the main entry does not export it.                                                                                           |
-| `PushReceiptStatus`       | The state of a receipt.                          | `'ok' \| 'pending' \| 'error'`; import it from `./shared`; the main entry does not export it.                                                                                                           |
-| `PushReceiptResult`       | One receipt.                                     | `ticketId`, `status`, `reason?`, `retryable?`; import it from `./shared`; the main entry does not export it.                                                                                            |
+##### Apple Push Notification service
+
+`ApnsPushProvider` talks to APNs itself over HTTP/2: no SDK, no peer dependency, `node:http2` and a provider token signed with your `.p8` key. Import `@bymax-one/nest-notification/push/apns` at startup, next to the main entry, for the same realm-root reason as `./push`.
+
+```ts
+import { BymaxNotificationModule } from '@bymax-one/nest-notification'
+import { ApnsPushProvider } from '@bymax-one/nest-notification/push/apns'
+
+BymaxNotificationModule.forRoot({
+  push: {
+    provider: new ApnsPushProvider({
+      teamId: process.env.APNS_TEAM_ID ?? '',
+      keyId: process.env.APNS_KEY_ID ?? '',
+      privateKey: process.env.APNS_PRIVATE_KEY ?? '', // the content of the .p8 file
+      topic: 'com.example.app', // the bundle id
+      environment: 'production' // 'sandbox' for the tokens of development builds
+    })
+  }
+})
+```
+
+- **Credentials are values.** The adapter reads no file and no environment variable. `privateKey` needs real line breaks. `teamId` and `keyId` are 10 capital letters or digits; a key that is not a P-256 private key in PEM form makes the constructor throw, without quoting it. `timeoutMs` defaults to 10 000, `concurrency` (1 to 500) to 20.
+- **Connection.** One HTTP/2 session to `api.push.apple.com` (or `api.sandbox.push.apple.com`) is kept and reused; it does not keep the process running while idle. Until a session has had a request accepted, one request is sent alone. `close()` ends it, and Nest calls that on `app.close()`; a later `send` opens another. `connect` replaces `http2.connect`, for example to go through a proxy: the host's function receives the origin and returns the session.
+- **Provider token.** The ES256 token is reused for 50 minutes. When APNs answers `ExpiredProviderToken` and the token is at least 20 minutes old, it is signed again and that request repeated once.
+- **One request per token.** Results come in the order of `tokens`; a token given twice is sent once. A device token that is not hexadecimal is answered `token_invalid` with no call. `messageId` is the `apns-id` of the answer. There are no receipts: `fetchReceipts` throws `CHANNEL_DISABLED`. At most 65 536 bytes of an answer are accepted.
+- **Fields.** `title`, `subtitle` and `body` form the alert; `sound`, `badge`, `categoryId`, `threadId` and `mutableContent` go in `aps`; `data` keys sit beside `aps`, so the key `aps` is refused. `priority` is sent as `apns-priority` (`high` is 10, `normal` 5), `ttlSeconds` as `apns-expiration` (`0` means one attempt, nothing stored) and `collapseKey`, 1 to 64 printable ASCII characters, as `apns-collapse-id`. `imageUrl` and `channelId` are not sent. A payload over 4096 bytes is answered `message_too_big` with no call.
+- **Background push (`contentAvailable`).** Give `title: ''` and `body: ''` and none of `subtitle`, `imageUrl`, `sound`, `badge`, `channelId`, `categoryId`, `threadId` or `mutableContent: true`; otherwise it is refused with `notification.invalid_scope_identifier`. The message carries `content-available: 1`, `apns-push-type: background` and `apns-priority: 5`, and no alert.
+- **Reasons.** `410 Unregistered` or `ExpiredToken` is `token_unregistered` (delete the token). `BadDeviceToken` and `DeviceTokenNotForTopic` are `token_invalid`; a `BadDeviceToken` is often a token of the other environment, so check `environment` before deleting anything. A 403 or `TopicDisallowed` is `credentials`, a 429 `rate_limited`. `retryable` is `true` for a rate limit, for a request APNs cannot have seen and for a 500 or 503 that names a reason. A request that times out, resets or meets another 5xx is `retryable: false`: it may have been delivered.
+- **When `send` throws.** `PUSH_SEND_FAILED` is thrown only when no request got as far as the message: no connection was made, APNs saw none of the requests, or it refused the account (credentials, or `TooManyProviderTokenUpdates`). Otherwise every token has its own result.
+
+| Name                      | What it is                                         | Members                                                                                                                                                                                                 |
+| ------------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PushService`             | The push channel's service.                        | `send(input)`, `fetchReceipts(ticketIds)`, `isConfigured()`.                                                                                                                                            |
+| `PushSendInput`           | The argument of `PushService.send()`.              | `PushSendOptions` plus `tenantId` and `userId?`.                                                                                                                                                        |
+| `ResolvedPushOptions`     | The push section after validation.                 | `provider`, `defaultTtlSeconds?`.                                                                                                                                                                       |
+| `ExpoPushProvider`        | Reference adapter for Expo Push (`./push` only).   | `new ExpoPushProvider(options?)`; `name` is `'expo'`.                                                                                                                                                   |
+| `ExpoPushProviderOptions` | Options of `ExpoPushProvider` (`./push`).          | `accessToken?` (Expo enhanced security), `timeoutMs?` (default 10 000), `fetch?`.                                                                                                                       |
+| `FcmPushProvider`         | Adapter for FCM HTTP v1 (`./push/fcm` only).       | `new FcmPushProvider(options)`; `name` is `'fcm'`.                                                                                                                                                      |
+| `FcmPushProviderOptions`  | Options of `FcmPushProvider` (`./push/fcm`).       | `projectId`, `clientEmail`, `privateKey`, `timeoutMs?`, `concurrency?`, `fetch?`.                                                                                                                       |
+| `FcmFetch`                | The `fetch` the adapter calls (`./push/fcm`).      | `(url, init) => Promise<Response>`.                                                                                                                                                                     |
+| `ApnsPushProvider`        | Adapter for APNs over HTTP/2 (`./push/apns` only). | `new ApnsPushProvider(options)`; `name` is `'apns'`; `close()`.                                                                                                                                         |
+| `ApnsPushProviderOptions` | Options of `ApnsPushProvider` (`./push/apns`).     | `teamId`, `keyId`, `privateKey`, `topic`, `environment`, `timeoutMs?`, `concurrency?`, `connect?`.                                                                                                      |
+| `ApnsConnect`             | Opens the HTTP/2 session (`./push/apns`).          | `(authority) => ClientHttp2Session`.                                                                                                                                                                    |
+| `PushFailureReason`       | Why a token was not served (closed set).           | `'token_unregistered' \| 'token_invalid' \| 'message_too_big' \| 'rate_limited' \| 'provider_unavailable' \| 'credentials' \| 'unknown'`; import it from `./shared`; the main entry does not export it. |
+| `PushTokenResult`         | The outcome of one token in a send.                | `token`, `messageId?`, `reason?`, `retryable?`; import it from `./shared`; the main entry does not export it.                                                                                           |
+| `PushReceiptStatus`       | The state of a receipt.                            | `'ok' \| 'pending' \| 'error'`; import it from `./shared`; the main entry does not export it.                                                                                                           |
+| `PushReceiptResult`       | One receipt.                                       | `ticketId`, `status`, `reason?`, `retryable?`; import it from `./shared`; the main entry does not export it.                                                                                            |
 
 #### SMS and push contracts
 

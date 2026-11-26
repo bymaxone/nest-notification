@@ -1,6 +1,6 @@
 /**
  * Probe run by the smoke test against the BUILT package, never against src: it wires the built
- * `./push` and `./push/fcm` entries beside the built server entry, in both module formats, and holds
+ * `./push`, `./push/fcm` and `./push/apns` entries beside the built server entry, in both module formats, and holds
  * them to what only built bundles can show. The specs run on src, where there is one copy of every module; a push
  * bundle carries its own copy of the input helpers, so the two things that must not differ are the
  * error class (one copy, the server's) and the behavior of the duplicated helpers. Exit code 0 means
@@ -14,6 +14,7 @@
 require('reflect-metadata')
 const { generateKeyPairSync } = require('node:crypto')
 const { readFileSync } = require('node:fs')
+const http2 = require('node:http2')
 const { join } = require('node:path')
 const { Test } = require('@nestjs/testing')
 
@@ -223,7 +224,68 @@ async function runFcm(format, server, fcm) {
   )
 }
 
+// The adapter from `./push/apns` against the built server: one send over a local plaintext HTTP/2
+// server, and an input refusal that must be the server's own error class.
+async function runApns(format, server, apns) {
+  const label = (text) => `${format} apns: ${text}`
+  const { privateKey } = generateKeyPairSync('ec', {
+    namedCurve: 'P-256',
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+    publicKeyEncoding: { type: 'spki', format: 'pem' }
+  })
+  const seen = []
+  const local = http2.createServer()
+  local.on('stream', (stream, headers) => {
+    seen.push(headers[':path'])
+    stream.respond({ ':status': 200, 'apns-id': 'apns-1' })
+    stream.end()
+  })
+  await new Promise((done) => local.listen(0, '127.0.0.1', done))
+  const authorities = []
+  const provider = new apns.ApnsPushProvider({
+    teamId: 'TEAM123456',
+    keyId: 'KEY1234567',
+    privateKey,
+    topic: 'com.example.app',
+    environment: 'sandbox',
+    connect: (authority) => {
+      authorities.push(authority)
+      return http2.connect(`http://127.0.0.1:${local.address().port}`)
+    }
+  })
+  const moduleRef = await Test.createTestingModule({
+    imports: [server.BymaxNotificationModule.forRoot({ push: { provider } })]
+  }).compile()
+  const sent = await moduleRef
+    .get(server.NotificationService)
+    .getPush()
+    .send({ tenantId: 'acme', tokens: 'ab12', title: 'T', body: 'B' })
+  check(label('a token gets its apns-id'), sent.results[0]?.messageId === 'apns-1')
+  check(
+    label('the fixed host was asked for the device path'),
+    authorities.join() === 'https://api.sandbox.push.apple.com' && seen.join() === '/3/device/ab12'
+  )
+  const bad = await failureOf(provider.send({ tokens: 'ab12', title: 5, body: 'B' }))
+  check(
+    label("an input refusal is the server's NotificationException"),
+    bad instanceof server.NotificationException
+  )
+  await moduleRef.close()
+  provider.close()
+  await new Promise((done) => local.close(done))
+}
+
 async function main() {
+  await runApns(
+    'cjs',
+    require('@bymax-one/nest-notification'),
+    require('@bymax-one/nest-notification/push/apns')
+  )
+  await runApns(
+    'esm',
+    await import('@bymax-one/nest-notification'),
+    await import('@bymax-one/nest-notification/push/apns')
+  )
   await runFcm(
     'cjs',
     require('@bymax-one/nest-notification'),
