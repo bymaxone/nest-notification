@@ -63,7 +63,7 @@ export interface UseOtpInputState {
 
 /** Options for {@link useOtpCountdown}. */
 export interface UseOtpCountdownOptions {
-  /** Unix epoch milliseconds of expiry, or `null` to disable the countdown. */
+  /** Unix epoch milliseconds of expiry. `null`, or a value that is not finite, disables it. */
   expiresAt: number | null
 
   /** Recompute interval in milliseconds. Default: `1000`. */

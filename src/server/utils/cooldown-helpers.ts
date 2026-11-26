@@ -15,11 +15,18 @@ const SECONDS_PER_MINUTE = 60
 /** Seconds in one hour. */
 const SECONDS_PER_HOUR = 3600
 
+/** The remaining seconds to present: never negative, and `0` when the value is not finite. */
+function clampRemaining(remainingSeconds: number): number {
+  const clamped = Math.max(remainingSeconds, 0)
+  return Number.isFinite(clamped) ? clamped : 0
+}
+
 /**
  * Computes the HTTP `Retry-After` header value (in whole seconds).
  *
  * Rounds up (a partial second still requires waiting) and clamps to a
- * non-negative integer, so an already-expired cooldown yields `'0'`.
+ * non-negative integer, so an already-expired cooldown yields `'0'`, as does a value that is not a
+ * finite number.
  *
  * @param remainingSeconds - Remaining cooldown, as returned by `storage.getCooldown()`.
  * @returns A string suitable for `res.setHeader('Retry-After', value)`.
@@ -30,14 +37,15 @@ const SECONDS_PER_HOUR = 3600
  * ```
  */
 export function toRetryAfterHeader(remainingSeconds: number): string {
-  return String(Math.max(0, Math.ceil(remainingSeconds)))
+  return String(Math.ceil(clampRemaining(remainingSeconds)))
 }
 
 /**
  * Computes the epoch-ms timestamp at which the cooldown will expire.
  *
  * @param remainingSeconds - Current remaining cooldown in seconds.
- * @returns Epoch ms when the cooldown expires; `Date.now()` when already expired.
+ * @returns Epoch ms when the cooldown expires; `Date.now()` when already expired or when the
+ *   value is not a finite number.
  * @example
  * ```ts
  * cooldownExpiresAt(60) // ~Date.now() + 60_000
@@ -45,13 +53,14 @@ export function toRetryAfterHeader(remainingSeconds: number): string {
  * ```
  */
 export function cooldownExpiresAt(remainingSeconds: number): number {
-  return Date.now() + Math.max(remainingSeconds, 0) * MS_PER_SECOND
+  return Date.now() + clampRemaining(remainingSeconds) * MS_PER_SECOND
 }
 
 /**
  * Formats a remaining cooldown as a compact human-readable string for a UI.
  *
- * Zero-valued units are omitted; an expired or zero cooldown floors to `'0s'`.
+ * Zero-valued units are omitted; an expired or zero cooldown, or a value that is not a finite
+ * number, gives `'0s'`.
  *
  * @param remainingSeconds - Remaining cooldown in seconds.
  * @returns A string such as `'0s'`, `'47s'`, `'2m'`, `'2m 5s'`, `'1h'`, or `'1h 2m 5s'`.
@@ -62,7 +71,7 @@ export function cooldownExpiresAt(remainingSeconds: number): number {
  * ```
  */
 export function formatCooldown(remainingSeconds: number): string {
-  const totalSeconds = Math.ceil(Math.max(remainingSeconds, 0))
+  const totalSeconds = Math.ceil(clampRemaining(remainingSeconds))
   const hours = Math.floor(totalSeconds / SECONDS_PER_HOUR)
   const minutes = Math.floor((totalSeconds % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE)
   const seconds = totalSeconds % SECONDS_PER_MINUTE

@@ -11,6 +11,17 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 ## [Unreleased]
 
+## [1.5.5] - 2026-11-26
+
+### Fixed
+
+- **A value that is not a finite number is no longer rendered.** `formatCooldown` returned strings such as `'NaNs'`,
+  `toRetryAfterHeader` returned `'NaN'` or `'Infinity'`, and `cooldownExpiresAt` returned a non-finite timestamp; all
+  three now read such a value as no cooldown (`'0s'`, `'0'`, `Date.now()`).
+- **`useOtpCountdown` treats a non-finite `expiresAt` like `null`.** `NaN` and `Infinity` showed `NaN` and kept a timer; it
+  now reports `00:00` and `expired: true`, starts no timer and does not call `onExpired`. This includes `-Infinity`,
+  which used to call `onExpired`.
+
 ## [1.5.4] - 2026-11-25
 
 ### Changed
@@ -2149,7 +2160,8 @@ rejected at startup rather than failing on the first send.
 
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.5.4...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.5.5...HEAD
+[1.5.5]: https://github.com/bymaxone/nest-notification/compare/v1.5.4...v1.5.5
 [1.5.4]: https://github.com/bymaxone/nest-notification/compare/v1.5.3...v1.5.4
 [1.5.3]: https://github.com/bymaxone/nest-notification/compare/v1.5.2...v1.5.3
 [1.5.2]: https://github.com/bymaxone/nest-notification/compare/v1.5.1...v1.5.2
