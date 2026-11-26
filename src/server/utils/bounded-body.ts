@@ -3,7 +3,7 @@
  * @layer infrastructure
  */
 
-import { checkedAwait } from './realm-root'
+import { checkedAwait, silence } from './realm-root'
 
 /**
  * Reads a web stream chunk by chunk, so it costs at most the bound and one chunk.
@@ -35,7 +35,8 @@ export async function readBounded(
     }
     bytes += value.byteLength
     if (bytes > limit) {
-      await checkedAwait(reader.cancel(), owner)
+      // Not awaited: on a cloned answer it settles only once the other branch is done with too.
+      silence(reader.cancel())
       return ''
     }
     text += decoder.decode(value, { stream: true })

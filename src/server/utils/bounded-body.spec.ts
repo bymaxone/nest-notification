@@ -57,6 +57,25 @@ describe('readBounded', () => {
     expect(state.cancelled).toBe(true)
   })
 
+  // Cancelling one branch of a clone settles only once the other branch is cancelled or read.
+  it('does not wait for the cancellation of a cloned answer', async () => {
+    /* Arrange: the other branch is never read */
+    const response = new Response('a'.repeat(LIMIT + 1))
+    const other = response.clone()
+    /* Act / Assert */
+    expect(await read(response)).toBe('')
+    expect(other.bodyUsed).toBe(false)
+  }, 1_000)
+
+  it('answers nothing when the cancellation rejects', async () => {
+    const body = new ReadableStream<Uint8Array>({
+      start: (controller) => controller.enqueue(new Uint8Array(LIMIT + 1)),
+      cancel: () => Promise.reject(new Error('no'))
+    })
+
+    expect(await read(new Response(body))).toBe('')
+  })
+
   it('counts bytes, not characters', async () => {
     expect(await read(new Response('é'.repeat(LIMIT / 2 + 1)))).toBe('')
   })
