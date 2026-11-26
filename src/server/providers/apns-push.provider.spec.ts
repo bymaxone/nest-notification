@@ -346,6 +346,90 @@ describe('ApnsPushProvider', () => {
     })
   })
 
+  describe('one request first on a connection', () => {
+    const tokens = ['01', '02', '03', '04', '05', '06'].map((t) => t.repeat(32))
+
+    it('holds side-by-side sends until the first is answered', async () => {
+      /* Arrange */
+      const server = await fake({ maxConcurrentStreams: 1 })
+      const provider = providerOn(server)
+      /* Act */
+      const results = await Promise.all(
+        tokens.map((token) => provider.send({ ...base, tokens: token }))
+      )
+      /* Assert */
+      expect(results.map((r) => r.results[0]?.reason)).toEqual(tokens.map(() => undefined))
+    }, 5_000)
+
+    it('holds it again on the connection that replaces one mid-send', async () => {
+      /* Arrange */
+      const server = await fake({ maxConcurrentStreams: 1 })
+      server.steps.push((seen) => {
+        answer(seen, { status: 200 })
+        seen.stream.session?.close()
+      })
+      /* Act */
+      const result = await providerOn(server).send({ ...base, tokens })
+      /* Assert */
+      expect(result.results.map((r) => r.reason)).toEqual(tokens.map(() => undefined))
+    }, 5_000)
+
+    it('returns what waited behind an unanswered first request as not sent', async () => {
+      /* Arrange */
+      const server = await fake()
+      server.steps.push(() => undefined)
+      const provider = providerOn(server, { timeoutMs: 150 })
+      /* Act */
+      const first = provider.send({ ...base, tokens: TOKEN })
+      const waited = failureOf(provider.send({ ...base, tokens: OTHER }))
+      /* Assert */
+      expect((await first).results[0]?.retryable).toBe(false)
+      expect((await waited).code).toBe('EUNAVAILABLE')
+      expect(server.requests).toHaveLength(1)
+      const after = await provider.send({ ...base, tokens: THIRD })
+      expect(after.results[0]?.messageId).toBe('id-ef')
+    }, 5_000)
+
+    it('lets another request lead when the first was reset on a connection that stays', async () => {
+      /* Arrange */
+      const server = await fake()
+      server.steps.push((seen) => seen.stream.close(constants.NGHTTP2_INTERNAL_ERROR))
+      const provider = providerOn(server)
+      await provider.send({ ...base, tokens: TOKEN })
+      /* Act */
+      const result = await provider.send({ ...base, tokens: OTHER })
+      /* Assert */
+      expect(result.results[0]?.messageId).toBe('id-cd')
+      expect(server.authorities).toHaveLength(1)
+    }, 5_000)
+  })
+
+  describe('close', () => {
+    it('lets a request still waiting for the connection be sent', async () => {
+      /* Arrange */
+      const server = await fake()
+      const provider = providerOn(server)
+      /* Act */
+      const pending = provider.send({ ...base, tokens: TOKEN })
+      provider.close()
+      /* Assert */
+      expect((await pending).results[0]?.messageId).toBe('id-ab')
+    }, 5_000)
+
+    it('ends a session that was already connected when the host gave it', async () => {
+      /* Arrange */
+      const server = await fake()
+      const ready = server.connect('https://api.push.apple.com')
+      await new Promise<void>((done) => ready.once('connect', () => done()))
+      const provider = providerOn(server, { connect: () => ready })
+      await provider.send({ ...base, tokens: TOKEN })
+      /* Act */
+      provider.close()
+      /* Assert */
+      expect(ready.closed).toBe(true)
+    }, 5_000)
+  })
+
   describe('provider token', () => {
     it('signs an ES256 token with the key id and team id, and reuses it', async () => {
       /* Arrange */

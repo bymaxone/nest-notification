@@ -7,7 +7,7 @@
  * key, its id, the team id and the words of APNs are never logged and never put in a thrown error.
  *
  * APNs takes one token per request. While the session has had no request accepted, a `send` makes its
- * first request alone: APNs allows a single stream on a connection it has not authenticated yet.
+ * first request alone, so that a refusal of the account is known before the others are made.
  */
 
 import { Injectable } from '@nestjs/common'
@@ -201,7 +201,7 @@ export class ApnsPushProvider implements IPushProvider, OnModuleDestroy {
     return true
   }
 
-  /** Ends the connection once its requests are done; a later `send` opens another. */
+  /** Ends the connection once the requests on it are done; a later request opens another. */
   close(): void {
     this.#session.close()
   }
@@ -245,7 +245,7 @@ export class ApnsPushProvider implements IPushProvider, OnModuleDestroy {
     }
   }
 
-  /** Sends one token alone on a session not yet accepted, then the rest side by side. */
+  /** Sends one token alone while the account is not known to be accepted, then the rest side by side. */
   async #sendAll(batch: Batch): Promise<void> {
     if (!this.#session.proven && batch.tokens.length > 0) {
       await checkedAwait(this.#sendNext(batch), OWNER)

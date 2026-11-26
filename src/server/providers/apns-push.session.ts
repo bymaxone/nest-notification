@@ -3,6 +3,10 @@
  * and never as an exception.
  * @layer infrastructure
  *
+ * APNs allows one stream on a connection it has not authenticated yet, and Node submits what is pending
+ * before it knows the peer's limit. So until a connection has had an answer, one request is in flight on
+ * it and the others wait; if that one gets no answer, those that waited are returned as not sent.
+ *
  * A request that got no status says whether APNs can have seen it: not when its stream never had an
  * id, was refused with `REFUSED_STREAM`, or is above the last stream a `GOAWAY` names.
  */
@@ -13,7 +17,7 @@ import type { ClientHttp2Session, ClientHttp2Stream, IncomingHttpHeaders } from 
 import { boundedChunks } from '../utils/bounded-body'
 import { OUTCOME_UNKNOWN, UNREACHABLE, field } from '../utils/push-outcome'
 import type { PushFailure } from '../utils/push-outcome'
-import { assertStandardRealmRoot, newPromise } from '../utils/realm-root'
+import { assertStandardRealmRoot, checkedAwait, newPromise } from '../utils/realm-root'
 
 // Read once, when the module loads: a later replacement of the built-in changes nothing here.
 const connectTo = connect
@@ -47,6 +51,14 @@ interface Link {
   connected: boolean
   /** Whether APNs has accepted a request on it. */
   proven: boolean
+  /** Whether any request on it has had a status. */
+  answered: boolean
+  /** How many requests on it are not yet over. */
+  open: number
+  /** Set once it takes no more requests; it is ended when none is left open. */
+  retired: boolean
+  /** The request the others wait for, while none has had a status. */
+  lead?: Promise<ApnsCall> | undefined
   /** The last stream id of a `GOAWAY`, once one arrived. */
   lastStreamId?: number
 }
@@ -73,6 +85,7 @@ function ended(link: Link, stream: ClientHttp2Stream, answer: Answer): ApnsCall 
   const { status, apnsId } = answer
   if (status !== undefined) {
     link.proven ||= status === 200
+    link.answered = true
     return { kind: 'answer', status, apnsId, reason: reasonOf(answer.chunks.text()) }
   }
   const id = stream.id
@@ -109,7 +122,16 @@ function collect(stream: ClientHttp2Stream): Answer {
 
 /** Follows a new session. */
 function follow(session: ClientHttp2Session): Link {
-  const link: Link = { session, connected: false, proven: false }
+  // A host's `connect` may give a session that is already connected, which says so only here.
+  const connected = session.connecting === false && !session.destroyed
+  const link: Link = {
+    session,
+    connected,
+    proven: false,
+    answered: false,
+    open: 0,
+    retired: false
+  }
   session.on('connect', () => {
     link.connected = true
   })
@@ -121,6 +143,15 @@ function follow(session: ClientHttp2Session): Link {
   // An idle connection never keeps the process running; a request in flight has its timer.
   session.unref()
   return link
+}
+
+/** Takes no more requests on a link, and ends its session once none is left open. */
+function retire(link: Link): void {
+  link.retired = true
+  if (link.open === 0) {
+    // Not before: a session closed while it connects, or right after, destroys or refuses its streams.
+    link.session.close()
+  }
 }
 
 /** The connection of one provider to one APNs origin. */
@@ -143,11 +174,13 @@ export class ApnsSession {
     return this.#link?.proven === true && !this.#link.session.closed
   }
 
-  /** Ends the session once its requests are done; the next request opens another. */
+  /** Ends the session once the requests on it are done; the next request opens another. */
   close(): void {
     const link = this.#link
     this.#link = undefined
-    link?.session.close()
+    if (link !== undefined) {
+      retire(link)
+    }
   }
 
   /**
@@ -164,6 +197,9 @@ export class ApnsSession {
     let stream: ClientHttp2Stream
     try {
       link = this.#use()
+      if (!link.answered && link.lead !== undefined) {
+        return this.#after(link, link.lead, headers, body)
+      }
       stream = link.session.request(headers)
     } catch {
       const neverConnected = this.#link?.connected !== true
@@ -172,7 +208,25 @@ export class ApnsSession {
         resolve({ kind: 'lost', failure: UNREACHABLE, neverConnected })
       )
     }
-    return this.#exchange(link, stream, body)
+    const call = this.#exchange(link, stream, body)
+    if (!link.answered) {
+      link.lead = call
+    }
+    return call
+  }
+
+  /** Posts once the leading request of the connection has been answered; otherwise nothing was sent. */
+  async #after(
+    link: Link,
+    lead: Promise<ApnsCall>,
+    headers: Record<string, string>,
+    body: string
+  ): Promise<ApnsCall> {
+    await checkedAwait(lead, this.#owner)
+    if (link.answered) {
+      return checkedAwait(this.post(headers, body), this.#owner)
+    }
+    return { kind: 'lost', failure: UNREACHABLE, neverConnected: !link.connected }
   }
 
   /** The session in use, or a new one when it can take no more requests. */
@@ -192,28 +246,42 @@ export class ApnsSession {
 
   /** Sends the body and waits for the answer, up to the bound. */
   #exchange(link: Link, stream: ClientHttp2Stream, body: string): Promise<ApnsCall> {
+    link.open += 1
     return newPromise((resolve) => {
       const answer = collect(stream)
-      const timer = setTimeout(() => {
+      let over = false
+      const settle = (): void => {
+        if (over) {
+          return
+        }
+        over = true
+        link.open -= 1
+        link.lead = undefined
         resolve(ended(link, stream, answer))
+        if (link.retired) {
+          retire(link)
+        }
+      }
+      const timer = setTimeout(() => {
+        settle()
         stream.close(NGHTTP2_CANCEL)
-        this.#retire(link)
+        this.#abandon(link)
       }, this.#timeoutMs)
       stream.on('close', () => {
         clearTimeout(timer)
-        resolve(ended(link, stream, answer))
+        settle()
       })
       stream.end(body)
     })
   }
 
   /** Stops using a session that let a request time out. */
-  #retire(link: Link): void {
+  #abandon(link: Link): void {
     if (this.#link === link) {
       this.#link = undefined
     }
     if (link.connected) {
-      link.session.close()
+      retire(link)
     } else {
       link.session.destroy()
     }
