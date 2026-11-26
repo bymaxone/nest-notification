@@ -12,7 +12,7 @@ import type { ReadPush } from '../utils/push-send-input'
 // Read from the global once, when the module loads: a later replacement of the built-in changes nothing here.
 const stringifyJson = JSON.stringify
 
-/** The most bytes of notification and data FCM accepts. */
+/** The most payload bytes FCM accepts. */
 export const FCM_PAYLOAD_LIMIT = 4096
 
 type Message = ReadPush['message']

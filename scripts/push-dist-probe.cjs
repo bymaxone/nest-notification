@@ -1,7 +1,7 @@
 /**
  * Probe run by the smoke test against the BUILT package, never against src: it wires the built
  * `./push` and `./push/fcm` entries beside the built server entry, in both module formats, and holds
- * them to what only built bundles can show. The specs run on src, where there is one copy of every module; the push
+ * them to what only built bundles can show. The specs run on src, where there is one copy of every module; a push
  * bundle carries its own copy of the input helpers, so the two things that must not differ are the
  * error class (one copy, the server's) and the behavior of the duplicated helpers. Exit code 0 means
  * every assertion held.

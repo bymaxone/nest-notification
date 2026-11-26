@@ -3,7 +3,7 @@
  * @layer utils
  *
  * A failure is a closed reason and a retry answer, never the provider's words. `retryable` is true
- * only when the message was certainly not accepted, since neither provider deduplicates.
+ * only when the message was certainly not accepted, since a repeat is not deduplicated.
  */
 
 import type { PushFailureReason } from '../../shared/types/push.types'

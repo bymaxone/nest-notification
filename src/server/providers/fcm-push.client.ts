@@ -2,8 +2,7 @@
  * @fileoverview One HTTPS POST to Google, answered as data and never as an exception.
  * @layer infrastructure
  *
- * The hosts are constants of this file and a redirect is refused rather than followed. Nothing a
- * response says leaves the adapter except through the closed tables of `fcm-push.codes.ts`.
+ * The hosts are constants of this file and a redirect is refused rather than followed.
  */
 
 import { errorCodeOf } from '../utils/availability'

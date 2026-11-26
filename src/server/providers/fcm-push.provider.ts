@@ -7,8 +7,7 @@
  * file and no environment variable. A device token, the key, the access token and the service's own
  * error text are never logged and never put in a thrown error.
  *
- * FCM v1 takes one token per request, so a send runs at most `concurrency` requests at a time. It
- * does not retry a send; it answers per token and the host decides.
+ * FCM v1 takes one token per request, so a send runs at most `concurrency` requests at a time.
  */
 
 import { Injectable } from '@nestjs/common'
@@ -38,7 +37,7 @@ import { classifyFcmRefusal, fcmErrorCode } from './fcm-push.codes'
 import { assertBackgroundPush, buildFcmMessage, sendBody } from './fcm-push.mapping'
 import type { FcmMessageBody } from './fcm-push.mapping'
 
-/** Options of {@link FcmPushProvider}. The first three are in the service account JSON. */
+/** Options of {@link FcmPushProvider}. */
 export interface FcmPushProviderOptions {
   /** The Firebase project id (`project_id`). */
   projectId: string
@@ -136,7 +135,7 @@ function nothingSent(deliveries: Map<string, Delivery>): PushFailure | undefined
   return last
 }
 
-/** Checks the credential values that are text and the count. */
+/** Checks option values. */
 function assertFcmOptions(own: FcmPushProviderOptions): void {
   if (typeof own.projectId !== 'string' || !PROJECT_ID.test(own.projectId)) {
     throw new Error(`${OWNER}: projectId must be a Firebase project id`)

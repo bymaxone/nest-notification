@@ -2,8 +2,8 @@
  * @fileoverview Maps what FCM HTTP v1 answers to the closed failure set.
  * @layer infrastructure
  *
- * The tables are closed: an answer they do not name is `unknown`, and a token is reported gone only
- * on the one documented answer that says so, since a host deletes such tokens.
+ * The tables are closed, and a token is reported gone only on the one documented answer that says
+ * so, since a host deletes such tokens.
  */
 
 import {
@@ -57,7 +57,7 @@ function namesToken(body: unknown): boolean {
   })
 }
 
-/** Reads a 5xx: a Google error envelope refused the call; a bare one may follow a delivery. */
+/** Reads a 5xx: only an enveloped 500 or 503 refused the call; others may follow a delivery. */
 function serverFailure(status: number, body: unknown): PushFailure {
   const enveloped = typeof field(field(body, 'error'), 'status') === 'string'
   return enveloped && (status === 500 || status === 503) ? UNREACHABLE : OUTCOME_UNKNOWN
