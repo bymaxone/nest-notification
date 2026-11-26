@@ -27,7 +27,7 @@ import { assertOptionsObject, readOptionKeys } from '../utils/read-options'
 import { checkedAwait } from '../utils/realm-root'
 import { assertTimerMs } from '../utils/timer-option'
 import { EXPO_RECEIPTS_URL, EXPO_SEND_URL, callExpo, refused } from './expo-push.client'
-import type { ExpoCall, ExpoCallOptions, ExpoFetch } from './expo-push.client'
+import type { ExpoCall, ExpoCallOptions, ExpoFetch, ExpoRefusal } from './expo-push.client'
 import { OUTCOME_UNKNOWN, UNKNOWN_FAILURE, isExpoPushToken } from './expo-push.codes'
 import type { ExpoFailure } from './expo-push.codes'
 import {
@@ -149,7 +149,7 @@ export class ExpoPushProvider implements IPushProvider {
     // an id leaves that id pending.
     const data = field(call.body, 'data')
     if (typeof data !== 'object' || data === null || Array.isArray(data)) {
-      const named = (refused(200, call.body) as Extract<ExpoCall, { kind: 'failed' }>).failure
+      const named = refused(200, call.body).failure
       throw new ExpoPushError(named === UNKNOWN_FAILURE ? OUTCOME_UNKNOWN : named)
     }
     return readReceipts(ids, call.body)
@@ -173,7 +173,7 @@ export class ExpoPushProvider implements IPushProvider {
     if (call.mixedProjects !== undefined) {
       return this.#sendByProject(push, tokens, call, state)
     }
-    return tokens.map((token) => failedOutcome(token, call.failure as ExpoFailure))
+    return tokens.map((token) => failedOutcome(token, call.failure))
   }
 
   /**
@@ -183,7 +183,7 @@ export class ExpoPushProvider implements IPushProvider {
   async #sendByProject(
     push: ReadPush,
     tokens: readonly string[],
-    refused: Extract<ExpoCall, { kind: 'failed' }>,
+    refused: ExpoRefusal,
     state: { sent: boolean; maybeSent: boolean; last: ExpoFailure }
   ): Promise<TokenOutcome[]> {
     const outcomes = new Map<string, TokenOutcome>()

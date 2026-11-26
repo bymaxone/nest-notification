@@ -39,10 +39,6 @@ function pad2(value: number): string {
 
 /** Formats `totalSeconds` as `MM:SS`, or `HH:MM:SS` once it reaches one hour. */
 function formatTime(totalSeconds: number): string {
-  // Stryker disable next-line ConditionalExpression,EqualityOperator,BlockStatement: `totalSeconds` is the clamped (>= 0) remaining count, so the only live case is exactly 0; whether via the early return or the emptied-block fall-through, 0h/0m/0s pads to '00:00' — making `<= 0` vs `< 0` and the early return vs the fall-through equivalent.
-  if (totalSeconds <= 0) {
-    return '00:00'
-  }
   const hours = Math.floor(totalSeconds / SECONDS_PER_HOUR)
   const minutes = Math.floor((totalSeconds % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE)
   const seconds = totalSeconds % SECONDS_PER_MINUTE

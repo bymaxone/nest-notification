@@ -409,6 +409,28 @@ describe('RedisOtpStorage', () => {
     expect(spy.mock.calls.map((call) => call[3])).toEqual([1, 1])
   })
 
+  // Redis answers -2 for a missing key and -1 for a key without expiry: neither is a cooldown.
+  it.each([-2, -1, 0])('should report no cooldown for a TTL of %i', async (ttl) => {
+    jest.spyOn(redis, 'ttl').mockResolvedValueOnce(ttl)
+
+    await expect(storage.getCooldown(T, R, P)).resolves.toBe(0)
+  })
+
+  it('should report the last second of a cooldown', async () => {
+    jest.spyOn(redis, 'ttl').mockResolvedValueOnce(1)
+
+    await expect(storage.getCooldown(T, R, P)).resolves.toBe(1)
+  })
+
+  // The fake ignores this script's text, so what reaches `eval` is pinned here.
+  it('should hand the consumeAttempt script to eval', async () => {
+    const spy = jest.spyOn(redis, 'eval')
+
+    await storage.consumeAttempt(T, R, P)
+
+    expect(spy.mock.calls[0]?.[0]).toContain("redis.call('GET', KEYS[1])")
+  })
+
   // Clearing removes only this scope's counter and is idempotent.
   it('should clear only its own counter and tolerate a missing one', async () => {
     await storage.recordFailure(T, R, P, 600)

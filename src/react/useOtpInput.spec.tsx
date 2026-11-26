@@ -594,4 +594,46 @@ describe('useOtpInput', () => {
     })
     expect(focusSpies.some((spy) => spy.mock.calls.length > 0)).toBe(false)
   })
+
+  // The accepted set per type, over all of ASCII and look-alikes: letters upper-cased, the rest dropped.
+  it.each([
+    ['numeric', /[0-9]/],
+    ['alpha', /[A-Za-z]/],
+    ['alphanumeric', /[0-9A-Za-z]/]
+  ] as const)('should accept exactly the %s characters', (type, accepted) => {
+    const { result } = renderHook(() => useOtpInput({ length: 1, type }))
+    const ascii = Array.from({ length: 128 }, (_, code) => String.fromCharCode(code))
+
+    for (const char of [...ascii, 'é', '\u017f', '\u212a', '\u0661', '\uff11']) {
+      act(() => result.current.onChange(0)(changeEvent('')))
+      act(() => result.current.onChange(0)(changeEvent(char)))
+
+      expect([char, result.current.values[0]]).toEqual([
+        char,
+        accepted.test(char) ? char.toUpperCase() : ''
+      ])
+    }
+  })
+
+  // Nothing to change means the same `values` array, so a consumer's memo or effect does not rerun.
+  it('should keep the `values` array on Backspace in the empty first slot', () => {
+    const { result } = renderHook(() => useOtpInput({ length: 6 }))
+    const before = result.current.values
+
+    act(() => result.current.onKeyDown(0)(keyEvent('Backspace')))
+
+    expect(result.current.values).toBe(before)
+  })
+
+  it('should keep the `values` array created at mount while `length` is unchanged', () => {
+    const seen = new Set<readonly string[]>()
+
+    renderHook(() => {
+      const state = useOtpInput({ length: 6 })
+      seen.add(state.values)
+      return state
+    })
+
+    expect(seen.size).toBe(1)
+  })
 })

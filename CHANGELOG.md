@@ -11,6 +11,19 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 ## [Unreleased]
 
+## [1.5.4] - 2026-11-25
+
+### Changed
+
+- **Internal simplifications, with the same behaviour.** Redundant branches and patterns were removed or rewritten in
+  `useOtpInput`, `useOtpCountdown`, the cooldown helpers, the template renderer and the Redis OTP storage, so that
+  mutation testing can judge those lines instead of skipping them; type casts were removed from the Expo push adapter.
+  The comments of the `./testing` storage contract changed too. No public type changes.
+
+#### Apply to a derived backend
+
+- Nothing to change.
+
 ## [1.5.3] - 2026-11-25
 
 ### Fixed
@@ -2136,7 +2149,8 @@ rejected at startup rather than failing on the first send.
 
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.5.3...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.5.4...HEAD
+[1.5.4]: https://github.com/bymaxone/nest-notification/compare/v1.5.3...v1.5.4
 [1.5.3]: https://github.com/bymaxone/nest-notification/compare/v1.5.2...v1.5.3
 [1.5.2]: https://github.com/bymaxone/nest-notification/compare/v1.5.1...v1.5.2
 [1.5.1]: https://github.com/bymaxone/nest-notification/compare/v1.5.0...v1.5.1
