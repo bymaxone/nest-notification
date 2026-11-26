@@ -59,8 +59,8 @@ function charsetFor(type: OtpInputType): string {
 }
 
 /**
- * Whether `char` is accepted for `type`. Callers pass one character: `includes` would also accept an
- * empty string or a run of the charset.
+ * Whether `char` is accepted for `type`. Callers pass at most one character; the empty string is
+ * accepted, and `includes` would also accept a run of the charset.
  */
 function isValidChar(char: string, type: OtpInputType): boolean {
   return charsetFor(type).includes(char)
@@ -122,7 +122,7 @@ function applyChange(ctx: HandlerContext, index: number, rawValue: string): void
   if (rawValue.length > 1) {
     return
   }
-  // The empty string passes: `includes('')` is true, and it clears the slot.
+  // An empty value passes the check and clears the slot.
   if (!isValidChar(rawValue, ctx.type)) {
     return
   }
