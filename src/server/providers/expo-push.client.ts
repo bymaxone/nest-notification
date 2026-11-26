@@ -9,6 +9,7 @@
  */
 
 import { errorCodeOf } from '../utils/availability'
+import { readBounded } from '../utils/bounded-body'
 import { checkedAwait } from '../utils/realm-root'
 import {
   MIXED_PROJECTS_CODE,
@@ -22,6 +23,9 @@ import { field } from './expo-push.mapping'
 // Read from the global once, when the module loads: a later replacement of the built-in changes nothing here.
 const parseJson = JSON.parse
 const stringifyJson = JSON.stringify
+
+/** The most bytes of an answer that are read: a read of 1000 receipts is a few hundred kilobytes. */
+const ANSWER_LIMIT = 1_048_576
 
 /** The only endpoint a send goes to. */
 export const EXPO_SEND_URL = 'https://exp.host/--/api/v2/push/send'
@@ -78,7 +82,8 @@ export function refused(status: number, body: unknown): ExpoRefusal {
  * @param url - {@link EXPO_SEND_URL} or {@link EXPO_RECEIPTS_URL}.
  * @param payload - The JSON body.
  * @param options - The fetch, the access token, the bound and the owner named in a refusal.
- * @returns The parsed body of a 2xx answer, or the classified failure.
+ * @returns The parsed body of a 2xx answer, or the classified failure. An answer over 1 MiB is read
+ * no further and counts as one that does not parse.
  */
 export async function callExpo(
   url: typeof EXPO_SEND_URL | typeof EXPO_RECEIPTS_URL,
@@ -93,7 +98,7 @@ export async function callExpo(
     headers.authorization = `Bearer ${options.accessToken}`
   }
   let response: Response
-  let text: string
+  let text: string | undefined
   try {
     response = await checkedAwait(
       options.fetch(url, {
@@ -105,11 +110,11 @@ export async function callExpo(
       }),
       options.owner
     )
-    text = await checkedAwait(response.text(), options.owner)
+    text = await checkedAwait(readBounded(response, ANSWER_LIMIT, options.owner), options.owner)
   } catch (error) {
     return { kind: 'failed', failure: classifyTransportFailure(errorCodeOf(error)) }
   }
-  const body = parse(text)
+  const body = text === undefined ? undefined : parse(text)
   if (!response.ok) {
     return refused(response.status, body)
   }

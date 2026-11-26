@@ -53,6 +53,34 @@ describe('callExpo', () => {
   })
 })
 
+// A receipt read of 1000 ids is a few hundred kilobytes, so the bound here is 1 MiB.
+describe('callExpo, size of an answer', () => {
+  const jsonOf = (bytes: number): string => `"${'a'.repeat(bytes - 2)}"`
+
+  it('should read an answer of exactly 1 MiB', async () => {
+    const result = await call(answering(200, jsonOf(1_048_576)))
+
+    expect(result).toStrictEqual({ kind: 'ok', body: 'a'.repeat(1_048_574) })
+  })
+
+  it('should read a 2xx of one byte more as an unknown outcome', async () => {
+    const result = await call(answering(200, jsonOf(1_048_577)))
+
+    expect(result).toStrictEqual({ kind: 'failed', failure: OUTCOME_UNKNOWN })
+  })
+
+  it('should classify an oversize refusal by its status alone', async () => {
+    const errors = [{ code: 'TOO_MANY_REQUESTS', message: 'x'.repeat(1_048_576) }]
+
+    const result = await call(answering(400, JSON.stringify({ errors })))
+
+    expect(result).toStrictEqual({
+      kind: 'failed',
+      failure: classifyRequestFailure(400, undefined)
+    })
+  })
+})
+
 describe('classifyRequestFailure', () => {
   it.each([42, null, undefined, {}])(
     'should read a bare 503 with code %j as an unknown outcome',

@@ -6,6 +6,7 @@
  */
 
 import { errorCodeOf } from '../utils/availability'
+import { readBounded } from '../utils/bounded-body'
 import { transportFailure } from '../utils/push-outcome'
 import type { PushFailure } from '../utils/push-outcome'
 import { checkedAwait } from '../utils/realm-root'
@@ -48,29 +49,6 @@ function parse(text: string): unknown {
   }
 }
 
-/** The text of an answer, or `undefined` past {@link ANSWER_LIMIT}, where reading stops. */
-async function textOf(response: Response, owner: string): Promise<string | undefined> {
-  if (response.body === null) {
-    return ''
-  }
-  const reader = response.body.getReader()
-  const decoder = new TextDecoder()
-  let text = ''
-  let bytes = 0
-  for (;;) {
-    const { done, value } = await checkedAwait(reader.read(), owner)
-    if (done) {
-      return text + decoder.decode()
-    }
-    bytes += value.byteLength
-    if (bytes > ANSWER_LIMIT) {
-      await checkedAwait(reader.cancel(), owner)
-      return undefined
-    }
-    text += decoder.decode(value, { stream: true })
-  }
-}
-
 /**
  * Posts one body.
  *
@@ -98,7 +76,10 @@ export async function postToGoogle(
       }),
       options.owner
     )
-    const text = await checkedAwait(textOf(response, options.owner), options.owner)
+    const text = await checkedAwait(
+      readBounded(response, ANSWER_LIMIT, options.owner),
+      options.owner
+    )
     const parsed = text === undefined ? undefined : parse(text)
     return { kind: 'answer', status: response.status, body: parsed }
   } catch (error) {
