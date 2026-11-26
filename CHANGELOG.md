@@ -11,6 +11,17 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 ## [Unreleased]
 
+## [1.5.7] - 2026-11-26
+
+### Fixed
+
+- **`OTP_COOLDOWN_ACTIVE` carries a usable `remainingSeconds`.** When the store's `getCooldown` answered a value that is not
+  a finite number, or a negative one, `details.remainingSeconds` and the `cooldown_blocked` audit entry carried it as it
+  was (`null` once serialized, for a non-finite one); both now carry `0`.
+- **`FcmPushProvider` bounds the answers it reads.** The whole body of a send or token answer was buffered whatever its
+  size; at most 65 536 bytes are now read, the stream is cancelled past that, and such an answer is treated like one
+  that is not JSON.
+
 ## [1.5.6] - 2026-11-26
 
 ### Added
@@ -2181,7 +2192,8 @@ rejected at startup rather than failing on the first send.
 
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.5.6...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.5.7...HEAD
+[1.5.7]: https://github.com/bymaxone/nest-notification/compare/v1.5.6...v1.5.7
 [1.5.6]: https://github.com/bymaxone/nest-notification/compare/v1.5.5...v1.5.6
 [1.5.5]: https://github.com/bymaxone/nest-notification/compare/v1.5.4...v1.5.5
 [1.5.4]: https://github.com/bymaxone/nest-notification/compare/v1.5.3...v1.5.4
