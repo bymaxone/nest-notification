@@ -106,14 +106,12 @@ export class FcmAccessTokens {
     if (this.#cached !== undefined && Date.now() < this.#cached.until) {
       return { kind: 'ok', token: this.#cached.token }
     }
-    return await checkedAwait((this.#pending ??= this.#shared()), this.#call.owner)
-  }
-
-  /** One exchange for every caller that asks while it runs; cleared once, when it ends. */
-  async #shared(): Promise<FcmGrant> {
+    const pending = (this.#pending ??= this.#exchange())
     try {
-      return await checkedAwait(this.#exchange(), this.#call.owner)
+      return await checkedAwait(pending, this.#call.owner)
     } finally {
+      // Cleared by a caller, after the assignment: a refusal raised while the exchange starts has
+      // already rejected the promise by then, and clearing from inside it would be undone.
       this.#pending = undefined
     }
   }

@@ -741,6 +741,22 @@ describe('FcmPushProvider', () => {
       expect(script.exchanges()).toHaveLength(2)
     })
 
+    it('exchanges again after a refusal raised while the exchange started', async () => {
+      /* Arrange */
+      const script = scripted()
+      const provider = providerWith(script)
+      Object.defineProperty(Object.prototype, 'planted', { value: 1, configurable: true })
+      /* Act */
+      try {
+        await failureOf(provider.send({ ...base, tokens: 'a' }))
+      } finally {
+        Reflect.deleteProperty(Object.prototype, 'planted')
+      }
+      const clean = await provider.send({ ...base, tokens: 'a' })
+      /* Assert */
+      expect(clean.results[0]?.messageId).toBeDefined()
+    })
+
     it('answers the rest when the token cannot be renewed mid-batch', async () => {
       /* Arrange */
       const script = scripted([accepted, fcmError(401)], [granted(), { status: 400 }])
