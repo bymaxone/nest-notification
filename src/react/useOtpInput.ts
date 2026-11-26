@@ -122,7 +122,8 @@ function applyChange(ctx: HandlerContext, index: number, rawValue: string): void
   if (rawValue.length > 1) {
     return
   }
-  if (rawValue !== '' && !isValidChar(rawValue, ctx.type)) {
+  // The empty string passes: `includes('')` is true, and it clears the slot.
+  if (!isValidChar(rawValue, ctx.type)) {
     return
   }
   const char = rawValue.toUpperCase()
