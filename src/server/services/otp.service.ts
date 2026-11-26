@@ -42,7 +42,7 @@ import type { IOtpStorage, OtpEntry, OtpVerifyResult } from '../interfaces/otp-s
 import { writeAudit } from '../utils/audit-write'
 import { AuditWriteWarning } from '../utils/audit-write-warning'
 import { generateOtpCode } from '../utils/code-generator'
-import { cooldownExpiresAt, toRetryAfterHeader } from '../utils/cooldown-helpers'
+import { clampRemaining, cooldownExpiresAt, toRetryAfterHeader } from '../utils/cooldown-helpers'
 import { releaseCooldownAfterRefusal } from '../utils/cooldown-release'
 import { readHostName, textOfHostName } from '../utils/host-name'
 import { logEvent } from '../utils/log-event'
@@ -389,11 +389,8 @@ export class OtpService implements OnModuleInit {
     if (hasCooldownLock) {
       return
     }
-    const remainingSeconds = await this.storage.getCooldown(
-      ref.tenantId,
-      ref.recipient,
-      ref.purpose
-    )
+    const answer = await this.storage.getCooldown(ref.tenantId, ref.recipient, ref.purpose)
+    const remainingSeconds = clampRemaining(answer)
     await own(this.audit(this.otpAuditEntry('cooldown_blocked', ref, { remainingSeconds })))
     throw new NotificationException('OTP_COOLDOWN_ACTIVE', {
       remainingSeconds,

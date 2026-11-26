@@ -16,7 +16,7 @@ const SECONDS_PER_MINUTE = 60
 const SECONDS_PER_HOUR = 3600
 
 /** The remaining seconds to present: never negative, and `0` when the value is not finite. */
-function clampRemaining(remainingSeconds: number): number {
+export function clampRemaining(remainingSeconds: number): number {
   const clamped = Math.max(remainingSeconds, 0)
   return Number.isFinite(clamped) ? clamped : 0
 }
