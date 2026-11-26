@@ -6,8 +6,8 @@
  * the credential values; this adapter reads no file and no environment variable. A device token, the
  * key, its id, the team id and the words of APNs are never logged and never put in a thrown error.
  *
- * APNs takes one token per request. Until a session has had a request accepted, one is sent alone:
- * APNs allows a single stream on a connection it has not authenticated yet.
+ * APNs takes one token per request. While the session has had no request accepted, a `send` makes its
+ * first request alone: APNs allows a single stream on a connection it has not authenticated yet.
  */
 
 import { Injectable } from '@nestjs/common'
