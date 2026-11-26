@@ -416,6 +416,35 @@ describe('ApnsPushProvider', () => {
       expect((await pending).results[0]?.messageId).toBe('id-ab')
     }, 5_000)
 
+    it.each([
+      ['one waiting behind the first request', [TOKEN, OTHER]],
+      ['the rest of a batch in progress', [[TOKEN, OTHER, THIRD]]]
+    ])(
+      'leaves no session open for %s, and a later send keeps its own',
+      async (_case, sends) => {
+        /* Arrange */
+        const server = await fake()
+        const sessions: ClientHttp2Session[] = []
+        const provider = providerOn(server, {
+          connect: (authority) => {
+            const session = server.connect(authority)
+            sessions.push(session)
+            return session
+          }
+        })
+        /* Act */
+        const pending = sends.map((tokens) => provider.send({ ...base, tokens }))
+        provider.close()
+        await Promise.all(pending)
+        const open = sessions.filter((session) => !session.closed && !session.destroyed)
+        await provider.send({ ...base, tokens: TOKEN })
+        /* Assert */
+        expect(open).toEqual([])
+        expect(sessions[sessions.length - 1]?.closed).toBe(false)
+      },
+      5_000
+    )
+
     it('ends a session that was already connected when the host gave it', async () => {
       /* Arrange */
       const server = await fake()
@@ -469,27 +498,28 @@ describe('ApnsPushProvider', () => {
 
     it('signs again and retries once on ExpiredProviderToken, no sooner than 20 minutes', async () => {
       /* Arrange */
-      const clock = jest.spyOn(Date, 'now').mockReturnValue(0)
+      const start = 6_000_000
+      const clock = jest.spyOn(Date, 'now').mockReturnValue(start)
       const server = await fake()
       const provider = providerOn(server)
       await provider.send({ ...base, tokens: TOKEN })
       const expired: Step = { status: 403, reason: 'ExpiredProviderToken' }
       /* Act */
       server.steps.push(expired)
-      clock.mockReturnValue(20 * 60_000 - 1)
+      clock.mockReturnValue(start + 20 * 60_000 - 1)
       const early = await failureOf(provider.send({ ...base, tokens: TOKEN }))
       server.steps.push(expired)
-      clock.mockReturnValue(20 * 60_000)
+      clock.mockReturnValue(start + 20 * 60_000)
       const late = await provider.send({ ...base, tokens: TOKEN })
       server.steps.push(expired, expired)
-      clock.mockReturnValue(40 * 60_000)
+      clock.mockReturnValue(start + 40 * 60_000)
       const twice = await failureOf(provider.send({ ...base, tokens: TOKEN }))
       /* Assert */
       expect(early.message).toContain('(credentials)')
       expect(late.results[0]?.messageId).toBe('id-ab')
       expect(twice.message).toContain('(credentials)')
       expect(server.requests.map((r) => claimsOf(r).claims.iat)).toEqual([
-        0, 0, 0, 1200, 1200, 2400
+        6000, 6000, 6000, 7200, 7200, 8400
       ])
     })
 

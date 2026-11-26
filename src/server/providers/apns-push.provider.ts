@@ -178,6 +178,8 @@ export class ApnsPushProvider implements IPushProvider, OnModuleDestroy {
   readonly #concurrency: number
   readonly #session: ApnsSession
   readonly #token: ApnsProviderToken
+  /** How many times `close` was called, so that a `send` in progress can tell. */
+  #closes = 0
 
   constructor(options: ApnsPushProviderOptions) {
     assertOptionsObject(OWNER, options)
@@ -203,6 +205,7 @@ export class ApnsPushProvider implements IPushProvider, OnModuleDestroy {
 
   /** Ends the connection once the requests on it are done; a later request opens another. */
   close(): void {
+    this.#closes += 1
     this.#session.close()
   }
 
@@ -231,7 +234,12 @@ export class ApnsPushProvider implements IPushProvider, OnModuleDestroy {
       }
     }
     const batch: Batch = { tokens: valid, message, deliveries: new Map(), next: 0 }
+    const closes = this.#closes
     await checkedAwait(this.#sendAll(batch), OWNER)
+    // A `close` during this send does not stop it, and what it opened since is ended here.
+    if (this.#closes !== closes) {
+      this.#session.close()
+    }
     // A throw is safe only when no request reached a judgement of the message, so that a caller who retries it repeats nothing.
     const failure = nothingSent(batch.deliveries)
     if (failure !== undefined) {

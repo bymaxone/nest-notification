@@ -127,8 +127,10 @@ describe('ApnsPushProvider messages', () => {
       [{ collapseKey: 'a\r\nb' }, 'collapseKey'],
       [{ collapseKey: 'é' }, 'collapseKey'],
       [{ collapseKey: '' }, 'collapseKey'],
-      [{ data: { aps: 'x' } }, 'data']
-    ])('refuses %# before any connection', async (options, field) => {
+      [{ data: { aps: 'x' } }, 'data'],
+      [{ data: { aps: 'x' } }, "may not use the key 'aps', which APNs reserves"],
+      [{ collapseKey: '' }, 'must be 1 to 64 printable ASCII characters']
+    ])('refuses %# before any connection', async (options, told) => {
       /* Arrange */
       const server = await fake()
       /* Act */
@@ -137,7 +139,7 @@ describe('ApnsPushProvider messages', () => {
       expect(error).toBeInstanceOf(NotificationException)
       const answered = JSON.stringify((error as unknown as NotificationException).getResponse())
       expect(answered).toContain('notification.invalid_scope_identifier')
-      expect(answered).toContain(field)
+      expect(answered).toContain(told)
       expect(server.authorities).toHaveLength(0)
     })
 
