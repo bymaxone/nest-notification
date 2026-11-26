@@ -14,7 +14,7 @@ import { checkedAwait } from '../utils/realm-root'
 // Read from the global once, when the module loads: a later replacement of the built-in changes nothing here.
 const parseJson = JSON.parse
 
-/** The most bytes of an answer that are read. */
+/** The most bytes of an answer that are accepted. */
 const ANSWER_LIMIT = 65_536
 
 /** The only endpoint an access token is asked of, and the audience of the assertion. */

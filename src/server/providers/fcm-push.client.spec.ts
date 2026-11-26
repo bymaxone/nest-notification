@@ -1,6 +1,6 @@
 /**
  * @fileoverview Holds the one POST to Google to its bound on the size of an answer: at most
- * 65 536 bytes are read, and a larger answer is unreadable, like one that is not JSON.
+ * 65 536 bytes are accepted, and a larger answer is unreadable, like one that is not JSON.
  * @layer infrastructure
  */
 

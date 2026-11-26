@@ -24,7 +24,7 @@ import { field } from './expo-push.mapping'
 const parseJson = JSON.parse
 const stringifyJson = JSON.stringify
 
-/** The most bytes of an answer that are read: a read of 1000 receipts is a few hundred kilobytes. */
+/** The most bytes of an answer that are accepted: a read of 1000 receipts is a few hundred kilobytes. */
 const ANSWER_LIMIT = 1_048_576
 
 /** The only endpoint a send goes to. */

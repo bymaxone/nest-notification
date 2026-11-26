@@ -1,6 +1,5 @@
 /**
- * @fileoverview Holds the bounded read of an HTTP body: the bound itself, where reading stops, and
- * the decoding of a body that arrives in pieces.
+ * @fileoverview Holds the bounded read of an HTTP body.
  * @layer infrastructure
  */
 
