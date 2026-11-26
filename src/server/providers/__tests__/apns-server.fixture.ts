@@ -19,11 +19,13 @@ import type { PushSendOptions } from '../../interfaces/push-provider.interface'
 import { ApnsPushProvider } from '../apns-push.provider'
 import type { ApnsPushProviderOptions } from '../apns-push.provider'
 
+/** A P-256 key pair made for one run of a spec. */
 export const KEYS = generateKeyPairSync('ec', {
   namedCurve: 'P-256',
   privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
   publicKeyEncoding: { type: 'spki', format: 'pem' }
 })
+/** Complete provider options; the team and key ids are values a spec can search errors for. */
 export const credentials = {
   teamId: 'TEAMSECRET',
   keyId: 'KEYSECRET1',
@@ -31,11 +33,16 @@ export const credentials = {
   topic: 'com.example.app',
   environment: 'production' as const
 }
+/** The smallest message. */
 export const base = { title: 't', body: 'b' }
+/** A device token. */
 export const TOKEN = 'ab'.repeat(32)
+/** A second device token. */
 export const OTHER = 'cd'.repeat(32)
+/** A third device token. */
 export const THIRD = 'ef'.repeat(32)
 
+/** One request as the server read it. */
 export interface Seen {
   headers: IncomingHttpHeaders
   body: string
@@ -43,10 +50,12 @@ export interface Seen {
   connection: number
 }
 
+/** What the server does with one request: a scripted answer, or a function that takes it over. */
 export type Step =
   | { status: number; reason?: string; text?: string; apnsId?: string | null }
   | ((seen: Seen) => void)
 
+/** What a spec holds of a running server. */
 export interface Fake {
   readonly requests: Seen[]
   readonly authorities: string[]
@@ -59,6 +68,7 @@ export interface Fake {
 const servers: Fake[] = []
 const providers: ApnsPushProvider[] = []
 
+/** Answers one request; without an `apnsId` the answer names the start of the device token. */
 export function answer(seen: Seen, step: Exclude<Step, (seen: Seen) => void>): void {
   const headers: Record<string, string | number> = { ':status': step.status }
   if (step.apnsId !== null) {
@@ -131,6 +141,7 @@ export async function fake(settings: Settings = {}): Promise<Fake> {
   return made
 }
 
+/** A provider connected to the server, closed by `cleanup`. */
 export function providerOn(
   server: Fake,
   extra: Partial<ApnsPushProviderOptions> = {}
@@ -140,11 +151,13 @@ export function providerOn(
   return provider
 }
 
+/** Sends one message and returns the last request the server read. */
 export async function sendOne(server: Fake, options: Partial<PushSendOptions> = {}): Promise<Seen> {
   await providerOn(server).send({ ...base, tokens: TOKEN, ...options })
   return server.requests[server.requests.length - 1] as Seen
 }
 
+/** The error a promise rejects with; throws when it resolves. */
 export async function failureOf(pending: Promise<unknown>): Promise<Error & { code?: string }> {
   try {
     await pending
@@ -154,6 +167,7 @@ export async function failureOf(pending: Promise<unknown>): Promise<Error & { co
   throw new Error('the call was expected to reject')
 }
 
+/** The provider token of a request, with its decoded header and claims. */
 export function claimsOf(request: Seen): {
   token: string
   header: object
