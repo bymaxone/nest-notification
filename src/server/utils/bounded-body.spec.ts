@@ -3,7 +3,7 @@
  * @layer infrastructure
  */
 
-import { readBounded } from './bounded-body'
+import { boundedChunks, readBounded } from './bounded-body'
 
 const LIMIT = 8
 
@@ -116,5 +116,37 @@ describe('readBounded', () => {
 
   it('answers an empty text for an answer without a body', async () => {
     expect(await read(new Response(null, { status: 204 }))).toBe('')
+  })
+})
+
+describe('boundedChunks', () => {
+  it('collects chunks up to exactly the bound, decoding a character split between two', () => {
+    /* Arrange */
+    const bytes = Buffer.from('abcdef\u00e9')
+    const collector = boundedChunks(LIMIT)
+    /* Act */
+    const kept = [collector.add(bytes.subarray(0, 7)), collector.add(bytes.subarray(7))]
+    /* Assert */
+    expect(kept).toEqual([true, true])
+    expect(collector.text()).toBe('abcdef\u00e9')
+  })
+
+  it('keeps nothing past the bound, and stays past it', () => {
+    /* Arrange */
+    const collector = boundedChunks(LIMIT)
+    /* Act */
+    const kept = [
+      collector.add(Buffer.from('12345678')),
+      collector.add(Buffer.from('9')),
+      collector.add(Buffer.alloc(0))
+    ]
+    /* Assert */
+    expect(kept).toEqual([true, false, false])
+    expect(collector.text()).toBe('')
+  })
+
+  it('is empty when nothing arrived', () => {
+    /* Assert */
+    expect(boundedChunks(LIMIT).text()).toBe('')
   })
 })
