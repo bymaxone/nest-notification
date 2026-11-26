@@ -214,6 +214,7 @@ export class ApnsPushProvider implements IPushProvider, OnModuleDestroy {
 
   /** Ends the connection once the requests on it are done; a later request opens another. */
   close(): void {
+    // Stryker disable next-line AssignmentOperator: only inequality with an earlier value is read
     this.#closes += 1
     this.#session.close()
   }
@@ -268,6 +269,7 @@ export class ApnsPushProvider implements IPushProvider, OnModuleDestroy {
       await checkedAwait(this.#sendNext(batch), OWNER)
     }
     const workers: Promise<void>[] = []
+    // Stryker disable next-line ArithmeticOperator: a worker beyond the tokens left finds none and ends
     const count = Math.min(this.#concurrency, batch.tokens.length - batch.next)
     for (let started = 0; started < count; started += 1) {
       const worker = this.#work(batch)

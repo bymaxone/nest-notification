@@ -226,9 +226,8 @@ export class ApnsSession {
       )
     }
     const call = this.#exchange(link, stream, body)
-    if (!link.answered) {
-      link.lead = call
-    }
+    // Read only while the connection has had no answer.
+    link.lead = call
     return call
   }
 
@@ -249,12 +248,8 @@ export class ApnsSession {
   /** The session in use, or a new one when it can take no more requests. */
   #use(): Link {
     const held = this.#link
-    if (
-      held !== undefined &&
-      !held.session.closed &&
-      !held.session.destroyed &&
-      held.lastStreamId === undefined
-    ) {
+    // A `GOAWAY` leaves the session closed or destroyed as soon as it arrives.
+    if (held !== undefined && !held.session.closed && !held.session.destroyed) {
       if (!stale(held)) {
         return held
       }

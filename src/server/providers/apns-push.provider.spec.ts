@@ -45,6 +45,7 @@ describe('ApnsPushProvider', () => {
       [{ keyId: undefined }, 'keyId'],
       [{ keyId: 'KEYSECRET' }, 'keyId'],
       [{ keyId: 'KEY SECRET' }, 'keyId'],
+      [{ keyId: 1234567890 }, 'keyId'],
       [{ privateKey: undefined }, 'privateKey'],
       [{ privateKey: 5 }, 'privateKey'],
       [{ privateKey: 'not a key SECRET' }, 'privateKey'],
@@ -307,9 +308,8 @@ describe('ApnsPushProvider', () => {
       /* Act */
       const result = await provider.send({ ...base, tokens: [TOKEN, OTHER, THIRD] })
       /* Assert */
-      const retryable = result.results.slice(1).map((r) => r.retryable)
       expect(result.results[0]?.messageId).toBe('id-ab')
-      expect(retryable.sort()).toEqual([false, true])
+      expect(result.results.slice(1).map((r) => r.retryable)).toEqual([false, true])
     }, 5_000)
 
     it('sends the first request alone, then the rest together', async () => {
