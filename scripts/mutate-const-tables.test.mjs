@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { execFileSync, spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -46,6 +46,17 @@ test('a suite that failed to run is a load failure, not a kill', async () => {
   assert.equal(await verdict(fixture(out, { code: 1 })), 'load-failure')
 })
 
+test('a crash line whose first character arrives in two chunks is still read', async () => {
+  // The pause lets the first byte of the three-byte marker arrive on its own.
+  const text = '● Test suite failed to run\n\nTests:       1 failed, 1 total\n'
+  const script = `
+    const bytes = Buffer.from(${JSON.stringify(text)})
+    process.stderr.write(bytes.subarray(0, 1))
+    setTimeout(() => { process.stderr.write(bytes.subarray(1)); process.exitCode = 1 }, 300)
+  `
+  assert.equal(await verdict([process.execPath, '-e', script, '--']), 'crash')
+})
+
 test('a run killed by a signal is crash-only', async () => {
   assert.equal(await verdict(fixture('', { signal: 'SIGKILL' })), 'crash')
 })
@@ -66,12 +77,13 @@ test('a command that hangs, with a child that holds the output open, is stopped 
 })
 
 test('every run gets --forceExit, and the in-band rerun drops the worker count', async () => {
-  // Fails an assertion only when the flags arrive as the runner needs them.
+  // A run without --forceExit passes, so either run missing it ends as 'survived'. With it, the
+  // first run crashes and the rerun fails an assertion only when the worker count is gone.
   const script = `
     const args = process.argv.slice(1)
-    const inBand = args.includes('--runInBand')
-    if (!inBand) process.exit(1)
-    const ok = args.includes('--forceExit') && !args.some((a) => a.startsWith('--maxWorkers') || a === '1')
+    if (!args.includes('--forceExit')) process.exit(0)
+    if (!args.includes('--runInBand')) process.exit(1)
+    const ok = !args.some((a) => a.startsWith('--maxWorkers') || a === '1')
     process.stderr.write(ok ? 'Tests:       1 failed, 1 total\\n' : '')
     process.exit(1)
   `
@@ -226,6 +238,43 @@ test('the run is refused when the command fails in band on the unmutated file', 
     assert.equal(run.status, 2, run.stdout + run.stderr)
     assert.match(run.stderr, /--runInBand.*unmutated file src\/t\.ts/)
     assert.doesNotMatch(run.stderr, /KILLED/)
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test('a file edited before its turn is left as edited, and the run is refused', () => {
+  // While src/t.ts is mutated, the command appends to src/u.ts, whose turn comes later.
+  const script = `
+    const fs = require('node:fs')
+    const text = fs.readFileSync(process.env.MUTATED_FILE, 'utf8')
+    if (text.includes("'a'") || text.includes("'b'")) process.exit(0)
+    if (process.env.MUTATED_FILE === 'src/t.ts') fs.appendFileSync('src/u.ts', '// edit')
+    process.stderr.write('Tests:       1 failed, 1 total\\n')
+    process.exit(1)
+  `
+  const root = repositoryWithTable()
+  try {
+    writeFileSync(join(root, 'src', 'u.ts'), "export const U = ['b'] as const\n")
+    execFileSync('git', ['add', 'src'], { cwd: root })
+    const path = process.env.CONST_TABLES_SCRIPT
+      ? resolve(process.env.CONST_TABLES_SCRIPT)
+      : fileURLToPath(new URL('./mutate-const-tables.mjs', import.meta.url))
+    const run = spawnSync(
+      process.execPath,
+      [path, '--root', root, '--', process.execPath, '-e', script, '--'],
+      { encoding: 'utf8' }
+    )
+    assert.equal(
+      readFileSync(join(root, 'src', 'u.ts'), 'utf8'),
+      "export const U = ['b'] as const\n// edit"
+    )
+    assert.equal(
+      readFileSync(join(root, 'src', 't.ts'), 'utf8'),
+      "export const T = ['a'] as const\n"
+    )
+    assert.equal(run.status, 2, run.stdout + run.stderr)
+    assert.match(run.stderr, /src\/u\.ts changed during the run/)
   } finally {
     rmSync(root, { recursive: true, force: true })
   }
