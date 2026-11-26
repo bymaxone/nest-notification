@@ -42,7 +42,7 @@ import type { IOtpStorage, OtpEntry, OtpVerifyResult } from '../interfaces/otp-s
 import { writeAudit } from '../utils/audit-write'
 import { AuditWriteWarning } from '../utils/audit-write-warning'
 import { generateOtpCode } from '../utils/code-generator'
-import { cooldownExpiresAt, toRetryAfterHeader } from '../utils/cooldown-helpers'
+import { clampRemaining, cooldownExpiresAt, toRetryAfterHeader } from '../utils/cooldown-helpers'
 import { releaseCooldownAfterRefusal } from '../utils/cooldown-release'
 import { readHostName, textOfHostName } from '../utils/host-name'
 import { logEvent } from '../utils/log-event'
@@ -348,11 +348,8 @@ export class OtpService implements OnModuleInit {
     const scope = this.keyed(input)
     // One await at a time, each checked by the wrapper: `Promise.all` reads `then` of the realm.
     const entry = await this.storage.get(scope.tenantId, scope.recipient, scope.purpose)
-    const cooldownSeconds = await this.storage.getCooldown(
-      scope.tenantId,
-      scope.recipient,
-      scope.purpose
-    )
+    const answer = await this.storage.getCooldown(scope.tenantId, scope.recipient, scope.purpose)
+    const cooldownSeconds = clampRemaining(answer)
     assertStandardRealmRoot('OtpService')
     if (!entry) {
       return { exists: false, cooldownSeconds }
@@ -389,11 +386,8 @@ export class OtpService implements OnModuleInit {
     if (hasCooldownLock) {
       return
     }
-    const remainingSeconds = await this.storage.getCooldown(
-      ref.tenantId,
-      ref.recipient,
-      ref.purpose
-    )
+    const answer = await this.storage.getCooldown(ref.tenantId, ref.recipient, ref.purpose)
+    const remainingSeconds = clampRemaining(answer)
     await own(this.audit(this.otpAuditEntry('cooldown_blocked', ref, { remainingSeconds })))
     throw new NotificationException('OTP_COOLDOWN_ACTIVE', {
       remainingSeconds,

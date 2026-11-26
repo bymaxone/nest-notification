@@ -6,12 +6,16 @@
  */
 
 import { errorCodeOf } from '../utils/availability'
+import { readBounded } from '../utils/bounded-body'
 import { transportFailure } from '../utils/push-outcome'
 import type { PushFailure } from '../utils/push-outcome'
 import { checkedAwait } from '../utils/realm-root'
 
 // Read from the global once, when the module loads: a later replacement of the built-in changes nothing here.
 const parseJson = JSON.parse
+
+/** The most bytes of an answer that are accepted. */
+const ANSWER_LIMIT = 65_536
 
 /** The only endpoint an access token is asked of, and the audience of the assertion. */
 export const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token'
@@ -52,7 +56,8 @@ function parse(text: string): unknown {
  * @param headers - The headers of the call.
  * @param body - The encoded body.
  * @param options - The fetch, the bound and the owner named in a refusal.
- * @returns The status and parsed body, or the classified transport failure.
+ * @returns The status and parsed body, or the classified transport failure. The body is `undefined`
+ * when the answer is not JSON or is over 65 536 bytes.
  */
 export async function postToGoogle(
   url: string,
@@ -71,7 +76,10 @@ export async function postToGoogle(
       }),
       options.owner
     )
-    const text = await checkedAwait(response.text(), options.owner)
+    const text = await checkedAwait(
+      readBounded(response, ANSWER_LIMIT, options.owner),
+      options.owner
+    )
     return { kind: 'answer', status: response.status, body: parse(text) }
   } catch (error) {
     return { kind: 'lost', failure: transportFailure(errorCodeOf(error)) }

@@ -34,7 +34,8 @@
  * the run stops with exit 2 and names the file: a failing command
  * would "kill" every mutant, and the judgement of each file's mutants is the command's verdict
  * on that file. A file with no table is not run. The source file is restored after every mutant,
- * and on SIGINT or SIGTERM. Run it on a clean working tree.
+ * and on SIGINT or SIGTERM. Run it on a clean working tree. A file edited before its turn stops
+ * the run with exit 2 and keeps the edit; an edit to the file being mutated is overwritten.
  *
  * An interrupt kills the command's process group, so a runner's workers stop with it.
  *
@@ -57,8 +58,8 @@
  *   --config jest.mutants.config.ts --findRelatedTests {file} --coverage=false --silent
  *
  * Exit codes: 0 every mutant was killed (or there is no table), 1 at least one survived, crashed,
- * timed out or failed to load, 2 usage error, a command that fails on an unmutated file, or a run stopped by
- * SIGINT or SIGTERM.
+ * timed out or failed to load, 2 usage error, a command that fails on an unmutated file, a file
+ * edited before its turn, or a run stopped by SIGINT or SIGTERM.
  */
 
 import { execFileSync, spawn } from 'node:child_process'
@@ -269,6 +270,10 @@ function runCommand(root, command, file) {
         stderr.destroy()
       }, DRAIN_MS)
     })
+    // A character split between two chunks would otherwise decode as broken ones, and a crash
+    // line that starts with one would not be recognized.
+    running.stdout.setEncoding('utf8')
+    running.stderr.setEncoding('utf8')
     running.stdout.on('data', (chunk) => (output += chunk))
     running.stderr.on('data', (chunk) => (output += chunk))
     running.once('error', () => {
@@ -423,15 +428,20 @@ async function survivorsOf(ts, root, files, command) {
   process.once('SIGTERM', onSignal)
   const targets = files
     .map((file) => {
-      const original = readFileSync(join(root, file), 'utf8')
-      return { file, original, mutants: mutantsOf(ts, file, original) }
+      const checked = readFileSync(join(root, file), 'utf8')
+      return { file, checked, mutants: mutantsOf(ts, file, checked) }
     })
     .filter(({ mutants }) => mutants.length > 0)
   // Every file is checked before any is mutated: a run that cannot judge one does not start.
   for (const { file } of targets) await requirePassing(root, command, file)
-  for (const { file, original, mutants } of targets) {
+  for (const { file, checked, mutants } of targets) {
     const absolute = join(root, file)
-    restore = () => writeFileSync(absolute, original)
+    // The mutants and the restore come from the text the command passed on. Writing either over
+    // an edit saved since then would lose it, and the edited text has not been checked.
+    if (readFileSync(absolute, 'utf8') !== checked) {
+      throw new Error(`${file} changed during the run; it is left as it is. Run again.`)
+    }
+    restore = () => writeFileSync(absolute, checked)
     try {
       for (const mutant of mutants) {
         writeFileSync(absolute, mutant.text)

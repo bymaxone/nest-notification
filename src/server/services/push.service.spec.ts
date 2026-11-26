@@ -5,6 +5,8 @@
  * @layer application
  */
 
+import { generateKeyPairSync } from 'node:crypto'
+
 import type { HttpException } from '@nestjs/common'
 
 import type { PushReceiptResult } from '../../shared/types/push.types'
@@ -19,6 +21,7 @@ import type {
   PushSendOptions,
   PushSendResult
 } from '../interfaces/push-provider.interface'
+import { FcmPushProvider } from '../providers/fcm-push.provider'
 
 import { PushService } from './push.service'
 import type { PushSendInput } from './push.service'
@@ -531,6 +534,24 @@ describe('PushService.fetchReceipts', () => {
     const error = await failureOf(build(provider).fetchReceipts(['t1']))
 
     expect(error).toMatchObject({ code: 'notification.channel_disabled' })
+  })
+
+  it('should say the channel cannot read receipts with the FCM adapter, and call nothing', async () => {
+    const fetch = jest.fn<Promise<Response>, [string, RequestInit]>()
+    const provider = new FcmPushProvider({
+      projectId: 'demo-project',
+      clientEmail: 'push@demo-project.iam.gserviceaccount.com',
+      privateKey: generateKeyPairSync('rsa', { modulusLength: 2048 })
+        .privateKey.export({ type: 'pkcs8', format: 'pem' })
+        .toString(),
+      fetch
+    })
+    const service = new PushService(options(), provider, makeAudit())
+
+    const error = await failureOf(service.fetchReceipts(['t1']))
+
+    expect(error).toMatchObject({ code: 'notification.channel_disabled' })
+    expect(fetch).not.toHaveBeenCalled()
   })
 
   it('should classify a failing provider and carry none of its text', async () => {
