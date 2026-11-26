@@ -36,6 +36,33 @@ describe('useOtpCountdown', () => {
     expect(onExpired).not.toHaveBeenCalled()
   })
 
+  // An expiry that is not a finite number is no countdown: the same state as null,
+  // with no timer started and no expiry reported.
+  it.each([NaN, Infinity, -Infinity])('should treat an expiresAt of %p like null', (expiresAt) => {
+    const onExpired = jest.fn()
+
+    const { result } = renderHook(() => useOtpCountdown({ expiresAt, onExpired }))
+
+    expect(result.current.remainingSeconds).toBe(0)
+    expect(result.current.expired).toBe(true)
+    expect(result.current.formatted).toBe('00:00')
+    expect(jest.getTimerCount()).toBe(0)
+    expect(onExpired).not.toHaveBeenCalled()
+  })
+
+  // A running countdown whose expiry turns invalid drops to zero and stops its timer.
+  it('should stop a running countdown when expiresAt turns non-finite', () => {
+    const { result, rerender } = renderHook(
+      ({ expiresAt }: { expiresAt: number }) => useOtpCountdown({ expiresAt }),
+      { initialProps: { expiresAt: 60_000 } }
+    )
+
+    rerender({ expiresAt: NaN })
+
+    expect(result.current.formatted).toBe('00:00')
+    expect(jest.getTimerCount()).toBe(0)
+  })
+
   // The initial remainder is derived from `expiresAt` and formatted MM:SS.
   it('should compute the initial remainder and format MM:SS', () => {
     const { result } = renderHook(() => useOtpCountdown({ expiresAt: 90_000 }))

@@ -65,3 +65,18 @@ describe('formatCooldown', () => {
     expect(formatCooldown(input)).toBe(expected)
   })
 })
+
+describe('non-finite remaining seconds', () => {
+  // A value that is not a finite number is read as "nothing left", never rendered.
+  it.each([NaN, Infinity, -Infinity])('should read %p as no cooldown in every helper', (input) => {
+    jest.useFakeTimers()
+    jest.setSystemTime(5000)
+    try {
+      expect(formatCooldown(input)).toBe('0s')
+      expect(toRetryAfterHeader(input)).toBe('0')
+      expect(cooldownExpiresAt(input)).toBe(5000)
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+})

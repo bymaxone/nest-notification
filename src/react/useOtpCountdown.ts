@@ -24,6 +24,11 @@ const SECONDS_PER_MINUTE = 60
 /** Seconds in one hour. */
 const SECONDS_PER_HOUR = 3600
 
+/** The expiry to count down to, or `null` when there is none or the value is not finite. */
+function toTarget(expiresAt: number | null): number | null {
+  return Number.isFinite(Number(expiresAt)) ? expiresAt : null
+}
+
 /** Whole seconds remaining until `expiresAt`, never negative; `0` when disabled. */
 function computeRemaining(expiresAt: number | null): number {
   if (expiresAt === null) {
@@ -55,7 +60,8 @@ function formatTime(totalSeconds: number): string {
  * @returns Remaining seconds, an `expired` flag, and the formatted remainder.
  */
 export function useOtpCountdown(options: UseOtpCountdownOptions): UseOtpCountdownState {
-  const { expiresAt, tickIntervalMs = DEFAULT_TICK_MS, onExpired } = options
+  const { tickIntervalMs = DEFAULT_TICK_MS, onExpired } = options
+  const expiresAt = toTarget(options.expiresAt)
 
   const [remainingSeconds, setRemainingSeconds] = useState<number>(() =>
     computeRemaining(expiresAt)
