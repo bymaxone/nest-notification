@@ -98,7 +98,7 @@ export async function callExpo(
     headers.authorization = `Bearer ${options.accessToken}`
   }
   let response: Response
-  let text: string | undefined
+  let text: string
   try {
     response = await checkedAwait(
       options.fetch(url, {
@@ -114,7 +114,7 @@ export async function callExpo(
   } catch (error) {
     return { kind: 'failed', failure: classifyTransportFailure(errorCodeOf(error)) }
   }
-  const body = text === undefined ? undefined : parse(text)
+  const body = parse(text)
   if (!response.ok) {
     return refused(response.status, body)
   }

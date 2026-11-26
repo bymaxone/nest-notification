@@ -80,8 +80,7 @@ export async function postToGoogle(
       readBounded(response, ANSWER_LIMIT, options.owner),
       options.owner
     )
-    const parsed = text === undefined ? undefined : parse(text)
-    return { kind: 'answer', status: response.status, body: parsed }
+    return { kind: 'answer', status: response.status, body: parse(text) }
   } catch (error) {
     return { kind: 'lost', failure: transportFailure(errorCodeOf(error)) }
   }

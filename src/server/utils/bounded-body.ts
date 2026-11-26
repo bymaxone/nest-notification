@@ -6,21 +6,23 @@
 import { checkedAwait } from './realm-root'
 
 /**
- * Reads a body chunk by chunk, so that an answer of any size costs at most the bound and one chunk.
+ * Reads a web stream chunk by chunk, so it costs at most the bound and one chunk.
  *
  * @param response - The answer whose body is read.
  * @param limit - The most bytes accepted.
  * @param owner - The component named in a refusal of the realm.
- * @returns The text, `''` for an answer without a body, or `undefined` past the bound, where the
- * stream is cancelled.
+ * @returns The text; `''` for an answer without a body and past the bound, where a stream is
+ * cancelled. An empty text parses to nothing, so a caller needs no case of its own for either.
  */
 export async function readBounded(
   response: Response,
   limit: number,
   owner: string
-): Promise<string | undefined> {
-  if (response.body === null) {
-    return ''
+): Promise<string> {
+  // An injected fetch may offer only `text()`: such an answer is bounded after buffering.
+  if (typeof response.body?.getReader !== 'function') {
+    const body = await checkedAwait(response.text(), owner)
+    return Buffer.byteLength(body) > limit ? '' : body
   }
   const reader = response.body.getReader()
   const decoder = new TextDecoder()
@@ -34,7 +36,7 @@ export async function readBounded(
     bytes += value.byteLength
     if (bytes > limit) {
       await checkedAwait(reader.cancel(), owner)
-      return undefined
+      return ''
     }
     text += decoder.decode(value, { stream: true })
   }

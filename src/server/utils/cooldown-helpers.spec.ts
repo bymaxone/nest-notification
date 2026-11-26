@@ -1,5 +1,16 @@
 import { cooldownExpiresAt, formatCooldown, toRetryAfterHeader } from './cooldown-helpers'
 
+describe('cooldown helpers, a count too large for milliseconds', () => {
+  it('should read it as no cooldown everywhere', () => {
+    jest.spyOn(Date, 'now').mockReturnValue(1000)
+
+    expect(cooldownExpiresAt(Number.MAX_VALUE)).toBe(1000)
+    expect(toRetryAfterHeader(Number.MAX_VALUE)).toBe('0')
+    expect(formatCooldown(Number.MAX_VALUE)).toBe('0s')
+    jest.restoreAllMocks()
+  })
+})
+
 describe('toRetryAfterHeader', () => {
   // A whole-second value passes through unchanged.
   it('should return whole seconds verbatim', () => {

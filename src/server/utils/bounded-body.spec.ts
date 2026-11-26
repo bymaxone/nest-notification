@@ -34,8 +34,7 @@ function chunked(chunks: Uint8Array[]): {
   return state
 }
 
-const read = (response: Response): Promise<string | undefined> =>
-  readBounded(response, LIMIT, 'Test')
+const read = (response: Response): Promise<string> => readBounded(response, LIMIT, 'Test')
 
 describe('readBounded', () => {
   it('reads a body of exactly the bound', async () => {
@@ -43,7 +42,7 @@ describe('readBounded', () => {
   })
 
   it('answers nothing for one byte over the bound', async () => {
-    expect(await read(new Response('a'.repeat(LIMIT + 1)))).toBeUndefined()
+    expect(await read(new Response('a'.repeat(LIMIT + 1)))).toBe('')
   })
 
   it('stops reading and cancels the stream once over the bound', async () => {
@@ -53,13 +52,13 @@ describe('readBounded', () => {
     /* Act */
     const text = await read(state.response)
     /* Assert */
-    expect(text).toBeUndefined()
+    expect(text).toBe('')
     expect(state.pulls).toBe(2)
     expect(state.cancelled).toBe(true)
   })
 
   it('counts bytes, not characters', async () => {
-    expect(await read(new Response('é'.repeat(LIMIT / 2 + 1)))).toBeUndefined()
+    expect(await read(new Response('é'.repeat(LIMIT / 2 + 1)))).toBe('')
   })
 
   it('decodes a character split between two chunks', async () => {
@@ -76,6 +75,24 @@ describe('readBounded', () => {
     const state = chunked([new Uint8Array([0x31, 0xc3])])
     /* Act / Assert */
     expect(await read(state.response)).toBe('1\uFFFD')
+  })
+
+  // An injected fetch may answer with something that has `text()` but no web stream as its body.
+  const shaped = (body: object | undefined, text: string): Response =>
+    Object.defineProperties(new Response(), {
+      body: { value: body },
+      text: { value: () => Promise.resolve(text) }
+    })
+
+  it.each([
+    ['a body that is no web stream', { pipe: () => undefined }],
+    ['no body property', undefined]
+  ])('reads %s through text()', async (_case, body) => {
+    expect(await read(shaped(body, 'a'.repeat(LIMIT)))).toBe('a'.repeat(LIMIT))
+  })
+
+  it('holds a text() read to the bound in bytes', async () => {
+    expect(await read(shaped(undefined, 'é'.repeat(LIMIT / 2 + 1)))).toBe('')
   })
 
   it('answers an empty text for an answer without a body', async () => {

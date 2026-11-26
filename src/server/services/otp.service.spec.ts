@@ -167,6 +167,19 @@ describe('OtpService.generate', () => {
     }
   )
 
+  it.each([Number.POSITIVE_INFINITY, Number.NaN, -3])(
+    'should report 0 cooldown seconds in the status when the store answers %p',
+    async (answer) => {
+      const service = new OtpService(makeOptions(), storage, audit)
+      jest.spyOn(storage, 'getCooldown').mockResolvedValue(answer)
+
+      expect(await service.getStatus(ref)).toStrictEqual({ exists: false, cooldownSeconds: 0 })
+
+      await service.generate({ ...ref, deliverVia: 'manual' })
+      expect(await service.getStatus(ref)).toMatchObject({ exists: true, cooldownSeconds: 0 })
+    }
+  )
+
   // Email delivery renders the otp_code template with the auto-injected data.
   it('should deliver via email with auto-injected code/expiresInMinutes/purpose', async () => {
     const service = new OtpService(makeOptions(), storage, audit, emailServiceStub)

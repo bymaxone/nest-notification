@@ -348,11 +348,8 @@ export class OtpService implements OnModuleInit {
     const scope = this.keyed(input)
     // One await at a time, each checked by the wrapper: `Promise.all` reads `then` of the realm.
     const entry = await this.storage.get(scope.tenantId, scope.recipient, scope.purpose)
-    const cooldownSeconds = await this.storage.getCooldown(
-      scope.tenantId,
-      scope.recipient,
-      scope.purpose
-    )
+    const answer = await this.storage.getCooldown(scope.tenantId, scope.recipient, scope.purpose)
+    const cooldownSeconds = clampRemaining(answer)
     assertStandardRealmRoot('OtpService')
     if (!entry) {
       return { exists: false, cooldownSeconds }
