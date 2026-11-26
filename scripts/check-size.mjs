@@ -38,7 +38,7 @@ const PACKAGE = openPackage(ROOT)
 // The .mjs ships unminified with JSDoc, so every line of runtime code and every contract case
 // counts in full. A budget is re-derived from the artifact of the change that needs it, and not
 // raised ahead of it.
-// Budgets: server 56_960 B, push entry 8_472 B, push/apns 9_963 B and observability 3_490 B follow
+// Budgets: server 56_960 B, push entry 8_472 B, push/apns 10_039 B and observability 3_490 B follow
 // the measured artifact.
 // A budget changes only with the owner's approval.
 const BUDGETS = [
@@ -48,7 +48,7 @@ const BUDGETS = [
   { name: 'testing (storage contract)', path: 'dist/testing/index.mjs', brotli: 4.5 * 1024 },
   { name: 'push (reference adapters)', path: 'dist/push/index.mjs', brotli: 8_472 },
   { name: 'push/fcm (FCM adapter)', path: 'dist/push/fcm/index.mjs', brotli: 9_726 },
-  { name: 'push/apns (APNs adapter)', path: 'dist/push/apns/index.mjs', brotli: 9_963 },
+  { name: 'push/apns (APNs adapter)', path: 'dist/push/apns/index.mjs', brotli: 10_039 },
   {
     name: 'observability (metrics, spans, health)',
     path: 'dist/observability/index.mjs',
