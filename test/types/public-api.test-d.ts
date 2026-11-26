@@ -56,6 +56,8 @@ import {
 } from '@bymax-one/nest-notification/observability'
 import { ExpoPushProvider } from '@bymax-one/nest-notification/push'
 import type { ExpoPushProviderOptions } from '@bymax-one/nest-notification/push'
+import { FcmPushProvider } from '@bymax-one/nest-notification/push/fcm'
+import type { FcmFetch, FcmPushProviderOptions } from '@bymax-one/nest-notification/push/fcm'
 import type { OtpStorageContractCase } from '@bymax-one/nest-notification/testing'
 import { otpStorageContract } from '@bymax-one/nest-notification/testing'
 
@@ -295,6 +297,17 @@ type _PushReasons = Expect<
 // One result per token carries a closed reason, never provider text.
 type _PushResultReason = Expect<Equal<PushTokenResult['reason'], PushFailureReason | undefined>>
 type _PushSendResolves = Expect<Equal<Awaited<ReturnType<typeof push.send>>, PushSendResult>>
+
+// The FCM subpath: an `IPushProvider` whose options are the six documented keys.
+declare const fcmOptions: FcmPushProviderOptions
+const _fcmIsAPushProvider: IPushProvider = new FcmPushProvider(fcmOptions)
+type _FcmOptionKeys = Expect<
+  Equal<
+    keyof FcmPushProviderOptions,
+    'projectId' | 'clientEmail' | 'privateKey' | 'timeoutMs' | 'concurrency' | 'fetch'
+  >
+>
+type _FcmFetchShape = Expect<Equal<FcmFetch, (url: string, init: RequestInit) => Promise<Response>>>
 
 // The push subpath: the Expo adapter is an `IPushProvider`, and its options are the three documented keys.
 const _expoIsAPushProvider: IPushProvider = new ExpoPushProvider()

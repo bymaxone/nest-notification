@@ -46,6 +46,7 @@ const BUDGETS = [
   { name: 'react (hooks)', path: 'dist/react/index.mjs', brotli: 8 * 1024 },
   { name: 'testing (storage contract)', path: 'dist/testing/index.mjs', brotli: 4.5 * 1024 },
   { name: 'push (reference adapters)', path: 'dist/push/index.mjs', brotli: 8_307 },
+  { name: 'push/fcm (FCM adapter)', path: 'dist/push/fcm/index.mjs', brotli: 9_589 },
   {
     name: 'observability (metrics, spans, health)',
     path: 'dist/observability/index.mjs',

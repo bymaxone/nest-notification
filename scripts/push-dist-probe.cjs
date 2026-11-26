@@ -1,7 +1,7 @@
 /**
  * Probe run by the smoke test against the BUILT package, never against src: it wires the built
- * `./push` entry beside the built server entry, in both module formats, and holds them to what only
- * built bundles can show. The specs run on src, where there is one copy of every module; the push
+ * `./push` and `./push/fcm` entries beside the built server entry, in both module formats, and holds
+ * them to what only built bundles can show. The specs run on src, where there is one copy of every module; the push
  * bundle carries its own copy of the input helpers, so the two things that must not differ are the
  * error class (one copy, the server's) and the behavior of the duplicated helpers. Exit code 0 means
  * every assertion held.
@@ -12,6 +12,7 @@
 'use strict'
 
 require('reflect-metadata')
+const { generateKeyPairSync } = require('node:crypto')
 const { readFileSync } = require('node:fs')
 const { join } = require('node:path')
 const { Test } = require('@nestjs/testing')
@@ -22,6 +23,7 @@ const check = (label, ok) => {
 }
 
 const SEND_URL = 'https://exp.host/--/api/v2/push/send'
+const FCM_NAME = 'projects/p/messages/1'
 const GOOD = 'ExponentPushToken[good-token-1]'
 const GOOD_2 = 'ExponentPushToken[good-token-2]'
 
@@ -181,7 +183,57 @@ async function run(format, server, push) {
   )
 }
 
+// The adapter from `./push/fcm` against the built server: one send with a throwaway key and a
+// scripted `fetch`, and an input refusal that must be the server's own error class.
+async function runFcm(format, server, fcm) {
+  const label = (text) => `${format} fcm: ${text}`
+  const { privateKey } = generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+    publicKeyEncoding: { type: 'spki', format: 'pem' }
+  })
+  const urls = []
+  const answers = [{ access_token: 'at', expires_in: 3600 }, { name: FCM_NAME }]
+  const provider = new fcm.FcmPushProvider({
+    projectId: 'demo-project',
+    clientEmail: 'push@demo-project.iam.gserviceaccount.com',
+    privateKey,
+    fetch: async (url) => {
+      urls.push(String(url))
+      return new Response(JSON.stringify(answers.shift() ?? {}))
+    }
+  })
+  const moduleRef = await Test.createTestingModule({
+    imports: [server.BymaxNotificationModule.forRoot({ push: { provider } })]
+  }).compile()
+  const sent = await moduleRef
+    .get(server.NotificationService)
+    .getPush()
+    .send({ tenantId: 'acme', tokens: 'device', title: 'T', body: 'B' })
+  check(label('a token gets its message name'), sent.results[0]?.messageId === FCM_NAME)
+  check(
+    label('the exchange and the send went to the fixed URLs'),
+    urls.join() ===
+      'https://oauth2.googleapis.com/token,https://fcm.googleapis.com/v1/projects/demo-project/messages:send'
+  )
+  const bad = await failureOf(provider.send({ tokens: 'device', title: 5, body: 'B' }))
+  check(
+    label("an input refusal is the server's NotificationException"),
+    bad instanceof server.NotificationException
+  )
+}
+
 async function main() {
+  await runFcm(
+    'cjs',
+    require('@bymax-one/nest-notification'),
+    require('@bymax-one/nest-notification/push/fcm')
+  )
+  await runFcm(
+    'esm',
+    await import('@bymax-one/nest-notification'),
+    await import('@bymax-one/nest-notification/push/fcm')
+  )
   await run(
     'cjs',
     require('@bymax-one/nest-notification'),

@@ -83,7 +83,7 @@ Everything that touches the outside world — the email transport, the OTP store
 
 ## 📦 Subpath Exports
 
-One package, five entry points — import only what your app needs:
+One package, seven entry points — import only what your app needs:
 
 | Subpath           | Import                                       | Purpose                                                |                                 Peer deps                                  |
 | ----------------- | -------------------------------------------- | ------------------------------------------------------ | :------------------------------------------------------------------------: |
@@ -92,6 +92,8 @@ One package, five entry points — import only what your app needs:
 | **React**         | `@bymax-one/nest-notification/react`         | `useOtpInput` + `useOtpCountdown` (UX/state only)      |                                  React 19                                  |
 | **Testing**       | `@bymax-one/nest-notification/testing`       | Executable `IOtpStorage` contract for your own storage |                                    None                                    |
 | **Observability** | `@bymax-one/nest-notification/observability` | Metrics, spans and a readiness check                   | `@bymax-one/nest-core`, `prom-client`, `@opentelemetry/api` (all optional) |
+| **Push (Expo)**   | `@bymax-one/nest-notification/push`          | `ExpoPushProvider`                                     |                                    None                                    |
+| **Push (FCM)**    | `@bymax-one/nest-notification/push/fcm`      | `FcmPushProvider`                                      |                                    None                                    |
 
 ```
 shared (zero deps) ← server        react
@@ -1053,7 +1055,7 @@ The renderer options and defaults are in the Templates section; these are the ty
 
 #### Push
 
-`PushService` sends one message to many device tokens and answers **per token**. The library stores no token: your backend does, and it acts on the closed `PushFailureReason` of each result (`token_unregistered` means delete the token). `ExpoPushProvider` is the shipped adapter, imported from the `@bymax-one/nest-notification/push` subpath so that it stays out of the main bundle of a host that sends no push: no SDK, no peer dependency, two JSON endpoints called with the platform's `fetch`, every request bounded by `timeoutMs` and sent only to Expo's fixed URLs.
+`PushService` sends one message to many device tokens and answers **per token**. The library stores no token: your backend does, and it acts on the closed `PushFailureReason` of each result (`token_unregistered` means delete the token). Two adapters ship, `ExpoPushProvider` and `FcmPushProvider` (see [Firebase Cloud Messaging](#firebase-cloud-messaging)). `ExpoPushProvider` is imported from the `@bymax-one/nest-notification/push` subpath so that it stays out of the main bundle of a host that sends no push: no SDK, no peer dependency, two JSON endpoints called with the platform's `fetch`, every request bounded by `timeoutMs` and sent only to Expo's fixed URLs.
 
 Import `@bymax-one/nest-notification/push` at startup, next to the main entry, and not lazily: the subpath carries its own copy of the realm-root check and takes its baseline when it is first imported, so a lazy import would take it at that later moment.
 
@@ -1090,6 +1092,40 @@ async function notifyOrderShipped(
 - **Limits to know.** A token that is not a string refuses the whole batch with `notification.invalid_scope_identifier`; only a string that is a bad token is answered `token_invalid` on its own. The adapter does not read `Retry-After`: after a 429 the later chunks of the same call are still sent, and each token of the refused chunk is answered `rate_limited` with `retryable: true`. When `send` throws, its `retryable` follows the last chunk that was tried. A silent push still needs `title` and `body`. A host without push configured still exports the push series of the observability metrics, at zero.
 - **Nothing sensitive leaves.** No device token, access token, title, body or data value appears in a log, an audit entry or an error: the audit entry names the tenant, the provider and counts (`recipient: 'devices:N'`), and a provider's own error text is dropped, not wrapped. Treat the title, body and `data` as visible to Expo and to the push services behind it, and keep secrets out of them.
 
+##### Firebase Cloud Messaging
+
+`FcmPushProvider` talks to the FCM HTTP v1 API: no SDK, no peer dependency, an OAuth token exchange and one send endpoint, both fixed Google URLs, every request bounded by `timeoutMs` and never following a redirect. Import `@bymax-one/nest-notification/push/fcm` at startup, next to the main entry, for the same realm-root reason as `./push`.
+
+```ts
+import { BymaxNotificationModule } from '@bymax-one/nest-notification'
+import { FcmPushProvider } from '@bymax-one/nest-notification/push/fcm'
+
+// The service account JSON of the Firebase project, from your secret store.
+const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT ?? '{}') as {
+  project_id: string
+  client_email: string
+  private_key: string
+}
+
+BymaxNotificationModule.forRoot({
+  push: {
+    provider: new FcmPushProvider({
+      projectId: serviceAccount.project_id,
+      clientEmail: serviceAccount.client_email,
+      privateKey: serviceAccount.private_key
+    })
+  }
+})
+```
+
+- **Credentials are values.** The adapter reads no file and no environment variable. `privateKey` needs real line breaks: a PEM kept in an environment variable with literal `\n` has to have them replaced first. A key that is not an RSA private key in PEM form makes the constructor throw, without quoting it. `timeoutMs` defaults to 10 000, `concurrency` (1 to 500) to 20, and `fetch` can be injected, for example to route through a proxy.
+- **One request per token.** FCM v1 takes one token per request, so a call runs at most `concurrency` of them at a time. Results come in the order of `tokens`; a token given twice is sent once. `messageId` is the message name FCM returns. There are no receipts: `fetchReceipts` throws `CHANNEL_DISABLED`.
+- **Fields.** `title`, `body` and `imageUrl` form the notification and `data` is passed as it is. `channelId`, `sound`, `priority`, `ttlSeconds` and `collapseKey` go to the Android block; `subtitle`, `sound`, `badge`, `categoryId`, `threadId`, `mutableContent`, `priority` and `ttlSeconds` go to the APNs block. A message whose notification, data and `aps` exceed 4096 bytes is answered `message_too_big` with no call.
+- **Background push (`contentAvailable`).** Give `title: ''` and `body: ''` and none of `subtitle`, `imageUrl`, `sound`, `badge`, `channelId`, `categoryId`, `threadId` or `mutableContent: true`; anything else is refused with `notification.invalid_scope_identifier`. The message carries `content-available: 1`, `apns-push-type: background` and `apns-priority: 5`, and no notification.
+- **Reasons.** A 404 `UNREGISTERED` is `token_unregistered` (delete the token). `SENDER_ID_MISMATCH`, or a 400 that names the token field, is `token_invalid`. A quota refusal is `rate_limited`; a refused credential is `credentials`. `retryable` is `true` for a rate limit, for a connection that was never made and for a refusal that says nothing was processed. A timeout, a reset or a bare gateway 5xx is `retryable: false`, because the message may have been delivered. The adapter does not retry a send, except once after a 401, with a new access token.
+- **When `send` throws.** `PUSH_SEND_FAILED` is thrown only when no request got as far as the message: the token exchange failed, no connection was made, or the account was refused. Otherwise every token has its own result. A refusal of the APNs key (`THIRD_PARTY_AUTH_ERROR`) concerns iOS tokens only and is a result.
+- **Quotas.** Firebase documents 600 000 messages a minute per project, and for one Android device 240 a minute and 5 000 an hour. After a 429, wait for `Retry-After` or else 60 seconds, and back off at least 10 seconds between retries of a 5xx. The adapter does not read `Retry-After`; the waiting is the host's.
+
 | Name                      | What it is                                       | Members                                                                                                                                                                                                 |
 | ------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `PushService`             | The push channel's service.                      | `send(input)`, `fetchReceipts(ticketIds)`, `isConfigured()`.                                                                                                                                            |
@@ -1097,6 +1133,9 @@ async function notifyOrderShipped(
 | `ResolvedPushOptions`     | The push section after validation.               | `provider`, `defaultTtlSeconds?`.                                                                                                                                                                       |
 | `ExpoPushProvider`        | Reference adapter for Expo Push (`./push` only). | `new ExpoPushProvider(options?)`; `name` is `'expo'`.                                                                                                                                                   |
 | `ExpoPushProviderOptions` | Options of `ExpoPushProvider` (`./push`).        | `accessToken?` (Expo enhanced security), `timeoutMs?` (default 10 000), `fetch?`.                                                                                                                       |
+| `FcmPushProvider`         | Adapter for FCM HTTP v1 (`./push/fcm` only).     | `new FcmPushProvider(options)`; `name` is `'fcm'`.                                                                                                                                                      |
+| `FcmPushProviderOptions`  | Options of `FcmPushProvider` (`./push/fcm`).     | `projectId`, `clientEmail`, `privateKey`, `timeoutMs?`, `concurrency?`, `fetch?`.                                                                                                                       |
+| `FcmFetch`                | The `fetch` the adapter calls (`./push/fcm`).    | `(url, init) => Promise<Response>`.                                                                                                                                                                     |
 | `PushFailureReason`       | Why a token was not served (closed set).         | `'token_unregistered' \| 'token_invalid' \| 'message_too_big' \| 'rate_limited' \| 'provider_unavailable' \| 'credentials' \| 'unknown'`; import it from `./shared`; the main entry does not export it. |
 | `PushTokenResult`         | The outcome of one token in a send.              | `token`, `messageId?`, `reason?`, `retryable?`; import it from `./shared`; the main entry does not export it.                                                                                           |
 | `PushReceiptStatus`       | The state of a receipt.                          | `'ok' \| 'pending' \| 'error'`; import it from `./shared`; the main entry does not export it.                                                                                                           |
