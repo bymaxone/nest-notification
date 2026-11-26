@@ -32,6 +32,7 @@ const FCM_ERRORS: ReadonlyMap<string, PushFailure> = new Map<string, PushFailure
 /** The `details` list of an error body, empty when it has none. */
 function detailsOf(body: unknown): unknown[] {
   const details = field(field(body, 'error'), 'details')
+  // Stryker disable next-line ArrayDeclaration: both readers ignore an entry without their field
   return Array.isArray(details) ? (details as unknown[]) : []
 }
 

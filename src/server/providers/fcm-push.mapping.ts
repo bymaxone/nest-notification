@@ -44,7 +44,7 @@ export function assertBackgroundPush(owner: string, message: Message): void {
     message.title !== '' ||
     message.body !== '' ||
     message.mutableContent === true ||
-    Object.entries(message).some(([name, value]) => value !== undefined && VISIBLE_FIELDS.has(name))
+    Object.keys(message).some((name) => VISIBLE_FIELDS.has(name))
   if (visible) {
     throw refuseInput(
       owner,

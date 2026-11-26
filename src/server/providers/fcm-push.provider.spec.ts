@@ -8,6 +8,7 @@ import { createPublicKey, generateKeyPairSync, verify } from 'node:crypto'
 
 import { NotificationException } from '../errors/notification-exception'
 import type { PushSendOptions } from '../interfaces/push-provider.interface'
+import { FcmAccessTokens, readRsaKey } from './fcm-push.auth'
 import { GOOGLE_TOKEN_URL } from './fcm-push.client'
 import type { FcmFetch } from './fcm-push.client'
 import { FcmPushProvider } from './fcm-push.provider'
@@ -139,6 +140,7 @@ describe('FcmPushProvider', () => {
       [{ clientEmail: 'no-at-sign' }, 'clientEmail'],
       [{ clientEmail: 'a@b@c' }, 'clientEmail'],
       [{ clientEmail: 'a b@c' }, 'clientEmail'],
+      [{ clientEmail: { toString: () => 'a@b' } }, 'clientEmail'],
       [{ privateKey: undefined }, 'privateKey'],
       [{ privateKey: 5 }, 'privateKey'],
       [{ privateKey: 'not a key SECRET' }, 'privateKey'],
@@ -210,6 +212,7 @@ describe('FcmPushProvider', () => {
       await providerWith(script).send({ ...base, tokens: 'a' })
       /* Assert */
       const [exchange] = script.exchanges()
+      expect(exchange?.url).toBe('https://oauth2.googleapis.com/token')
       expect(exchange?.init.method).toBe('POST')
       expect(exchange?.init.redirect).toBe('error')
       expect(exchange?.init.signal).toBeInstanceOf(AbortSignal)
@@ -285,6 +288,7 @@ describe('FcmPushProvider', () => {
       [{ status: 401 }, 'credentials', undefined],
       [{ status: 429 }, 'rate_limited', 'EUNAVAILABLE'],
       [{ status: 500 }, 'provider_unavailable', 'EUNAVAILABLE'],
+      [{ status: 300, body: { access_token: 'x' } }, 'credentials', undefined],
       [{ status: 200, text: 'not json' }, 'provider_unavailable', 'EUNAVAILABLE'],
       [{ body: { access_token: 'has space' } }, 'provider_unavailable', 'EUNAVAILABLE'],
       [{ body: { access_token: 7 } }, 'provider_unavailable', 'EUNAVAILABLE'],
@@ -520,7 +524,8 @@ describe('FcmPushProvider', () => {
       )
       /* Assert */
       expect(error).toMatchObject({ code: 'notification.invalid_scope_identifier' })
-      expect(JSON.stringify(responseOf(error))).toContain('is a background push')
+      expect(responseOf(error)).toContain('"parameter":"contentAvailable"')
+      expect(responseOf(error)).toContain('is a background push')
       expect(script.calls).toHaveLength(0)
     })
 
@@ -620,6 +625,22 @@ describe('FcmPushProvider', () => {
       [fcmError(400, 'INVALID_ARGUMENT', { violation: 'message.token' }), 'token_invalid', false],
       [fcmError(400, 'INVALID_ARGUMENT', { violation: 'message.data' }), 'unknown', false],
       [fcmError(400, 'INVALID_ARGUMENT'), 'unknown', false],
+      [fcmError(404, undefined, { violation: 'message.token' }), 'unknown', false],
+      [
+        {
+          status: 400,
+          body: {
+            error: {
+              details: [
+                { fieldViolations: [{ field: 'message.data' }, { field: 'message.token' }] }
+              ]
+            }
+          }
+        },
+        'token_invalid',
+        false
+      ],
+      [{ status: 300, body: { name: 'projects/demo-project/messages/1' } }, 'unknown', false],
       [fcmError(429, 'QUOTA_EXCEEDED'), 'rate_limited', true],
       [{ status: 429 }, 'rate_limited', true],
       [fcmError(503, 'UNAVAILABLE'), 'provider_unavailable', true],
@@ -666,6 +687,23 @@ describe('FcmPushProvider', () => {
       expect(error.code).toBe(code)
     })
 
+    it.each(['ENOTFOUND', 'EAI_AGAIN'])('can send again after %s', async (code) => {
+      /* Arrange */
+      const lost = Object.assign(new Error('x'), { cause: { code } })
+      const script = scripted([accepted, { throws: lost }])
+      /* Act */
+      const result = await providerWith(script, { concurrency: 1 }).send({
+        ...base,
+        tokens: ['a', 'b']
+      })
+      /* Assert */
+      expect(result.results[1]).toEqual({
+        token: 'b',
+        reason: 'provider_unavailable',
+        retryable: true
+      })
+    })
+
     it.each<[Step[]]>([
       [[accepted, { throws: refusedConnection }]],
       [[{ throws: refusedConnection }, accepted]]
@@ -680,6 +718,27 @@ describe('FcmPushProvider', () => {
       /* Assert */
       expect(result.results.filter((r) => r.messageId !== undefined)).toHaveLength(1)
       expect(result.results.filter((r) => r.retryable === true)).toHaveLength(1)
+    })
+
+    it('drops the cached token only when it is the one refused', async () => {
+      /* Arrange */
+      const script = scripted([], [granted('one'), granted('two')])
+      const tokens = new FcmAccessTokens(
+        credentials.clientEmail,
+        readRsaKey('spec', KEYS.privateKey),
+        { fetch: script.fetch, timeoutMs: 1_000, owner: 'spec' }
+      )
+      /* Act */
+      tokens.drop('one')
+      await tokens.get()
+      tokens.drop('older')
+      const kept = await tokens.get()
+      tokens.drop('one')
+      const renewed = await tokens.get()
+      /* Assert */
+      expect(kept).toEqual({ kind: 'ok', token: 'one' })
+      expect(renewed).toEqual({ kind: 'ok', token: 'two' })
+      expect(script.exchanges()).toHaveLength(2)
     })
 
     it('answers the rest when the token cannot be renewed mid-batch', async () => {

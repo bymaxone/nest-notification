@@ -43,9 +43,11 @@ export type FcmGrant =
 export function readRsaKey(owner: string, pem: unknown): KeyObject {
   let key: KeyObject | undefined
   try {
-    key = typeof pem === 'string' ? readKey(pem) : undefined
+    if (typeof pem === 'string') {
+      key = readKey(pem)
+    }
   } catch {
-    key = undefined
+    // Not a PEM: refused below, with none of the parser's words.
   }
   if (key?.asymmetricKeyType !== 'rsa') {
     throw new Error(`${owner}: privateKey must be an RSA private key in PEM form`)
@@ -104,20 +106,21 @@ export class FcmAccessTokens {
     if (this.#cached !== undefined && Date.now() < this.#cached.until) {
       return { kind: 'ok', token: this.#cached.token }
     }
-    const pending = (this.#pending ??= this.#exchange())
+    return await checkedAwait((this.#pending ??= this.#shared()), this.#call.owner)
+  }
+
+  /** One exchange for every caller that asks while it runs; cleared once, when it ends. */
+  async #shared(): Promise<FcmGrant> {
     try {
-      return await checkedAwait(pending, this.#call.owner)
+      return await checkedAwait(this.#exchange(), this.#call.owner)
     } finally {
-      if (this.#pending === pending) {
-        this.#pending = undefined
-      }
+      this.#pending = undefined
     }
   }
 
   /** Forgets a token the service refused. A newer one stays. */
-  drop(token: string): void {
-    const refused = (cached: { readonly token: string }): boolean => cached.token === token
-    if (this.#cached !== undefined && refused(this.#cached)) {
+  drop(refused: string): void {
+    if (this.#cached?.token === refused) {
       this.#cached = undefined
     }
   }
@@ -141,7 +144,7 @@ export class FcmAccessTokens {
       return { kind: 'failed', failure: exchangeFailure(call) }
     }
     const seconds = field(body, 'expires_in')
-    if (typeof seconds === 'number' && seconds > EXPIRY_MARGIN_SECONDS) {
+    if (typeof seconds === 'number') {
       this.#cached = { token, until: startedAt + (seconds - EXPIRY_MARGIN_SECONDS) * 1000 }
     }
     return { kind: 'ok', token }

@@ -110,7 +110,7 @@ function readDelivery(token: string, call: FcmCall): Delivery {
       ? unsent(token, UNREACHABLE)
       : { outcome: failedOutcome(token, call.failure) }
   }
-  if (call.status >= 200 && call.status < 300) {
+  if (call.status < 300) {
     const name = field(call.body, 'name')
     return typeof name === 'string' && name.length > 0
       ? { outcome: { token, messageId: name } }
