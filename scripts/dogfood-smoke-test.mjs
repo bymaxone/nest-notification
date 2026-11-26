@@ -52,7 +52,10 @@ const EXPECTED_DIST_FILES = [
   'dist/observability/index.d.ts',
   'dist/push/index.mjs',
   'dist/push/index.cjs',
-  'dist/push/index.d.ts'
+  'dist/push/index.d.ts',
+  'dist/push/fcm/index.mjs',
+  'dist/push/fcm/index.cjs',
+  'dist/push/fcm/index.d.ts'
 ]
 
 const EXPECTED_SERVER_EXPORTS = [
@@ -278,6 +281,8 @@ try {
       ".then((s) => { if (!('DEFAULT_TTLS' in s)) process.exit(4) })",
       ".then(() => import('@bymax-one/nest-notification/push'))",
       ".then((p) => { if (typeof p.ExpoPushProvider !== 'function') process.exit(7) })",
+      ".then(() => import('@bymax-one/nest-notification/push/fcm'))",
+      ".then((f) => { if (typeof f.FcmPushProvider !== 'function') process.exit(8) })",
       ".then(() => import('@bymax-one/nest-notification/react'))",
       ".then(() => import('@bymax-one/nest-notification/testing'))",
       ".then((t) => { if (typeof t.otpStorageContract !== 'function') process.exit(6) })",

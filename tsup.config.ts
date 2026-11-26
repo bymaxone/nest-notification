@@ -138,5 +138,23 @@ export default defineConfig([
     splitting: false,
     treeshake: true,
     sourcemap: false
+  },
+
+  // FCM entry — its own, so a host that does not send through FCM loads none of it. Built like
+  // the push entry, error class included.
+  {
+    entry: { 'push/fcm/index': 'src/push/fcm/index.ts' },
+    format: ['esm', 'cjs'],
+    dts: true,
+    tsconfig: 'tsconfig.build.json',
+    outDir: 'dist',
+    outExtension: ({ format }) => ({ js: format === 'esm' ? '.mjs' : '.cjs' }),
+    external: PEER_EXTERNALS,
+    esbuildPlugins: [SHARED_ERROR_CLASS],
+    target: 'node24',
+    clean: false,
+    splitting: false,
+    treeshake: true,
+    sourcemap: false
   }
 ])

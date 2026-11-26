@@ -32,7 +32,7 @@ export interface PushTokenResult {
   token: string
   /**
    * The provider's id for the accepted message. For Expo it is the ticket id, which
-   * `fetchReceipts` takes later. Absent when the token was not served.
+   * `fetchReceipts` takes later; for FCM it is the message name. Absent when the token was not served.
    */
   messageId?: string
   /** Why the token was not served. Absent when it was. */
