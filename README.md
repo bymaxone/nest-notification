@@ -862,7 +862,7 @@ pnpm mutation      # Stryker mutation testing
 | `cooldownExpiresAt()`   | Absolute expiry timestamp for a remaining cooldown                      |
 | `formatCooldown()`      | Human-readable cooldown, for a UI countdown                             |
 
-The three cooldown helpers read a value that is not a number, is negative or is above `2147483647` seconds as no cooldown.
+The cooldown helpers read a value that is not a number, is negative or is above `2147483647` seconds as no cooldown.
 
 ### React hooks (`./react`)
 
