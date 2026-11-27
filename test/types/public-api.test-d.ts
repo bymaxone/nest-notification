@@ -56,6 +56,8 @@ import {
 } from '@bymax-one/nest-notification/observability'
 import { ExpoPushProvider } from '@bymax-one/nest-notification/push'
 import type { ExpoPushProviderOptions } from '@bymax-one/nest-notification/push'
+import { ApnsPushProvider } from '@bymax-one/nest-notification/push/apns'
+import type { ApnsConnect, ApnsPushProviderOptions } from '@bymax-one/nest-notification/push/apns'
 import { FcmPushProvider } from '@bymax-one/nest-notification/push/fcm'
 import type { FcmFetch, FcmPushProviderOptions } from '@bymax-one/nest-notification/push/fcm'
 import type { OtpStorageContractCase } from '@bymax-one/nest-notification/testing'
@@ -308,6 +310,26 @@ type _FcmOptionKeys = Expect<
   >
 >
 type _FcmFetchShape = Expect<Equal<FcmFetch, (url: string, init: RequestInit) => Promise<Response>>>
+
+// The APNs subpath: an `IPushProvider` whose options are the eight documented keys.
+declare const apnsOptions: ApnsPushProviderOptions
+const _apnsIsAPushProvider: IPushProvider = new ApnsPushProvider(apnsOptions)
+type _ApnsOptionKeys = Expect<
+  Equal<
+    keyof ApnsPushProviderOptions,
+    | 'teamId'
+    | 'keyId'
+    | 'privateKey'
+    | 'topic'
+    | 'environment'
+    | 'timeoutMs'
+    | 'concurrency'
+    | 'connect'
+  >
+>
+type _ApnsConnectShape = Expect<
+  Equal<ApnsConnect, (authority: string) => import('node:http2').ClientHttp2Session>
+>
 
 // The push subpath: the Expo adapter is an `IPushProvider`, and its options are the three documented keys.
 const _expoIsAPushProvider: IPushProvider = new ExpoPushProvider()

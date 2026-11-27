@@ -21,6 +21,7 @@ import type {
   PushSendOptions,
   PushSendResult
 } from '../interfaces/push-provider.interface'
+import { ApnsPushProvider } from '../providers/apns-push.provider'
 import { FcmPushProvider } from '../providers/fcm-push.provider'
 
 import { PushService } from './push.service'
@@ -552,6 +553,26 @@ describe('PushService.fetchReceipts', () => {
 
     expect(error).toMatchObject({ code: 'notification.channel_disabled' })
     expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('should say the channel cannot read receipts with the APNs adapter, and connect nowhere', async () => {
+    const connect = jest.fn()
+    const provider = new ApnsPushProvider({
+      teamId: 'TEAM123456',
+      keyId: 'KEY1234567',
+      privateKey: generateKeyPairSync('ec', { namedCurve: 'P-256' })
+        .privateKey.export({ type: 'pkcs8', format: 'pem' })
+        .toString(),
+      topic: 'com.example.app',
+      environment: 'sandbox',
+      connect
+    })
+    const service = new PushService(options(), provider, makeAudit())
+
+    const error = await failureOf(service.fetchReceipts(['t1']))
+
+    expect(error).toMatchObject({ code: 'notification.channel_disabled' })
+    expect(connect).not.toHaveBeenCalled()
   })
 
   it('should classify a failing provider and carry none of its text', async () => {

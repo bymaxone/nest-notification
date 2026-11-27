@@ -11,6 +11,22 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 ## [Unreleased]
 
+## [1.5.8] - 2026-11-26
+
+### Added
+
+- **`ApnsPushProvider`, from the new `@bymax-one/nest-notification/push/apns` subpath.** An `IPushProvider` for Apple
+  Push Notification service over `node:http2`, signed with the `.p8` key of the account: no SDK and no peer dependency.
+  Every token gets its own classified result, and `PUSH_SEND_FAILED` is thrown only when no request got as far as the
+  message. A connection with no request open for 60 seconds is replaced before it is used again, and a 200 without an
+  `apns-id` is `unknown`. `contentAvailable` sends a background push and requires an empty `title` and `body`, as with
+  `FcmPushProvider`. There are no receipts.
+
+#### Apply to a derived backend
+
+- Nothing to change. To send through APNs, import `ApnsPushProvider` from the new subpath at startup and give it
+  `teamId`, `keyId`, `privateKey`, `topic` and `environment`.
+
 ## [1.5.7] - 2026-11-26
 
 ### Fixed
@@ -2197,7 +2213,8 @@ rejected at startup rather than failing on the first send.
 
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.5.7...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.5.8...HEAD
+[1.5.8]: https://github.com/bymaxone/nest-notification/compare/v1.5.7...v1.5.8
 [1.5.7]: https://github.com/bymaxone/nest-notification/compare/v1.5.6...v1.5.7
 [1.5.6]: https://github.com/bymaxone/nest-notification/compare/v1.5.5...v1.5.6
 [1.5.5]: https://github.com/bymaxone/nest-notification/compare/v1.5.4...v1.5.5

@@ -42,3 +42,34 @@ export async function readBounded(
     text += decoder.decode(value, { stream: true })
   }
 }
+
+/** The bytes of an answer that arrives as chunks, kept up to a bound. */
+export interface BoundedChunks {
+  /** Keeps a chunk; `false` once the answer is over the bound, when the caller stops its stream. */
+  add: (chunk: Buffer) => boolean
+  /** The text kept; `''` past the bound. */
+  text: () => string
+}
+
+/**
+ * Collects an answer that is pushed to the caller, as a Node stream does.
+ *
+ * @param limit - The most bytes accepted.
+ * @returns An empty collector.
+ */
+export function boundedChunks(limit: number): BoundedChunks {
+  const decoder = new TextDecoder()
+  let text = ''
+  let bytes = 0
+  return {
+    add: (chunk): boolean => {
+      bytes += chunk.byteLength
+      if (bytes > limit) {
+        return false
+      }
+      text += decoder.decode(chunk, { stream: true })
+      return true
+    },
+    text: (): string => (bytes > limit ? '' : text + decoder.decode())
+  }
+}
