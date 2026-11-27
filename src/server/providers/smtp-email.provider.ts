@@ -51,6 +51,7 @@ import {
 import { assertTimerMs } from '../utils/timer-option'
 import { AUTH_KEYS, MESSAGE_KEYS } from './nodemailer-keys'
 import { mapSmtpAttachments } from './smtp-attachments'
+import { shadowTransportAuth } from './smtp-auth-shadow'
 import type {
   NodemailerLike,
   SmtpCredentials,
@@ -701,7 +702,9 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
    */
   private instantiate(nodemailer: NodemailerLike, config: SmtpTransportConfig): SmtpTransportLike {
     try {
-      return nodemailer.createTransport(config)
+      const transport = nodemailer.createTransport(config)
+      shadowTransportAuth(transport)
+      return transport
     } catch (error) {
       throw this.redactError(error)
     }

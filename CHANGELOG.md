@@ -11,6 +11,19 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 ## [Unreleased]
 
+## [1.5.11] - 2026-11-27
+
+### Fixed
+
+- **SMTP: a key on `Object.prototype` that appears while Nodemailer logs in or closes no longer throws
+  outside the call.** Nodemailer builds its own auth objects and reads `oauth2` from them, which they do not
+  hold, so a string under that name was called as an OAuth2 client: an uncaught `TypeError`, and a
+  `verify()` that never settled. The adapter now gives each of those objects an own key for every name
+  Nodemailer reads from it, on pooled and unpooled transports. The call is refused or fails as for any
+  other planted key.
+- **README: two limits of the realm check are stated:** an `Object.prototype.toString` replaced by a non-function, and a refusal
+  that arrives after the relay may already have accepted the message.
+
 ## [1.5.10] - 2026-11-27
 
 ### Fixed
@@ -2244,7 +2257,8 @@ rejected at startup rather than failing on the first send.
 
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.5.10...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.5.11...HEAD
+[1.5.11]: https://github.com/bymaxone/nest-notification/compare/v1.5.10...v1.5.11
 [1.5.10]: https://github.com/bymaxone/nest-notification/compare/v1.5.9...v1.5.10
 [1.5.9]: https://github.com/bymaxone/nest-notification/compare/v1.5.8...v1.5.9
 [1.5.8]: https://github.com/bymaxone/nest-notification/compare/v1.5.7...v1.5.8
