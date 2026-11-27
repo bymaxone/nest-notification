@@ -7,7 +7,8 @@
  * method }`, and reads `oauth2`, `pass` and `options` from it, which it does not hold. Those reads
  * reach `Object.prototype`: a string planted there under `oauth2` is taken for an OAuth2 client and
  * called, and throws inside a socket callback, where no caller can catch it. The adapter cannot hand
- * these objects over, so it completes each one as Nodemailer builds it. This relies on three members
+ * these objects over, so it completes them as Nodemailer builds them; a pool's `verify` builds one it
+ * cannot reach, which is for the caller to avoid. This relies on three members
  * of Nodemailer's transports, `auth`, `getAuth` and, on a pooled one, `_createConnection`; a spec
  * runs the real Nodemailer and fails when the objects are no longer reached.
  */

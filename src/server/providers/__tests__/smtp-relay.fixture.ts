@@ -31,6 +31,8 @@ export interface RelayLog {
 export interface RelayLogin {
   /** Runs when the relay receives EHLO, before it answers: the client is then waiting for the reply. */
   readonly onEhlo?: () => void
+  /** The one AUTH mechanism offered; `PLAIN` when left out. */
+  readonly mechanism?: 'PLAIN' | 'XOAUTH2'
 }
 
 /** A running relay. */
@@ -129,7 +131,7 @@ function ehloReply(certificate: TestCertificate | undefined, login?: RelayLogin)
   if (certificate) {
     return '250-relay\r\n250 STARTTLS\r\n'
   }
-  return login ? '250-relay\r\n250 AUTH PLAIN\r\n' : '250 relay\r\n'
+  return login ? `250-relay\r\n250 AUTH ${login.mechanism ?? 'PLAIN'}\r\n` : '250 relay\r\n'
 }
 
 /** Answers the SMTP conversation on one socket, upgrading it on STARTTLS when it has a certificate. */

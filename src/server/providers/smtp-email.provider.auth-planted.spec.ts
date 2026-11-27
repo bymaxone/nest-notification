@@ -7,7 +7,7 @@
 
 import { Logger } from '@nestjs/common'
 
-import { startRelay, type Relay } from './__tests__/smtp-relay.fixture'
+import { startRelay, type Relay, type RelayLogin } from './__tests__/smtp-relay.fixture'
 import { SmtpEmailProvider } from './smtp-email.provider'
 import type { SmtpEmailProviderOptions } from './smtp-email.types'
 
@@ -39,9 +39,10 @@ function plant(name: string): void {
 /** A provider that logs in to a relay which runs `onEhlo` before it answers EHLO. */
 async function loggingIn(
   options: Partial<SmtpEmailProviderOptions>,
-  onEhlo?: () => void
+  onEhlo?: () => void,
+  login: RelayLogin = {}
 ): Promise<SmtpEmailProvider> {
-  relay = await startRelay({ login: onEhlo ? { onEhlo } : {} })
+  relay = await startRelay({ login: onEhlo ? { ...login, onEhlo } : login })
   provider = new SmtpEmailProvider({
     host: '127.0.0.1',
     port: relay.port,
@@ -112,6 +113,18 @@ describe.each([
     expect(['resolved', 'SmtpEmailProvider: the relay did not accept the connection']).toContain(
       result
     )
+  })
+
+  // With only XOAUTH2 offered, Nodemailer calls what it finds under `oauth2` instead of reading it.
+  it('should settle verify() when oauth2 is planted and the relay offers only XOAUTH2', async () => {
+    const checker = await loggingIn(options, () => plant('oauth2'), { mechanism: 'XOAUTH2' })
+
+    const result = await outcome(checker.verify())
+    await checker.close()
+    await settleSockets()
+
+    expect(planted).toEqual(['oauth2'])
+    expect(result).toBe('SmtpEmailProvider: the relay did not accept the connection')
   })
 
   it('should still log in and send on a clean realm', async () => {
