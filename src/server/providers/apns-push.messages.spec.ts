@@ -338,6 +338,20 @@ describe('ApnsPushProvider messages', () => {
       expect(server.requests).toHaveLength(2)
     })
 
+    it('does not send again on a 403 that gives another reason, however old the token', async () => {
+      /* Arrange */
+      const clock = jest.spyOn(Date, 'now').mockReturnValue(1_000_000)
+      const server = await fake()
+      const provider = providerOn(server)
+      await provider.send({ ...base, tokens: TOKEN })
+      clock.mockReturnValue(1_000_000 + 30 * 60_000)
+      server.steps.push({ status: 403, reason: 'InvalidProviderToken' })
+      /* Act */
+      await provider.send({ ...base, tokens: TOKEN }).catch(() => undefined)
+      /* Assert */
+      expect(server.requests).toHaveLength(2)
+    })
+
     it('keeps the token, the credentials and the words of APNs out of results and errors', async () => {
       /* Arrange */
       const server = await fake()
