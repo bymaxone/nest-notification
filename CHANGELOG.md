@@ -18,8 +18,8 @@ the entries that carry one, is the compatibility contract — read it, not the n
 - **README: statements about options and the push channel that were false or incomplete.** The push channel is now
   named where the intro, `DispatchInput`, `DispatchResult`, the observability types and
   `NOTIFICATION_SEND_CHANNELS` left it out; `ResolvedPushOptions` has no `provider` member;
-  `NOTIFICATION_BOOTSTRAP_OK` is logged by `forRoot` only and `NOTIFICATION_PLAINTEXT_OTP_CODES` by both forms;
-  there are 26 error codes. Added what each push input, adapter option and unchecked field does with a bad value.
+  `NOTIFICATION_BOOTSTRAP_OK` is logged by `forRoot` only and `NOTIFICATION_PLAINTEXT_OTP_CODES` by both forms.
+  Added what push inputs, adapter options and unchecked fields do with a bad value.
 - **The declaration comment of the `push` module option** said the channel is rejected at startup. It is implemented.
 
 #### Apply to a derived backend
