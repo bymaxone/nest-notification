@@ -862,6 +862,8 @@ pnpm mutation      # Stryker mutation testing
 | `cooldownExpiresAt()`   | Absolute expiry timestamp for a remaining cooldown                      |
 | `formatCooldown()`      | Human-readable cooldown, for a UI countdown                             |
 
+The cooldown helpers read a value that is negative or not a finite number as no cooldown, and present a finite value above `2147483647` seconds as `2147483647`.
+
 ### React hooks (`./react`)
 
 | Hook                | Returns                                                                             | Purpose                                              |
@@ -1126,6 +1128,7 @@ BymaxNotificationModule.forRoot({
 - **Reasons.** A 404 `UNREGISTERED` is `token_unregistered` (delete the token). `SENDER_ID_MISMATCH`, or a 400 that names the token field, is `token_invalid`. A quota refusal is `rate_limited`; a refused credential is `credentials`. `retryable` is `true` for a rate limit, for a connection that was never made and for a refusal that says nothing was processed. A send that times out, resets or meets a bare gateway 5xx is `retryable: false`: it may have been delivered. The adapter does not retry a send, except once after a non-APNs 401, with a new token.
 - **When `send` throws.** `PUSH_SEND_FAILED` is thrown only when no request got as far as the message: the token exchange failed, no connection was made, or the account was refused. Otherwise every token has its own result. A refusal of the APNs key (`THIRD_PARTY_AUTH_ERROR`) concerns iOS tokens only and is a result.
 - **Quotas.** Firebase documents 600 000 messages a minute per project, and for one Android device 240 a minute and 5 000 an hour. After a 429, wait for `Retry-After` or else 60 seconds, and back off at least 10 seconds between retries of a 5xx. The adapter does not read `Retry-After`; the waiting is the host's.
+- **Known limit.** This adapter is tested with a stand-in for `fetch` only; it has not been exercised against FCM itself.
 
 ##### Apple Push Notification service
 
@@ -1156,6 +1159,7 @@ BymaxNotificationModule.forRoot({
 - **Background push (`contentAvailable`).** Give `title: ''` and `body: ''` and none of `subtitle`, `imageUrl`, `sound`, `badge`, `channelId`, `categoryId`, `threadId` or `mutableContent: true`; otherwise it is refused with `notification.invalid_scope_identifier`. The message carries `content-available: 1`, `apns-push-type: background` and `apns-priority: 5`, and no alert.
 - **Reasons.** `410 Unregistered` or `ExpiredToken` is `token_unregistered` (delete the token). `BadDeviceToken` and `DeviceTokenNotForTopic` are `token_invalid`; a `BadDeviceToken` is often a token of the other environment, so check `environment` before deleting anything. A 403 or `TopicDisallowed` is `credentials`, a 429 `rate_limited`. `retryable` is `true` for a rate limit, for a request APNs cannot have seen and for a 500 or 503 that names a reason. A request that APNs may have seen and that times out or resets, or one that meets another 5xx, is `retryable: false`: it may have been delivered.
 - **When `send` throws.** `PUSH_SEND_FAILED` is thrown only when no request got as far as the message: no connection was made, APNs saw none of the requests, or it refused the account (credentials, or `TooManyProviderTokenUpdates`). Otherwise every token has its own result.
+- **Known limit.** This adapter is tested against a local HTTP/2 server only; it has not been exercised against APNs itself.
 - **Known limit.** A connection dropped before it has been idle for 60 seconds is not detected: a request written to it can come back `provider_unavailable` with `retryable: false`, although APNs never saw it.
 
 | Name                      | What it is                                         | Members                                                                                                                                                                                                 |

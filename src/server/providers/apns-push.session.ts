@@ -93,7 +93,7 @@ function reasonOf(text: string): string | undefined {
 function ended(link: Link, stream: ClientHttp2Stream, answer: Answer): ApnsCall {
   const { status, apnsId } = answer
   if (status !== undefined) {
-    link.proven ||= status === 200
+    link.proven ||= status === 200 && Boolean(apnsId)
     link.answered = true
     return { kind: 'answer', status, apnsId, reason: reasonOf(answer.chunks.text()) }
   }
