@@ -68,7 +68,7 @@ export interface Fake {
 const servers: Fake[] = []
 const providers: ApnsPushProvider[] = []
 
-/** Answers one request; without an `apnsId` the answer names the start of the device token. */
+/** Answers one request. An absent `apnsId` names the start of the device token; `null` sends none. */
 export function answer(seen: Seen, step: Exclude<Step, (seen: Seen) => void>): void {
   const headers: Record<string, string | number> = { ':status': step.status }
   if (step.apnsId !== null) {

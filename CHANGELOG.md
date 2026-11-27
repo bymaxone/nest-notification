@@ -11,6 +11,20 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 ## [Unreleased]
 
+## [1.5.9] - 2026-11-27
+
+### Fixed
+
+- **APNs: a 200 without `apns-id` no longer counts as an accepted request.** It is answered `unknown`, and the next
+  `send` still makes its first request alone, as before any acceptance.
+- **Cooldown helpers: a count above 2147483647 seconds is read as no cooldown.** `toRetryAfterHeader` could return a
+  value such as `'1e+300'`, which is not a valid `Retry-After`, and `cooldownExpiresAt` a time no `Date` can hold. The
+  same bound applies to `formatCooldown` and to the `details` of `OTP_COOLDOWN_ACTIVE`.
+
+### Documentation
+
+- The README says that the FCM and APNs adapters have not been exercised against the real services.
+
 ## [1.5.8] - 2026-11-26
 
 ### Added
@@ -2213,7 +2227,8 @@ rejected at startup rather than failing on the first send.
 
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.5.8...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.5.9...HEAD
+[1.5.9]: https://github.com/bymaxone/nest-notification/compare/v1.5.8...v1.5.9
 [1.5.8]: https://github.com/bymaxone/nest-notification/compare/v1.5.7...v1.5.8
 [1.5.7]: https://github.com/bymaxone/nest-notification/compare/v1.5.6...v1.5.7
 [1.5.6]: https://github.com/bymaxone/nest-notification/compare/v1.5.5...v1.5.6

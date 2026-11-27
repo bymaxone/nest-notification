@@ -128,6 +128,23 @@ describe('ApnsPushProvider, what a connection is taken to be', () => {
     expect(server.requests).toHaveLength(2)
   }, 5_000)
 
+  it.each([null, ''])(
+    'does not count a connection as accepted on a 200 whose apns-id is %p',
+    async (apnsId) => {
+      /* Arrange */
+      const server = await fake()
+      const refused: Step = { status: 403, reason: 'InvalidProviderToken' }
+      server.steps.push({ status: 200, apnsId }, refused, refused, refused)
+      const provider = providerOn(server)
+      await provider.send({ ...base, tokens: TOKEN })
+      /* Act */
+      await provider.send({ ...base, tokens: [TOKEN, OTHER, THIRD] }).catch(() => undefined)
+      /* Assert */
+      expect(server.requests).toHaveLength(2)
+    },
+    5_000
+  )
+
   it('reads the reason of an answer that arrives in parts', async () => {
     /* Arrange */
     const server = await fake()
