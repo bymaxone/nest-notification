@@ -21,7 +21,7 @@ the entries that carry one, is the compatibility contract — read it, not the n
   `verify()` that never settled. The adapter now gives each of those objects an own key for every name
   Nodemailer reads from it, on pooled and unpooled transports. The call is refused or fails as for any
   other planted key.
-- **README: two limits of the realm check are stated:** an `Object.prototype.toString` replaced by a non-function, and a refusal
+- **README: more limits of the realm check are stated:** an `Object.prototype.toString` replaced by a non-function, and a refusal
   that arrives after the relay may already have accepted the message.
 
 ## [1.5.10] - 2026-11-27
