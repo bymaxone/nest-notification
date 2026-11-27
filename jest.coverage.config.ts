@@ -56,7 +56,7 @@ const config: Config = {
   maxWorkers: '50%',
   clearMocks: true,
   restoreMocks: true,
-  passWithNoTests: true
+  passWithNoTests: process.env['CI'] !== 'true'
 }
 
 export default config
