@@ -17,9 +17,11 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 - **APNs: a 200 without `apns-id` no longer counts as an accepted request.** It is answered `unknown`, and does not by
   itself stop the next `send` from making its first request alone.
-- **Cooldown helpers: a count above 2147483647 seconds is read as no cooldown.** `toRetryAfterHeader` could return a
-  value such as `'1e+300'`, which is not a valid `Retry-After`, and `cooldownExpiresAt` a time no `Date` can hold. The
-  same bound applies to `formatCooldown` and to the `details` of `OTP_COOLDOWN_ACTIVE`.
+- **Cooldown helpers: a finite count above 2147483647 seconds is presented as 2147483647.** `toRetryAfterHeader` could
+  return a value such as `'1e+300'`, which is not a valid `Retry-After`, and `cooldownExpiresAt` a time no `Date` can
+  hold. The same bound applies to `formatCooldown`, to the `details` of `OTP_COOLDOWN_ACTIVE` and to
+  `getStatus().cooldownSeconds`. `NaN`, `±Infinity` and negative values are still read as no cooldown; a finite count
+  too large to be held in milliseconds, which was read as none since 1.5.7, is now presented as the bound.
 
 ### Documentation
 

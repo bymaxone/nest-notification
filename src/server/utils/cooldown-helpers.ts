@@ -18,10 +18,10 @@ const SECONDS_PER_HOUR = 3600
 /** The most seconds that are presented: more would not always print as digits or give a date. */
 const MAX_REMAINING_SECONDS = 2_147_483_647
 
-/** The remaining seconds to present: never negative, and `0` when not a number up to the bound. */
+/** The remaining seconds to present: from `0` to the bound, and `0` when not a finite number. */
 export function clampRemaining(remainingSeconds: number): number {
   const clamped = Math.max(remainingSeconds, 0)
-  return clamped <= MAX_REMAINING_SECONDS ? clamped : 0
+  return Number.isFinite(clamped) ? Math.min(clamped, MAX_REMAINING_SECONDS) : 0
 }
 
 /**
@@ -29,7 +29,7 @@ export function clampRemaining(remainingSeconds: number): number {
  *
  * Rounds up (a partial second still requires waiting) and clamps to a
  * non-negative integer, so an already-expired cooldown yields `'0'`, as does a value that is not a
- * number or is above 2147483647.
+ * finite number. A finite value above 2147483647 is presented as 2147483647.
  *
  * @param remainingSeconds - Remaining cooldown, as returned by `storage.getCooldown()`.
  * @returns A string suitable for `res.setHeader('Retry-After', value)`.
@@ -48,7 +48,7 @@ export function toRetryAfterHeader(remainingSeconds: number): string {
  *
  * @param remainingSeconds - Current remaining cooldown in seconds.
  * @returns Epoch ms when the cooldown expires; `Date.now()` when already expired, or when the
- *   value is not a number or is above 2147483647.
+ *   value is not a finite number. A finite value above 2147483647 counts as 2147483647.
  * @example
  * ```ts
  * cooldownExpiresAt(60) // ~Date.now() + 60_000
@@ -62,8 +62,8 @@ export function cooldownExpiresAt(remainingSeconds: number): number {
 /**
  * Formats a remaining cooldown as a compact human-readable string for a UI.
  *
- * Zero-valued units are omitted; an expired or zero cooldown, or a value that is not a number or
- * is above 2147483647, gives `'0s'`.
+ * Zero-valued units are omitted; an expired or zero cooldown, or a value that is not a finite
+ * number, gives `'0s'`. A finite value above 2147483647 is formatted as 2147483647.
  *
  * @param remainingSeconds - Remaining cooldown in seconds.
  * @returns A string such as `'0s'`, `'47s'`, `'2m'`, `'2m 5s'`, `'1h'`, or `'1h 2m 5s'`.

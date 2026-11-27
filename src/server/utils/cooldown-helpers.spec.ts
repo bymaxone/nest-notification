@@ -1,28 +1,20 @@
 import { cooldownExpiresAt, formatCooldown, toRetryAfterHeader } from './cooldown-helpers'
 
-describe('cooldown helpers, a count too large for milliseconds', () => {
-  it('should read it as no cooldown everywhere', () => {
-    jest.spyOn(Date, 'now').mockReturnValue(1000)
-
-    expect(cooldownExpiresAt(Number.MAX_VALUE)).toBe(1000)
-    expect(toRetryAfterHeader(Number.MAX_VALUE)).toBe('0')
-    expect(formatCooldown(Number.MAX_VALUE)).toBe('0s')
-    jest.restoreAllMocks()
-  })
-})
-
 describe('cooldown helpers, the largest count that is presented', () => {
   afterEach(() => jest.restoreAllMocks())
 
-  it('should present 2147483647 seconds as it is', () => {
-    jest.spyOn(Date, 'now').mockReturnValue(1000)
+  it.each([2_147_483_647, 2_147_483_647.5, 2_147_483_648, 1e21, 1e300, Number.MAX_VALUE])(
+    'should present %p seconds as 2147483647',
+    (seconds) => {
+      jest.spyOn(Date, 'now').mockReturnValue(1000)
 
-    expect(toRetryAfterHeader(2_147_483_647)).toBe('2147483647')
-    expect(cooldownExpiresAt(2_147_483_647)).toBe(2_147_483_648_000)
-    expect(formatCooldown(2_147_483_647)).toBe('596523h 14m 7s')
-  })
+      expect(toRetryAfterHeader(seconds)).toBe('2147483647')
+      expect(cooldownExpiresAt(seconds)).toBe(2_147_483_648_000)
+      expect(formatCooldown(seconds)).toBe('596523h 14m 7s')
+    }
+  )
 
-  it.each([2_147_483_648, 1e21, 1e300])('should read %p seconds as no cooldown', (seconds) => {
+  it.each([NaN, Infinity, -Infinity, -1e300])('should read %p as no cooldown', (seconds) => {
     jest.spyOn(Date, 'now').mockReturnValue(1000)
 
     expect(toRetryAfterHeader(seconds)).toBe('0')
