@@ -15,8 +15,8 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 ### Fixed
 
-- **SMTP: a string assigned to `Object.prototype` while Nodemailer logs in or closes no longer throws
-  outside the call.** Nodemailer builds its own auth objects and reads `oauth2` from them, which they do not
+- **SMTP: a string assigned to `Object.prototype.oauth2` while Nodemailer logs in or closes no longer
+  throws outside the call.** Nodemailer builds its own auth objects and reads `oauth2` from them, which they do not
   hold, so a string under that name was called as an OAuth2 client: an uncaught `TypeError`, and a
   `verify()` that never settled. The adapter now gives each of those objects an own key for every name
   Nodemailer reads from it. A pool's `verify()` builds one the adapter cannot reach, so a pooled provider now
