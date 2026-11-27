@@ -6,8 +6,7 @@ import type { Config } from 'jest'
  * Lives separately from the unit-test config (`jest.config.ts`) so the unit-suite
  * coverage thresholds never interfere with E2E runs, and so E2E specs can be
  * discovered under `test/e2e/` rather than inside `src/`. The config roots at the
- * project so a still-absent `test/e2e/` directory does not error; `passWithNoTests`
- * keeps it green until the first `*.e2e-spec.ts` is added.
+ * project. In CI a run that matches no test fails.
  */
 const config: Config = {
   preset: 'ts-jest',
@@ -34,7 +33,7 @@ const config: Config = {
   testTimeout: 30_000,
   clearMocks: true,
   restoreMocks: true,
-  passWithNoTests: true
+  passWithNoTests: process.env['CI'] !== 'true'
 }
 
 export default config

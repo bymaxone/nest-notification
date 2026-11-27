@@ -178,7 +178,7 @@ export interface BymaxNotificationModuleOptions {
   otp?: OtpChannelOptions
   /** SMS channel — declared; rejected at startup. */
   sms?: SmsChannelOptions
-  /** Push channel — declared; rejected at startup. */
+  /** Push channel — registered only when present. */
   push?: PushChannelOptions
   /** Audit log — defaults to a no-op sink when absent. */
   audit?: AuditOptions

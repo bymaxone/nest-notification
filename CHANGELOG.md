@@ -11,6 +11,21 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 ## [Unreleased]
 
+## [1.5.10] - 2026-11-27
+
+### Fixed
+
+- **README: statements about options and the push channel that were false or incomplete.** The push channel is now
+  named where the intro, `DispatchInput`, `DispatchResult`, the observability types and
+  `NOTIFICATION_SEND_CHANNELS` left it out; `ResolvedPushOptions` has no `provider` member;
+  `NOTIFICATION_BOOTSTRAP_OK` is logged by `forRoot` only and `NOTIFICATION_PLAINTEXT_OTP_CODES` by both forms.
+  Added what push inputs, adapter options and unchecked fields do with a bad value.
+- **The declaration comment of the `push` module option** said the channel is rejected at startup. It is implemented.
+
+#### Apply to a derived backend
+
+Nothing to change. No behaviour changes; the only change in the published declarations is a comment.
+
 ## [1.5.9] - 2026-11-27
 
 ### Fixed
@@ -2229,7 +2244,8 @@ rejected at startup rather than failing on the first send.
 
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.5.9...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.5.10...HEAD
+[1.5.10]: https://github.com/bymaxone/nest-notification/compare/v1.5.9...v1.5.10
 [1.5.9]: https://github.com/bymaxone/nest-notification/compare/v1.5.8...v1.5.9
 [1.5.8]: https://github.com/bymaxone/nest-notification/compare/v1.5.7...v1.5.8
 [1.5.7]: https://github.com/bymaxone/nest-notification/compare/v1.5.6...v1.5.7
