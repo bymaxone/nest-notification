@@ -465,6 +465,8 @@ const storage = new RedisOtpStorage({ redisClient: client })
 
 Close the client in your own shutdown hook, after Nest has closed the application, so no OTP operation is still running when its connection goes.
 
+Known limit, in `ioredis` itself: with `ioredis` 6.1.0 and `skipLibCheck: false`, TypeScript reports `TS7016` because `redis-errors` ships no types. Add `@types/redis-errors` to your dev dependencies, or set `skipLibCheck: true`.
+
 ### Bound every send
 
 `ResendEmailProvider` takes `timeoutMs` and `SmtpEmailProvider` takes `sendTimeoutMs`, plus the phase timeouts, each with its default in the option tables. A send that times out fails with `EMAIL_SEND_FAILED`, and **may still have been delivered**: make the job that retries it idempotent, as the Apply note of 1.4.9 says.

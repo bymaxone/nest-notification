@@ -3,7 +3,8 @@
  * produces: the messages are those a real ioredis 6.0.0 client printed (refused and DNS failures
  * with the default retry limit, a command timeout against a server that never answered, a closed
  * connection, the offline queue switched off) and the replies a Redis server sent, captured
- * verbatim, plus the error codes Node and nodemailer set. Anything else is not availability.
+ * verbatim, plus the error codes Node and nodemailer set and the two timeouts ioredis 6.1.0 defines
+ * for server maintenance. Anything else is not availability.
  * @layer utils
  */
 
@@ -14,6 +15,13 @@ class ReplyError extends Error {
 }
 class MaxRetriesPerRequestError extends Error {
   override name = 'MaxRetriesPerRequestError'
+}
+// ioredis 6.1.0 names these errors after their class.
+class CommandTimeoutDuringMaintenanceError extends Error {
+  override name = 'CommandTimeoutDuringMaintenanceError'
+}
+class SocketTimeoutDuringMaintenanceError extends Error {
+  override name = 'SocketTimeoutDuringMaintenanceError'
 }
 
 const coded = (code: string, message = 'boom'): Error => Object.assign(new Error(message), { code })
@@ -33,6 +41,35 @@ describe('isUnavailableError', () => {
 
   it('should treat a MaxRetriesPerRequestError as unavailable whatever its text', () => {
     expect(isUnavailableError(new MaxRetriesPerRequestError('anything'))).toBe(true)
+  })
+
+  // The texts of the two classes ioredis 6.1.0 raises while the server announces maintenance. Each
+  // is read on its own, so a wrapper that keeps only the message is still recognised.
+  it.each([
+    'Command timed out during server maintenance (relaxed timeout: 10000ms)',
+    "Socket timeout during server maintenance. Expecting data, but didn't receive any in 10000ms."
+  ])('should treat the ioredis 6.1.0 failure %j as unavailable', (message) => {
+    expect(isUnavailableError(new Error(message))).toBe(true)
+  })
+
+  it.each([CommandTimeoutDuringMaintenanceError, SocketTimeoutDuringMaintenanceError])(
+    'should treat a %p as unavailable whatever its text',
+    (Timeout) => {
+      expect(isUnavailableError(new Timeout('anything'))).toBe(true)
+    }
+  )
+
+  // Words of those texts inside another message say nothing about the server.
+  it.each([
+    'the job Command timed out during server maintenance (relaxed timeout: 10000ms)',
+    'Command timed out during validation',
+    'Command timed out during server maintenance',
+    'the Socket timeout during server maintenance. was mishandled',
+    'Socket timeout during server maintenance window parsing failed',
+    'request timed out',
+    'timed out'
+  ])('should not treat the text %j as an ioredis timeout', (message) => {
+    expect(isUnavailableError(new Error(message))).toBe(false)
   })
 
   // Captured from a Redis server answering a command with an error reply.

@@ -29,14 +29,17 @@ const UNAVAILABLE_CODES: ReadonlySet<string> = new Set([
 ])
 
 /**
- * The texts ioredis 6.0.0 rejects a command with when it cannot reach the server: a closed
- * connection, a command that timed out, a stream that cannot be written with the offline queue off,
- * a command that ran out of reconnection attempts.
- * Matched whole, so a defect whose message merely mentions a phrase is not mistaken for an outage.
+ * The texts ioredis rejects a command with when it cannot reach the server: a closed connection, a
+ * command that timed out, a stream that cannot be written with the offline queue off, a command that
+ * ran out of reconnection attempts, and the two timeouts ioredis 6.1.0 raises while the server
+ * announces maintenance. Each is anchored at the start, so a defect whose message merely mentions a
+ * phrase is not mistaken for an outage.
  */
 const UNAVAILABLE_MESSAGES: readonly RegExp[] = [
   /^Connection is closed\.$/,
   /^Command timed out$/,
+  /^Command timed out during server maintenance \(/,
+  /^Socket timeout during server maintenance\./,
   /^Stream isn't writeable and enableOfflineQueue options is false$/,
   /^Reached the max retries per request limit \(which is \d+\)\./
 ]
@@ -47,8 +50,15 @@ const UNAVAILABLE_MESSAGES: readonly RegExp[] = [
  */
 const UNAVAILABLE_REPLY = /^(?:READONLY|LOADING|MASTERDOWN|CLUSTERDOWN|TRYAGAIN)\b/
 
-/** The ioredis error name for a command that ran out of reconnection attempts. */
-const MAX_RETRIES_NAME = 'MaxRetriesPerRequestError'
+/**
+ * The ioredis error names that mean the server did not answer: the reconnection attempts ran out,
+ * or a command or the socket timed out during server maintenance.
+ */
+const UNAVAILABLE_NAMES: ReadonlySet<unknown> = new Set([
+  'MaxRetriesPerRequestError',
+  'CommandTimeoutDuringMaintenanceError',
+  'SocketTimeoutDuringMaintenanceError'
+])
 
 /** Links of a cause chain read; a provider or SDK chooses how deep its chain is. */
 const MAX_LINKS = 8
@@ -82,7 +92,7 @@ function isUnavailableLink(error: unknown): boolean {
   if (typeof code === 'string' && UNAVAILABLE_CODES.has(code)) {
     return true
   }
-  if (read(error, 'name') === MAX_RETRIES_NAME) {
+  if (UNAVAILABLE_NAMES.has(read(error, 'name'))) {
     return true
   }
   const message = read(error, 'message')

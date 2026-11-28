@@ -11,6 +11,18 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 ## [Unreleased]
 
+## [1.5.13] - 2026-11-28
+
+### Fixed
+
+- **OTP: an `ioredis` 6.1.0 timeout during server maintenance is answered as unavailable.**
+  `CommandTimeoutDuringMaintenanceError` and `SocketTimeoutDuringMaintenanceError` were not
+  recognised, so a code store that timed out this way was not reported as unavailable. Both are
+  recognised by name and by the start of their message. CI now also runs the newest `ioredis` the
+  peer range admits.
+- **README:** the `TS7016` that `ioredis` 6.1.0 causes with `skipLibCheck: false` is stated, with
+  what to do about it.
+
 ## [1.5.11] - 2026-11-27
 
 ### Fixed
