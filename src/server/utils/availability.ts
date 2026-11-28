@@ -31,8 +31,8 @@ const UNAVAILABLE_CODES: ReadonlySet<string> = new Set([
 /**
  * The texts ioredis rejects a command with when it cannot reach the server: a closed connection, a
  * command that timed out, a stream that cannot be written with the offline queue off, a command that
- * ran out of reconnection attempts, and the two timeouts ioredis 6.1.0 raises while the server
- * announces maintenance. Each is anchored at the start, so a defect whose message merely mentions a
+ * ran out of reconnection attempts, and what ioredis 6.1.0 says during server maintenance: two
+ * timeouts and a refusal during a connection handoff. Each is anchored at the start, so a defect whose message merely mentions a
  * phrase is not mistaken for an outage.
  */
 const UNAVAILABLE_MESSAGES: readonly RegExp[] = [
@@ -41,6 +41,7 @@ const UNAVAILABLE_MESSAGES: readonly RegExp[] = [
   /^Command timed out during server maintenance \(/,
   /^Socket timeout during server maintenance\./,
   /^Stream isn't writeable and enableOfflineQueue options is false$/,
+  /^Command cannot be queued during a connection handoff because enableOfflineQueue is false$/,
   /^Reached the max retries per request limit \(which is \d+\)\./
 ]
 

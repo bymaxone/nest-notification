@@ -3,8 +3,8 @@
  * produces: the messages are those a real ioredis 6.0.0 client printed (refused and DNS failures
  * with the default retry limit, a command timeout against a server that never answered, a closed
  * connection, the offline queue switched off) and the replies a Redis server sent, captured
- * verbatim, plus the error codes Node and nodemailer set and the two timeouts ioredis 6.1.0 defines
- * for server maintenance. Anything else is not availability.
+ * verbatim, plus the error codes Node and nodemailer set and what ioredis 6.1.0 says during
+ * server maintenance. Anything else is not availability.
  * @layer utils
  */
 
@@ -43,11 +43,12 @@ describe('isUnavailableError', () => {
     expect(isUnavailableError(new MaxRetriesPerRequestError('anything'))).toBe(true)
   })
 
-  // The texts of the two classes ioredis 6.1.0 raises while the server announces maintenance. Each
-  // is read on its own, so a wrapper that keeps only the message is still recognised.
+  // What ioredis 6.1.0 says while the server announces maintenance: its two timeout classes, and the
+  // refusal of a command during a handoff with the offline queue off. Each text is read on its own, so a wrapper that keeps only the message is still recognised.
   it.each([
     'Command timed out during server maintenance (relaxed timeout: 10000ms)',
-    "Socket timeout during server maintenance. Expecting data, but didn't receive any in 10000ms."
+    "Socket timeout during server maintenance. Expecting data, but didn't receive any in 10000ms.",
+    'Command cannot be queued during a connection handoff because enableOfflineQueue is false'
   ])('should treat the ioredis 6.1.0 failure %j as unavailable', (message) => {
     expect(isUnavailableError(new Error(message))).toBe(true)
   })
@@ -65,6 +66,8 @@ describe('isUnavailableError', () => {
     'Command timed out during validation',
     'Command timed out during server maintenance',
     'the Socket timeout during server maintenance. was mishandled',
+    'the Command cannot be queued during a connection handoff because enableOfflineQueue is false',
+    'Command cannot be queued during a connection handoff because enableOfflineQueue is false, retried',
     'Socket timeout during server maintenance window parsing failed',
     'request timed out',
     'timed out'
