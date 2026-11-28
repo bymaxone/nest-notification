@@ -11,6 +11,25 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 ## [Unreleased]
 
+## [1.5.11] - 2026-11-27
+
+### Fixed
+
+- **SMTP: a string assigned to `Object.prototype.oauth2` while Nodemailer logs in or closes no longer
+  throws outside the call.** Nodemailer builds its own auth objects and reads `oauth2` from them, which they do not
+  hold, so a string under that name was called as an OAuth2 client: an uncaught `TypeError`, and a
+  `verify()` that never settled. The adapter now gives each of those objects an own key for every name
+  Nodemailer reads from it. A pool's `verify()` builds one the adapter cannot reach, so a pooled provider now
+  verifies on an unpooled transport. `verify()` also no longer has Nodemailer copy the credentials
+  during the login, which threw on a locked auth name.
+- **README: more limits of the realm check are stated:** a locked key under a name Nodemailer assigns on its errors,
+  an `Object.prototype.toString` replaced by a non-function, and a refusal that arrives after the relay may already
+  have accepted the message.
+
+#### Apply to a derived backend
+
+Nothing to change. Apart from comments, the only change in the published declarations is a new private member of `SmtpEmailProvider`.
+
 ## [1.5.10] - 2026-11-27
 
 ### Fixed
@@ -2244,7 +2263,8 @@ rejected at startup rather than failing on the first send.
 
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.5.10...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.5.11...HEAD
+[1.5.11]: https://github.com/bymaxone/nest-notification/compare/v1.5.10...v1.5.11
 [1.5.10]: https://github.com/bymaxone/nest-notification/compare/v1.5.9...v1.5.10
 [1.5.9]: https://github.com/bymaxone/nest-notification/compare/v1.5.8...v1.5.9
 [1.5.8]: https://github.com/bymaxone/nest-notification/compare/v1.5.7...v1.5.8

@@ -27,6 +27,14 @@ export interface RelayLog {
   readonly envelope: string[]
 }
 
+/** What a spec has the relay do when a client logs in. */
+export interface RelayLogin {
+  /** Runs when the relay receives EHLO, before it answers: the client is then waiting for the reply. */
+  readonly onEhlo?: () => void
+  /** The one AUTH mechanism offered; `PLAIN` when left out. */
+  readonly mechanism?: 'PLAIN' | 'XOAUTH2'
+}
+
 /** A running relay. */
 export interface Relay extends RelayLog {
   readonly port: number
@@ -118,12 +126,21 @@ function upgrade(socket: net.Socket, log: RelayLog, certificate: TestCertificate
   )
 }
 
+/** The answer to EHLO: the extensions this relay offers. */
+function ehloReply(certificate: TestCertificate | undefined, login?: RelayLogin): string {
+  if (certificate) {
+    return '250-relay\r\n250 STARTTLS\r\n'
+  }
+  return login ? `250-relay\r\n250 AUTH ${login.mechanism ?? 'PLAIN'}\r\n` : '250 relay\r\n'
+}
+
 /** Answers the SMTP conversation on one socket, upgrading it on STARTTLS when it has a certificate. */
 function converse(
   socket: net.Socket,
   log: RelayLog,
   certificate: TestCertificate | undefined,
-  onStarttls?: () => void
+  onStarttls?: () => void,
+  login?: RelayLogin
 ): void {
   let body: string | undefined
   let pending = ''
@@ -144,7 +161,10 @@ function converse(
       pending = pending.slice(end + 2)
       record(log, line)
       if (/^EHLO/iu.test(line)) {
-        socket.write(certificate ? '250-relay\r\n250 STARTTLS\r\n' : '250 relay\r\n')
+        login?.onEhlo?.()
+        socket.write(ehloReply(certificate, login))
+      } else if (/^AUTH/iu.test(line) && login) {
+        socket.write('235 accepted\r\n')
       } else if (/^STARTTLS/iu.test(line) && certificate) {
         socket.write('220 go ahead\r\n')
         onStarttls?.()
@@ -169,7 +189,7 @@ function converse(
  * Starts a relay on a free local port.
  *
  * @param options - `implicitTls` serves TLS from the first byte; `starttls` offers STARTTLS. Both
- *   take the certificate to serve.
+ *   take the certificate to serve. `login` offers AUTH PLAIN on a plain connection and accepts it.
  * @returns The relay, with what it saw.
  */
 export async function startRelay(
@@ -180,6 +200,7 @@ export async function startRelay(
     onConnect?: () => void
     /** Runs when the relay has agreed to a STARTTLS upgrade, before the handshake. */
     onStarttls?: () => void
+    login?: RelayLogin
   } = {}
 ): Promise<Relay> {
   const log: RelayLog = { commands: [], messages: [], servernames: [], envelope: [] }
@@ -190,7 +211,8 @@ export async function startRelay(
       sealed(socket),
       log,
       options.implicitTls ? undefined : options.certificate,
-      options.onStarttls
+      options.onStarttls,
+      options.login
     )
   }
   const server =

@@ -51,6 +51,7 @@ import {
 import { assertTimerMs } from '../utils/timer-option'
 import { AUTH_KEYS, MESSAGE_KEYS } from './nodemailer-keys'
 import { mapSmtpAttachments } from './smtp-attachments'
+import { shadowTransportAuth } from './smtp-auth-shadow'
 import type {
   NodemailerLike,
   SmtpCredentials,
@@ -314,7 +315,7 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
     assertStandardRealmRoot('SmtpEmailProvider')
     let transport: SmtpTransportLike
     try {
-      transport = (await own(this.getTransport(), 'SmtpEmailProvider')).value
+      transport = (await own(this.transportToVerify(), 'SmtpEmailProvider')).value
     } catch {
       relayRefused()
     }
@@ -653,10 +654,15 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
     if (cached !== null) {
       return cached
     }
-    const build = this.createTransport()
+    const build = this.createTransport(this.#pool)
     this.#transportPromise = build
     void this.dropWhenFailed(build)
     return build
+  }
+
+  /** A pool's `verify` builds its auth object out of reach, so a pooled provider verifies unpooled. */
+  private transportToVerify(): Promise<Boxed<SmtpTransportLike>> {
+    return this.#pool === undefined ? this.getTransport() : this.createTransport()
   }
 
   /** Drops a build that failed from the cache, only while it is still the cached one. */
@@ -673,11 +679,12 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
   /**
    * Builds a fresh transport.
    *
+   * @param pool - The pool limits; none for an unpooled transport.
    * @returns The initialized transport.
    * @throws Error When the configuration is incomplete or `nodemailer` is missing.
    */
-  private async createTransport(): Promise<Boxed<SmtpTransportLike>> {
-    const config = this.buildTransportConfig()
+  private async createTransport(pool?: SmtpPoolOptions): Promise<Boxed<SmtpTransportLike>> {
+    const config = this.buildTransportConfig(pool)
     const nodemailer = (await own(this.loadNodemailer(), 'SmtpEmailProvider')).value
     // Boxed: the transport is an event emitter, whose prototype chain the realm check does not cover.
     return boxed(this.instantiate(nodemailer, config))
@@ -701,7 +708,9 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
    */
   private instantiate(nodemailer: NodemailerLike, config: SmtpTransportConfig): SmtpTransportLike {
     try {
-      return nodemailer.createTransport(config)
+      const transport = nodemailer.createTransport(config)
+      shadowTransportAuth(transport)
+      return transport
     } catch (error) {
       throw this.redactError(error)
     }
@@ -740,8 +749,8 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
    * @returns The resolved configuration.
    * @throws Error When `host` is missing, or `credentials` were supplied incomplete.
    */
-  private buildTransportConfig(): SmtpTransportConfig {
-    return buildSmtpTransportConfig(this.#options, this.#pool, () => this.resolveCredentials())
+  private buildTransportConfig(pool: SmtpPoolOptions | undefined): SmtpTransportConfig {
+    return buildSmtpTransportConfig(this.#options, pool, () => this.resolveCredentials())
   }
 
   /**
