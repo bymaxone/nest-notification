@@ -11,6 +11,19 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 ## [Unreleased]
 
+## [1.5.13] - 2026-11-28
+
+### Fixed
+
+- **OTP: an `ioredis` 6.1.0 timeout during server maintenance is answered as unavailable.**
+  `CommandTimeoutDuringMaintenanceError` and `SocketTimeoutDuringMaintenanceError` were not
+  recognised, so a code store that timed out this way was not reported as unavailable. Both are
+  recognised by name and by the start of their message, and so is the refusal of a command during a
+  connection handoff with `enableOfflineQueue: false`. CI now also runs the newest `ioredis` the
+  peer range admits.
+- **README:** the `TS7016` that `ioredis` 6.1.0 causes with `skipLibCheck: false` is stated, with
+  what to do about it.
+
 ## [1.5.11] - 2026-11-27
 
 ### Fixed
@@ -2263,7 +2276,8 @@ rejected at startup rather than failing on the first send.
 
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.5.11...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.5.13...HEAD
+[1.5.13]: https://github.com/bymaxone/nest-notification/compare/v1.5.12...v1.5.13
 [1.5.11]: https://github.com/bymaxone/nest-notification/compare/v1.5.10...v1.5.11
 [1.5.10]: https://github.com/bymaxone/nest-notification/compare/v1.5.9...v1.5.10
 [1.5.9]: https://github.com/bymaxone/nest-notification/compare/v1.5.8...v1.5.9

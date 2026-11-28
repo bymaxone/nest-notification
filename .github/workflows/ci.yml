@@ -141,6 +141,24 @@ jobs:
       - name: Run the real-Redis suite
         run: pnpm test:e2e:redis
 
+  ioredis-latest:
+    # The lockfile holds the floor of the `ioredis` peer range, which every other job runs on.
+    # Consumers install the newest release in that range, so the same suites run against it here.
+    name: Latest ioredis in range
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: bymaxone/.github/.github/actions/setup-node-pnpm@v1
+      - name: Move ioredis to the newest release the range admits
+        run: |
+          pnpm update ioredis
+          node -p "'ioredis ' + require('ioredis/package.json').version"
+      - run: pnpm typecheck
+      - run: pnpm test:types
+      - run: pnpm test:cov:all
+      - run: pnpm test:e2e:redis
+
   security:
     # Dependency review needs the dependency graph (public repos, or private + GHAS).
     # Gated on visibility so it starts running automatically once this repo is public.
@@ -169,7 +187,7 @@ jobs:
   ci-pass:
     name: CI passed
     if: always()
-    needs: [ci, verify, redis-e2e, security]
+    needs: [ci, verify, redis-e2e, ioredis-latest, security]
     runs-on: ubuntu-latest
     # Once this is the required check, a hung runner holds every merge behind it
     # for GitHub's default of six hours. The job is one comparison, so a short
