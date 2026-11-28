@@ -1,5 +1,5 @@
 /**
- * @fileoverview The warning logged when an audit write fails and the caller is not told.
+ * @fileoverview The warning logged when an audit write is not confirmed and the caller is not told.
  * @layer utils
  *
  * A failure the caller never sees must still be visible to the operator. With
@@ -58,7 +58,7 @@ function reasonOf(error: unknown): string {
 }
 
 /**
- * Warns, at most once per interval, that an audit entry could not be written.
+ * Warns, at most once per interval, that an audit entry was not confirmed as written.
  *
  * The line carries the channel and the error's class or code only; it holds no message, no
  * recipient, no user id and no OTP code. There is no timer, so
@@ -106,7 +106,7 @@ export class AuditWriteWarning {
       this.logger,
       'warn',
       NOTIFICATION_LOG_EVENTS.AUDIT_WRITE_FAILED,
-      `[${WARNING_CODE}] An audit entry could not be written by the ${this.channel} channel ` +
+      `[${WARNING_CODE}] An audit entry of the ${this.channel} channel was not confirmed as written ` +
         `(${reasonOf(error)}${similar}); ` +
         "the operation's result is unaffected."
     )

@@ -22,10 +22,11 @@ the entries that carry one, is the compatibility contract — read it, not the n
   An audit write whose outcome the changed realm hides is warned about, even with `audit.swallowErrors: false`; an
   audit failure on an unchanged realm still throws `AUDIT_LOG_FAILED`. These answers carry an own, non-enumerable
   `then` that is `undefined`.
-- **The audit write warning** (`BYMAX_NOTIFICATION_AUDIT_WRITE_FAILED`) no longer ends with "because
-  audit.swallowErrors is true".
+- **The audit write warning** (`BYMAX_NOTIFICATION_AUDIT_WRITE_FAILED`) now reads "was not confirmed as
+  written" and no longer says that `audit.swallowErrors` is true; both were false for an accepted send.
 - **A push the service accepted is no longer reported as failed.** The same refusal reached `PushService.send` and the
-  FCM, APNs and Expo adapters after a message had been judged, losing the results of the tokens already delivered.
+  FCM, APNs and Expo adapters after a message had been judged, losing the results of the tokens already delivered. The push channel of
+  `dispatch` refused the same way.
   Those calls now resolve. No further request starts on a changed realm; a token that was not sent is answered
   `provider_unavailable`, `retryable: true`. A send with no request made is still refused.
 - **README and SECURITY.md:** the limits about stream event names, locked keys and a replaced

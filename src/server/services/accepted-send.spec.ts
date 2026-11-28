@@ -247,5 +247,7 @@ describe('a send the provider accepted before the realm was found changed', () =
     expect(JSON.stringify(warn.mock.calls)).toContain('BYMAX_NOTIFICATION_AUDIT_WRITE_FAILED')
     // The host set the option to false here, so the line must not say it was true.
     expect(JSON.stringify(warn.mock.calls)).not.toContain('swallowErrors is true')
+    // The sink's own write ran, so the line must not claim the entry was never written.
+    expect(JSON.stringify(warn.mock.calls)).not.toContain('could not be written')
   })
 })

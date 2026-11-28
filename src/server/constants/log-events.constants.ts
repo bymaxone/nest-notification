@@ -24,7 +24,7 @@ export const NOTIFICATION_LOG_EVENTS = {
   OTP_FAILURES_NOT_CARRIED: 'NOTIFICATION_OTP_FAILURES_NOT_CARRIED',
   /** The default OTP email template does not resolve (or could not be checked). */
   OTP_TEMPLATE_NOT_RESOLVED: 'NOTIFICATION_OTP_TEMPLATE_NOT_RESOLVED',
-  /** An audit entry could not be written and the failure was swallowed. */
+  /** An audit entry was not confirmed as written and the caller was not told. */
   AUDIT_WRITE_FAILED: 'NOTIFICATION_AUDIT_WRITE_FAILED',
   /** The Resend API call failed. */
   RESEND_SEND_FAILED: 'NOTIFICATION_RESEND_SEND_FAILED',

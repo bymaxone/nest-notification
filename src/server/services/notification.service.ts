@@ -142,10 +142,9 @@ export class NotificationService implements OnModuleInit {
       return accepted({ channel: 'email' as const, messageId })
     }
     if (channel === 'push') {
-      return {
-        channel: 'push',
-        result: await own(this.dispatchPush(tenantId, payload), 'NotificationService')
-      }
+      const result = await own(this.dispatchPush(tenantId, payload), 'NotificationService')
+      const answer = { channel: 'push' as const, result }
+      return isAccepted(result) ? accepted(answer) : answer
     }
     const result = await own(this.dispatchOtp(tenantId, payload), 'NotificationService')
     const answer = { channel: 'otp' as const, result }
@@ -295,6 +294,10 @@ export class NotificationService implements OnModuleInit {
     // `PushService.send`; the tenant is the request's, never the payload's.
     const copy = copyByName(payload, [...PUSH_KEYS, 'userId']) as unknown as PushDispatchPayload
     const result = await pinOnce(push.send({ ...copy, tenantId }), 'NotificationService')
+    // A push a provider accepted is not refused after the fact.
+    if (isAccepted(result)) {
+      return accepted(result)
+    }
     assertStandardRealmRoot('NotificationService')
     return result
   }

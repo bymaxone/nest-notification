@@ -10,6 +10,7 @@ import { generateKeyPairSync } from 'node:crypto'
 import { Logger } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
 
+import { BYMAX_NOTIFICATION_OBSERVER } from '../bymax-notification.constants'
 import { BymaxNotificationModule } from '../bymax-notification.module'
 import type { IPushProvider } from '../interfaces/push-provider.interface'
 import { ApnsPushProvider } from '../providers/apns-push.provider'
@@ -25,6 +26,7 @@ import { ExpoPushProvider } from '../providers/expo-push.provider'
 import { GOOGLE_TOKEN_URL } from '../providers/fcm-push.client'
 import { FcmPushProvider } from '../providers/fcm-push.provider'
 
+import { NotificationService } from './notification.service'
 import { PushService } from './push.service'
 
 const ROOT = Object.prototype as unknown as Record<string, unknown>
@@ -132,6 +134,15 @@ const EXPO_TOKENS = Array.from(
   (_, index) => `ExponentPushToken[${String(index).padStart(22, '0')}]`
 )
 
+/** An observer where the module can inject it, so the send runs through its observed path. */
+class ObserverModule {}
+const observerImport = {
+  module: ObserverModule,
+  global: true,
+  providers: [{ provide: BYMAX_NOTIFICATION_OBSERVER, useValue: { onSend: () => undefined } }],
+  exports: [BYMAX_NOTIFICATION_OBSERVER]
+}
+
 describe('a push a provider accepted before the realm was found changed', () => {
   beforeEach(() => {
     jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
@@ -183,6 +194,43 @@ describe('a push a provider accepted before the realm was found changed', () => 
     const result = await settle(() => push.send({ ...message, tenantId: 't1', tokens: ['a'] }))
     expect(result).toEqual({ results: [{ token: 'a', messageId: 'm1' }] })
     expect(rows).toEqual(['sent'])
+    expect(calledThen).not.toHaveBeenCalled()
+  })
+
+  // The facade has its own answer around the results: it must not refuse them either.
+  it.each([
+    ['zzz', false],
+    ['then', false],
+    ['zzz', true]
+  ])('should answer a push dispatch with the results (%s, observer: %s)', async (key, observed) => {
+    const provider: IPushProvider = {
+      name: 'accepting',
+      isConfigured: () => true,
+      send: async () => {
+        await new Promise((resolve) => setImmediate(resolve))
+        plant(key)
+        const results = [{ token: 'a', messageId: 'm1' }]
+        return Object.assign(Object.create(null) as object, { then: undefined, results })
+      }
+    }
+    const module = await Test.createTestingModule({
+      imports: [
+        ...(observed ? [observerImport] : []),
+        BymaxNotificationModule.forRoot({ push: { provider } })
+      ]
+    }).compile()
+    const notifications = module.get(NotificationService)
+    const result = await settle(() =>
+      notifications.dispatch({
+        channel: 'push',
+        tenantId: 't1',
+        payload: { ...message, tokens: ['a'] }
+      })
+    )
+    expect(result).toEqual({
+      channel: 'push',
+      result: { results: [{ token: 'a', messageId: 'm1' }] }
+    })
     expect(calledThen).not.toHaveBeenCalled()
   })
 
