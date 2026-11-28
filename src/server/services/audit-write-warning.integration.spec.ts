@@ -77,7 +77,7 @@ describe('swallowed audit failures leave a trace', () => {
       expect(ours()).toHaveLength(1)
       expect(ours()[0]).toBe(
         `[${CODE}] An audit entry could not be written by the otp channel (Error); ` +
-          "the operation's result is unaffected because audit.swallowErrors is true."
+          "the operation's result is unaffected."
       )
     })
 
@@ -154,7 +154,7 @@ describe('swallowed audit failures leave a trace', () => {
       expect(sent).toEqual({ messageId: 'msg_1' })
       expect(ours()).toEqual([
         `[${CODE}] An audit entry could not be written by the email channel (Error); ` +
-          "the operation's result is unaffected because audit.swallowErrors is true."
+          "the operation's result is unaffected."
       ])
     })
   })
@@ -181,7 +181,7 @@ describe('swallowed audit failures leave a trace', () => {
       expect(value).toBe('RESULT')
       expect(ours()).toEqual([
         `[${CODE}] An audit entry could not be written by the interceptor channel (Error); ` +
-          "the operation's result is unaffected because audit.swallowErrors is true."
+          "the operation's result is unaffected."
       ])
     })
 
@@ -211,7 +211,7 @@ describe('swallowed audit failures leave a trace', () => {
       expect(ours()).toEqual([
         `[${CODE}] An audit entry could not be written by the interceptor channel ` +
           '(notification.invalid_scope_identifier); ' +
-          "the operation's result is unaffected because audit.swallowErrors is true."
+          "the operation's result is unaffected."
       ])
     })
   })

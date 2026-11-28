@@ -235,5 +235,7 @@ describe('a send the provider accepted before the realm was found changed', () =
     expect(result).toEqual({ messageId: 'm1' })
     expect(rig.rows).toEqual([{ verb: 'sent' }])
     expect(JSON.stringify(warn.mock.calls)).toContain('BYMAX_NOTIFICATION_AUDIT_WRITE_FAILED')
+    // The host set the option to false here, so the line must not say it was true.
+    expect(JSON.stringify(warn.mock.calls)).not.toContain('swallowErrors is true')
   })
 })

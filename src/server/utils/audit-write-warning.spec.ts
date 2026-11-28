@@ -18,7 +18,7 @@ const CODE = 'BYMAX_NOTIFICATION_AUDIT_WRITE_FAILED'
 /** The line for a given reason, as the warning writes it. */
 const lineFor = (channel: string, reason: string): string =>
   `[${CODE}] An audit entry could not be written by the ${channel} channel (${reason}); ` +
-  "the operation's result is unaffected because audit.swallowErrors is true."
+  "the operation's result is unaffected."
 
 describe('AuditWriteWarning', () => {
   let warn: jest.SpyInstance

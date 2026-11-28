@@ -1,5 +1,5 @@
 /**
- * @fileoverview The warning logged when an audit write fails and `audit.swallowErrors` hides it.
+ * @fileoverview The warning logged when an audit write fails and the caller is not told.
  * @layer utils
  *
  * A failure the caller never sees must still be visible to the operator. With
@@ -108,7 +108,7 @@ export class AuditWriteWarning {
       NOTIFICATION_LOG_EVENTS.AUDIT_WRITE_FAILED,
       `[${WARNING_CODE}] An audit entry could not be written by the ${this.channel} channel ` +
         `(${reasonOf(error)}${similar}); ` +
-        "the operation's result is unaffected because audit.swallowErrors is true."
+        "the operation's result is unaffected."
     )
   }
 }
