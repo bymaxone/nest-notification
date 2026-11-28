@@ -26,6 +26,10 @@ the entries that carry one, is the compatibility contract — read it, not the n
   an `Object.prototype.toString` replaced by a non-function, and a refusal that arrives after the relay may already
   have accepted the message.
 
+#### Apply to a derived backend
+
+Nothing to change. The only change in the published declarations is a new private member of `SmtpEmailProvider`.
+
 ## [1.5.10] - 2026-11-27
 
 ### Fixed
