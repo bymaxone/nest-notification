@@ -76,17 +76,9 @@ const renderer = {
 /** Holds the observer where the library's module can inject it. */
 class ObserverModule {}
 
-/** The module around a provider that accepts every message, planting the key as it answers. */
-async function build(
-  key: string,
-  value: unknown,
-  options: { span?: boolean; sinkFails?: boolean; swallowErrors?: boolean } = {}
-): Promise<Rig> {
-  const rows: Array<{ verb: string }> = []
-  const outcomes: string[] = []
-  const codes: string[] = []
-  const storage = new InMemoryOtpStorage()
-  const provider: IEmailProvider = {
+/** A provider that accepts every message, planting the key as it answers. */
+function acceptingProvider(key: string, value: unknown, codes: string[]): IEmailProvider {
+  return {
     name: 'accepting',
     isConfigured: () => true,
     send: async (message) => {
@@ -99,14 +91,32 @@ async function build(
       }
     }
   }
-  const observer: INotificationObserver = {
+}
+
+/** An observer that records each outcome, with a span that only runs the send when asked. */
+function recordingObserver(outcomes: string[], span: boolean): INotificationObserver {
+  return {
     onSend: (event) => {
       outcomes.push(event.outcome)
     },
-    ...(options.span
+    ...(span
       ? { span: <T>(_name: unknown, _attributes: unknown, run: () => Promise<T>) => run() }
       : {})
   }
+}
+
+/** The module around a provider that accepts every message, planting the key as it answers. */
+async function build(
+  key: string,
+  value: unknown,
+  options: { span?: boolean; sinkFails?: boolean; swallowErrors?: boolean } = {}
+): Promise<Rig> {
+  const rows: Array<{ verb: string }> = []
+  const outcomes: string[] = []
+  const codes: string[] = []
+  const storage = new InMemoryOtpStorage()
+  const provider = acceptingProvider(key, value, codes)
+  const observer = recordingObserver(outcomes, options.span === true)
   const module = await Test.createTestingModule({
     imports: [
       {
