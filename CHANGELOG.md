@@ -23,7 +23,7 @@ the entries that carry one, is the compatibility contract — read it, not the n
   audit failure on an unchanged realm still throws `AUDIT_LOG_FAILED`. These answers carry an own, non-enumerable
   `then` that is `undefined`.
 - **A push the service accepted is no longer reported as failed.** The same refusal reached `PushService.send` and the
-  FCM, APNs and Expo adapters after a request had been answered, losing the results of the tokens already delivered.
+  FCM, APNs and Expo adapters after a message had been judged, losing the results of the tokens already delivered.
   Those calls now resolve. No further request starts on a changed realm; a token that was not sent is answered
   `provider_unavailable`, `retryable: true`. A send with no request made is still refused.
 - **README and SECURITY.md:** the limits about stream event names, locked keys and a replaced
