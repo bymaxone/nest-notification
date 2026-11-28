@@ -20,7 +20,8 @@ the entries that carry one, is the compatibility contract — read it, not the n
   hold, so a string under that name was called as an OAuth2 client: an uncaught `TypeError`, and a
   `verify()` that never settled. The adapter now gives each of those objects an own key for every name
   Nodemailer reads from it. A pool's `verify()` builds one the adapter cannot reach, so a pooled provider now
-  verifies on an unpooled transport. The call is refused or fails as for any other planted key.
+  verifies on an unpooled transport. `verify()` also no longer has Nodemailer copy the credentials
+  during the login, so a key locked on `Object.prototype` at that point is not assigned over. The call is refused or fails as for any other planted key.
 - **README: more limits of the realm check are stated:** an `Object.prototype.toString` replaced by a non-function, and a refusal
   that arrives after the relay may already have accepted the message.
 

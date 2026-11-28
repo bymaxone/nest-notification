@@ -127,6 +127,24 @@ describe.each([
     expect(result).toBe('SmtpEmailProvider: the relay did not accept the connection')
   })
 
+  // A key that cannot be assigned over throws where Nodemailer copies the credentials.
+  it.each([
+    ['non-writable', { value: 'x' }],
+    ['an accessor', { get: () => 'x' }]
+  ])('should settle verify() when oauth2 is planted as %s', async (_kind, descriptor) => {
+    const checker = await loggingIn(options, () => {
+      Object.defineProperty(Object.prototype, 'oauth2', { ...descriptor, configurable: true })
+      planted.push('oauth2')
+    })
+
+    const result = await outcome(checker.verify())
+    await checker.close()
+    await settleSockets()
+
+    expect(planted).toEqual(['oauth2'])
+    expect(result).toBe('SmtpEmailProvider: the relay did not accept the connection')
+  })
+
   it('should still log in and send on a clean realm', async () => {
     const sender = await loggingIn(options)
 

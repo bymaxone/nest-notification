@@ -54,6 +54,47 @@ describe('shadowTransportAuth', () => {
     expect(isComplete(answered)).toBe(true)
   })
 
+  it('should answer the auth it holds, building nothing, when the options add nothing', () => {
+    const auth = { type: 'LOGIN' }
+    const build = jest.fn(() => ({ type: 'OTHER' }))
+    const transporter = { auth, getAuth: build as (options?: unknown) => unknown }
+
+    shadowTransportAuth({ transporter })
+
+    expect(transporter.getAuth({})).toBe(auth)
+    expect(build).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['no options', []],
+    ['null', [null]],
+    ['a value that is not an object', [0]],
+    ['options of the call', [{ user: 'per-call' }]]
+  ])('should build when getAuth is given %s', (_label, args: unknown[]) => {
+    const built = { type: 'OTHER' }
+    const transporter = {
+      auth: { type: 'LOGIN' },
+      getAuth: (..._options: unknown[]): unknown => built
+    }
+
+    shadowTransportAuth({ transporter })
+
+    expect(transporter.getAuth(...args)).toBe(built)
+  })
+
+  it.each([
+    ['holds none', {}],
+    ['holds a false one', { auth: false }],
+    ['only inherits one', Object.create({ auth: { type: 'LOGIN' } }) as object]
+  ])('should build when the transport %s', (_label, holder) => {
+    const built = { type: 'OTHER' }
+    const transporter = Object.assign(holder, { getAuth: (_options: unknown): unknown => built })
+
+    shadowTransportAuth({ transporter })
+
+    expect(transporter.getAuth({})).toBe(built)
+  })
+
   it('should complete the auth of each connection a pool creates', () => {
     const connection = { auth: { type: 'LOGIN' } }
     const transporter = {
