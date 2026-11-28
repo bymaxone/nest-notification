@@ -8,9 +8,10 @@
  * the service's own text, an error message or a response body never leaves this file.
  */
 
+import { accepted } from '../utils/accepted-answer'
 import { errorCodeOf } from '../utils/availability'
 import { readBounded } from '../utils/bounded-body'
-import { checkedAwait } from '../utils/realm-root'
+import { checkedAwait, own } from '../utils/realm-root'
 import {
   MIXED_PROJECTS_CODE,
   OUTCOME_UNKNOWN,
@@ -110,14 +111,17 @@ export async function callExpo(
       }),
       options.owner
     )
-    text = await checkedAwait(readBounded(response, ANSWER_LIMIT, options.owner), options.owner)
+    // The request has been answered: a realm changed by now must not turn it into a lost one.
+    text = await own(readBounded(response, ANSWER_LIMIT, options.owner), options.owner)
   } catch (error) {
-    return { kind: 'failed', failure: classifyTransportFailure(errorCodeOf(error)) }
+    return accepted({ kind: 'failed', failure: classifyTransportFailure(errorCodeOf(error)) })
   }
   const body = parse(text)
   if (!response.ok) {
-    return refused(response.status, body)
+    return accepted(refused(response.status, body))
   }
   // A 2xx the service sent that does not parse may still have been acted on.
-  return body === undefined ? { kind: 'failed', failure: OUTCOME_UNKNOWN } : { kind: 'ok', body }
+  return accepted<ExpoCall>(
+    body === undefined ? { kind: 'failed', failure: OUTCOME_UNKNOWN } : { kind: 'ok', body }
+  )
 }

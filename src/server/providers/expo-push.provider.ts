@@ -21,10 +21,12 @@ import type {
   PushSendOptions,
   PushSendResult
 } from '../interfaces/push-provider.interface'
+import { accepted } from '../utils/accepted-answer'
+import { UNREACHABLE } from '../utils/push-outcome'
 import { readIdList, readPush } from '../utils/push-send-input'
 import type { ReadPush } from '../utils/push-send-input'
 import { assertOptionsObject, readOptionKeys } from '../utils/read-options'
-import { checkedAwait } from '../utils/realm-root'
+import { assertStandardRealmRoot, checkedAwait, own } from '../utils/realm-root'
 import { assertTimerMs } from '../utils/timer-option'
 import { EXPO_RECEIPTS_URL, EXPO_SEND_URL, callExpo, refused } from './expo-push.client'
 import type { ExpoCall, ExpoCallOptions, ExpoFetch, ExpoRefusal } from './expo-push.client'
@@ -77,6 +79,14 @@ class ExpoPushError extends Error {
   }
 }
 
+/** How the calls of one send have gone so far. */
+interface SendState {
+  sent: boolean
+  maybeSent: boolean
+  last: ExpoFailure
+  refusal?: unknown
+}
+
 /** Expo Push Service adapter. */
 @Injectable()
 export class ExpoPushProvider implements IPushProvider {
@@ -120,18 +130,19 @@ export class ExpoPushProvider implements IPushProvider {
         outcomes.set(token, failedOutcome(token, { reason: 'token_invalid', retryable: false }))
       }
     }
-    const state = { sent: false, maybeSent: false, last: UNKNOWN_FAILURE as ExpoFailure }
+    const state: SendState = { sent: false, maybeSent: false, last: UNKNOWN_FAILURE }
     for (const chunk of chunksOf(valid, SEND_CHUNK)) {
-      for (const outcome of await checkedAwait(this.#sendChunk(push, chunk, state), OWNER)) {
+      for (const outcome of await own(this.#sendChunk(push, chunk, state), OWNER)) {
         outcomes.set(outcome.token, outcome)
       }
     }
     // Only when nothing reached the service is a throw safe: a caller that retries it cannot repeat
     // what an earlier call carried. A token given twice is sent once and answered in each place it appeared.
     if (valid.length > 0 && !state.sent && !state.maybeSent) {
-      throw new ExpoPushError(state.last)
+      // A realm found changed refuses the send only when no message went out.
+      throw state.refusal ?? new ExpoPushError(state.last)
     }
-    return { results: push.tokens.map((token) => outcomes.get(token) as TokenOutcome) }
+    return accepted({ results: push.tokens.map((token) => outcomes.get(token) as TokenOutcome) })
   }
 
   /** @inheritdoc */
@@ -159,21 +170,21 @@ export class ExpoPushProvider implements IPushProvider {
   async #sendChunk(
     push: ReadPush,
     tokens: readonly string[],
-    state: { sent: boolean; maybeSent: boolean; last: ExpoFailure }
+    state: SendState
   ): Promise<TokenOutcome[]> {
-    const call = await checkedAwait(this.#call(EXPO_SEND_URL, buildMessages(push, tokens)), OWNER)
+    const call = await own(this.#post(buildMessages(push, tokens), state), OWNER)
     if (call.kind === 'ok') {
       state.sent = true
-      return readTickets(tokens, call.body)
+      return accepted(readTickets(tokens, call.body))
     }
     state.last = call.failure
     if (call.failure === OUTCOME_UNKNOWN) {
       state.maybeSent = true
     }
     if (call.mixedProjects !== undefined) {
-      return this.#sendByProject(push, tokens, call, state)
+      return own(this.#sendByProject(push, tokens, call, state), OWNER)
     }
-    return tokens.map((token) => failedOutcome(token, call.failure))
+    return accepted(tokens.map((token) => failedOutcome(token, call.failure)))
   }
 
   /**
@@ -184,11 +195,11 @@ export class ExpoPushProvider implements IPushProvider {
     push: ReadPush,
     tokens: readonly string[],
     refused: ExpoRefusal,
-    state: { sent: boolean; maybeSent: boolean; last: ExpoFailure }
+    state: SendState
   ): Promise<TokenOutcome[]> {
     const outcomes = new Map<string, TokenOutcome>()
     for (const group of groupByProject(tokens, refused.mixedProjects)) {
-      const call = await checkedAwait(this.#call(EXPO_SEND_URL, buildMessages(push, group)), OWNER)
+      const call = await own(this.#post(buildMessages(push, group), state), OWNER)
       if (call.kind === 'ok') {
         state.sent = true
         readTickets(group, call.body).forEach((outcome) => outcomes.set(outcome.token, outcome))
@@ -198,10 +209,23 @@ export class ExpoPushProvider implements IPushProvider {
         group.forEach((token) => outcomes.set(token, failedOutcome(token, call.failure)))
       }
     }
-    return tokens.map(
-      (token) =>
-        outcomes.get(token) ?? failedOutcome(token, { reason: 'token_invalid', retryable: false })
+    return accepted(
+      tokens.map(
+        (token) =>
+          outcomes.get(token) ?? failedOutcome(token, { reason: 'token_invalid', retryable: false })
+      )
     )
+  }
+
+  /** One send call, not made on a realm that was changed. */
+  async #post(payload: unknown, state: SendState): Promise<ExpoCall> {
+    try {
+      assertStandardRealmRoot(OWNER)
+    } catch (refusal) {
+      state.refusal = refusal
+      return accepted({ kind: 'failed', failure: UNREACHABLE })
+    }
+    return own(this.#call(EXPO_SEND_URL, payload), OWNER)
   }
 
   /** One call with this provider's bound, access token and fetch. */

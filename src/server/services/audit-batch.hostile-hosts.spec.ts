@@ -95,8 +95,9 @@ describe('EmailService.send when onSend plants a then that answers a forged resu
 
     const result = await outcome(() => email.send(SEND))
 
-    expect(result.value).not.toStrictEqual({ messageId: 'forged' })
-    expect(result.ok).toBe(false)
+    // The provider had accepted: the real id is answered, never the planted one and never a refusal.
+    expect(result.ok).toBe(true)
+    expect(result.value).toEqual({ messageId: 'msg_1' })
   })
 })
 

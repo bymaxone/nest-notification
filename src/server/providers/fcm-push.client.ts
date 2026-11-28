@@ -5,11 +5,12 @@
  * The hosts are constants of this file and a redirect is refused rather than followed.
  */
 
+import { accepted } from '../utils/accepted-answer'
 import { errorCodeOf } from '../utils/availability'
 import { readBounded } from '../utils/bounded-body'
 import { transportFailure } from '../utils/push-outcome'
 import type { PushFailure } from '../utils/push-outcome'
-import { checkedAwait } from '../utils/realm-root'
+import { checkedAwait, own } from '../utils/realm-root'
 
 // Read from the global once, when the module loads: a later replacement of the built-in changes nothing here.
 const parseJson = JSON.parse
@@ -76,12 +77,10 @@ export async function postToGoogle(
       }),
       options.owner
     )
-    const text = await checkedAwait(
-      readBounded(response, ANSWER_LIMIT, options.owner),
-      options.owner
-    )
-    return { kind: 'answer', status: response.status, body: parse(text) }
+    // The request has been answered: a realm changed by now must not turn it into a lost one.
+    const text = await own(readBounded(response, ANSWER_LIMIT, options.owner), options.owner)
+    return accepted({ kind: 'answer', status: response.status, body: parse(text) })
   } catch (error) {
-    return { kind: 'lost', failure: transportFailure(errorCodeOf(error)) }
+    return accepted({ kind: 'lost', failure: transportFailure(errorCodeOf(error)) })
   }
 }

@@ -11,6 +11,25 @@ the entries that carry one, is the compatibility contract — read it, not the n
 
 ## [Unreleased]
 
+## [1.5.12] - 2026-11-28
+
+### Fixed
+
+- **A send the provider accepted is no longer reported as failed.** A key planted on `Object.prototype` while the relay
+  or Resend had the message was refused (`INVALID_SCOPE_IDENTIFIER`) after the acceptance, so a caller that retried
+  delivered it twice. The SMTP and Resend adapters, `EmailService.send` and `sendTemplate`, the email channel of
+  `NotificationService.dispatch` and an emailed `OtpService.generate` now answer it as sent (RFC 5321, section 6.1).
+  An audit write whose outcome the changed realm hides is warned about, even with `audit.swallowErrors: false`; an
+  audit failure on an unchanged realm still throws `AUDIT_LOG_FAILED`. These answers carry an own, non-enumerable
+  `then` that is `undefined`.
+- **A push the service accepted is no longer reported as failed.** The same refusal reached `PushService.send` and the
+  FCM, APNs and Expo adapters after a request had been answered, losing the results of the tokens already delivered.
+  Those calls now resolve. No further request starts on a changed realm; a token that was not sent is answered
+  `provider_unavailable`, `retryable: true`. A send with no request made is still refused.
+- **README and SECURITY.md:** the limits about stream event names, locked keys and a replaced
+  `Object.prototype.toString` are replaced by the trust model:
+  the application keeps `Object.prototype` clean.
+
 ## [1.5.11] - 2026-11-27
 
 ### Fixed
@@ -2263,7 +2282,8 @@ rejected at startup rather than failing on the first send.
 
 [1.0.4]: https://github.com/bymaxone/nest-notification/compare/v1.0.3...v1.0.4
 [1.0.3]: https://github.com/bymaxone/nest-notification/compare/v1.0.2...v1.0.3
-[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.5.11...HEAD
+[Unreleased]: https://github.com/bymaxone/nest-notification/compare/v1.5.12...HEAD
+[1.5.12]: https://github.com/bymaxone/nest-notification/compare/v1.5.11...v1.5.12
 [1.5.11]: https://github.com/bymaxone/nest-notification/compare/v1.5.10...v1.5.11
 [1.5.10]: https://github.com/bymaxone/nest-notification/compare/v1.5.9...v1.5.10
 [1.5.9]: https://github.com/bymaxone/nest-notification/compare/v1.5.8...v1.5.9

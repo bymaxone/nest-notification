@@ -39,6 +39,7 @@ import type {
 import type { OtpPurposeConfig } from '../interfaces/notification-module-options.interface'
 import type { INotificationObserver } from '../interfaces/notification-observer.interface'
 import type { IOtpStorage, OtpEntry, OtpVerifyResult } from '../interfaces/otp-storage.interface'
+import { accepted, auditAfterAcceptance } from '../utils/accepted-answer'
 import { writeAudit } from '../utils/audit-write'
 import { AuditWriteWarning } from '../utils/audit-write-warning'
 import { generateOtpCode } from '../utils/code-generator'
@@ -213,9 +214,17 @@ export class OtpService implements OnModuleInit {
     }
     await own(this.persistAndDeliver(input, scope, code, entry, cfg))
     reportOtp(this.observer, { event: 'issued' })
-    await own(this.audit(this.otpAuditEntry('generated', scope, undefined)))
+    const answer = { expiresAt, cooldownSeconds: cfg.resendCooldownSeconds }
+    const row = this.otpAuditEntry('generated', scope, undefined)
+    if (this.deliveryOf(input) === 'email') {
+      // The provider accepted the code: from here on a changed realm does not refuse the call.
+      const warn = (error: unknown): void => this.auditWarning.warn(error)
+      await own(auditAfterAcceptance(own(this.audit(row)), warn, 'OtpService'))
+      return accepted(answer)
+    }
+    await own(this.audit(row))
     assertStandardRealmRoot('OtpService')
-    return { expiresAt, cooldownSeconds: cfg.resendCooldownSeconds }
+    return answer
   }
 
   /**

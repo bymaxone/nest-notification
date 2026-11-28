@@ -17,6 +17,7 @@ import type {
   PushSendOptions,
   PushSendResult
 } from '../interfaces/push-provider.interface'
+import { accepted } from '../utils/accepted-answer'
 import {
   MESSAGE_TOO_BIG,
   OUTCOME_UNKNOWN,
@@ -28,8 +29,9 @@ import {
 import type { PushFailure, PushOutcome } from '../utils/push-outcome'
 import { isUsableToken, readPush } from '../utils/push-send-input'
 import { assertOptionsObject, readOptionKeys } from '../utils/read-options'
-import { checkedAwait, silence } from '../utils/realm-root'
+import { assertStandardRealmRoot, checkedAwait, own, silence } from '../utils/realm-root'
 import { assertTimerMs } from '../utils/timer-option'
+import type { FcmGrant } from './fcm-push.auth'
 import { FcmAccessTokens, readRsaKey } from './fcm-push.auth'
 import { fcmSendUrl, postToGoogle } from './fcm-push.client'
 import type { FcmCall, FcmCallOptions, FcmFetch } from './fcm-push.client'
@@ -79,6 +81,8 @@ interface Delivery {
 
 /** The state the requests of one `send` share. */
 interface Batch {
+  /** The realm refusal that stopped the batch, if one did. */
+  refusal?: unknown
   readonly tokens: readonly string[]
   readonly body: FcmMessageBody
   readonly deliveries: Map<string, Delivery>
@@ -206,18 +210,19 @@ export class FcmPushProvider implements IPushProvider {
       }
     }
     const batch: Batch = { tokens: valid, body, deliveries: new Map(), next: 0 }
-    await checkedAwait(this.#sendAll(batch), OWNER)
+    await own(this.#sendAll(batch), OWNER)
     // A throw is safe only when no request reached a judgement of the message, so that a caller who retries it repeats nothing.
     const failure = nothingSent(batch.deliveries)
     if (failure !== undefined) {
-      throw new FcmPushError(failure)
+      // A realm found changed refuses the send only when no message went out.
+      throw batch.refusal ?? new FcmPushError(failure)
     }
     // A token given twice is sent once and answered in each place it appeared.
-    return {
+    return accepted({
       results: push.tokens.map(
         (token) => ((batch.deliveries.get(token) ?? deliveries.get(token)) as Delivery).outcome
       )
-    }
+    })
   }
 
   /** Runs the workers of a batch and waits for each. */
@@ -231,7 +236,7 @@ export class FcmPushProvider implements IPushProvider {
       workers.push(worker)
     }
     for (const worker of workers) {
-      await checkedAwait(worker, OWNER)
+      await own(worker, OWNER)
     }
   }
 
@@ -240,26 +245,36 @@ export class FcmPushProvider implements IPushProvider {
     while (batch.next < batch.tokens.length) {
       const token = batch.tokens[batch.next] as string
       batch.next += 1
-      batch.deliveries.set(token, await checkedAwait(this.#deliver(batch, token), OWNER))
+      batch.deliveries.set(token, await own(this.#deliver(batch, token), OWNER))
     }
   }
 
   /** Sends one token, once more with a new access token when the first was refused as expired. */
   async #deliver(batch: Batch, token: string, retried = false): Promise<Delivery> {
     if (batch.noGrant !== undefined) {
-      return unsent(token, batch.noGrant)
+      return accepted(unsent(token, batch.noGrant))
     }
-    const grant = await checkedAwait(this.#tokens.get(), OWNER)
+    let grant: FcmGrant
+    try {
+      // Checked before the token is asked for, whose answer would otherwise resolve on a changed realm,
+      assertStandardRealmRoot(OWNER)
+      grant = await checkedAwait(this.#tokens.get(), OWNER)
+      // and again with nothing between it and the request: no message starts on a changed realm.
+      assertStandardRealmRoot(OWNER)
+    } catch (refusal) {
+      batch.refusal = refusal
+      return accepted(unsent(token, UNREACHABLE))
+    }
     if (grant.kind === 'failed') {
       batch.noGrant = grant.failure
-      return unsent(token, grant.failure)
+      return accepted(unsent(token, grant.failure))
     }
     const headers = {
       authorization: `Bearer ${grant.token}`,
       'content-type': 'application/json',
       accept: 'application/json'
     }
-    const call = await checkedAwait(
+    const call = await own(
       postToGoogle(this.#url, headers, sendBody(token, batch.body), this.#call),
       OWNER
     )
@@ -269,8 +284,8 @@ export class FcmPushProvider implements IPushProvider {
       fcmErrorCode(call.body) !== 'THIRD_PARTY_AUTH_ERROR'
     if (expired && !retried) {
       this.#tokens.drop(grant.token)
-      return checkedAwait(this.#deliver(batch, token, true), OWNER)
+      return own(this.#deliver(batch, token, true), OWNER)
     }
-    return readDelivery(token, call)
+    return accepted(readDelivery(token, call))
   }
 }
