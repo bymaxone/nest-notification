@@ -182,16 +182,16 @@ const RETURN_SCOPE = [
 ]
 
 const SEALS =
-  /^(assertStandardRealmRoot|boxed|nullProto|assignTo|createBare|frozenCopy|Object\.create)/u
+  /^(assertStandardRealmRoot|boxed|nullProto|assignTo|createBare|frozenCopy|Object\.create|accepted\()/u
 
 const RETURN_EXEMPT: Readonly<Record<string, { count: number; reason: string }>> = {
   'server/services/email.service.ts': {
-    count: 8,
+    count: 7,
     reason:
       'Returns of the provider result and of strings after awaits whose callee asserts the realm last, or of a promise that always rejects; sendUnobserved and the public methods assert before they resolve with an object.'
   },
   'server/services/notification.service.ts': {
-    count: 5,
+    count: 4,
     reason:
       'route builds the answer from callees that end with their own check and run no host code after it, and dispatch pins and checks it as it is handed over; the messageId return is a string.'
   },

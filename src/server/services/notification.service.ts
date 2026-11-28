@@ -16,6 +16,7 @@ import { NOTIFICATION_LOG_EVENTS } from '../constants/log-events.constants'
 import { NotificationException } from '../errors/notification-exception'
 import type { OtpVerifyResult } from '../interfaces/otp-storage.interface'
 import type { PushSendResult } from '../interfaces/push-provider.interface'
+import { accepted, isAccepted } from '../utils/accepted-answer'
 import { copyByName, refuseInput } from '../utils/bounded-list'
 import { logEvent } from '../utils/log-event'
 import { readOtpAction } from '../utils/otp-input'
@@ -137,21 +138,17 @@ export class NotificationService implements OnModuleInit {
       throw refuseInput('NotificationService', 'channel', 'expected email, otp or push')
     }
     if (channel === 'email') {
-      return {
-        channel: 'email',
-        messageId: await own(this.dispatchEmail(tenantId, payload), 'NotificationService')
-      }
+      const messageId = await own(this.dispatchEmail(tenantId, payload), 'NotificationService')
+      return accepted({ channel: 'email' as const, messageId })
     }
     if (channel === 'push') {
-      return {
-        channel: 'push',
-        result: await own(this.dispatchPush(tenantId, payload), 'NotificationService')
-      }
+      const result = await own(this.dispatchPush(tenantId, payload), 'NotificationService')
+      const answer = { channel: 'push' as const, result }
+      return isAccepted(result) ? accepted(answer) : answer
     }
-    return {
-      channel: 'otp',
-      result: await own(this.dispatchOtp(tenantId, payload), 'NotificationService')
-    }
+    const result = await own(this.dispatchOtp(tenantId, payload), 'NotificationService')
+    const answer = { channel: 'otp' as const, result }
+    return isAccepted(result) ? accepted(answer) : answer
   }
 
   /**
@@ -297,6 +294,10 @@ export class NotificationService implements OnModuleInit {
     // `PushService.send`; the tenant is the request's, never the payload's.
     const copy = copyByName(payload, [...PUSH_KEYS, 'userId']) as unknown as PushDispatchPayload
     const result = await pinOnce(push.send({ ...copy, tenantId }), 'NotificationService')
+    // A push a provider accepted is not refused after the fact.
+    if (isAccepted(result)) {
+      return accepted(result)
+    }
     assertStandardRealmRoot('NotificationService')
     return result
   }
@@ -344,6 +345,10 @@ export class NotificationService implements OnModuleInit {
             })
     // Awaited, not returned: returning a promise from an async function reads its `then`.
     const result = await pinOnce(pending, 'NotificationService')
+    // A code that left by email is not refused after the fact.
+    if (isAccepted(result)) {
+      return accepted(result as OtpGenerateResult)
+    }
     assertStandardRealmRoot('NotificationService')
     return result
   }

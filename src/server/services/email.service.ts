@@ -31,6 +31,7 @@ import type {
   NotificationLogEntry
 } from '../interfaces/notification-log-repository.interface'
 import type { INotificationObserver } from '../interfaces/notification-observer.interface'
+import { accepted, auditAfterAcceptance } from '../utils/accepted-answer'
 import { writeAudit } from '../utils/audit-write'
 import { AuditWriteWarning } from '../utils/audit-write-warning'
 import { isUnavailableProviderError } from '../utils/availability'
@@ -49,7 +50,7 @@ import { maskAddressTokens } from '../utils/mask-in-text'
 import { reportSend, runInSpan } from '../utils/observe'
 import { rethrowRefusal } from '../utils/provider-refusal'
 import { nullProto } from '../utils/read-options'
-import { assertStandardRealmRoot, checkedAwait, own, ownChecked } from '../utils/realm-root'
+import { checkedAwait, own, ownChecked } from '../utils/realm-root'
 import { countRecipients } from '../utils/recipient-list'
 import {
   collectEchoedExcerpts,
@@ -314,7 +315,9 @@ export class EmailService {
    * @param run - The send, which records in `progress` how far it gets.
    * @returns What the send returns.
    */
-  private async observed<T>(run: (progress: SendProgress) => Promise<T>): Promise<T> {
+  private async observed<T extends object>(
+    run: (progress: SendProgress) => Promise<T>
+  ): Promise<T> {
     const progress: SendProgress = { stage: 'before-provider' }
     const started = process.hrtime.bigint()
     const seconds = (): number => Number(process.hrtime.bigint() - started) / NANOSECONDS_PER_SECOND
@@ -339,9 +342,7 @@ export class EmailService {
       throw error
     }
     reportSend(this.observer, { channel: 'email', outcome: 'sent', seconds: seconds() })
-    // The observer's call ran after the awaits: a `then` it planted must not answer for the result.
-    assertStandardRealmRoot('EmailService')
-    return result
+    return accepted(result)
   }
 
   /**
@@ -367,24 +368,21 @@ export class EmailService {
     this.guardRecipientCount(input, email.maxRecipients)
     const sendOptions = this.buildSendOptions(input, email)
     const recipient = this.maskRecipients(input.to)
-    const result = await own(this.deliver(sendOptions, input, recipient, progress), 'EmailService')
-    const { messageId } = result // once, before the host's audit sink
-    await own(
-      this.audit(
-        this.auditEntry(
-          'sent',
-          providerNameOf(this.provider),
-          input.tenantId,
-          recipient,
-          input.userId,
-          { messageId }
-        )
-      ),
+    const { messageId } = await own(
+      this.deliver(sendOptions, input, recipient, progress),
       'EmailService'
     )
-    // Last before the return: the host's audit sink ran since the awaits.
-    assertStandardRealmRoot('EmailService')
-    return { messageId }
+    const row = this.auditEntry(
+      'sent',
+      providerNameOf(this.provider),
+      input.tenantId,
+      recipient,
+      input.userId,
+      { messageId }
+    )
+    const warn = (error: unknown): void => this.auditWarning.warn(error)
+    await own(auditAfterAcceptance(this.audit(row), warn, 'EmailService'), 'EmailService')
+    return accepted({ messageId })
   }
 
   /**
@@ -402,7 +400,7 @@ export class EmailService {
    * @param input - The original input, for redaction values and the audit entry.
    * @param recipient - The already-masked recipient.
    * @param progress - Where the send records how far it gets.
-   * @returns The provider's result.
+   * @returns The provider's message id, marked as an accepted answer.
    * @throws NotificationException `EMAIL_SEND_FAILED`, carrying only what the
    * caller allows to be published.
    */
@@ -412,16 +410,18 @@ export class EmailService {
     recipient: string,
     progress: SendProgress
   ): Promise<{ messageId: string }> {
+    let result: { messageId: string }
     try {
-      const result = await checkedAwait(this.provider.send(sendOptions), 'EmailService')
+      result = await checkedAwait(this.provider.send(sendOptions), 'EmailService')
       progress.stage = 'accepted'
-      return result
     } catch (error) {
       // The provider refused the message as given: nothing was sent, so it is not a failed delivery.
       rethrowRefusal(error, 'EmailService')
       progress.stage = 'failed'
       return await own(this.failDelivery(error, sendOptions, input, recipient), 'EmailService')
     }
+    // Read once, before the host's audit sink. From here on nothing refuses the send.
+    return accepted({ messageId: result.messageId })
   }
 
   /**

@@ -21,6 +21,7 @@ import type {
   EmailSendResult,
   IEmailProvider
 } from '../interfaces/email-provider.interface'
+import { accepted } from '../utils/accepted-answer'
 import { errorCodeOf } from '../utils/availability'
 import { refuseInput } from '../utils/bounded-list'
 import { assertBodyParts } from '../utils/email-body'
@@ -323,9 +324,8 @@ export class ResendEmailProvider implements IEmailProvider {
    * maps any thrown `Error` to `EMAIL_SEND_FAILED`.
    */
   async send(options: EmailSendOptions): Promise<EmailSendResult> {
-    const sent = await own(this.sendRead(readSendOptions(options)), 'ResendEmailProvider')
-    assertStandardRealmRoot('ResendEmailProvider')
-    return sent
+    const { messageId } = await own(this.sendRead(readSendOptions(options)), 'ResendEmailProvider')
+    return accepted({ messageId })
   }
 
   /** Sends a message already read by name, whose fields no key planted on the realm root can answer for. */
@@ -351,10 +351,14 @@ export class ResendEmailProvider implements IEmailProvider {
           'ResendEmailProvider'
         )
       ).value
-      assertStandardRealmRoot('ResendEmailProvider')
     } catch (error) {
+      assertStandardRealmRoot('ResendEmailProvider')
       rethrowRefusal(error, 'EmailService')
       throw this.rejectedSend(error, options, signal, timeoutMs)
+    }
+    // An answer without an id was not an acceptance: on a changed realm it is refused, not read.
+    if (result.error || !result.data?.id) {
+      assertStandardRealmRoot('ResendEmailProvider')
     }
     if (result.error) {
       // The SDK's error object is consumer code too, so reading its `message`
@@ -365,9 +369,8 @@ export class ResendEmailProvider implements IEmailProvider {
     if (!messageId) {
       throw new Error('Resend returned no message ID')
     }
-    // The host's getters ran above: the realm is checked again before the answer is built.
-    assertStandardRealmRoot('ResendEmailProvider')
-    return { messageId }
+    // Resend accepted the message: the send is answered as sent, whatever the realm holds now.
+    return accepted({ messageId })
   }
 
   /**

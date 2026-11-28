@@ -5,6 +5,8 @@
  * @layer application
  */
 
+import { Logger } from '@nestjs/common'
+
 import { InMemoryOtpStorage } from '../providers/in-memory-otp.storage'
 import { EmailService } from './email.service'
 import { OtpService } from './otp.service'
@@ -132,7 +134,9 @@ describe('EmailService.send when the span promise never settles', () => {
 })
 
 describe('EmailService.send when a failed audit write plants the await accessors', () => {
-  it('should reject instead of resuming as a success', async () => {
+  // The provider accepted before the sink ran: the send is answered as sent and the row loss warned.
+  it('should answer the accepted send and warn about the audit row', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
     const audit = makeEmailAudit()
     audit.create.mockImplementation((() => {
       plantAwaitAnswer(undefined)
@@ -147,7 +151,9 @@ describe('EmailService.send when a failed audit write plants the await accessors
 
     const result = await outcome(() => email.send(SEND))
 
-    expect(result.ok).toBe(false)
+    expect(result.ok).toBe(true)
+    expect(result.value).toEqual({ messageId: 'msg_1' })
+    expect(JSON.stringify(warn.mock.calls)).toContain('BYMAX_NOTIFICATION_AUDIT_WRITE_FAILED')
   })
 })
 

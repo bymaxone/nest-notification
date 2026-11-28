@@ -95,15 +95,6 @@ const SMTP_ROWS: ReadonlyArray<readonly [string, () => Promise<unknown>, string]
     unpinnable(SMTP)
   ],
   [
-    'send after its read',
-    () =>
-      smtp('sendRead', async () => {
-        plant()
-        return { messageId: '<m@x>' }
-      }).send(MESSAGE),
-    polluted(SMTP)
-  ],
-  [
     'read awaiting the transport',
     () => smtp('getTransport', frozen({})).send(MESSAGE),
     unpinnable(SMTP)
@@ -112,15 +103,6 @@ const SMTP_ROWS: ReadonlyArray<readonly [string, () => Promise<unknown>, string]
     'read awaiting the dispatch',
     () => smtp('dispatch', frozen({})).send(MESSAGE),
     unpinnable(SMTP)
-  ],
-  [
-    'read after the dispatch',
-    () =>
-      smtp('dispatch', async () => {
-        plant()
-        return { messageId: '<m@x>' }
-      }).send(MESSAGE),
-    polluted(SMTP)
   ],
   [
     'dispatch after the relay was called',
@@ -152,15 +134,6 @@ const RESEND_ROWS: ReadonlyArray<readonly [string, () => Promise<unknown>, strin
     unpinnable(RESEND)
   ],
   [
-    'send after its read',
-    () =>
-      resend('sendRead', async () => {
-        plant()
-        return { messageId: 'r1' }
-      }).send(MESSAGE),
-    polluted(RESEND)
-  ],
-  [
     'read awaiting the client',
     () => resend('getClient', frozen({})).send(MESSAGE),
     unpinnable(RESEND)
@@ -169,9 +142,40 @@ const RESEND_ROWS: ReadonlyArray<readonly [string, () => Promise<unknown>, strin
     'client build awaiting the import',
     () => resend('loadResendConstructor', frozen({})).send(MESSAGE),
     unpinnable(RESEND)
+  ]
+]
+
+/** Steps that leave the realm changed once the provider has accepted the message. */
+const ACCEPTED_ROWS: ReadonlyArray<readonly [string, () => Promise<unknown>, string]> = [
+  [
+    'SMTP send after its read',
+    () =>
+      smtp('sendRead', async () => {
+        plant()
+        return { messageId: '<m@x>' }
+      }).send(MESSAGE),
+    '<m@x>'
   ],
   [
-    'read after the SDK answered',
+    'SMTP read after the dispatch',
+    () =>
+      smtp('dispatch', async () => {
+        plant()
+        return { value: { messageId: '<m@x>' } }
+      }).send(MESSAGE),
+    '<m@x>'
+  ],
+  [
+    'Resend send after its read',
+    () =>
+      resend('sendRead', async () => {
+        plant()
+        return { messageId: 'r1' }
+      }).send(MESSAGE),
+    'r1'
+  ],
+  [
+    'Resend read after the SDK answered',
     () => {
       mockResendSend.mockResolvedValue({
         data: {
@@ -184,9 +188,16 @@ const RESEND_ROWS: ReadonlyArray<readonly [string, () => Promise<unknown>, strin
       })
       return resend().send(MESSAGE)
     },
-    polluted(RESEND)
+    'r1'
   ]
 ]
+
+// A refusal here would tell the caller to send an accepted message again.
+describe('an adapter whose provider has accepted the message', () => {
+  it.each(ACCEPTED_ROWS)('should answer as sent: %s', async (_name, run, messageId) => {
+    await expect(run()).resolves.toEqual({ messageId })
+  })
+})
 
 const REFUSED_AS_GIVEN = '[EmailService] message the provider refused the message as given'
 

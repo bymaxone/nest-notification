@@ -131,9 +131,10 @@ describe('PushService and the answer of a host provider', () => {
     const { audit } = recorder()
 
     try {
-      await expect(new PushService(options, provider, audit, observer).send(input)).rejects.toThrow(
-        NotificationException
-      )
+      // The provider has the message: a refusal now would have the caller send it again.
+      await expect(
+        new PushService(options, provider, audit, observer).send(input)
+      ).resolves.toMatchObject({ results: [{ messageId: 'a' }, { messageId: 'b' }] })
     } finally {
       Reflect.deleteProperty(Object.prototype, 'plantedByProvider')
     }

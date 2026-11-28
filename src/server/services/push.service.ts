@@ -32,6 +32,7 @@ import type {
   PushSendOptions,
   PushSendResult
 } from '../interfaces/push-provider.interface'
+import { accepted, auditAfterAcceptance, isAccepted } from '../utils/accepted-answer'
 import { writeAudit } from '../utils/audit-write'
 import { AuditWriteWarning } from '../utils/audit-write-warning'
 import { isUnavailableProviderError } from '../utils/availability'
@@ -245,6 +246,10 @@ export class PushService {
       outcome: progress.stage === 'failed' ? 'failed' : 'sent',
       seconds: seconds()
     })
+    // An answer the provider gave is returned whatever the realm holds by now.
+    if (isAccepted(result)) {
+      return accepted(result as T & object)
+    }
     assertStandardRealmRoot(OWNER)
     return result
   }
@@ -281,9 +286,15 @@ export class PushService {
       )
     }
     progress.stage = allFailed(answer.results) ? 'failed' : 'accepted'
-    await own(this.audit(this.auditEntry(scope, answer)), OWNER)
-    assertStandardRealmRoot(OWNER)
-    return answer
+    if (usable.length === 0) {
+      await own(this.audit(this.auditEntry(scope, answer)), OWNER)
+      assertStandardRealmRoot(OWNER)
+      return answer
+    }
+    const row = this.audit(this.auditEntry(scope, answer))
+    const warn = (error: unknown): void => this.auditWarning.warn(error)
+    await own(auditAfterAcceptance(row, warn, OWNER), OWNER)
+    return accepted(answer)
   }
 
   /** Hands the message to the provider; any failure it raises becomes `PUSH_SEND_FAILED`. */
@@ -298,8 +309,8 @@ export class PushService {
         throw new TypeError()
       }
       progress.stage = 'accepted'
-      assertStandardRealmRoot(OWNER)
-      return answer
+      // A fresh object: returning the provider's own would read `then` off it.
+      return accepted({ results: answer.results })
     } catch (error) {
       rethrowRefusal(error, OWNER)
       progress.stage = 'failed'

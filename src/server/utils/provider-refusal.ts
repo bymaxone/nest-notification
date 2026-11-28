@@ -14,7 +14,7 @@ import { refuseInput } from './bounded-list'
 import { isLibraryError } from './is-library-error'
 
 /** The code of a library error; `undefined` for anything else, and for one whose code cannot be read. */
-function libraryCode(error: unknown): string | undefined {
+export function libraryCode(error: unknown): string | undefined {
   try {
     return isLibraryError(error) ? error.code : undefined
   } catch {

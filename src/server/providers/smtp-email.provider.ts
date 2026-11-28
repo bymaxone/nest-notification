@@ -28,6 +28,7 @@ import type {
   EmailSendResult,
   IEmailProvider
 } from '../interfaces/email-provider.interface'
+import { accepted } from '../utils/accepted-answer'
 import { errorCodeOf } from '../utils/availability'
 import { extractDeliveryStatus, withoutDeclaredValues } from '../utils/delivery-status'
 import { describeError, UNPRINTABLE_ERROR } from '../utils/describe-error'
@@ -253,9 +254,8 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
    * comes back. `EmailService` maps any thrown `Error` to `EMAIL_SEND_FAILED`.
    */
   async send(options: EmailSendOptions): Promise<EmailSendResult> {
-    const sent = await own(this.sendRead(readSendOptions(options)), 'SmtpEmailProvider')
-    assertStandardRealmRoot('SmtpEmailProvider')
-    return sent
+    const { messageId } = await own(this.sendRead(readSendOptions(options)), 'SmtpEmailProvider')
+    return accepted({ messageId })
   }
 
   /** Sends a message already read by name, whose fields no key planted on the realm root can answer for. */
@@ -289,14 +289,12 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
       options.redactValues,
       options.publishProviderText
     )
-    const info = await own(dispatched, 'SmtpEmailProvider')
-    const messageId = info.messageId
+    const messageId = (await own(dispatched, 'SmtpEmailProvider')).value.messageId
     if (!messageId) {
       throw new Error('SMTP transport returned no message ID')
     }
-    // The host's getter ran above: the realm is checked again before the answer is built.
-    assertStandardRealmRoot('SmtpEmailProvider')
-    return { messageId }
+    // The relay accepted the message: the send is answered as sent, whatever the realm holds now.
+    return accepted({ messageId })
   }
 
   /**
@@ -375,7 +373,7 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
    *
    * @param transport - The initialized transport.
    * @param payload - The message to send.
-   * @returns The transport's send info.
+   * @returns The transport's send info, boxed.
    * @throws Error When the transport rejects the message.
    */
   private async dispatch(
@@ -383,7 +381,7 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
     payload: SmtpSendPayload,
     redactValuesList?: readonly string[],
     publishProviderText?: boolean
-  ): Promise<{ messageId?: string }> {
+  ): Promise<Boxed<{ messageId?: string }>> {
     // Checked again where the message is handed over, after the transport was created.
     assertStandardRealmRoot('SmtpEmailProvider')
     try {
@@ -395,9 +393,8 @@ export class SmtpEmailProvider implements IEmailProvider, OnModuleDestroy {
         ),
         'SmtpEmailProvider'
       )
-      // Last before the return, which reads `then` of what it resolves with.
-      assertStandardRealmRoot('SmtpEmailProvider')
-      return settled.value
+      // Boxed: nothing is read off the transport's answer here, and nothing refuses it.
+      return boxed(settled.value)
     } catch (error) {
       // A send that failed while the realm root is polluted failed because of it (the socket destroys
       // the connection on a write then), and is told so: the refusal, not the relay's error.

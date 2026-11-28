@@ -3,7 +3,7 @@
  * @layer infrastructure
  */
 
-import { checkedAwait, silence } from './realm-root'
+import { own, silence } from './realm-root'
 
 /**
  * Reads a web stream chunk by chunk, so it costs at most the bound and one chunk.
@@ -21,7 +21,7 @@ export async function readBounded(
 ): Promise<string> {
   // An injected fetch may offer only `text()`: such an answer is bounded after buffering.
   if (typeof response.body?.getReader !== 'function') {
-    const body = await checkedAwait(response.text(), owner)
+    const body = await own(response.text(), owner)
     return Buffer.byteLength(body) > limit ? '' : body
   }
   const reader = response.body.getReader()
@@ -29,7 +29,7 @@ export async function readBounded(
   let text = ''
   let bytes = 0
   for (;;) {
-    const { done, value } = await checkedAwait(reader.read(), owner)
+    const { done, value } = await own(reader.read(), owner)
     if (done) {
       return text + decoder.decode()
     }

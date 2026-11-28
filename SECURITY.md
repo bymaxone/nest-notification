@@ -83,6 +83,13 @@ accidental or hostile objects handed in by a consumer's own adapters. They are n
 boundary against code that can already patch built-ins, and a report that needs such code is
 out of scope.
 
+The application must keep `Object.prototype` clean. A key planted or locked there while a send
+runs can end the process inside Node or Nodemailer; Node's
+[security policy](https://github.com/nodejs/node/blob/main/SECURITY.md#prototype-pollution-attacks-cwe-1321)
+(CWE-1321) leaves preventing that to the application. Replacing `Object.prototype.toString`
+during a send with something that is not a function, which throws inside Nodemailer where it
+formats an error, is the same act and is outside this threat model.
+
 Known limits: the first `import()` of an optional peer is awaited unpinned; `Date.now`
 (OTP expiry, the readiness TTL) is read live; and a throwing `setTimeout` or `addEventListener`
 planted by same-process code can end a send in an unhandled rejection.

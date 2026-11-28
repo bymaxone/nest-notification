@@ -12,6 +12,7 @@ import type {
   NotificationSpanName
 } from '../interfaces/notification-observer.interface'
 import type { OtpVerifyResult } from '../interfaces/otp-storage.interface'
+import { accepted, isAccepted } from './accepted-answer'
 import { assertStandardRealmRoot, checkedAwait, own, silence } from './realm-root'
 
 const freezeObject = Object.freeze
@@ -77,7 +78,11 @@ export async function runInSpan<T>(
   }
   const result = await own(once(), owner)
   // The span's `end()` and the rest of the host's code ran while it was awaited: the realm is
-  // checked again right before the return, which reads `then` of the result.
+  // checked again right before the return, which reads `then` of the result. An accepted send's
+  // answer carries its own `then` and is never refused.
+  if (isAccepted(result)) {
+    return accepted(result as T & object)
+  }
   assertStandardRealmRoot(owner)
   return result
 }

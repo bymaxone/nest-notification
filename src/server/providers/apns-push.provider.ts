@@ -18,6 +18,7 @@ import type {
   PushSendOptions,
   PushSendResult
 } from '../interfaces/push-provider.interface'
+import { accepted } from '../utils/accepted-answer'
 import {
   MESSAGE_TOO_BIG,
   TOKEN_INVALID,
@@ -28,7 +29,7 @@ import {
 import type { PushFailure, PushOutcome } from '../utils/push-outcome'
 import { readPush } from '../utils/push-send-input'
 import { assertOptionsObject, readOptionKeys } from '../utils/read-options'
-import { checkedAwait, silence } from '../utils/realm-root'
+import { own, silence } from '../utils/realm-root'
 import { assertTimerMs } from '../utils/timer-option'
 import { ApnsProviderToken, readEcKey } from './apns-push.auth'
 import { EXPIRED_PROVIDER_TOKEN, classifyApnsRefusal, refusesAccount } from './apns-push.codes'
@@ -95,6 +96,8 @@ interface Delivery {
 
 /** The state the requests of one `send` share. */
 interface Batch {
+  /** The realm refusal that stopped the batch, if one did. */
+  refusal?: unknown
   readonly tokens: readonly string[]
   readonly message: ApnsMessage
   readonly deliveries: Map<string, Delivery>
@@ -245,7 +248,7 @@ export class ApnsPushProvider implements IPushProvider, OnModuleDestroy {
     }
     const batch: Batch = { tokens: valid, message, deliveries: new Map(), next: 0 }
     const closes = this.#closes
-    await checkedAwait(this.#sendAll(batch), OWNER)
+    await own(this.#sendAll(batch), OWNER)
     // A `close` during this send does not stop it, and what it opened since is ended here.
     if (this.#closes !== closes) {
       this.#session.close()
@@ -253,20 +256,21 @@ export class ApnsPushProvider implements IPushProvider, OnModuleDestroy {
     // A throw is safe only when no request reached a judgement of the message, so that a caller who retries it repeats nothing.
     const failure = nothingSent(batch.deliveries)
     if (failure !== undefined) {
-      throw new ApnsPushError(failure)
+      // A realm found changed refuses the send only when no message went out.
+      throw batch.refusal ?? new ApnsPushError(failure)
     }
     // A token given twice is sent once and answered in each place it appeared.
-    return {
+    return accepted({
       results: push.tokens.map(
         (token) => ((batch.deliveries.get(token) ?? refused.get(token)) as Delivery).outcome
       )
-    }
+    })
   }
 
   /** Sends one token alone while the account is not known to be accepted, then the rest side by side. */
   async #sendAll(batch: Batch): Promise<void> {
     if (!this.#session.proven && batch.tokens.length > 0) {
-      await checkedAwait(this.#sendNext(batch), OWNER)
+      await own(this.#sendNext(batch), OWNER)
     }
     const workers: Promise<void>[] = []
     // Stryker disable next-line ArithmeticOperator: a worker beyond the tokens left finds none and ends
@@ -278,14 +282,14 @@ export class ApnsPushProvider implements IPushProvider, OnModuleDestroy {
       workers.push(worker)
     }
     for (const worker of workers) {
-      await checkedAwait(worker, OWNER)
+      await own(worker, OWNER)
     }
   }
 
   /** Sends the next unclaimed token until there is none. */
   async #work(batch: Batch): Promise<void> {
     while (batch.next < batch.tokens.length) {
-      await checkedAwait(this.#sendNext(batch), OWNER)
+      await own(this.#sendNext(batch), OWNER)
     }
   }
 
@@ -293,7 +297,7 @@ export class ApnsPushProvider implements IPushProvider, OnModuleDestroy {
   async #sendNext(batch: Batch): Promise<void> {
     const token = batch.tokens[batch.next] as string
     batch.next += 1
-    const delivery = await checkedAwait(this.#deliver(batch, token), OWNER)
+    const delivery = await own(this.#deliver(batch, token), OWNER)
     if (delivery.stops !== undefined) {
       batch.stopped = delivery.stops
     }
@@ -303,7 +307,7 @@ export class ApnsPushProvider implements IPushProvider, OnModuleDestroy {
   /** Sends one token, once more with a new provider token when the first was refused as expired. */
   async #deliver(batch: Batch, token: string, retried = false): Promise<Delivery> {
     if (batch.stopped !== undefined) {
-      return { outcome: failedOutcome(token, batch.stopped), unsent: batch.stopped }
+      return accepted({ outcome: failedOutcome(token, batch.stopped), unsent: batch.stopped })
     }
     const jwt = this.#token.get()
     const headers = {
@@ -313,13 +317,20 @@ export class ApnsPushProvider implements IPushProvider, OnModuleDestroy {
       'apns-topic': this.#topic,
       ...batch.message.headers
     }
-    const call = await checkedAwait(this.#session.post(headers, batch.message.body), OWNER)
+    let call: ApnsCall
+    try {
+      // `post` refuses a changed realm before it opens a request, and throws for nothing else.
+      call = await own(this.#session.post(headers, batch.message.body), OWNER)
+    } catch (refusal) {
+      batch.refusal = refusal
+      return accepted({ outcome: failedOutcome(token, UNREACHABLE), unsent: UNREACHABLE })
+    }
     // Only a refusal is repeated: the same words on an accepted request would send it twice.
     const expired =
       call.kind === 'answer' && call.status === 403 && call.reason === EXPIRED_PROVIDER_TOKEN
     if (expired && !retried && this.#token.renew(jwt)) {
-      return checkedAwait(this.#deliver(batch, token, true), OWNER)
+      return own(this.#deliver(batch, token, true), OWNER)
     }
-    return readDelivery(token, call)
+    return accepted(readDelivery(token, call))
   }
 }

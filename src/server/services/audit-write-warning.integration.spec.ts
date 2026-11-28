@@ -76,8 +76,8 @@ describe('swallowed audit failures leave a trace', () => {
       expect(answers[5]).toBe('max_attempts')
       expect(ours()).toHaveLength(1)
       expect(ours()[0]).toBe(
-        `[${CODE}] An audit entry could not be written by the otp channel (Error); ` +
-          "the operation's result is unaffected because audit.swallowErrors is true."
+        `[${CODE}] An audit entry of the otp channel was not confirmed as written (Error); ` +
+          "the operation's result is unaffected."
       )
     })
 
@@ -153,8 +153,8 @@ describe('swallowed audit failures leave a trace', () => {
 
       expect(sent).toEqual({ messageId: 'msg_1' })
       expect(ours()).toEqual([
-        `[${CODE}] An audit entry could not be written by the email channel (Error); ` +
-          "the operation's result is unaffected because audit.swallowErrors is true."
+        `[${CODE}] An audit entry of the email channel was not confirmed as written (Error); ` +
+          "the operation's result is unaffected."
       ])
     })
   })
@@ -180,8 +180,8 @@ describe('swallowed audit failures leave a trace', () => {
 
       expect(value).toBe('RESULT')
       expect(ours()).toEqual([
-        `[${CODE}] An audit entry could not be written by the interceptor channel (Error); ` +
-          "the operation's result is unaffected because audit.swallowErrors is true."
+        `[${CODE}] An audit entry of the interceptor channel was not confirmed as written (Error); ` +
+          "the operation's result is unaffected."
       ])
     })
 
@@ -209,9 +209,9 @@ describe('swallowed audit failures leave a trace', () => {
 
       expect(value).toBe('RESULT')
       expect(ours()).toEqual([
-        `[${CODE}] An audit entry could not be written by the interceptor channel ` +
+        `[${CODE}] An audit entry of the interceptor channel was not confirmed as written ` +
           '(notification.invalid_scope_identifier); ' +
-          "the operation's result is unaffected because audit.swallowErrors is true."
+          "the operation's result is unaffected."
       ])
     })
   })

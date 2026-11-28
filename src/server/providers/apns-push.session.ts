@@ -18,10 +18,11 @@
 import { connect, constants } from 'node:http2'
 import type { ClientHttp2Session, ClientHttp2Stream, IncomingHttpHeaders } from 'node:http2'
 
+import { accepted } from '../utils/accepted-answer'
 import { boundedChunks } from '../utils/bounded-body'
 import { OUTCOME_UNKNOWN, UNREACHABLE, field } from '../utils/push-outcome'
 import type { PushFailure } from '../utils/push-outcome'
-import { assertStandardRealmRoot, checkedAwait, newPromise } from '../utils/realm-root'
+import { assertStandardRealmRoot, checkedAwait, newPromise, own } from '../utils/realm-root'
 
 // Read once, when the module loads: a later replacement of the built-in changes nothing here.
 const connectTo = connect
@@ -222,7 +223,7 @@ export class ApnsSession {
       const neverConnected = this.#link?.connected !== true
       this.close()
       return newPromise((resolve) =>
-        resolve({ kind: 'lost', failure: UNREACHABLE, neverConnected })
+        resolve(accepted({ kind: 'lost', failure: UNREACHABLE, neverConnected }))
       )
     }
     const call = this.#exchange(link, stream, body)
@@ -240,9 +241,9 @@ export class ApnsSession {
   ): Promise<ApnsCall> {
     await checkedAwait(lead, this.#owner)
     if (link.answered) {
-      return checkedAwait(this.post(headers, body), this.#owner)
+      return own(this.post(headers, body), this.#owner)
     }
-    return { kind: 'lost', failure: UNREACHABLE, neverConnected: !link.connected }
+    return accepted({ kind: 'lost', failure: UNREACHABLE, neverConnected: !link.connected })
   }
 
   /** The session in use, or a new one when it can take no more requests. */
@@ -273,7 +274,7 @@ export class ApnsSession {
         link.open -= 1
         link.quietSince = Date.now()
         link.lead = undefined
-        resolve(ended(link, stream, answer))
+        resolve(accepted(ended(link, stream, answer)))
         if (link.retired) {
           retire(link)
         }
